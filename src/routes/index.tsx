@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { ArrowRight, Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+
 import brainImage from "@/assets/neural-brain.png";
 
 export const Route = createFileRoute("/")({
