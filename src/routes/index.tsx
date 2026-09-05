@@ -136,11 +136,13 @@ function SignIn() {
 
             <div className="flex items-center justify-between pt-1">
               <label className="flex cursor-pointer items-center gap-2 text-sm text-[oklch(0.88_0.05_155)]">
-                <Checkbox
+                <input
+                  type="checkbox"
                   checked={keepSignedIn}
-                  onCheckedChange={(v) => setKeepSignedIn(v === true)}
-                  className="size-5 rounded-md border-[oklch(0.8_0.18_155/0.6)] data-[state=checked]:border-[oklch(0.85_0.2_155)] data-[state=checked]:bg-[oklch(0.82_0.2_155)] data-[state=checked]:text-[oklch(0.18_0.04_160)]"
+                  onChange={(e) => setKeepSignedIn(e.target.checked)}
+                  className="size-5 cursor-pointer appearance-none rounded-md border border-[oklch(0.8_0.18_155/0.6)] bg-[oklch(0.22_0.05_160/0.6)] transition checked:border-[oklch(0.85_0.2_155)] checked:bg-[oklch(0.82_0.2_155)]"
                 />
+
                 Keep me signed in
               </label>
               <a
