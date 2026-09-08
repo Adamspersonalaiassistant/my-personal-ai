@@ -1,7 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-type ChatInput = { message: string };
+type HistoryTurn = { role: "user" | "assistant"; text: string };
+type ChatInput = { message: string; history?: HistoryTurn[] };
 
 export const sendChatMessage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -9,7 +10,17 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     const message = typeof input?.message === "string" ? input.message.trim() : "";
     if (!message) throw new Error("Message is required");
     if (message.length > 8000) throw new Error("Message is too long");
-    return { message };
+    const history = (Array.isArray(input?.history) ? input.history : [])
+      .filter(
+        (t): t is HistoryTurn =>
+          !!t &&
+          (t.role === "user" || t.role === "assistant") &&
+          typeof t.text === "string" &&
+          t.text.trim().length > 0,
+      )
+      .slice(-30)
+      .map((t) => ({ role: t.role, text: t.text.slice(0, 8000) }));
+    return { message, history };
   })
   .handler(async ({ data }) => {
     const apiKey = process.env["OPENAI_API_KEY"];
