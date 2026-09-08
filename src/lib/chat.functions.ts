@@ -1,0 +1,80 @@
+import { createServerFn } from "@tanstack/react-start";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+
+type ChatInput = { message: string };
+
+export const sendChatMessage = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: ChatInput) => {
+    const message = typeof input?.message === "string" ? input.message.trim() : "";
+    if (!message) throw new Error("Message is required");
+    if (message.length > 8000) throw new Error("Message is too long");
+    return { message };
+  })
+  .handler(async ({ data }) => {
+    const apiKey = process.env["OPENAI_API_KEY"];
+    if (!apiKey) {
+      return { error: "The AI service isn't configured yet." } as const;
+    }
+
+    let response: Response;
+    try {
+      response = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gpt-5.6-luna",
+          input: [
+            {
+              role: "system",
+              content:
+                "You are a helpful personal AI assistant. Be concise, warm and practical.",
+            },
+            { role: "user", content: data.message },
+          ],
+        }),
+      });
+    } catch {
+      return { error: "Couldn't reach the AI service. Please try again." } as const;
+    }
+
+    if (!response.ok) {
+      console.error("OpenAI request failed with status", response.status);
+      if (response.status === 429) {
+        return { error: "Too many requests right now. Please try again shortly." } as const;
+      }
+      if (response.status === 401 || response.status === 403) {
+        return { error: "The AI service rejected the request." } as const;
+      }
+      return { error: "The AI couldn't answer right now. Please try again." } as const;
+    }
+
+    let payload: {
+      output_text?: string;
+      output?: { content?: { type?: string; text?: string }[] }[];
+    };
+    try {
+      payload = await response.json();
+    } catch {
+      return { error: "The AI sent an unreadable response." } as const;
+    }
+
+    let text = typeof payload.output_text === "string" ? payload.output_text : "";
+    if (!text && Array.isArray(payload.output)) {
+      text = payload.output
+        .flatMap((item) => (Array.isArray(item.content) ? item.content : []))
+        .filter((c) => c?.type === "output_text")
+        .map((c) => c.text ?? "")
+        .join("")
+        .trim();
+    }
+
+    if (!text) {
+      return { error: "The AI returned an empty response." } as const;
+    }
+
+    return { reply: text } as const;
+  });
