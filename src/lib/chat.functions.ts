@@ -44,6 +44,15 @@ export const sendChatMessage = createServerFn({ method: "POST" })
               content:
                 "You are a helpful personal AI assistant. Be concise, warm and practical.",
             },
+            ...data.history.map((turn) => ({
+              role: turn.role,
+              content: [
+                {
+                  type: turn.role === "assistant" ? "output_text" : "input_text",
+                  text: turn.text,
+                },
+              ],
+            })),
             { role: "user", content: data.message },
           ],
         }),

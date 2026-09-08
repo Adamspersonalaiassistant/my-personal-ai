@@ -27,7 +27,8 @@ function Chat() {
     setError(null);
     setPending(true);
     try {
-      const result = await askAssistant({ data: { message: text } });
+      const history = messages.map((m) => ({ role: m.role, text: m.text }));
+      const result = await askAssistant({ data: { message: text, history } });
       if ("reply" in result && result.reply) {
         setMessages((prev) => [
           ...prev,
