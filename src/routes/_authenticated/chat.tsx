@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Mic, Paperclip, ArrowUp } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
-import { sendChatMessage } from "@/lib/chat.functions";
+import { sendChatMessage, getLatestConversation } from "@/lib/chat.functions";
 
 export const Route = createFileRoute("/_authenticated/chat")({
   component: Chat,
