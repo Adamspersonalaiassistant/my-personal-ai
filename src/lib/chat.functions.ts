@@ -171,3 +171,31 @@ export const sendChatMessage = createServerFn({ method: "POST" })
 
     return { reply: text } as const;
   });
+
+function normalize(text: string) {
+  return text.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function makeTitle(fact: string) {
+  const words = fact.split(/\s+/).slice(0, 6).join(" ");
+  return words.length < fact.length ? `${words}…` : words;
+}
+
+/**
+ * Detects explicit "remember this" phrasing and returns the clean fact,
+ * or null when the message is not an explicit memory request.
+ */
+function extractExplicitMemory(message: string): string | null {
+  const patterns = [
+    /^\s*(?:hey\s+)?(?:please\s+|can you\s+|could you\s+)?(?:remember|memorize|keep in mind|note|save)(?:\s+this|\s+that|\s+it)?\s*(?:to|in|into)?\s*(?:memory|long[- ]term memory)?\s*[:,-]?\s+(.+)$/is,
+    /^\s*(?:please\s+)?save\s+(?:this|that)\s+(?:to|in|into)\s+memory\s*[:,-]?\s*(.*)$/is,
+  ];
+  for (const re of patterns) {
+    const m = message.match(re);
+    if (m && m[1]) {
+      const fact = m[1].trim().replace(/^that\s+/i, "").replace(/\s+/g, " ").trim();
+      if (fact.length >= 2 && fact.length <= 2000) return fact;
+    }
+  }
+  return null;
+}
