@@ -218,7 +218,55 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       return { error: "The AI returned an empty response." } as const;
     }
 
-    return { reply: text } as const;
+    // --- Persist the conversation ----------------------------------------
+    let conversationId = data.conversationId;
+    try {
+      const now = new Date().toISOString();
+      const newTurns: StoredMessage[] = [
+        { role: "user", text: data.message, at: now },
+        { role: "assistant", text, at: new Date().toISOString() },
+      ];
+
+      if (conversationId) {
+        const { data: existing } = await supabase
+          .from("conversations")
+          .select("id, metadata")
+          .eq("id", conversationId)
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (existing) {
+          const merged = [...readStoredMessages(existing.metadata), ...newTurns].slice(-400);
+          const { error: updateError } = await supabase
+            .from("conversations")
+            .update({ metadata: { messages: merged }, transcript: toTranscript(merged) })
+            .eq("id", conversationId)
+            .eq("user_id", userId);
+          if (updateError) console.error("Conversation update failed", updateError.message);
+        } else {
+          conversationId = null;
+        }
+      }
+
+      if (!conversationId) {
+        const { data: created, error: createError } = await supabase
+          .from("conversations")
+          .insert({
+            user_id: userId,
+            channel: "app",
+            title: data.message.slice(0, 80),
+            metadata: { messages: newTurns },
+            transcript: toTranscript(newTurns),
+          })
+          .select("id")
+          .single();
+        if (createError) console.error("Conversation create failed", createError.message);
+        else conversationId = created.id;
+      }
+    } catch (e) {
+      console.error("Conversation persist error", e instanceof Error ? e.message : "unknown");
+    }
+
+    return { reply: text, conversationId } as const;
   });
 
 function normalize(text: string) {
