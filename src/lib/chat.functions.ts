@@ -67,7 +67,9 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       )
       .slice(-30)
       .map((t) => ({ role: t.role, text: t.text.slice(0, 8000) }));
-    return { message, history };
+    const conversationId =
+      typeof input?.conversationId === "string" && input.conversationId ? input.conversationId : null;
+    return { message, history, conversationId };
   })
   .handler(async ({ data, context }) => {
     const apiKey = process.env["OPENAI_API_KEY"];
