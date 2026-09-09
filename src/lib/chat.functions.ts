@@ -2,7 +2,54 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 type HistoryTurn = { role: "user" | "assistant"; text: string };
-type ChatInput = { message: string; history?: HistoryTurn[] };
+type ChatInput = { message: string; history?: HistoryTurn[]; conversationId?: string | null };
+
+type StoredMessage = { role: "user" | "assistant"; text: string; at: string };
+
+function readStoredMessages(metadata: unknown): StoredMessage[] {
+  const raw =
+    metadata && typeof metadata === "object" && "messages" in metadata
+      ? (metadata as { messages?: unknown }).messages
+      : null;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(
+      (m): m is StoredMessage =>
+        !!m &&
+        typeof m === "object" &&
+        ((m as StoredMessage).role === "user" || (m as StoredMessage).role === "assistant") &&
+        typeof (m as StoredMessage).text === "string",
+    )
+    .map((m) => ({ role: m.role, text: m.text, at: typeof m.at === "string" ? m.at : "" }));
+}
+
+function toTranscript(messages: StoredMessage[]) {
+  return messages
+    .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.text}`)
+    .join("\n\n")
+    .slice(0, 100000);
+}
+
+/** Loads the signed-in user's most recent conversation, in chronological order. */
+export const getLatestConversation = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { data, error } = await supabase
+      .from("conversations")
+      .select("id, metadata")
+      .eq("user_id", userId)
+      .eq("channel", "app")
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      console.error("Conversation load failed", error.message);
+      return { conversationId: null, messages: [] as StoredMessage[] };
+    }
+    if (!data) return { conversationId: null, messages: [] as StoredMessage[] };
+    return { conversationId: data.id, messages: readStoredMessages(data.metadata) };
+  });
 
 export const sendChatMessage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
