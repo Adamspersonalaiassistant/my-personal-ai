@@ -16,7 +16,35 @@ function Chat() {
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const askAssistant = useServerFn(sendChatMessage);
+  const loadConversation = useServerFn(getLatestConversation);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await loadConversation({});
+        if (cancelled || !result) return;
+        setConversationId(result.conversationId ?? null);
+        setMessages(
+          (result.messages ?? []).map((m, i) => ({
+            id: i + 1,
+            role: m.role,
+            text: m.text,
+          })),
+        );
+      } catch {
+        /* start with an empty chat */
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadConversation]);
 
   async function send(e: React.FormEvent) {
     e.preventDefault();
