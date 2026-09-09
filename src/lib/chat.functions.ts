@@ -2,7 +2,54 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 type HistoryTurn = { role: "user" | "assistant"; text: string };
-type ChatInput = { message: string; history?: HistoryTurn[] };
+type ChatInput = { message: string; history?: HistoryTurn[]; conversationId?: string | null };
+
+type StoredMessage = { role: "user" | "assistant"; text: string; at: string };
+
+function readStoredMessages(metadata: unknown): StoredMessage[] {
+  const raw =
+    metadata && typeof metadata === "object" && "messages" in metadata
+      ? (metadata as { messages?: unknown }).messages
+      : null;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(
+      (m): m is StoredMessage =>
+        !!m &&
+        typeof m === "object" &&
+        ((m as StoredMessage).role === "user" || (m as StoredMessage).role === "assistant") &&
+        typeof (m as StoredMessage).text === "string",
+    )
+    .map((m) => ({ role: m.role, text: m.text, at: typeof m.at === "string" ? m.at : "" }));
+}
+
+function toTranscript(messages: StoredMessage[]) {
+  return messages
+    .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.text}`)
+    .join("\n\n")
+    .slice(0, 100000);
+}
+
+/** Loads the signed-in user's most recent conversation, in chronological order. */
+export const getLatestConversation = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { data, error } = await supabase
+      .from("conversations")
+      .select("id, metadata")
+      .eq("user_id", userId)
+      .eq("channel", "app")
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      console.error("Conversation load failed", error.message);
+      return { conversationId: null, messages: [] as StoredMessage[] };
+    }
+    if (!data) return { conversationId: null, messages: [] as StoredMessage[] };
+    return { conversationId: data.id, messages: readStoredMessages(data.metadata) };
+  });
 
 export const sendChatMessage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -20,7 +67,9 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       )
       .slice(-30)
       .map((t) => ({ role: t.role, text: t.text.slice(0, 8000) }));
-    return { message, history };
+    const conversationId =
+      typeof input?.conversationId === "string" && input.conversationId ? input.conversationId : null;
+    return { message, history, conversationId };
   })
   .handler(async ({ data, context }) => {
     const apiKey = process.env["OPENAI_API_KEY"];
@@ -169,7 +218,55 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       return { error: "The AI returned an empty response." } as const;
     }
 
-    return { reply: text } as const;
+    // --- Persist the conversation ----------------------------------------
+    let conversationId = data.conversationId;
+    try {
+      const now = new Date().toISOString();
+      const newTurns: StoredMessage[] = [
+        { role: "user", text: data.message, at: now },
+        { role: "assistant", text, at: new Date().toISOString() },
+      ];
+
+      if (conversationId) {
+        const { data: existing } = await supabase
+          .from("conversations")
+          .select("id, metadata")
+          .eq("id", conversationId)
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (existing) {
+          const merged = [...readStoredMessages(existing.metadata), ...newTurns].slice(-400);
+          const { error: updateError } = await supabase
+            .from("conversations")
+            .update({ metadata: { messages: merged }, transcript: toTranscript(merged) })
+            .eq("id", conversationId)
+            .eq("user_id", userId);
+          if (updateError) console.error("Conversation update failed", updateError.message);
+        } else {
+          conversationId = null;
+        }
+      }
+
+      if (!conversationId) {
+        const { data: created, error: createError } = await supabase
+          .from("conversations")
+          .insert({
+            user_id: userId,
+            channel: "app",
+            title: data.message.slice(0, 80),
+            metadata: { messages: newTurns },
+            transcript: toTranscript(newTurns),
+          })
+          .select("id")
+          .single();
+        if (createError) console.error("Conversation create failed", createError.message);
+        else conversationId = created.id;
+      }
+    } catch (e) {
+      console.error("Conversation persist error", e instanceof Error ? e.message : "unknown");
+    }
+
+    return { reply: text, conversationId } as const;
   });
 
 function normalize(text: string) {

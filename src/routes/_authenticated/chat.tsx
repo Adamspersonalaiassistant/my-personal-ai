@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Mic, Paperclip, ArrowUp } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
-import { sendChatMessage } from "@/lib/chat.functions";
+import { sendChatMessage, getLatestConversation } from "@/lib/chat.functions";
 
 export const Route = createFileRoute("/_authenticated/chat")({
   component: Chat,
@@ -16,7 +16,35 @@ function Chat() {
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const askAssistant = useServerFn(sendChatMessage);
+  const loadConversation = useServerFn(getLatestConversation);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await loadConversation({});
+        if (cancelled || !result) return;
+        setConversationId(result.conversationId ?? null);
+        setMessages(
+          (result.messages ?? []).map((m, i) => ({
+            id: i + 1,
+            role: m.role,
+            text: m.text,
+          })),
+        );
+      } catch {
+        /* start with an empty chat */
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadConversation]);
 
   async function send(e: React.FormEvent) {
     e.preventDefault();
@@ -28,8 +56,13 @@ function Chat() {
     setPending(true);
     try {
       const history = messages.map((m) => ({ role: m.role, text: m.text }));
-      const result = await askAssistant({ data: { message: text, history } });
+      const result = await askAssistant({
+        data: { message: text, history, conversationId },
+      });
       if ("reply" in result && result.reply) {
+        if ("conversationId" in result && result.conversationId) {
+          setConversationId(result.conversationId);
+        }
         setMessages((prev) => [
           ...prev,
           { id: Date.now() + 1, role: "assistant", text: result.reply },
@@ -48,11 +81,15 @@ function Chat() {
     <AppShell title="Chat" padded={false}>
       <div className="flex min-h-full flex-col">
         <div className="flex-1 space-y-3 px-4 py-5">
-          {messages.length === 0 ? (
+          {loading ? (
+            <p className="py-16 text-center text-sm text-muted-foreground">
+              Loading your conversation…
+            </p>
+          ) : messages.length === 0 ? (
             <div className="mx-auto max-w-sm py-16 text-center">
               <h2 className="text-base font-semibold">Ask me anything</h2>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                Your assistant is connected. Messages aren&apos;t saved yet.
+                Your assistant is connected. Your conversation is saved to your account.
               </p>
             </div>
           ) : (
