@@ -22,11 +22,70 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       .map((t) => ({ role: t.role, text: t.text.slice(0, 8000) }));
     return { message, history };
   })
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const apiKey = process.env["OPENAI_API_KEY"];
     if (!apiKey) {
       return { error: "The AI service isn't configured yet." } as const;
     }
+
+    const { supabase, userId } = context;
+
+    // --- Explicit memory write -------------------------------------------
+    const fact = extractExplicitMemory(data.message);
+    let savedMemory: string | null = null;
+    if (fact) {
+      try {
+        const { data: existing } = await supabase
+          .from("memories")
+          .select("id, content")
+          .eq("user_id", userId)
+          .eq("memory_type", "core")
+          .limit(200);
+        const normalized = normalize(fact);
+        const duplicate = (existing ?? []).some(
+          (m) => normalize(m.content ?? "") === normalized,
+        );
+        if (!duplicate) {
+          const { error: insertError } = await supabase.from("memories").insert({
+            user_id: userId,
+            memory_type: "core",
+            title: makeTitle(fact),
+            content: fact,
+            importance: 4,
+            confidence: 1.0,
+            source_type: "chat",
+          });
+          if (insertError) console.error("Memory insert failed", insertError.message);
+          else savedMemory = fact;
+        } else {
+          savedMemory = fact;
+        }
+      } catch (e) {
+        console.error("Memory write error", e instanceof Error ? e.message : "unknown");
+      }
+    }
+
+    // --- Long-term memory read -------------------------------------------
+    let memoryBlock = "";
+    try {
+      const nowIso = new Date().toISOString();
+      const { data: memories } = await supabase
+        .from("memories")
+        .select("title, content, importance, created_at, expires_at")
+        .eq("user_id", userId)
+        .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
+        .order("importance", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(40);
+      if (memories && memories.length > 0) {
+        memoryBlock = memories
+          .map((m) => `- ${m.title ? `${m.title}: ` : ""}${m.content}`)
+          .join("\n");
+      }
+    } catch (e) {
+      console.error("Memory read error", e instanceof Error ? e.message : "unknown");
+    }
+
 
     let response: Response;
     try {
