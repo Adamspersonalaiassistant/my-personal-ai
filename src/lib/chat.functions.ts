@@ -101,8 +101,22 @@ export const sendChatMessage = createServerFn({ method: "POST" })
             {
               role: "system",
               content:
-                "You are a helpful personal AI assistant. Be concise, warm and practical.",
+                "You are a helpful personal AI assistant. Be concise, warm and practical." +
+                (savedMemory
+                  ? ` The user just asked you to remember something and it has been saved permanently: "${savedMemory}". Briefly confirm it.`
+                  : ""),
             },
+            ...(memoryBlock
+              ? [
+                  {
+                    role: "system" as const,
+                    content:
+                      "LONG-TERM MEMORY about the user (saved from previous sessions). Treat these as known facts, but prefer newer corrections the user makes in the current conversation:\n" +
+                      memoryBlock,
+                  },
+                ]
+              : []),
+
             ...data.history.map((turn) => ({
               role: turn.role,
               content: [
