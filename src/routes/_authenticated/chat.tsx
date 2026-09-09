@@ -81,11 +81,15 @@ function Chat() {
     <AppShell title="Chat" padded={false}>
       <div className="flex min-h-full flex-col">
         <div className="flex-1 space-y-3 px-4 py-5">
-          {messages.length === 0 ? (
+          {loading ? (
+            <p className="py-16 text-center text-sm text-muted-foreground">
+              Loading your conversation…
+            </p>
+          ) : messages.length === 0 ? (
             <div className="mx-auto max-w-sm py-16 text-center">
               <h2 className="text-base font-semibold">Ask me anything</h2>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                Your assistant is connected. Messages aren&apos;t saved yet.
+                Your assistant is connected. Your conversation is saved to your account.
               </p>
             </div>
           ) : (
