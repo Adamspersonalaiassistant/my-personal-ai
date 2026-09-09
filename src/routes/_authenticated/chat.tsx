@@ -56,8 +56,13 @@ function Chat() {
     setPending(true);
     try {
       const history = messages.map((m) => ({ role: m.role, text: m.text }));
-      const result = await askAssistant({ data: { message: text, history } });
+      const result = await askAssistant({
+        data: { message: text, history, conversationId },
+      });
       if ("reply" in result && result.reply) {
+        if ("conversationId" in result && result.conversationId) {
+          setConversationId(result.conversationId);
+        }
         setMessages((prev) => [
           ...prev,
           { id: Date.now() + 1, role: "assistant", text: result.reply },
