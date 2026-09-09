@@ -22,11 +22,70 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       .map((t) => ({ role: t.role, text: t.text.slice(0, 8000) }));
     return { message, history };
   })
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const apiKey = process.env["OPENAI_API_KEY"];
     if (!apiKey) {
       return { error: "The AI service isn't configured yet." } as const;
     }
+
+    const { supabase, userId } = context;
+
+    // --- Explicit memory write -------------------------------------------
+    const fact = extractExplicitMemory(data.message);
+    let savedMemory: string | null = null;
+    if (fact) {
+      try {
+        const { data: existing } = await supabase
+          .from("memories")
+          .select("id, content")
+          .eq("user_id", userId)
+          .eq("memory_type", "core")
+          .limit(200);
+        const normalized = normalize(fact);
+        const duplicate = (existing ?? []).some(
+          (m) => normalize(m.content ?? "") === normalized,
+        );
+        if (!duplicate) {
+          const { error: insertError } = await supabase.from("memories").insert({
+            user_id: userId,
+            memory_type: "core",
+            title: makeTitle(fact),
+            content: fact,
+            importance: 4,
+            confidence: 1.0,
+            source_type: "chat",
+          });
+          if (insertError) console.error("Memory insert failed", insertError.message);
+          else savedMemory = fact;
+        } else {
+          savedMemory = fact;
+        }
+      } catch (e) {
+        console.error("Memory write error", e instanceof Error ? e.message : "unknown");
+      }
+    }
+
+    // --- Long-term memory read -------------------------------------------
+    let memoryBlock = "";
+    try {
+      const nowIso = new Date().toISOString();
+      const { data: memories } = await supabase
+        .from("memories")
+        .select("title, content, importance, created_at, expires_at")
+        .eq("user_id", userId)
+        .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
+        .order("importance", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(40);
+      if (memories && memories.length > 0) {
+        memoryBlock = memories
+          .map((m) => `- ${m.title ? `${m.title}: ` : ""}${m.content}`)
+          .join("\n");
+      }
+    } catch (e) {
+      console.error("Memory read error", e instanceof Error ? e.message : "unknown");
+    }
+
 
     let response: Response;
     try {
@@ -42,8 +101,22 @@ export const sendChatMessage = createServerFn({ method: "POST" })
             {
               role: "system",
               content:
-                "You are a helpful personal AI assistant. Be concise, warm and practical.",
+                "You are a helpful personal AI assistant. Be concise, warm and practical." +
+                (savedMemory
+                  ? ` The user just asked you to remember something and it has been saved permanently: "${savedMemory}". Briefly confirm it.`
+                  : ""),
             },
+            ...(memoryBlock
+              ? [
+                  {
+                    role: "system" as const,
+                    content:
+                      "LONG-TERM MEMORY about the user (saved from previous sessions). Treat these as known facts, but prefer newer corrections the user makes in the current conversation:\n" +
+                      memoryBlock,
+                  },
+                ]
+              : []),
+
             ...data.history.map((turn) => ({
               role: turn.role,
               content: [
@@ -98,3 +171,31 @@ export const sendChatMessage = createServerFn({ method: "POST" })
 
     return { reply: text } as const;
   });
+
+function normalize(text: string) {
+  return text.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function makeTitle(fact: string) {
+  const words = fact.split(/\s+/).slice(0, 6).join(" ");
+  return words.length < fact.length ? `${words}…` : words;
+}
+
+/**
+ * Detects explicit "remember this" phrasing and returns the clean fact,
+ * or null when the message is not an explicit memory request.
+ */
+function extractExplicitMemory(message: string): string | null {
+  const patterns = [
+    /^\s*(?:hey\s+)?(?:please\s+|can you\s+|could you\s+)?(?:remember|memorize|keep in mind|note|save)(?:\s+this|\s+that|\s+it)?\s*(?:to|in|into)?\s*(?:memory|long[- ]term memory)?\s*[:,-]?\s+(.+)$/is,
+    /^\s*(?:please\s+)?save\s+(?:this|that)\s+(?:to|in|into)\s+memory\s*[:,-]?\s*(.*)$/is,
+  ];
+  for (const re of patterns) {
+    const m = message.match(re);
+    if (m && m[1]) {
+      const fact = m[1].trim().replace(/^that\s+/i, "").replace(/\s+/g, " ").trim();
+      if (fact.length >= 2 && fact.length <= 2000) return fact;
+    }
+  }
+  return null;
+}
