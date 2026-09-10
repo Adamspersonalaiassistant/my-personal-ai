@@ -1,15 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Mic, Paperclip, ArrowUp } from "lucide-react";
+import { Mic, Paperclip, ArrowUp, History, Plus, X } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
-import { sendChatMessage, getLatestConversation } from "@/lib/chat.functions";
+import {
+  sendChatMessage,
+  getLatestConversation,
+  listConversations,
+  getConversationMessages,
+} from "@/lib/chat.functions";
 
 export const Route = createFileRoute("/_authenticated/chat")({
   component: Chat,
 });
 
 type Message = { id: number; role: "user" | "assistant"; text: string };
+type ConversationSummary = { id: string; title: string | null; started_at: string };
 
 function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -18,8 +24,21 @@ function Chat() {
   const [error, setError] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const askAssistant = useServerFn(sendChatMessage);
   const loadConversation = useServerFn(getLatestConversation);
+  const loadList = useServerFn(listConversations);
+  const loadMessages = useServerFn(getConversationMessages);
+
+  const refreshList = useCallback(async () => {
+    try {
+      const result = await loadList({});
+      setConversations(result?.conversations ?? []);
+    } catch {
+      /* ignore */
+    }
+  }, [loadList]);
 
   useEffect(() => {
     let cancelled = false;
@@ -29,11 +48,7 @@ function Chat() {
         if (cancelled || !result) return;
         setConversationId(result.conversationId ?? null);
         setMessages(
-          (result.messages ?? []).map((m, i) => ({
-            id: i + 1,
-            role: m.role,
-            text: m.text,
-          })),
+          (result.messages ?? []).map((m, i) => ({ id: i + 1, role: m.role, text: m.text })),
         );
       } catch {
         /* start with an empty chat */
@@ -41,10 +56,35 @@ function Chat() {
         if (!cancelled) setLoading(false);
       }
     })();
+    void refreshList();
     return () => {
       cancelled = true;
     };
-  }, [loadConversation]);
+  }, [loadConversation, refreshList]);
+
+  async function openConversation(id: string) {
+    setHistoryOpen(false);
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await loadMessages({ data: { conversationId: id } });
+      setConversationId(id);
+      setMessages(
+        (result?.messages ?? []).map((m, i) => ({ id: i + 1, role: m.role, text: m.text })),
+      );
+    } catch {
+      setError("Couldn't open that conversation.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function newChat() {
+    setHistoryOpen(false);
+    setConversationId(null);
+    setMessages([]);
+    setError(null);
+  }
 
   async function send(e: React.FormEvent) {
     e.preventDefault();
@@ -55,10 +95,8 @@ function Chat() {
     setError(null);
     setPending(true);
     try {
-      const history = messages.map((m) => ({ role: m.role, text: m.text }));
-      const result = await askAssistant({
-        data: { message: text, history, conversationId },
-      });
+      const isNew = !conversationId;
+      const result = await askAssistant({ data: { message: text, conversationId } });
       if ("reply" in result && result.reply) {
         if ("conversationId" in result && result.conversationId) {
           setConversationId(result.conversationId);
@@ -67,6 +105,7 @@ function Chat() {
           ...prev,
           { id: Date.now() + 1, role: "assistant", text: result.reply },
         ]);
+        if (isNew) void refreshList();
       } else {
         setError(("error" in result && result.error) || "Something went wrong.");
       }
@@ -80,6 +119,66 @@ function Chat() {
   return (
     <AppShell title="Chat" padded={false}>
       <div className="flex min-h-full flex-col">
+        <div className="flex items-center justify-between gap-2 border-b border-border/60 px-3 py-2">
+          <button
+            type="button"
+            onClick={() => {
+              setHistoryOpen((v) => !v);
+              void refreshList();
+            }}
+            className="flex items-center gap-1.5 rounded-full border border-border/60 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <History className="size-4" />
+            History
+          </button>
+          <button
+            type="button"
+            onClick={newChat}
+            className="flex items-center gap-1.5 rounded-full border border-primary/40 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+          >
+            <Plus className="size-4" />
+            New chat
+          </button>
+        </div>
+
+        {historyOpen && (
+          <div className="border-b border-border/60 bg-secondary/30 px-3 py-2">
+            <div className="mb-1 flex items-center justify-between">
+              <p className="text-xs font-medium text-muted-foreground">Saved conversations</p>
+              <button
+                type="button"
+                aria-label="Close history"
+                onClick={() => setHistoryOpen(false)}
+                className="text-muted-foreground"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            {conversations.length === 0 ? (
+              <p className="py-3 text-xs text-muted-foreground">No saved conversations yet.</p>
+            ) : (
+              <ul className="max-h-64 space-y-1 overflow-y-auto">
+                {conversations.map((c) => (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      onClick={() => openConversation(c.id)}
+                      className={`w-full rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-secondary ${
+                        c.id === conversationId ? "bg-secondary text-primary" : "text-foreground"
+                      }`}
+                    >
+                      <span className="line-clamp-1">{c.title || "Untitled chat"}</span>
+                      <span className="block text-[11px] text-muted-foreground">
+                        {new Date(c.started_at).toLocaleString()}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
         <div className="flex-1 space-y-3 px-4 py-5">
           {loading ? (
             <p className="py-16 text-center text-sm text-muted-foreground">

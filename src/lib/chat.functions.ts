@@ -1,54 +1,85 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-type HistoryTurn = { role: "user" | "assistant"; text: string };
-type ChatInput = { message: string; history?: HistoryTurn[]; conversationId?: string | null };
+type ChatInput = { message: string; conversationId?: string | null };
+type StoredMessage = { role: "user" | "assistant"; text: string };
 
-type StoredMessage = { role: "user" | "assistant"; text: string; at: string };
+/** Lists the signed-in user's saved conversations, newest first. */
+export const listConversations = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { data, error } = await supabase
+      .from("conversations")
+      .select("id, title, started_at")
+      .eq("user_id", userId)
+      .eq("channel", "app")
+      .order("started_at", { ascending: false })
+      .limit(50);
+    if (error) {
+      console.error("Conversation list failed", error.message);
+      return { conversations: [] as { id: string; title: string | null; started_at: string }[] };
+    }
+    return { conversations: data ?? [] };
+  });
 
-function readStoredMessages(metadata: unknown): StoredMessage[] {
-  const raw =
-    metadata && typeof metadata === "object" && "messages" in metadata
-      ? (metadata as { messages?: unknown }).messages
-      : null;
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .filter(
-      (m): m is StoredMessage =>
-        !!m &&
-        typeof m === "object" &&
-        ((m as StoredMessage).role === "user" || (m as StoredMessage).role === "assistant") &&
-        typeof (m as StoredMessage).text === "string",
-    )
-    .map((m) => ({ role: m.role, text: m.text, at: typeof m.at === "string" ? m.at : "" }));
-}
+/** Loads one conversation's messages in chronological order. */
+export const getConversationMessages = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { conversationId: string }) => {
+    if (!input?.conversationId || typeof input.conversationId !== "string") {
+      throw new Error("conversationId is required");
+    }
+    return { conversationId: input.conversationId };
+  })
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { data: rows, error } = await supabase
+      .from("conversation_messages")
+      .select("role, content, created_at")
+      .eq("user_id", userId)
+      .eq("conversation_id", data.conversationId)
+      .order("created_at", { ascending: true })
+      .limit(500);
+    if (error) {
+      console.error("Message load failed", error.message);
+      return { messages: [] as StoredMessage[] };
+    }
+    return {
+      messages: (rows ?? [])
+        .filter((r) => r.role === "user" || r.role === "assistant")
+        .map((r) => ({ role: r.role as "user" | "assistant", text: r.content })),
+    };
+  });
 
-function toTranscript(messages: StoredMessage[]) {
-  return messages
-    .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.text}`)
-    .join("\n\n")
-    .slice(0, 100000);
-}
-
-/** Loads the signed-in user's most recent conversation, in chronological order. */
+/** Loads the most recent conversation plus its messages. */
 export const getLatestConversation = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
     const { data, error } = await supabase
       .from("conversations")
-      .select("id, metadata")
+      .select("id")
       .eq("user_id", userId)
       .eq("channel", "app")
       .order("started_at", { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (error) {
-      console.error("Conversation load failed", error.message);
-      return { conversationId: null, messages: [] as StoredMessage[] };
-    }
-    if (!data) return { conversationId: null, messages: [] as StoredMessage[] };
-    return { conversationId: data.id, messages: readStoredMessages(data.metadata) };
+    if (error || !data) return { conversationId: null, messages: [] as StoredMessage[] };
+
+    const { data: rows } = await supabase
+      .from("conversation_messages")
+      .select("role, content, created_at")
+      .eq("user_id", userId)
+      .eq("conversation_id", data.id)
+      .order("created_at", { ascending: true })
+      .limit(500);
+    return {
+      conversationId: data.id,
+      messages: (rows ?? [])
+        .filter((r) => r.role === "user" || r.role === "assistant")
+        .map((r) => ({ role: r.role as "user" | "assistant", text: r.content })),
+    };
   });
 
 export const sendChatMessage = createServerFn({ method: "POST" })
@@ -57,27 +88,81 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     const message = typeof input?.message === "string" ? input.message.trim() : "";
     if (!message) throw new Error("Message is required");
     if (message.length > 8000) throw new Error("Message is too long");
-    const history = (Array.isArray(input?.history) ? input.history : [])
-      .filter(
-        (t): t is HistoryTurn =>
-          !!t &&
-          (t.role === "user" || t.role === "assistant") &&
-          typeof t.text === "string" &&
-          t.text.trim().length > 0,
-      )
-      .slice(-30)
-      .map((t) => ({ role: t.role, text: t.text.slice(0, 8000) }));
     const conversationId =
       typeof input?.conversationId === "string" && input.conversationId ? input.conversationId : null;
-    return { message, history, conversationId };
+    return { message, conversationId };
   })
   .handler(async ({ data, context }) => {
     const apiKey = process.env["OPENAI_API_KEY"];
-    if (!apiKey) {
-      return { error: "The AI service isn't configured yet." } as const;
-    }
+    if (!apiKey) return { error: "The AI service isn't configured yet." } as const;
 
     const { supabase, userId } = context;
+
+    // --- Ensure a conversation exists ------------------------------------
+    let conversationId = data.conversationId;
+    if (conversationId) {
+      const { data: owned } = await supabase
+        .from("conversations")
+        .select("id")
+        .eq("id", conversationId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (!owned) conversationId = null;
+    }
+    if (!conversationId) {
+      const { data: created, error: createError } = await supabase
+        .from("conversations")
+        .insert({
+          user_id: userId,
+          channel: "app",
+          title: data.message.slice(0, 60),
+        })
+        .select("id")
+        .single();
+      if (createError || !created) {
+        console.error("Conversation create failed", createError?.message);
+        return { error: "Couldn't start a conversation. Please try again." } as const;
+      }
+      conversationId = created.id;
+    }
+
+    // --- Save the user message -------------------------------------------
+    const { error: userMsgError } = await supabase.from("conversation_messages").insert({
+      user_id: userId,
+      conversation_id: conversationId,
+      role: "user",
+      content: data.message,
+    });
+    if (userMsgError) console.error("User message save failed", userMsgError.message);
+
+    // --- Core identity ----------------------------------------------------
+    const statedName = extractName(data.message);
+    if (statedName) {
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .upsert({ user_id: userId, display_name: statedName }, { onConflict: "user_id" });
+      if (profileError) console.error("Profile upsert failed", profileError.message);
+    }
+
+    let profileBlock = "";
+    try {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("display_name, assistant_name, timezone, profile_summary")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (profile) {
+        const lines = [
+          profile.display_name ? `Name: ${profile.display_name}` : null,
+          profile.assistant_name ? `Assistant name: ${profile.assistant_name}` : null,
+          profile.timezone ? `Timezone: ${profile.timezone}` : null,
+          profile.profile_summary ? `About: ${profile.profile_summary}` : null,
+        ].filter(Boolean);
+        profileBlock = lines.join("\n");
+      }
+    } catch (e) {
+      console.error("Profile read error", e instanceof Error ? e.message : "unknown");
+    }
 
     // --- Explicit memory write -------------------------------------------
     const fact = extractExplicitMemory(data.message);
@@ -91,10 +176,21 @@ export const sendChatMessage = createServerFn({ method: "POST" })
           .eq("memory_type", "core")
           .limit(200);
         const normalized = normalize(fact);
-        const duplicate = (existing ?? []).some(
-          (m) => normalize(m.content ?? "") === normalized,
+        const duplicate = (existing ?? []).find((m) => normalize(m.content ?? "") === normalized);
+        const superseded = (existing ?? []).find(
+          (m) => !duplicate && sharesSubject(m.content ?? "", fact),
         );
-        if (!duplicate) {
+        if (duplicate) {
+          savedMemory = fact;
+        } else if (superseded) {
+          const { error: updateError } = await supabase
+            .from("memories")
+            .update({ content: fact, title: makeTitle(fact), confidence: 1.0, importance: 4 })
+            .eq("id", superseded.id)
+            .eq("user_id", userId);
+          if (updateError) console.error("Memory update failed", updateError.message);
+          else savedMemory = fact;
+        } else {
           const { error: insertError } = await supabase.from("memories").insert({
             user_id: userId,
             memory_type: "core",
@@ -106,8 +202,6 @@ export const sendChatMessage = createServerFn({ method: "POST" })
           });
           if (insertError) console.error("Memory insert failed", insertError.message);
           else savedMemory = fact;
-        } else {
-          savedMemory = fact;
         }
       } catch (e) {
         console.error("Memory write error", e instanceof Error ? e.message : "unknown");
@@ -135,6 +229,26 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       console.error("Memory read error", e instanceof Error ? e.message : "unknown");
     }
 
+    // --- Conversation history from the database ---------------------------
+    let history: StoredMessage[] = [];
+    try {
+      const { data: rows } = await supabase
+        .from("conversation_messages")
+        .select("role, content, created_at")
+        .eq("user_id", userId)
+        .eq("conversation_id", conversationId)
+        .order("created_at", { ascending: true })
+        .limit(60);
+      history = (rows ?? [])
+        .filter((r) => r.role === "user" || r.role === "assistant")
+        .map((r) => ({ role: r.role as "user" | "assistant", text: r.content }));
+      // Drop the message we just saved; it is sent separately as the newest turn.
+      const lastIndex = history.map((h) => h.text).lastIndexOf(data.message);
+      if (lastIndex >= 0 && history[lastIndex]?.role === "user") history.splice(lastIndex, 1);
+      history = history.slice(-30);
+    } catch (e) {
+      console.error("History read error", e instanceof Error ? e.message : "unknown");
+    }
 
     let response: Response;
     try {
@@ -150,23 +264,21 @@ export const sendChatMessage = createServerFn({ method: "POST" })
             {
               role: "system",
               content:
-                "You are a helpful personal AI assistant. Be concise, warm and practical." +
+                "You are a helpful personal AI assistant. Be concise, warm and practical. " +
+                "You are given CORE PROFILE (permanent identity), LONG-TERM MEMORY (persistent facts and preferences), " +
+                "and CURRENT CONVERSATION. Treat CORE PROFILE and LONG-TERM MEMORY as known facts about the user, " +
+                "but always prefer newer explicit corrections from the current conversation." +
                 (savedMemory
                   ? ` The user just asked you to remember something and it has been saved permanently: "${savedMemory}". Briefly confirm it.`
                   : ""),
             },
-            ...(memoryBlock
-              ? [
-                  {
-                    role: "system" as const,
-                    content:
-                      "LONG-TERM MEMORY about the user (saved from previous sessions). Treat these as known facts, but prefer newer corrections the user makes in the current conversation:\n" +
-                      memoryBlock,
-                  },
-                ]
+            ...(profileBlock
+              ? [{ role: "system" as const, content: `CORE PROFILE:\n${profileBlock}` }]
               : []),
-
-            ...data.history.map((turn) => ({
+            ...(memoryBlock
+              ? [{ role: "system" as const, content: `LONG-TERM MEMORY:\n${memoryBlock}` }]
+              : []),
+            ...history.map((turn) => ({
               role: turn.role,
               content: [
                 {
@@ -214,57 +326,15 @@ export const sendChatMessage = createServerFn({ method: "POST" })
         .trim();
     }
 
-    if (!text) {
-      return { error: "The AI returned an empty response." } as const;
-    }
+    if (!text) return { error: "The AI returned an empty response." } as const;
 
-    // --- Persist the conversation ----------------------------------------
-    let conversationId = data.conversationId;
-    try {
-      const now = new Date().toISOString();
-      const newTurns: StoredMessage[] = [
-        { role: "user", text: data.message, at: now },
-        { role: "assistant", text, at: new Date().toISOString() },
-      ];
-
-      if (conversationId) {
-        const { data: existing } = await supabase
-          .from("conversations")
-          .select("id, metadata")
-          .eq("id", conversationId)
-          .eq("user_id", userId)
-          .maybeSingle();
-        if (existing) {
-          const merged = [...readStoredMessages(existing.metadata), ...newTurns].slice(-400);
-          const { error: updateError } = await supabase
-            .from("conversations")
-            .update({ metadata: { messages: merged }, transcript: toTranscript(merged) })
-            .eq("id", conversationId)
-            .eq("user_id", userId);
-          if (updateError) console.error("Conversation update failed", updateError.message);
-        } else {
-          conversationId = null;
-        }
-      }
-
-      if (!conversationId) {
-        const { data: created, error: createError } = await supabase
-          .from("conversations")
-          .insert({
-            user_id: userId,
-            channel: "app",
-            title: data.message.slice(0, 80),
-            metadata: { messages: newTurns },
-            transcript: toTranscript(newTurns),
-          })
-          .select("id")
-          .single();
-        if (createError) console.error("Conversation create failed", createError.message);
-        else conversationId = created.id;
-      }
-    } catch (e) {
-      console.error("Conversation persist error", e instanceof Error ? e.message : "unknown");
-    }
+    const { error: assistantMsgError } = await supabase.from("conversation_messages").insert({
+      user_id: userId,
+      conversation_id: conversationId,
+      role: "assistant",
+      content: text,
+    });
+    if (assistantMsgError) console.error("Assistant message save failed", assistantMsgError.message);
 
     return { reply: text, conversationId } as const;
   });
@@ -276,6 +346,37 @@ function normalize(text: string) {
 function makeTitle(fact: string) {
   const words = fact.split(/\s+/).slice(0, 6).join(" ");
   return words.length < fact.length ? `${words}…` : words;
+}
+
+/** Rough "same subject" check so a correction replaces the old fact. */
+function sharesSubject(oldContent: string, newFact: string) {
+  const stop = new Set([
+    "my","the","a","an","is","are","that","this","i","me","to","of","and","in","for","it","with","prefer","favorite","favourite",
+  ]);
+  const keys = (s: string) =>
+    new Set(normalize(s).split(" ").filter((w) => w.length > 2 && !stop.has(w)));
+  const oldKeys = keys(oldContent);
+  const newKeys = keys(newFact);
+  if (oldKeys.size === 0 || newKeys.size === 0) return false;
+  let shared = 0;
+  newKeys.forEach((k) => {
+    if (oldKeys.has(k)) shared += 1;
+  });
+  return shared / Math.min(oldKeys.size, newKeys.size) >= 0.7;
+}
+
+/** Detects an explicit, unambiguous statement of the user's own name. */
+function extractName(message: string): string | null {
+  const m = message.match(
+    /^\s*(?:hi[, ]+|hello[, ]+)?(?:my name is|i am called|i'm called|you can call me|call me)\s+([A-Za-zÀ-ÿ'’-]+(?:\s+[A-Za-zÀ-ÿ'’-]+){0,2})\s*[.!]?\s*$/i,
+  );
+  if (!m?.[1]) return null;
+  const name = m[1].trim();
+  if (name.length < 2 || name.length > 60) return null;
+  return name
+    .split(/\s+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
 }
 
 /**
