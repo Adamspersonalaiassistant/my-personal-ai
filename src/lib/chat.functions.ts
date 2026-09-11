@@ -3,6 +3,44 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 type ChatInput = { message: string; conversationId?: string | null };
 type StoredMessage = { role: "user" | "assistant"; text: string };
+type MemoryResult = {
+  memorySaved: boolean;
+  memoryUpdated: boolean;
+  memoryError: string | null;
+};
+
+type SavedMemory = {
+  id: string;
+  title: string | null;
+  content: string;
+  memory_type: string;
+  importance: number;
+  created_at: string;
+  updated_at: string;
+};
+
+/** Lists the signed-in user's saved memories, highest importance first. */
+export const listMemories = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { data, error } = await supabase
+      .from("memories")
+      .select("id, title, content, memory_type, importance, created_at, updated_at")
+      .eq("user_id", userId)
+      .order("importance", { ascending: false })
+      .order("updated_at", { ascending: false });
+
+    if (error) {
+      console.error("Memory SELECT failed while listing saved memories", error.message);
+      return {
+        memories: [] as SavedMemory[],
+        error: "Your saved memories couldn't be loaded. Please try again.",
+      };
+    }
+
+    return { memories: data ?? [], error: null };
+  });
 
 /** Lists the signed-in user's saved conversations, newest first. */
 export const listConversations = createServerFn({ method: "GET" })
@@ -89,7 +127,9 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     if (!message) throw new Error("Message is required");
     if (message.length > 8000) throw new Error("Message is too long");
     const conversationId =
-      typeof input?.conversationId === "string" && input.conversationId ? input.conversationId : null;
+      typeof input?.conversationId === "string" && input.conversationId
+        ? input.conversationId
+        : null;
     return { message, conversationId };
   })
   .handler(async ({ data, context }) => {
@@ -97,6 +137,16 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     if (!apiKey) return { error: "The AI service isn't configured yet." } as const;
 
     const { supabase, userId } = context;
+    const memoryResult: MemoryResult = {
+      memorySaved: false,
+      memoryUpdated: false,
+      memoryError: null,
+    };
+
+    const recordMemoryError = (operation: "SELECT" | "INSERT" | "UPDATE", message: string) => {
+      console.error(`Memory ${operation} failed`, message);
+      memoryResult.memoryError = "Your memory couldn't be saved or loaded right now.";
+    };
 
     // --- Ensure a conversation exists ------------------------------------
     let conversationId = data.conversationId;
@@ -169,42 +219,53 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     let savedMemory: string | null = null;
     if (fact) {
       try {
-        const { data: existing } = await supabase
+        const { data: existing, error: existingError } = await supabase
           .from("memories")
           .select("id, content")
           .eq("user_id", userId)
           .eq("memory_type", "core")
           .limit(200);
-        const normalized = normalize(fact);
-        const duplicate = (existing ?? []).find((m) => normalize(m.content ?? "") === normalized);
-        const superseded = (existing ?? []).find(
-          (m) => !duplicate && sharesSubject(m.content ?? "", fact),
-        );
-        if (duplicate) {
-          savedMemory = fact;
-        } else if (superseded) {
-          const { error: updateError } = await supabase
-            .from("memories")
-            .update({ content: fact, title: makeTitle(fact), confidence: 1.0, importance: 4 })
-            .eq("id", superseded.id)
-            .eq("user_id", userId);
-          if (updateError) console.error("Memory update failed", updateError.message);
-          else savedMemory = fact;
+        if (existingError) {
+          recordMemoryError("SELECT", existingError.message);
         } else {
-          const { error: insertError } = await supabase.from("memories").insert({
-            user_id: userId,
-            memory_type: "core",
-            title: makeTitle(fact),
-            content: fact,
-            importance: 4,
-            confidence: 1.0,
-            source_type: "chat",
-          });
-          if (insertError) console.error("Memory insert failed", insertError.message);
-          else savedMemory = fact;
+          const normalized = normalize(fact);
+          const duplicate = (existing ?? []).find((m) => normalize(m.content ?? "") === normalized);
+          const superseded = (existing ?? []).find(
+            (m) => !duplicate && sharesSubject(m.content ?? "", fact),
+          );
+          if (!duplicate && superseded) {
+            const { error: updateError } = await supabase
+              .from("memories")
+              .update({ content: fact, title: makeTitle(fact), confidence: 1.0, importance: 4 })
+              .eq("id", superseded.id)
+              .eq("user_id", userId);
+            if (updateError) {
+              recordMemoryError("UPDATE", updateError.message);
+            } else {
+              savedMemory = fact;
+              memoryResult.memorySaved = true;
+              memoryResult.memoryUpdated = true;
+            }
+          } else if (!duplicate) {
+            const { error: insertError } = await supabase.from("memories").insert({
+              user_id: userId,
+              memory_type: "core",
+              title: makeTitle(fact),
+              content: fact,
+              importance: 4,
+              confidence: 1.0,
+              source_type: "chat",
+            });
+            if (insertError) {
+              recordMemoryError("INSERT", insertError.message);
+            } else {
+              savedMemory = fact;
+              memoryResult.memorySaved = true;
+            }
+          }
         }
       } catch (e) {
-        console.error("Memory write error", e instanceof Error ? e.message : "unknown");
+        recordMemoryError("SELECT", e instanceof Error ? e.message : "unknown error");
       }
     }
 
@@ -212,7 +273,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     let memoryBlock = "";
     try {
       const nowIso = new Date().toISOString();
-      const { data: memories } = await supabase
+      const { data: memories, error: memoriesError } = await supabase
         .from("memories")
         .select("title, content, importance, created_at, expires_at")
         .eq("user_id", userId)
@@ -220,13 +281,15 @@ export const sendChatMessage = createServerFn({ method: "POST" })
         .order("importance", { ascending: false })
         .order("created_at", { ascending: false })
         .limit(40);
-      if (memories && memories.length > 0) {
+      if (memoriesError) {
+        recordMemoryError("SELECT", memoriesError.message);
+      } else if (memories && memories.length > 0) {
         memoryBlock = memories
           .map((m) => `- ${m.title ? `${m.title}: ` : ""}${m.content}`)
           .join("\n");
       }
     } catch (e) {
-      console.error("Memory read error", e instanceof Error ? e.message : "unknown");
+      recordMemoryError("SELECT", e instanceof Error ? e.message : "unknown error");
     }
 
     // --- Conversation history from the database ---------------------------
@@ -292,18 +355,27 @@ export const sendChatMessage = createServerFn({ method: "POST" })
         }),
       });
     } catch {
-      return { error: "Couldn't reach the AI service. Please try again." } as const;
+      return {
+        error: "Couldn't reach the AI service. Please try again.",
+        ...memoryResult,
+      } as const;
     }
 
     if (!response.ok) {
       console.error("OpenAI request failed with status", response.status);
       if (response.status === 429) {
-        return { error: "Too many requests right now. Please try again shortly." } as const;
+        return {
+          error: "Too many requests right now. Please try again shortly.",
+          ...memoryResult,
+        } as const;
       }
       if (response.status === 401 || response.status === 403) {
-        return { error: "The AI service rejected the request." } as const;
+        return { error: "The AI service rejected the request.", ...memoryResult } as const;
       }
-      return { error: "The AI couldn't answer right now. Please try again." } as const;
+      return {
+        error: "The AI couldn't answer right now. Please try again.",
+        ...memoryResult,
+      } as const;
     }
 
     let payload: {
@@ -313,7 +385,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     try {
       payload = await response.json();
     } catch {
-      return { error: "The AI sent an unreadable response." } as const;
+      return { error: "The AI sent an unreadable response.", ...memoryResult } as const;
     }
 
     let text = typeof payload.output_text === "string" ? payload.output_text : "";
@@ -326,7 +398,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
         .trim();
     }
 
-    if (!text) return { error: "The AI returned an empty response." } as const;
+    if (!text) return { error: "The AI returned an empty response.", ...memoryResult } as const;
 
     const { error: assistantMsgError } = await supabase.from("conversation_messages").insert({
       user_id: userId,
@@ -334,13 +406,18 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       role: "assistant",
       content: text,
     });
-    if (assistantMsgError) console.error("Assistant message save failed", assistantMsgError.message);
+    if (assistantMsgError)
+      console.error("Assistant message save failed", assistantMsgError.message);
 
-    return { reply: text, conversationId } as const;
+    return { reply: text, conversationId, ...memoryResult } as const;
   });
 
 function normalize(text: string) {
-  return text.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function makeTitle(fact: string) {
@@ -351,10 +428,33 @@ function makeTitle(fact: string) {
 /** Rough "same subject" check so a correction replaces the old fact. */
 function sharesSubject(oldContent: string, newFact: string) {
   const stop = new Set([
-    "my","the","a","an","is","are","that","this","i","me","to","of","and","in","for","it","with","prefer","favorite","favourite",
+    "my",
+    "the",
+    "a",
+    "an",
+    "is",
+    "are",
+    "that",
+    "this",
+    "i",
+    "me",
+    "to",
+    "of",
+    "and",
+    "in",
+    "for",
+    "it",
+    "with",
+    "prefer",
+    "favorite",
+    "favourite",
   ]);
   const keys = (s: string) =>
-    new Set(normalize(s).split(" ").filter((w) => w.length > 2 && !stop.has(w)));
+    new Set(
+      normalize(s)
+        .split(" ")
+        .filter((w) => w.length > 2 && !stop.has(w)),
+    );
   const oldKeys = keys(oldContent);
   const newKeys = keys(newFact);
   if (oldKeys.size === 0 || newKeys.size === 0) return false;
@@ -391,7 +491,11 @@ function extractExplicitMemory(message: string): string | null {
   for (const re of patterns) {
     const m = message.match(re);
     if (m && m[1]) {
-      const fact = m[1].trim().replace(/^that\s+/i, "").replace(/\s+/g, " ").trim();
+      const fact = m[1]
+        .trim()
+        .replace(/^that\s+/i, "")
+        .replace(/\s+/g, " ")
+        .trim();
       if (fact.length >= 2 && fact.length <= 2000) return fact;
     }
   }
