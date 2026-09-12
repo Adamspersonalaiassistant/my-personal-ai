@@ -1,0 +1,29 @@
+name: Validate Emery UI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/validate-ui.yml'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Production build
+        run: npm run build
+      - name: TypeScript
+        run: npx tsc --noEmit
+      - name: Focused UI lint
+        run: npx eslint src/components/AppShell.tsx src/routes/_authenticated/chat.tsx src/routes/_authenticated/agents.tsx 'src/routes/_authenticated/agents_.$agentId.tsx' src/routes/_authenticated/tasks.tsx src/routes/_authenticated/projects.tsx src/routes/_authenticated/meetings.tsx src/routes/_authenticated/memories.tsx src/routes/_authenticated/settings.tsx
