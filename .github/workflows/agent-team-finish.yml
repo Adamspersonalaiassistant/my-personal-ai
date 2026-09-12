@@ -13,7 +13,7 @@ permissions:
 jobs:
   finish:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,7 +23,7 @@ jobs:
           node-version: 22
       - run: npm install --no-audit --no-fund
 
-      - name: Patch Emery agent orchestration
+      - name: Patch Emery agent orchestration and serialization
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -35,6 +35,11 @@ jobs:
           if 'existingExactAgent' not in agent:
               replacement = '''  const { data: existingExactAgent } = await db\n    .from("agents")\n    .select("*")\n    .eq("user_id", userId)\n    .eq("name", name)\n    .maybeSingle();\n  if (existingExactAgent) return existingExactAgent as AgentRow;\n\n  const baseSlug = slugify(name) || "specialist-agent";'''
               agent = agent.replace(marker, replacement)
+
+          old_list = '''    const rows = (data ?? []) as AgentRow[];\n    const visible = rows.filter((agent) => !agent.is_internal);\n    return {\n      agents: visible.map((agent) => ({\n        ...agent,\n        children: rows\n          .filter((child) => child.parent_agent_id === agent.id)\n          .map((child) => ({ id: child.id, name: child.name, slug: child.slug, description: child.description })),\n      })),\n    };'''
+          new_list = '''    const rows = (data ?? []) as AgentRow[];\n    const visible = rows.filter((agent) => !agent.is_internal);\n    return {\n      agents: visible.map((agent) => ({\n        id: agent.id,\n        name: agent.name,\n        slug: agent.slug,\n        description: agent.description,\n        mission: agent.mission,\n        parent_agent_id: agent.parent_agent_id,\n        is_internal: agent.is_internal,\n        is_active: agent.is_active,\n        sort_order: agent.sort_order,\n        children: rows\n          .filter((child) => child.parent_agent_id === agent.id)\n          .map((child) => ({ id: child.id, name: child.name, slug: child.slug, description: child.description })),\n      })),\n    };'''
+          if old_list in agent:
+              agent = agent.replace(old_list, new_list)
 
           if 'export async function consultSpecialistFromEmery' not in agent:
               agent += '''\n\nexport async function consultSpecialistFromEmery(\n  apiKey: string,\n  db: any,\n  userId: string,\n  slug: "hpo-agent" | "research-agent" | "strategy-agent",\n  assignment: string,\n) {\n  await ensureDefaultAgentTeam(db, userId);\n  const { data: rawAgent, error } = await db\n    .from("agents")\n    .select("*")\n    .eq("user_id", userId)\n    .eq("slug", slug)\n    .eq("is_active", true)\n    .single();\n  if (error || !rawAgent) throw error ?? new Error("Specialist agent not found");\n  const agent = rawAgent as AgentRow;\n  const thread = await getOrCreateThread(db, userId, agent);\n  await saveAgentMessage(\n    db,\n    userId,\n    thread.id,\n    "emery",\n    "Emery",\n    `I’m bringing you in from my main conversation with Adam. Assignment: ${assignment}`,\n    { delegated_from_main_chat: true },\n  );\n  const history = await recentThread(db, userId, thread.id);\n  const adamContext = await loadAdamContext(db, userId);\n  let specialist: { response: string; metadata: Record<string, unknown> };\n  if (slug === "hpo-agent") specialist = await runHpoTeam(apiKey, agent, assignment, adamContext, history);\n  else if (slug === "research-agent") specialist = await runResearchAgent(apiKey, agent, assignment, adamContext, history);\n  else specialist = await runStrategyAgent(apiKey, agent, assignment, adamContext, history);\n  await saveAgentMessage(\n    db,\n    userId,\n    thread.id,\n    "agent",\n    agent.name,\n    specialist.response,\n    { ...specialist.metadata, delegated_from_main_chat: true },\n  );\n  await db\n    .from("agent_threads")\n    .update({ updated_at: new Date().toISOString() })\n    .eq("id", thread.id)\n    .eq("user_id", userId);\n  return { agentName: agent.name, response: specialist.response };\n}\n'''
@@ -64,21 +69,21 @@ jobs:
       - name: Format changed feature files
         run: npx prettier --write src/lib/agent.functions.ts src/lib/emery.functions.ts src/components/AppShell.tsx src/routes/_authenticated/agents.tsx 'src/routes/_authenticated/agents_.$agentId.tsx' src/routes/_authenticated/settings.tsx
 
-      - name: Generate route tree and production build
+      - name: Production build
         run: npm run build
 
       - name: TypeScript
         run: npx tsc --noEmit
 
-      - name: Scoped lint
+      - name: Focused lint
         run: npx eslint src/lib/agent.functions.ts src/lib/emery.functions.ts src/components/AppShell.tsx src/routes/_authenticated/agents.tsx 'src/routes/_authenticated/agents_.$agentId.tsx' src/routes/_authenticated/settings.tsx
 
-      - name: Commit generated and patched files
+      - name: Commit validated Agent Team foundation
         run: |
           if ! git diff --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add src/lib/agent.functions.ts src/lib/emery.functions.ts src/components/AppShell.tsx src/routes/_authenticated/agents.tsx 'src/routes/_authenticated/agents_.$agentId.tsx' src/routes/_authenticated/settings.tsx src/routeTree.gen.ts
-            git commit -m "Finish and validate Emery Agent Team V1 [skip ci]"
+            git commit -m "Stabilize Emery Agent Team foundation [skip ci]"
             git push origin HEAD:main
           fi
