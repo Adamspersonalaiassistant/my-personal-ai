@@ -1,18 +1,19 @@
 import { Link } from "@tanstack/react-router";
 import {
   MessageCircle,
-  Brain,
+  UsersRound,
   CheckSquare,
   CalendarDays,
   FolderKanban,
   Settings as SettingsIcon,
+  Brain,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import brainImage from "@/assets/neural-brain.png";
 
 const navItems = [
   { to: "/chat", label: "Emery", icon: MessageCircle },
-  { to: "/memories", label: "Memories", icon: Brain },
+  { to: "/agents", label: "Agents", icon: UsersRound },
   { to: "/tasks", label: "Tasks", icon: CheckSquare },
   { to: "/meetings", label: "Meetings", icon: CalendarDays },
   { to: "/projects", label: "Projects", icon: FolderKanban },
