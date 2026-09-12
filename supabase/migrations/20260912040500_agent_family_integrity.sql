@@ -3,6 +3,7 @@
 create or replace function public.enforce_agent_parent_owner()
 returns trigger
 language plpgsql
+set search_path = ''
 as $$
 begin
   if new.parent_agent_id is not null then
