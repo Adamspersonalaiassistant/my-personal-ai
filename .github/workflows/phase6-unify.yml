@@ -1,0 +1,186 @@
+name: Phase 6 Unify Emery OS
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/phase6-unify.yml
+
+permissions:
+  contents: write
+
+jobs:
+  unify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+
+      - name: Patch connected OS surfaces
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new, required=True):
+              p = Path(path)
+              text = p.read_text()
+              if old in text:
+                  text = text.replace(old, new)
+                  p.write_text(text)
+                  return
+              if required and new not in text:
+                  raise SystemExit(f"Missing patch marker in {path}: {old[:100]!r}")
+
+          # Chat: expose bounded connected context without turning chat into a dashboard.
+          replace('src/routes/_authenticated/chat.tsx',
+            'import { AppShell } from "@/components/AppShell";\n',
+            'import { AppShell } from "@/components/AppShell";\nimport { OperatingContextCard } from "@/components/OperatingContextCard";\n')
+          replace('src/routes/_authenticated/chat.tsx',
+            '        <div className="emery-scrollbar flex-1 overflow-y-auto px-4 pb-6 pt-5 sm:px-6 sm:pt-6">\n',
+            '        <div className="emery-scrollbar flex-1 overflow-y-auto px-4 pb-6 pt-5 sm:px-6 sm:pt-6">\n          <div className="mx-auto mb-4 max-w-2xl">\n            <OperatingContextCard />\n          </div>\n')
+
+          # Settings: files become part of the same OS context.
+          replace('src/routes/_authenticated/settings.tsx',
+            'import { AppShell } from "@/components/AppShell";\n',
+            'import { AppShell } from "@/components/AppShell";\nimport { RecentFilesCard } from "@/components/RecentFilesCard";\n')
+          replace('src/routes/_authenticated/settings.tsx',
+            '        <section className="emery-glass overflow-hidden rounded-[1.7rem]">\n',
+            '        <RecentFilesCard />\n\n        <section className="emery-glass overflow-hidden rounded-[1.7rem]">\n')
+
+          # Projects: surface connected execution rollup.
+          replace('src/routes/_authenticated/projects.tsx',
+            'import { AppShell } from "@/components/AppShell";\n',
+            'import { AppShell } from "@/components/AppShell";\nimport { ProjectExecutionOverview } from "@/components/ProjectExecutionOverview";\n')
+          replace('src/routes/_authenticated/projects.tsx',
+            '        {error ? (\n',
+            '        <ProjectExecutionOverview />\n\n        {error ? (\n')
+
+          # Tasks: use linked read/write functions and active project options.
+          replace('src/routes/_authenticated/tasks.tsx',
+            'import { createTask, listTasks, setTaskCompleted } from "@/lib/emery.functions";\n',
+            'import { setTaskCompleted } from "@/lib/emery.functions";\nimport { createLinkedTask, listProjectOptions, listUnifiedTasks } from "@/lib/os.functions";\n')
+          replace('src/routes/_authenticated/tasks.tsx',
+            '  project_id: string | null;\n  metadata: unknown;\n',
+            '  project_id: string | null;\n  project_name: string | null;\n  metadata: unknown;\n')
+          replace('src/routes/_authenticated/tasks.tsx',
+            'function Tasks() {\n  const loadTasks = useServerFn(listTasks);\n  const addTask = useServerFn(createTask);\n',
+            'type ProjectOption = { id: string; name: string; priority: number; status: string };\n\nfunction Tasks() {\n  const loadTasks = useServerFn(listUnifiedTasks);\n  const loadProjects = useServerFn(listProjectOptions);\n  const addTask = useServerFn(createLinkedTask);\n')
+          replace('src/routes/_authenticated/tasks.tsx',
+            '  const [priority, setPriority] = useState(3);\n',
+            '  const [priority, setPriority] = useState(3);\n  const [projectId, setProjectId] = useState("");\n  const [projects, setProjects] = useState<ProjectOption[]>([]);\n')
+          replace('src/routes/_authenticated/tasks.tsx',
+            '        const result = await loadTasks({});\n        if (!cancelled) setTasks((result?.tasks ?? []) as Task[]);\n',
+            '        const [result, projectResult] = await Promise.all([loadTasks({}), loadProjects({})]);\n        if (!cancelled) {\n          setTasks((result?.tasks ?? []) as Task[]);\n          setProjects((projectResult?.projects ?? []) as ProjectOption[]);\n        }\n')
+          replace('src/routes/_authenticated/tasks.tsx',
+            '  }, [loadTasks]);\n',
+            '  }, [loadProjects, loadTasks]);\n')
+          replace('src/routes/_authenticated/tasks.tsx',
+            '        data: { title, details, dueAt: due ? new Date(due).toISOString() : null, priority },\n',
+            '        data: { title, details, dueAt: due ? new Date(due).toISOString() : null, priority, projectId: projectId || null },\n')
+          replace('src/routes/_authenticated/tasks.tsx',
+            '      setPriority(3);\n      setShowAdd(false);\n',
+            '      setPriority(3);\n      setProjectId("");\n      setShowAdd(false);\n')
+          replace('src/routes/_authenticated/tasks.tsx',
+            '              <label className="block text-xs font-medium text-muted-foreground">Priority</label>\n',
+            '              <label className="block text-xs font-medium text-muted-foreground">Project (optional)</label>\n              <select\n                value={projectId}\n                onChange={(event) => setProjectId(event.target.value)}\n                className="min-h-12 w-full rounded-2xl border border-border/60 bg-card/60 px-3.5 text-sm outline-none"\n              >\n                <option value="">No project</option>\n                {projects.map((project) => (\n                  <option key={project.id} value={project.id}>{project.name}</option>\n                ))}\n              </select>\n              <label className="block text-xs font-medium text-muted-foreground">Priority</label>\n')
+          replace('src/routes/_authenticated/tasks.tsx',
+            '                    <span className="emery-chip text-muted-foreground">\n                      Priority {task.priority}\n                    </span>\n',
+            '                    <span className="emery-chip text-muted-foreground">\n                      Priority {task.priority}\n                    </span>\n                    {task.project_name ? <span className="emery-chip">{task.project_name}</span> : null}\n')
+
+          # Meetings: optional project linkage in existing metadata.
+          replace('src/routes/_authenticated/meetings.tsx',
+            'import { createMeeting, listMeetings } from "@/lib/emery.functions";\n',
+            'import { createLinkedMeeting, listProjectOptions, listUnifiedMeetings } from "@/lib/os.functions";\n')
+          replace('src/routes/_authenticated/meetings.tsx',
+            '  summary: string | null;\n  created_at: string;\n};\n',
+            '  summary: string | null;\n  project_id: string | null;\n  project_name: string | null;\n  created_at: string;\n};\n\ntype ProjectOption = { id: string; name: string; priority: number; status: string };\n')
+          replace('src/routes/_authenticated/meetings.tsx',
+            '  const loadMeetings = useServerFn(listMeetings);\n  const addMeeting = useServerFn(createMeeting);\n',
+            '  const loadMeetings = useServerFn(listUnifiedMeetings);\n  const loadProjects = useServerFn(listProjectOptions);\n  const addMeeting = useServerFn(createLinkedMeeting);\n')
+          replace('src/routes/_authenticated/meetings.tsx',
+            '  const [showAdd, setShowAdd] = useState(false);\n',
+            '  const [showAdd, setShowAdd] = useState(false);\n  const [projects, setProjects] = useState<ProjectOption[]>([]);\n')
+          replace('src/routes/_authenticated/meetings.tsx',
+            '        const result = await loadMeetings({});\n        if (!cancelled) setMeetings((result?.meetings ?? []) as Meeting[]);\n',
+            '        const [result, projectResult] = await Promise.all([loadMeetings({}), loadProjects({})]);\n        if (!cancelled) {\n          setMeetings((result?.meetings ?? []) as Meeting[]);\n          setProjects((projectResult?.projects ?? []) as ProjectOption[]);\n        }\n')
+          replace('src/routes/_authenticated/meetings.tsx',
+            '  }, [loadMeetings]);\n',
+            '  }, [loadMeetings, loadProjects]);\n')
+          replace('src/routes/_authenticated/meetings.tsx',
+            '        <MeetingEditor\n          onClose={() => setShowAdd(false)}\n',
+            '        <MeetingEditor\n          projects={projects}\n          onClose={() => setShowAdd(false)}\n')
+          replace('src/routes/_authenticated/meetings.tsx',
+            '                      {!past ? <span className="emery-chip">Upcoming</span> : null}\n',
+            '                      {!past ? <span className="emery-chip">Upcoming</span> : null}\n                      {meeting.project_name ? <span className="emery-chip">{meeting.project_name}</span> : null}\n')
+          replace('src/routes/_authenticated/meetings.tsx',
+            'function MeetingEditor({\n  onClose,\n  onSave,\n}: {\n  onClose: () => void;\n  onSave: (values: { title: string; meetingAt: string; participants?: string[] }) => Promise<void>;\n}) {\n',
+            'function MeetingEditor({\n  projects,\n  onClose,\n  onSave,\n}: {\n  projects: ProjectOption[];\n  onClose: () => void;\n  onSave: (values: { title: string; meetingAt: string; participants?: string[]; projectId?: string | null }) => Promise<void>;\n}) {\n')
+          replace('src/routes/_authenticated/meetings.tsx',
+            '  const [participants, setParticipants] = useState("");\n',
+            '  const [participants, setParticipants] = useState("");\n  const [projectId, setProjectId] = useState("");\n')
+          replace('src/routes/_authenticated/meetings.tsx',
+            '        participants: participants\n          .split(",")\n          .map((item) => item.trim())\n          .filter(Boolean),\n',
+            '        participants: participants\n          .split(",")\n          .map((item) => item.trim())\n          .filter(Boolean),\n        projectId: projectId || null,\n')
+          replace('src/routes/_authenticated/meetings.tsx',
+            '              <label className="block text-xs font-medium text-muted-foreground">Participants</label>\n',
+            '              <label className="block text-xs font-medium text-muted-foreground">Project (optional)</label>\n              <select\n                value={projectId}\n                onChange={(event) => setProjectId(event.target.value)}\n                className="min-h-12 w-full rounded-2xl border border-border/60 bg-card/60 px-3.5 text-sm outline-none"\n              >\n                <option value="">No project</option>\n                {projects.map((project) => (\n                  <option key={project.id} value={project.id}>{project.name}</option>\n                ))}\n              </select>\n              <label className="block text-xs font-medium text-muted-foreground">Participants</label>\n')
+
+          # Main-chat action context understands meeting->project metadata and human project names.
+          replace('src/lib/emery.functions.ts',
+            '    participants: unknown;\n  }>;\n};\n',
+            '    participants: unknown;\n    metadata: unknown;\n  }>;\n};\n')
+          replace('src/lib/emery.functions.ts',
+            '.select("id, title, meeting_at, participants")\n',
+            '.select("id, title, meeting_at, participants, metadata")\n')
+          old = '''function buildActionContextBlock(context: ActionContext) {\n  const maxCharacters = 7000;\n  const lines: string[] = ["OPEN TASKS:"];'''
+          new = '''function buildActionContextBlock(context: ActionContext) {\n  const maxCharacters = 7000;\n  const projectNames = new Map(context.projects.map((project) => [project.id, project.name]));\n  const lines: string[] = ["OPEN TASKS:"];'''
+          replace('src/lib/emery.functions.ts', old, new)
+          replace('src/lib/emery.functions.ts',
+            '`- TASK ${task.id}: ${task.title} | priority ${task.priority} | due ${task.due_at ?? "none"} | project ${task.project_id ?? "none"} | status ${task.status}${task.details ? ` | details ${task.details.slice(0, 240)}` : ""}`,\n',
+            '`- TASK ${task.id}: ${task.title} | priority ${task.priority} | due ${task.due_at ?? "none"} | project ${task.project_id ? `${projectNames.get(task.project_id) ?? "unknown"} (${task.project_id})` : "none"} | status ${task.status}${task.details ? ` | details ${task.details.slice(0, 240)}` : ""}`,\n')
+          replace('src/lib/emery.functions.ts',
+            '`- MEETING ${meeting.id}: ${meeting.title ?? "Untitled"} | at ${meeting.meeting_at ?? "unknown"} | participants ${JSON.stringify(meeting.participants ?? [])}`,\n',
+            '`- MEETING ${meeting.id}: ${meeting.title ?? "Untitled"} | at ${meeting.meeting_at ?? "unknown"} | project ${typeof safeObject(meeting.metadata)["project_id"] === "string" ? `${projectNames.get(String(safeObject(meeting.metadata)["project_id"])) ?? "unknown"} (${String(safeObject(meeting.metadata)["project_id"])})` : "none"} | participants ${JSON.stringify(meeting.participants ?? [])}`,\n')
+          PY
+
+      - name: Format Phase 6 files
+        run: npx prettier --write src/lib/os.functions.ts src/lib/emery.functions.ts src/components/OperatingContextCard.tsx src/components/RecentFilesCard.tsx src/components/ProjectExecutionOverview.tsx src/routes/_authenticated/chat.tsx src/routes/_authenticated/tasks.tsx src/routes/_authenticated/meetings.tsx src/routes/_authenticated/projects.tsx src/routes/_authenticated/settings.tsx
+
+      - name: Production build
+        run: npm run build
+
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+      - name: Focused lint
+        run: npx eslint src/lib/os.functions.ts src/lib/emery.functions.ts src/components/OperatingContextCard.tsx src/components/RecentFilesCard.tsx src/components/ProjectExecutionOverview.tsx src/routes/_authenticated/chat.tsx src/routes/_authenticated/tasks.tsx src/routes/_authenticated/meetings.tsx src/routes/_authenticated/projects.tsx src/routes/_authenticated/settings.tsx
+
+      - name: Mark Phase 6 complete
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('docs/OVERNIGHT_EMERY_SPRINT_STATUS.md')
+          text = p.read_text()
+          old = '''## Phase 6 — Unify Emery Life OS\n\nStatus: NOT STARTED'''
+          new = '''## Phase 6 — Unify Emery Life OS\n\nStatus: COMPLETE — production build, TypeScript, and focused lint validated.\n\nImplemented and validated:\n\n- Added a bounded, user-scoped operating-system snapshot joining active tasks, projects, upcoming meetings, recent memories, recent Emery attachments, and visible specialist agents.\n- Main Emery chat now surfaces a compact Current Context card driven by real structured data, with one highest-leverage focus and links into Tasks, Projects, Meetings, and recent files.\n- Manual Tasks can now link to active Projects; task cards show project context.\n- Meetings can now link to active Projects through existing meeting metadata; meeting cards show the relationship without a destructive schema change.\n- Projects now expose connected execution context including open-task counts and linked meeting cues.\n- Settings now surfaces recent Emery files/attachments with short-lived signed access while preserving the original conversation attachment system.\n- Emery's bounded action-context prompt now translates linked project IDs into human project names for tasks and meetings, improving answers such as “what do I have going on?” without adding a large new prompt block.\n- No Emery Voice behavior/design changes.\n\nRemaining for later phases:\n\n- Phase 7 should adopt paginated main-chat loading and complete mobile/performance polish.\n- File context remains attachment-oriented by design; no separate document library or external-drive sync was invented.\n\nValidation:\n\n- Production build passed.\n- TypeScript (`npx tsc --noEmit`) passed.\n- Focused lint passed on all changed Phase 6 files.'''
+          if old not in text:
+              raise SystemExit('Phase 6 status marker missing')
+          p.write_text(text.replace(old, new))
+          PY
+
+      - name: Commit validated Phase 6
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/lib/os.functions.ts src/lib/emery.functions.ts src/components/OperatingContextCard.tsx src/components/RecentFilesCard.tsx src/components/ProjectExecutionOverview.tsx src/routes/_authenticated/chat.tsx src/routes/_authenticated/tasks.tsx src/routes/_authenticated/meetings.tsx src/routes/_authenticated/projects.tsx src/routes/_authenticated/settings.tsx docs/OVERNIGHT_EMERY_SPRINT_STATUS.md src/routeTree.gen.ts
+          if ! git diff --cached --quiet; then
+            git commit -m "Unify Emery life operating system [skip ci]"
+            git push origin HEAD:main
+          fi
