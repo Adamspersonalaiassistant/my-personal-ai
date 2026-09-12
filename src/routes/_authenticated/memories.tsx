@@ -19,9 +19,18 @@ type Memory = {
   updated_at: string;
 };
 
+type Profile = {
+  display_name: string | null;
+  assistant_name: string | null;
+  timezone: string | null;
+  profile_summary: string | null;
+};
+
 function Memories() {
   const loadMemories = useServerFn(listMemories);
   const [memories, setMemories] = useState<Memory[]>([]);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,6 +45,8 @@ function Memories() {
           return;
         }
         setMemories(result.memories);
+        setProfile(result.profile);
+        setProfileError(result.profileError);
       })
       .catch(() => {
         if (!cancelled) setError("Your saved memories couldn't be loaded. Please try again.");
@@ -64,33 +75,84 @@ function Memories() {
           <h2 className="text-base font-semibold">Memories unavailable</h2>
           <p className="text-sm leading-relaxed text-muted-foreground">{error}</p>
         </div>
-      ) : memories.length === 0 ? (
-        <EmptyState
-          icon={Brain}
-          title="Nothing here yet"
-          description="Long-term memories your assistant keeps about people, preferences and past conversations will appear here."
-        />
       ) : (
-        <ul className="space-y-3">
-          {memories.map((memory) => (
-            <li key={memory.id} className="rounded-2xl border border-border/60 bg-card p-4">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-secondary text-muted-foreground">
-                  <Brain className="size-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  {memory.title ? <h2 className="text-sm font-semibold">{memory.title}</h2> : null}
-                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                    {memory.content}
-                  </p>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Saved {new Date(memory.created_at).toLocaleDateString()}
-                  </p>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <div className="space-y-5">
+          <section className="rounded-2xl border border-border/60 bg-card p-4">
+            <p className="text-xs uppercase tracking-widest text-muted-foreground">About Me</p>
+            {profileError ? (
+              <p className="mt-3 text-sm text-destructive" role="alert">
+                {profileError}
+              </p>
+            ) : profile && Object.values(profile).some(Boolean) ? (
+              <dl className="mt-3 space-y-2 text-sm">
+                {profile.display_name ? (
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Name</dt>
+                    <dd className="font-medium">{profile.display_name}</dd>
+                  </div>
+                ) : null}
+                {profile.assistant_name ? (
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Assistant name</dt>
+                    <dd className="font-medium">{profile.assistant_name}</dd>
+                  </div>
+                ) : null}
+                {profile.timezone ? (
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Timezone</dt>
+                    <dd className="font-medium">{profile.timezone}</dd>
+                  </div>
+                ) : null}
+                {profile.profile_summary ? (
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Profile</dt>
+                    <dd className="leading-relaxed">{profile.profile_summary}</dd>
+                  </div>
+                ) : null}
+              </dl>
+            ) : (
+              <p className="mt-3 text-sm text-muted-foreground">
+                Profile details learned from your conversations will appear here.
+              </p>
+            )}
+          </section>
+
+          {memories.length === 0 ? (
+            <EmptyState
+              icon={Brain}
+              title="Nothing here yet"
+              description="Long-term memories your assistant keeps about people, preferences and past conversations will appear here."
+            />
+          ) : (
+            <ul className="space-y-3">
+              {memories.map((memory) => (
+                <li key={memory.id} className="rounded-2xl border border-border/60 bg-card p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-secondary text-muted-foreground">
+                      <Brain className="size-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {memory.title ? (
+                          <h2 className="text-sm font-semibold">{memory.title}</h2>
+                        ) : null}
+                        <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                          {memory.memory_type.replaceAll("_", " ")}
+                        </span>
+                      </div>
+                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                        {memory.content}
+                      </p>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Saved {new Date(memory.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
     </AppShell>
   );

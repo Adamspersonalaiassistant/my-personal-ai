@@ -9,6 +9,31 @@ type MemoryResult = {
   memoryError: string | null;
 };
 
+type Profile = {
+  display_name: string | null;
+  assistant_name: string | null;
+  timezone: string | null;
+  profile_summary: string | null;
+};
+
+type ExistingMemory = {
+  id: string;
+  title: string | null;
+  content: string;
+  memory_type: string;
+};
+
+type MemoryCandidate = {
+  action: "create" | "update" | "profile_update" | "none";
+  memory_type: string;
+  title: string;
+  content: string;
+  importance: number;
+  confidence: number;
+  reason: string;
+  target_memory_id: string | null;
+};
+
 type SavedMemory = {
   id: string;
   title: string | null;
@@ -24,22 +49,40 @@ export const listMemories = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { data, error } = await supabase
-      .from("memories")
-      .select("id, title, content, memory_type, importance, created_at, updated_at")
-      .eq("user_id", userId)
-      .order("importance", { ascending: false })
-      .order("updated_at", { ascending: false });
+    const [{ data, error }, { data: profile, error: profileError }] = await Promise.all([
+      supabase
+        .from("memories")
+        .select("id, title, content, memory_type, importance, created_at, updated_at")
+        .eq("user_id", userId)
+        .order("importance", { ascending: false })
+        .order("updated_at", { ascending: false }),
+      supabase
+        .from("profiles")
+        .select("display_name, assistant_name, timezone, profile_summary")
+        .eq("user_id", userId)
+        .maybeSingle(),
+    ]);
 
     if (error) {
       console.error("Memory SELECT failed while listing saved memories", error.message);
       return {
         memories: [] as SavedMemory[],
+        profile: null as Profile | null,
+        profileError: profileError ? "Your profile couldn't be loaded right now." : null,
         error: "Your saved memories couldn't be loaded. Please try again.",
       };
     }
 
-    return { memories: data ?? [], error: null };
+    if (profileError) {
+      console.error("Profile SELECT failed while loading memories page", profileError.message);
+    }
+
+    return {
+      memories: data ?? [],
+      profile: (profile ?? null) as Profile | null,
+      profileError: profileError ? "Your profile couldn't be loaded right now." : null,
+      error: null,
+    };
   });
 
 /** Lists the signed-in user's saved conversations, newest first. */
@@ -191,82 +234,154 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       const { error: profileError } = await supabase
         .from("profiles")
         .upsert({ user_id: userId, display_name: statedName }, { onConflict: "user_id" });
-      if (profileError) console.error("Profile upsert failed", profileError.message);
+      if (profileError) {
+        console.error("Profile UPSERT failed for display_name", profileError.message);
+        memoryResult.memoryError = "Your profile couldn't be saved right now.";
+      }
     }
 
     let profileBlock = "";
-    try {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("display_name, assistant_name, timezone, profile_summary")
-        .eq("user_id", userId)
-        .maybeSingle();
-      if (profile) {
-        const lines = [
-          profile.display_name ? `Name: ${profile.display_name}` : null,
-          profile.assistant_name ? `Assistant name: ${profile.assistant_name}` : null,
-          profile.timezone ? `Timezone: ${profile.timezone}` : null,
-          profile.profile_summary ? `About: ${profile.profile_summary}` : null,
-        ].filter(Boolean);
-        profileBlock = lines.join("\n");
-      }
-    } catch (e) {
-      console.error("Profile read error", e instanceof Error ? e.message : "unknown");
+    const { data: initialProfile, error: initialProfileError } = await supabase
+      .from("profiles")
+      .select("display_name, assistant_name, timezone, profile_summary")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (initialProfileError) {
+      console.error("Profile SELECT failed before memory extraction", initialProfileError.message);
+      memoryResult.memoryError ??= "Your profile couldn't be loaded right now.";
     }
 
-    // --- Explicit memory write -------------------------------------------
+    // --- Existing memory read --------------------------------------------
+    const { data: existingRows, error: existingError } = await supabase
+      .from("memories")
+      .select("id, title, content, memory_type")
+      .eq("user_id", userId)
+      .order("updated_at", { ascending: false })
+      .limit(100);
+    const existingMemories: ExistingMemory[] = existingError ? [] : (existingRows ?? []);
+    if (existingError) recordMemoryError("SELECT", existingError.message);
+
+    // --- Explicit and automatic memory write -----------------------------
     const fact = extractExplicitMemory(data.message);
     let savedMemory: string | null = null;
     if (fact) {
-      try {
-        const { data: existing, error: existingError } = await supabase
-          .from("memories")
-          .select("id, content")
-          .eq("user_id", userId)
-          .eq("memory_type", "core")
-          .limit(200);
-        if (existingError) {
-          recordMemoryError("SELECT", existingError.message);
+      const duplicate = existingMemories.some((m) => normalize(m.content) === normalize(fact));
+      if (!existingError && !duplicate) {
+        const { error: insertError } = await supabase.from("memories").insert({
+          user_id: userId,
+          memory_type: "core",
+          title: makeTitle(fact),
+          content: fact,
+          importance: 4,
+          confidence: 1.0,
+          source_type: "chat",
+        });
+        if (insertError) {
+          recordMemoryError("INSERT", insertError.message);
         } else {
-          const normalized = normalize(fact);
-          const duplicate = (existing ?? []).find((m) => normalize(m.content ?? "") === normalized);
-          const superseded = (existing ?? []).find(
-            (m) => !duplicate && sharesSubject(m.content ?? "", fact),
-          );
-          if (!duplicate && superseded) {
-            const { error: updateError } = await supabase
-              .from("memories")
-              .update({ content: fact, title: makeTitle(fact), confidence: 1.0, importance: 4 })
-              .eq("id", superseded.id)
-              .eq("user_id", userId);
-            if (updateError) {
-              recordMemoryError("UPDATE", updateError.message);
-            } else {
-              savedMemory = fact;
-              memoryResult.memorySaved = true;
-              memoryResult.memoryUpdated = true;
-            }
-          } else if (!duplicate) {
-            const { error: insertError } = await supabase.from("memories").insert({
-              user_id: userId,
-              memory_type: "core",
-              title: makeTitle(fact),
-              content: fact,
-              importance: 4,
-              confidence: 1.0,
-              source_type: "chat",
-            });
-            if (insertError) {
-              recordMemoryError("INSERT", insertError.message);
-            } else {
-              savedMemory = fact;
-              memoryResult.memorySaved = true;
-            }
-          }
+          savedMemory = fact;
+          memoryResult.memorySaved = true;
         }
-      } catch (e) {
-        recordMemoryError("SELECT", e instanceof Error ? e.message : "unknown error");
+      } else if (!existingError && duplicate) {
+        savedMemory = fact;
       }
+    } else if (!existingError) {
+      const candidates = await extractAutomaticMemories(
+        apiKey,
+        data.message,
+        initialProfile,
+        existingMemories,
+      );
+      if (candidates === null) {
+        memoryResult.memoryError ??= "Automatic memory analysis wasn't available right now.";
+      }
+      for (const candidate of (candidates ?? []).slice(0, 3)) {
+        if (!isSafeDurableCandidate(candidate)) continue;
+
+        if (candidate.action === "profile_update") {
+          const update = profileUpdateForCandidate(candidate);
+          if (!update) continue;
+          const { error: profileUpdateError } = await supabase
+            .from("profiles")
+            .upsert({ user_id: userId, ...update }, { onConflict: "user_id" });
+          if (profileUpdateError) {
+            console.error(
+              "Profile UPSERT failed during automatic extraction",
+              profileUpdateError.message,
+            );
+            memoryResult.memoryError ??= "Your profile couldn't be saved right now.";
+          } else {
+            memoryResult.memorySaved = true;
+            memoryResult.memoryUpdated = true;
+          }
+          continue;
+        }
+
+        if (candidate.action === "update") {
+          if (!isClearCorrection(data.message) || !candidate.target_memory_id) continue;
+          const target = existingMemories.find((m) => m.id === candidate.target_memory_id);
+          if (!target) continue;
+          const { error: updateError } = await supabase
+            .from("memories")
+            .update({
+              memory_type: candidate.memory_type,
+              title: candidate.title,
+              content: candidate.content,
+              importance: candidate.importance,
+              confidence: candidate.confidence,
+              source_type: "chat_auto",
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", target.id)
+            .eq("user_id", userId);
+          if (updateError) {
+            recordMemoryError("UPDATE", updateError.message);
+          } else {
+            memoryResult.memorySaved = true;
+            memoryResult.memoryUpdated = true;
+          }
+          continue;
+        }
+
+        if (candidate.action === "create") {
+          if (isClearCorrection(data.message)) continue;
+          const duplicate = existingMemories.some(
+            (memory) => normalize(memory.content) === normalize(candidate.content),
+          );
+          if (duplicate) continue;
+          const { error: insertError } = await supabase.from("memories").insert({
+            user_id: userId,
+            memory_type: candidate.memory_type,
+            title: candidate.title,
+            content: candidate.content,
+            importance: candidate.importance,
+            confidence: candidate.confidence,
+            source_type: "chat_auto",
+          });
+          if (insertError) recordMemoryError("INSERT", insertError.message);
+          else memoryResult.memorySaved = true;
+        }
+      }
+    }
+
+    // Re-read the profile after any automatic profile update so this response and
+    // completely new conversations receive the confirmed database value.
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("display_name, assistant_name, timezone, profile_summary")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (profileError) {
+      console.error("Profile SELECT failed before assistant response", profileError.message);
+      memoryResult.memoryError ??= "Your profile couldn't be loaded right now.";
+    } else if (profile) {
+      const lines = [
+        profile.display_name ? `Name: ${profile.display_name}` : null,
+        profile.assistant_name ? `Assistant name: ${profile.assistant_name}` : null,
+        profile.timezone ? `Timezone: ${profile.timezone}` : null,
+        profile.profile_summary ? `About: ${profile.profile_summary}` : null,
+      ].filter(Boolean);
+      profileBlock = lines.join("\n");
     }
 
     // --- Long-term memory read -------------------------------------------
@@ -275,7 +390,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       const nowIso = new Date().toISOString();
       const { data: memories, error: memoriesError } = await supabase
         .from("memories")
-        .select("title, content, importance, created_at, expires_at")
+        .select("title, content, memory_type, importance, created_at, expires_at")
         .eq("user_id", userId)
         .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
         .order("importance", { ascending: false })
@@ -284,9 +399,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       if (memoriesError) {
         recordMemoryError("SELECT", memoriesError.message);
       } else if (memories && memories.length > 0) {
-        memoryBlock = memories
-          .map((m) => `- ${m.title ? `${m.title}: ` : ""}${m.content}`)
-          .join("\n");
+        memoryBlock = buildMemoryBlock(memories);
       }
     } catch (e) {
       recordMemoryError("SELECT", e instanceof Error ? e.message : "unknown error");
@@ -425,44 +538,256 @@ function makeTitle(fact: string) {
   return words.length < fact.length ? `${words}…` : words;
 }
 
-/** Rough "same subject" check so a correction replaces the old fact. */
-function sharesSubject(oldContent: string, newFact: string) {
-  const stop = new Set([
-    "my",
-    "the",
-    "a",
-    "an",
-    "is",
-    "are",
-    "that",
-    "this",
-    "i",
-    "me",
-    "to",
-    "of",
-    "and",
-    "in",
-    "for",
-    "it",
-    "with",
-    "prefer",
-    "favorite",
-    "favourite",
-  ]);
-  const keys = (s: string) =>
-    new Set(
-      normalize(s)
-        .split(" ")
-        .filter((w) => w.length > 2 && !stop.has(w)),
+const AUTOMATIC_MEMORY_TYPES = new Set([
+  "goal",
+  "preference",
+  "relationship",
+  "routine",
+  "responsibility",
+  "working_preference",
+  "decision",
+  "constraint",
+  "project_context",
+]);
+
+const PROFILE_MEMORY_TYPES = new Set([
+  "profile_name",
+  "profile_assistant_name",
+  "profile_timezone",
+  "profile_summary",
+]);
+
+const SENSITIVE_CONTENT =
+  /\b(password|passcode|pin|api[ _-]?key|secret|private key|seed phrase|recovery phrase|access token|refresh token|bank account|routing number|credit card|cvv|social security|ssn)\b/i;
+
+function looksSensitive(text: string) {
+  return (
+    SENSITIVE_CONTENT.test(text) ||
+    /\bsk-[A-Za-z0-9_-]{16,}\b/.test(text) ||
+    /\beyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/.test(text) ||
+    /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/.test(text)
+  );
+}
+
+function isSafeDurableCandidate(candidate: MemoryCandidate) {
+  if (candidate.action === "none") return false;
+  if (!Number.isFinite(candidate.confidence) || candidate.confidence < 0.9) return false;
+  if (
+    !Number.isInteger(candidate.importance) ||
+    candidate.importance < 3 ||
+    candidate.importance > 5
+  ) {
+    return false;
+  }
+  if (!candidate.content.trim() || candidate.content.length > 1000) return false;
+  if (!candidate.reason.trim() || looksSensitive(candidate.content)) return false;
+  if (candidate.action === "profile_update") {
+    return PROFILE_MEMORY_TYPES.has(candidate.memory_type) && candidate.confidence >= 0.95;
+  }
+  return AUTOMATIC_MEMORY_TYPES.has(candidate.memory_type) && candidate.title.trim().length > 0;
+}
+
+function profileUpdateForCandidate(candidate: MemoryCandidate): Partial<Profile> | null {
+  const content = candidate.content.trim();
+  if (!content) return null;
+  if (candidate.memory_type === "profile_name" && content.length <= 60) {
+    return { display_name: content };
+  }
+  if (candidate.memory_type === "profile_assistant_name" && content.length <= 60) {
+    return { assistant_name: content };
+  }
+  if (candidate.memory_type === "profile_timezone" && content.length <= 100) {
+    return { timezone: content };
+  }
+  if (candidate.memory_type === "profile_summary" && content.length <= 1000) {
+    return { profile_summary: content };
+  }
+  return null;
+}
+
+function isClearCorrection(message: string) {
+  return /\b(actually|correction|correct that|no longer|not anymore|changed|instead|from now on|now (?:i|my|we))\b/i.test(
+    message,
+  );
+}
+
+function buildMemoryBlock(
+  memories: {
+    title: string | null;
+    content: string;
+    importance: number;
+    memory_type: string;
+  }[],
+) {
+  const maxCharacters = 6000;
+  const lines: string[] = [];
+  let length = 0;
+  for (const memory of memories) {
+    const fullLine = `- [${memory.memory_type.toUpperCase()} | importance ${memory.importance}] ${
+      memory.title ? `${memory.title}: ` : ""
+    }${memory.content}`;
+    const remaining = maxCharacters - length - 1;
+    if (remaining <= 0) break;
+    const line = fullLine.slice(0, remaining);
+    lines.push(line);
+    length += line.length + 1;
+    if (line.length < fullLine.length) break;
+  }
+  return lines.join("\n");
+}
+
+async function extractAutomaticMemories(
+  apiKey: string,
+  message: string,
+  profile: Profile | null,
+  existingMemories: ExistingMemory[],
+): Promise<MemoryCandidate[] | null> {
+  if (message.length < 8 || looksSensitive(message)) return [];
+
+  const existing = existingMemories.slice(0, 60).map((memory) => ({
+    id: memory.id,
+    memory_type: memory.memory_type,
+    title: memory.title,
+    content: memory.content,
+  }));
+
+  let response: Response;
+  try {
+    response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-5.6-luna",
+        input: [
+          {
+            role: "system",
+            content:
+              "Extract only durable, explicitly user-stated personal context. Return zero candidates for temporary plans, casual chat, one-off questions, speculation, assumptions, assistant-generated ideas, or secrets. " +
+              "Durable memories include enduring goals, preferences, relationships, routines, responsibilities, working preferences, decisions, constraints, and important ongoing project context. " +
+              "Use profile_update only for name, assistant name, timezone, or a stable user summary. " +
+              "Use update only for a clear user correction and only with the exact target_memory_id from EXISTING MEMORIES. Never infer a target by loose keyword similarity. When uncertain, return none. " +
+              "Confidence must reflect direct support in the user's message; only use 0.9 or higher when the fact is explicit and durable.",
+          },
+          {
+            role: "user",
+            content: `CURRENT PROFILE:\n${JSON.stringify(profile ?? {})}\n\nEXISTING MEMORIES:\n${JSON.stringify(existing)}\n\nUSER MESSAGE:\n${message}`,
+          },
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "memory_candidates",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                candidates: {
+                  type: "array",
+                  maxItems: 3,
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                      action: {
+                        type: "string",
+                        enum: ["create", "update", "profile_update", "none"],
+                      },
+                      memory_type: { type: "string" },
+                      title: { type: "string" },
+                      content: { type: "string" },
+                      importance: { type: "integer", minimum: 1, maximum: 5 },
+                      confidence: { type: "number", minimum: 0, maximum: 1 },
+                      reason: { type: "string" },
+                      target_memory_id: { type: ["string", "null"] },
+                    },
+                    required: [
+                      "action",
+                      "memory_type",
+                      "title",
+                      "content",
+                      "importance",
+                      "confidence",
+                      "reason",
+                      "target_memory_id",
+                    ],
+                  },
+                },
+              },
+              required: ["candidates"],
+            },
+          },
+        },
+      }),
+    });
+  } catch (error) {
+    console.error(
+      "Automatic memory extraction request failed",
+      error instanceof Error ? error.message : "unknown error",
     );
-  const oldKeys = keys(oldContent);
-  const newKeys = keys(newFact);
-  if (oldKeys.size === 0 || newKeys.size === 0) return false;
-  let shared = 0;
-  newKeys.forEach((k) => {
-    if (oldKeys.has(k)) shared += 1;
-  });
-  return shared / Math.min(oldKeys.size, newKeys.size) >= 0.7;
+    return null;
+  }
+
+  if (!response.ok) {
+    console.error("Automatic memory extraction failed with status", response.status);
+    return null;
+  }
+
+  try {
+    const payload = (await response.json()) as {
+      output_text?: string;
+      output?: { content?: { type?: string; text?: string }[] }[];
+    };
+    const text = getResponseText(payload);
+    if (!text) {
+      console.error("Automatic memory extraction returned no structured text");
+      return null;
+    }
+    const parsed = JSON.parse(text) as { candidates?: unknown };
+    if (!Array.isArray(parsed.candidates)) {
+      console.error("Automatic memory extraction returned invalid candidates");
+      return null;
+    }
+    return parsed.candidates.filter(isMemoryCandidate);
+  } catch (error) {
+    console.error(
+      "Automatic memory extraction response parse failed",
+      error instanceof Error ? error.message : "unknown error",
+    );
+    return null;
+  }
+}
+
+function getResponseText(payload: {
+  output_text?: string;
+  output?: { content?: { type?: string; text?: string }[] }[];
+}) {
+  if (typeof payload.output_text === "string") return payload.output_text.trim();
+  if (!Array.isArray(payload.output)) return "";
+  return payload.output
+    .flatMap((item) => (Array.isArray(item.content) ? item.content : []))
+    .filter((content) => content?.type === "output_text")
+    .map((content) => content.text ?? "")
+    .join("")
+    .trim();
+}
+
+function isMemoryCandidate(value: unknown): value is MemoryCandidate {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<MemoryCandidate>;
+  return (
+    ["create", "update", "profile_update", "none"].includes(candidate.action ?? "") &&
+    typeof candidate.memory_type === "string" &&
+    typeof candidate.title === "string" &&
+    typeof candidate.content === "string" &&
+    typeof candidate.importance === "number" &&
+    typeof candidate.confidence === "number" &&
+    typeof candidate.reason === "string" &&
+    (typeof candidate.target_memory_id === "string" || candidate.target_memory_id === null)
+  );
 }
 
 /** Detects an explicit, unambiguous statement of the user's own name. */
