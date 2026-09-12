@@ -2,6 +2,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { ASSISTANT_IDENTITY } from "@/lib/assistant-identity";
+import { scopeAgentContext, selectHpoDelegates, shouldResearchWithWeb } from "@/lib/agent-policy";
 
 type AgentRow = {
   id: string;
@@ -350,43 +351,59 @@ async function runHpoTeam(
   adamContext: unknown,
   history: AgentMessage[],
 ) {
-  const common = `${FAMILY_FOUNDATION}\nYou are an internal HPO subagent. Your report goes to HPO Agent, not directly to Adam. Give concise evidence, assumptions, risks, and the next useful action. Current Adam/HPO context follows: ${JSON.stringify(adamContext)}`;
-  const [scout, route, relationship] = await Promise.all([
-    callModel(
-      apiKey,
-      `${common}\nROLE: Scout Agent. Mission: ${DEFAULTS.scout.mission} Use web search when current office/business facts would improve the answer. Do not invent offices or facts.`,
-      `HPO assignment from Adam: ${message}`,
-      { web: true },
-    ),
-    callModel(
-      apiKey,
-      `${common}\nROLE: Route Agent. Mission: ${DEFAULTS.route.mission} Focus on geography, sequencing, realistic field timing, bottlenecks and backups. If exact addresses are not supplied, say what is needed rather than inventing a route.`,
-      `HPO assignment from Adam: ${message}`,
-    ),
-    callModel(
-      apiKey,
-      `${common}\nROLE: Relationship Agent. Mission: ${DEFAULTS.relationship.mission} Use provided context only for relationship history. Do not invent prior visits, referrals or patient details.`,
-      `HPO assignment from Adam: ${message}`,
-    ),
-  ]);
+  const delegates = selectHpoDelegates(message);
+  const common = `${FAMILY_FOUNDATION}
+You are an internal HPO subagent. Your report goes to HPO Agent, never directly to Adam. Give concise evidence, assumptions, risks, and the next useful action. You cannot create or call other agents. Current scoped Adam/HPO context follows: ${JSON.stringify(adamContext)}`;
+
+  const reports = await Promise.all(
+    delegates.map(async (delegate) => {
+      if (delegate === "scout") {
+        const result = await callModel(
+          apiKey,
+          `${common}
+ROLE: Scout Agent. Mission: ${DEFAULTS.scout.mission} Use web search only because this assignment was routed to Scout for current prospect/business verification. Do not invent offices or facts.`,
+          `HPO assignment from Adam: ${message}`,
+          { web: true },
+        );
+        return { key: "scout", name: "Scout Agent", text: withSources(result) } as const;
+      }
+      if (delegate === "route") {
+        const result = await callModel(
+          apiKey,
+          `${common}
+ROLE: Route Agent. Mission: ${DEFAULTS.route.mission} Focus on geography, sequencing, realistic field timing, bottlenecks and backups. If exact addresses are necessary and not supplied, identify the missing data rather than inventing it.`,
+          `HPO assignment from Adam: ${message}`,
+        );
+        return { key: "route", name: "Route Agent", text: result.text } as const;
+      }
+      const result = await callModel(
+        apiKey,
+        `${common}
+ROLE: Relationship Agent. Mission: ${DEFAULTS.relationship.mission} Use only provided context for relationship history. Never invent prior visits, referrals, patient details or account status.`,
+        `HPO assignment from Adam: ${message}`,
+      );
+      return { key: "relationship", name: "Relationship Agent", text: result.text } as const;
+    }),
+  );
 
   const synthesis = await callModel(
     apiKey,
-    `${FAMILY_FOUNDATION}\nYou are ${agent.name}. ${agent.mission} Personality: ${agent.persona} You lead Scout, Route and Relationship. Resolve conflicts, discard weak suggestions and return one practical HPO recommendation. Adam does not need raw subagent chatter. Keep normal replies conversational and concise unless he asks for a detailed route/report.`,
+    `${FAMILY_FOUNDATION}
+You are ${agent.name}. ${agent.mission} Personality: ${agent.persona} You manage Scout, Route and Relationship behind the scenes. The internal reports below are advisory inputs only. Resolve conflicts, discard weak suggestions and return one practical HPO recommendation. If no internal specialist was needed, answer directly from your own HPO role. Adam does not need raw subagent chatter. Keep normal replies conversational and concise unless he asks for a detailed route/report.`,
     JSON.stringify({
       newest_message: message,
       group_history: conciseHistory(history),
       adam_context: adamContext,
-      scout_report: scout.text,
-      route_report: route.text,
-      relationship_report: relationship.text,
+      delegated: reports.map((report) => report.name),
+      internal_reports: Object.fromEntries(reports.map((report) => [report.key, report.text])),
     }),
   );
   return {
     response: synthesis.text,
     metadata: {
-      delegated: ["Scout Agent", "Route Agent", "Relationship Agent"],
-      internal_reports: { scout: scout.text, route: route.text, relationship: relationship.text },
+      delegated: reports.map((report) => report.name),
+      internal_reports: Object.fromEntries(reports.map((report) => [report.key, report.text])),
+      internal_call_count: reports.length,
     },
   };
 }
@@ -398,19 +415,23 @@ async function runResearchAgent(
   adamContext: unknown,
   history: AgentMessage[],
 ) {
+  const useWeb = shouldResearchWithWeb(message);
   const result = await callModel(
     apiKey,
-    `${FAMILY_FOUNDATION}\nYou are ${agent.name}. ${agent.mission} Personality: ${agent.persona}\n${DAN_PRINCIPLES}\nResearch current facts when the request benefits from freshness. Distinguish sourced facts from your inference. After the research, tell Adam what this means for him and the highest-value thing he can do today. Apply Dan principles only when they genuinely fit. Do not force them. Keep the answer natural and focused, but include enough evidence to trust the recommendation.`,
+    `${FAMILY_FOUNDATION}
+You are ${agent.name}. ${agent.mission} Personality: ${agent.persona}
+${DAN_PRINCIPLES}
+${useWeb ? "This request benefits from current external verification. Research first, distinguish sourced facts from inference, and preserve useful sources." : "This request does not require live web research. Reason from the scoped context and stable knowledge without wasting a web call."} After the analysis, tell Adam what this means for him and the highest-value thing he can do today. Apply Dan principles only when they genuinely fit. Never force them or invent Dan advice. Keep the answer natural and focused.`,
     JSON.stringify({
       newest_message: message,
       group_history: conciseHistory(history),
       adam_context: adamContext,
     }),
-    { web: true },
+    { web: useWeb },
   );
   return {
-    response: withSources(result),
-    metadata: { web_research: true, sources: result.sources },
+    response: useWeb ? withSources(result) : result.text,
+    metadata: { web_research: useWeb, sources: useWeb ? result.sources : [] },
   };
 }
 
@@ -440,7 +461,7 @@ async function runGenericAgent(
   adamContext: unknown,
   history: AgentMessage[],
 ) {
-  const canWeb = Boolean(agent.capabilities?.["web_search"]);
+  const canWeb = Boolean(agent.capabilities?.["web_search"]) && shouldResearchWithWeb(message);
   const result = await callModel(
     apiKey,
     `${FAMILY_FOUNDATION}\nYou are ${agent.name}. Mission: ${agent.mission}. Personality: ${agent.persona}. Specialty: ${agent.description}. Escalate to Emery when the request falls outside your mission or creates important cross-life tradeoffs.`,
@@ -707,7 +728,11 @@ export const sendAgentMessage = createServerFn({ method: "POST" })
       data.message,
     );
     const history = await recentThread(db, context.userId, thread.id);
-    const adamContext = await loadAdamContext(db, context.userId);
+    const rawAdamContext = await loadAdamContext(db, context.userId);
+    const adamContext = scopeAgentContext(rawAdamContext, agent.slug, data.message, {
+      mission: agent.mission,
+      description: agent.description,
+    });
 
     let specialist: { response: string; metadata: Record<string, unknown> };
     try {
@@ -789,7 +814,11 @@ export async function consultSpecialistFromEmery(
     { delegated_from_main_chat: true },
   );
   const history = await recentThread(db, userId, thread.id);
-  const adamContext = await loadAdamContext(db, userId);
+  const rawAdamContext = await loadAdamContext(db, userId);
+  const adamContext = scopeAgentContext(rawAdamContext, agent.slug, assignment, {
+    mission: agent.mission,
+    description: agent.description,
+  });
   let specialist: { response: string; metadata: Record<string, unknown> };
   if (slug === "hpo-agent")
     specialist = await runHpoTeam(apiKey, agent, assignment, adamContext, history);

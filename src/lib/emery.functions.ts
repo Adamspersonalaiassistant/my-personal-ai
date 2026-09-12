@@ -3,6 +3,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { ASSISTANT_IDENTITY } from "@/lib/assistant-identity";
 import { createAgentFromInstruction, consultSpecialistFromEmery } from "@/lib/agent.functions";
+import { isExplicitAgentCreationCommand } from "@/lib/agent-policy";
 
 type AttachmentInput = {
   storagePath: string;
@@ -1075,10 +1076,7 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
     const db = supabase as any;
 
     let agentTeamInstruction = "";
-    const explicitAgentCreation =
-      /\b(?:create|make|build)\s+(?:me\s+)?(?:(?:a|an)\s+)?(?:new\s+)?(?:specialist\s+)?agent\b/i.test(
-        data.message,
-      );
+    const explicitAgentCreation = isExplicitAgentCreationCommand(data.message);
     if (explicitAgentCreation) {
       try {
         const createdAgent = await createAgentFromInstruction(apiKey, db, userId, data.message);
