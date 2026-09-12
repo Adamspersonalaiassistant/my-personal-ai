@@ -111,7 +111,8 @@ function Settings() {
               </div>
               <p className="mt-2 truncate text-xs text-muted-foreground">{user?.email}</p>
               <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
-                One private operating system for conversation, memory, execution, specialist intelligence and bounded self-improvement.
+                One private operating system for conversation, memory, execution, specialist
+                intelligence and bounded self-improvement.
               </p>
             </div>
           </div>
@@ -198,7 +199,9 @@ function Settings() {
             <div>
               <p className="text-sm font-semibold">Next milestone: Emery Voice</p>
               <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                Voice stays intentionally untouched until Adam designs the live experience with Emery. The same memory, agents, action and improvement systems will sit underneath it.
+                Voice stays intentionally untouched until Adam designs the live experience with
+                Emery. The same memory, agents, action and improvement systems will sit underneath
+                it.
               </p>
             </div>
           </div>

@@ -28,7 +28,9 @@ export function ImprovementHealthCard() {
       const result = await loadDashboard({});
       setData(result);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not load Emery's improvement system.");
+      setError(
+        cause instanceof Error ? cause.message : "Could not load Emery's improvement system.",
+      );
     } finally {
       setLoading(false);
     }
