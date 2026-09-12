@@ -1,0 +1,40 @@
+name: Finish Memory Command Center
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/memory-command-center-finish.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  finish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - name: Format and autofix changed memory files
+        run: |
+          npx prettier --write src/lib/memory.functions.ts src/routes/_authenticated/memories.tsx src/routes/_authenticated/settings.tsx .github/workflows/validate-ui.yml
+          npx eslint --fix src/lib/memory.functions.ts src/routes/_authenticated/memories.tsx src/routes/_authenticated/settings.tsx || true
+      - name: Production build
+        run: npm run build
+      - name: TypeScript
+        run: npx tsc --noEmit
+      - name: Focused lint
+        run: npx eslint src/lib/memory.functions.ts src/routes/_authenticated/memories.tsx src/routes/_authenticated/settings.tsx
+      - name: Commit cleanup
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add src/lib/memory.functions.ts src/routes/_authenticated/memories.tsx src/routes/_authenticated/settings.tsx .github/workflows/validate-ui.yml
+            git commit -m "Finish Memories Command Center [skip ci]"
+            git push origin HEAD:main
+          fi
