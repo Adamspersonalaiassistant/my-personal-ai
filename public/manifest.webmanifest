@@ -1,0 +1,19 @@
+{
+  "name": "Emery — Adam's Personal AI",
+  "short_name": "Emery",
+  "description": "Adam's private persistent personal AI companion.",
+  "start_url": "/chat",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#06271c",
+  "theme_color": "#0d7d53",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon",
+      "purpose": "any"
+    }
+  ]
+}
