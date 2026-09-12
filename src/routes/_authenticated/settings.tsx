@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Brain,
@@ -8,6 +8,7 @@ import {
   Mic2,
   Radio,
   ShieldCheck,
+  UsersRound,
   Workflow,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
@@ -22,6 +23,7 @@ const status = [
   { label: "AI Brain", value: "Connected", icon: Brain, live: true },
   { label: "Memory", value: "Online", icon: Database, live: true },
   { label: "Action layer", value: "Connected", icon: CheckSquare, live: true },
+  { label: "Agent Team", value: "Connected", icon: UsersRound, live: true },
   { label: "File uploads", value: "Connected", icon: FileUp, live: true },
   { label: "Meetings", value: "Internal", icon: Radio, live: true },
   { label: "Emery Voice", value: "Next", icon: Mic2, live: false },
@@ -94,11 +96,27 @@ function Settings() {
           })}
         </section>
 
+        <Link
+          to="/memories"
+          className="flex min-h-16 items-center justify-between rounded-3xl border border-border/60 bg-card/55 px-4 py-3 transition hover:border-primary/25"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-2xl border border-primary/15 bg-primary/[0.05] text-primary">
+              <Database className="size-[18px]" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold">About Adam / Memories</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">Review what Emery has learned and saved.</p>
+            </div>
+          </div>
+          <span className="text-xs font-semibold text-primary">Open</span>
+        </Link>
+
         <section className="rounded-3xl border border-primary/15 bg-primary/[0.045] p-4">
           <p className="text-sm font-semibold">Next milestone</p>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            Emery Voice — a natural, low-friction voice layer on top of the same memory, action
-            system, files and main conversation working now.
+            Emery Voice — a natural, low-friction voice layer on top of the same memory, agents,
+            action system, files and main conversation working now.
           </p>
         </section>
 
