@@ -1,0 +1,34 @@
+name: Format Emery Redesign
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/format-redesign.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - name: Format redesign files
+        run: npx prettier --write src/styles.css src/components/AppShell.tsx src/routes/_authenticated/chat.tsx src/routes/_authenticated/agents.tsx 'src/routes/_authenticated/agents_.$agentId.tsx' src/routes/_authenticated/tasks.tsx src/routes/_authenticated/projects.tsx src/routes/_authenticated/meetings.tsx src/routes/_authenticated/memories.tsx src/routes/_authenticated/settings.tsx
+      - name: Commit formatting
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add src/styles.css src/components/AppShell.tsx src/routes/_authenticated/chat.tsx src/routes/_authenticated/agents.tsx 'src/routes/_authenticated/agents_.$agentId.tsx' src/routes/_authenticated/tasks.tsx src/routes/_authenticated/projects.tsx src/routes/_authenticated/meetings.tsx src/routes/_authenticated/memories.tsx src/routes/_authenticated/settings.tsx
+            git commit -m "Format Emery redesign [skip ci]"
+            git push origin HEAD:main
+          fi
