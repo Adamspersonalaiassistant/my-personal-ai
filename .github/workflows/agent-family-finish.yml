@@ -42,3 +42,4 @@ jobs:
             git pull --rebase origin main
             git push origin HEAD:main
           fi
+      # validation retry after strict helper typing fix
