@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Brain, Database, FileUp, Mic2, Radio, ShieldCheck, Workflow } from "lucide-react";
+import { Brain, CheckSquare, Database, FileUp, Mic2, Radio, ShieldCheck, Workflow } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
@@ -12,9 +12,10 @@ export const Route = createFileRoute("/_authenticated/settings")({
 const status = [
   { label: "AI Brain", value: "Connected", icon: Brain, live: true },
   { label: "Memory", value: "Online", icon: Database, live: true },
+  { label: "Action layer", value: "Connected", icon: CheckSquare, live: true },
+  { label: "File uploads", value: "Connected", icon: FileUp, live: true },
+  { label: "Meetings", value: "Internal", icon: Radio, live: true },
   { label: "Emery Voice", value: "Next", icon: Mic2, live: false },
-  { label: "File uploads", value: "Planned", icon: FileUp, live: false },
-  { label: "Meeting intelligence", value: "Planned", icon: Radio, live: false },
   { label: "Automations", value: "Planned", icon: Workflow, live: false },
 ] as const;
 
@@ -83,7 +84,7 @@ function Settings() {
         <section className="rounded-3xl border border-primary/15 bg-primary/[0.045] p-4">
           <p className="text-sm font-semibold">Next milestone</p>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            Emery Voice — a natural, low-friction voice layer built on top of the memory and identity system already working now.
+            Emery Voice — a natural, low-friction voice layer on top of the same memory, action system, files and main conversation working now.
           </p>
         </section>
 
