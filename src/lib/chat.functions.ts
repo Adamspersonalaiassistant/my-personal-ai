@@ -265,7 +265,24 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     // --- Explicit and automatic memory write -----------------------------
     const fact = extractExplicitMemory(data.message);
     let savedMemory: string | null = null;
-    if (fact) {
+    if (fact && (statedName || extractName(fact)) && isAboutOwnName(fact)) {
+      // "Please save in memories my name is Adam Ashraf" — this belongs on the
+      // profile, not as an awkward literal long-term memory row.
+      const name = statedName ?? extractName(fact);
+      if (name) {
+        const { error: nameError } = await supabase
+          .from("profiles")
+          .upsert({ user_id: userId, display_name: name }, { onConflict: "user_id" });
+        if (nameError) {
+          console.error("Profile UPSERT failed for display_name", nameError.message);
+          memoryResult.memoryError ??= "Your profile couldn't be saved right now.";
+        } else {
+          savedMemory = `Adam's name is ${name}`;
+          memoryResult.memorySaved = true;
+          memoryResult.memoryUpdated = true;
+        }
+      }
+    } else if (fact) {
       const duplicate = existingMemories.some((m) => normalize(m.content) === normalize(fact));
       if (!existingError && !duplicate) {
         const { error: insertError } = await supabase.from("memories").insert({
