@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowUp, FileText, Mic, Paperclip, Sparkles, X } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { OperatingContextCard } from "@/components/OperatingContextCard";
 import brainImage from "@/assets/neural-brain.png";
 import { supabase } from "@/integrations/supabase/client";
 import { getMainConversation, sendEmeryMessage } from "@/lib/emery.functions";
@@ -261,6 +262,9 @@ function Chat() {
         </div>
 
         <div className="emery-scrollbar flex-1 overflow-y-auto px-4 pb-6 pt-5 sm:px-6 sm:pt-6">
+          <div className="mx-auto mb-4 max-w-2xl">
+            <OperatingContextCard />
+          </div>
           {loading ? (
             <div className="flex min-h-[48vh] flex-col items-center justify-center gap-4">
               <div className="emery-breathe flex size-16 items-center justify-center overflow-hidden rounded-[1.35rem] border border-primary/15 bg-primary/[0.04]">

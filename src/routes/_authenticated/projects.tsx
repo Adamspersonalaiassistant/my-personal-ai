@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Edit3, FolderKanban, Plus, X } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { ProjectExecutionOverview } from "@/components/ProjectExecutionOverview";
 import { listProjects, saveProject } from "@/lib/emery.functions";
 
 export const Route = createFileRoute("/_authenticated/projects")({ component: Projects });
@@ -84,6 +85,8 @@ function Projects() {
             </button>
           </div>
         </section>
+        <ProjectExecutionOverview />
+
         {error ? (
           <p
             className="rounded-2xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive"

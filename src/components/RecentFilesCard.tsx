@@ -45,7 +45,8 @@ export function RecentFilesCard() {
           <p className="text-sm font-semibold">Recent Emery files</p>
         </div>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          Files and photos you gave Emery stay attached to the conversation that created the context.
+          Files and photos you gave Emery stay attached to the conversation that created the
+          context.
         </p>
       </div>
       {files.length === 0 ? (
@@ -62,13 +63,20 @@ export function RecentFilesCard() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{file.file_name}</p>
                   <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    {formatBytes(file.size_bytes)} · {new Date(file.created_at).toLocaleDateString()}
+                    {formatBytes(file.size_bytes)} ·{" "}
+                    {new Date(file.created_at).toLocaleDateString()}
                   </p>
                 </div>
               </div>
             );
             return file.url ? (
-              <a key={file.id} href={file.url} target="_blank" rel="noreferrer" className="emery-press block">
+              <a
+                key={file.id}
+                href={file.url}
+                target="_blank"
+                rel="noreferrer"
+                className="emery-press block"
+              >
                 {row}
               </a>
             ) : (

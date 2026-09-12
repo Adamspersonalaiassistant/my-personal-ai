@@ -46,7 +46,10 @@ export function ProjectExecutionOverview() {
       </div>
       <div className="mt-3 space-y-2">
         {projects.slice(0, 4).map((project) => (
-          <div key={project.id} className="rounded-2xl border border-border/45 bg-card/45 px-3.5 py-3">
+          <div
+            key={project.id}
+            className="rounded-2xl border border-border/45 bg-card/45 px-3.5 py-3"
+          >
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">

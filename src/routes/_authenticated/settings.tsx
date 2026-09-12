@@ -16,6 +16,7 @@ import {
   Workflow,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { RecentFilesCard } from "@/components/RecentFilesCard";
 import { Button } from "@/components/ui/button";
 import { listMemories } from "@/lib/chat.functions";
 import { supabase } from "@/lib/supabase";
@@ -108,7 +109,8 @@ function Settings() {
               </div>
               <p className="mt-2 truncate text-xs text-muted-foreground">{user?.email}</p>
               <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
-                One private operating system for conversation, memory, execution and specialist intelligence.
+                One private operating system for conversation, memory, execution and specialist
+                intelligence.
               </p>
             </div>
           </div>
@@ -142,6 +144,8 @@ function Settings() {
           ) : null}
         </Link>
 
+        <RecentFilesCard />
+
         <section className="emery-glass overflow-hidden rounded-[1.7rem]">
           <div className="flex items-end justify-between gap-3 border-b border-border/45 px-4 py-4 sm:px-5">
             <div>
@@ -160,15 +164,23 @@ function Settings() {
                   className={`flex min-h-[74px] items-center justify-between gap-3 px-4 py-3.5 sm:px-5 ${i > 0 ? "border-t border-border/35 sm:border-t-0" : ""} ${i >= 2 ? "sm:border-t sm:border-border/35" : ""} ${i % 2 === 1 ? "sm:border-l sm:border-border/35" : ""}`}
                 >
                   <div className="flex min-w-0 items-center gap-3">
-                    <div className={`flex size-10 shrink-0 items-center justify-center rounded-2xl border ${row.live ? "border-primary/15 bg-primary/[0.055] text-primary" : "border-border/55 bg-card/55 text-muted-foreground"}`}>
+                    <div
+                      className={`flex size-10 shrink-0 items-center justify-center rounded-2xl border ${row.live ? "border-primary/15 bg-primary/[0.055] text-primary" : "border-border/55 bg-card/55 text-muted-foreground"}`}
+                    >
                       <Icon className="size-[17px]" strokeWidth={1.8} />
                     </div>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{row.label}</p>
-                      <p className={`mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${row.live ? "text-primary/85" : "text-muted-foreground"}`}>{row.value}</p>
+                      <p
+                        className={`mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${row.live ? "text-primary/85" : "text-muted-foreground"}`}
+                      >
+                        {row.value}
+                      </p>
                     </div>
                   </div>
-                  <span className={`size-2 rounded-full ${row.live ? "bg-primary shadow-[0_0_8px_oklch(0.805_0.175_155/0.55)]" : "bg-muted-foreground/30"}`} />
+                  <span
+                    className={`size-2 rounded-full ${row.live ? "bg-primary shadow-[0_0_8px_oklch(0.805_0.175_155/0.55)]" : "bg-muted-foreground/30"}`}
+                  />
                 </div>
               );
             })}
@@ -177,17 +189,24 @@ function Settings() {
 
         <section className="overflow-hidden rounded-[1.55rem] border border-primary/14 bg-primary/[0.038] p-4">
           <div className="flex gap-3">
-            <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/[0.08] text-primary"><Sparkles className="size-4" /></div>
+            <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/[0.08] text-primary">
+              <Sparkles className="size-4" />
+            </div>
             <div>
               <p className="text-sm font-semibold">Next milestone: Emery Voice</p>
               <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                Voice stays intentionally untouched until Adam designs the live experience with Emery. The same memory, agents and action system will sit underneath it.
+                Voice stays intentionally untouched until Adam designs the live experience with
+                Emery. The same memory, agents and action system will sit underneath it.
               </p>
             </div>
           </div>
         </section>
 
-        <Button variant="outline" className="h-12 w-full rounded-2xl border-destructive/18 bg-transparent text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={signOut}>
+        <Button
+          variant="outline"
+          className="h-12 w-full rounded-2xl border-destructive/18 bg-transparent text-destructive hover:bg-destructive/10 hover:text-destructive"
+          onClick={signOut}
+        >
           Sign out
         </Button>
       </div>
@@ -199,7 +218,9 @@ function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-border/45 bg-card/45 px-3 py-2.5 text-center">
       <p className="text-sm font-semibold">{value}</p>
-      <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{label}</p>
+      <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </p>
     </div>
   );
 }

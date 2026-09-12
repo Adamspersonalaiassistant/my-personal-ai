@@ -126,6 +126,7 @@ type ActionContext = {
     title: string | null;
     meeting_at: string | null;
     participants: unknown;
+    metadata: unknown;
   }>;
 };
 
@@ -412,7 +413,7 @@ async function loadActionContext(supabase: any, userId: string): Promise<ActionC
       .limit(10),
     supabase
       .from("meetings")
-      .select("id, title, meeting_at, participants")
+      .select("id, title, meeting_at, participants, metadata")
       .eq("user_id", userId)
       .gte("meeting_at", now)
       .order("meeting_at", { ascending: true })
@@ -428,10 +429,11 @@ async function loadActionContext(supabase: any, userId: string): Promise<ActionC
 
 function buildActionContextBlock(context: ActionContext) {
   const maxCharacters = 7000;
+  const projectNames = new Map(context.projects.map((project) => [project.id, project.name]));
   const lines: string[] = ["OPEN TASKS:"];
   for (const task of context.tasks) {
     lines.push(
-      `- TASK ${task.id}: ${task.title} | priority ${task.priority} | due ${task.due_at ?? "none"} | project ${task.project_id ?? "none"} | status ${task.status}${task.details ? ` | details ${task.details.slice(0, 240)}` : ""}`,
+      `- TASK ${task.id}: ${task.title} | priority ${task.priority} | due ${task.due_at ?? "none"} | project ${task.project_id ? `${projectNames.get(task.project_id) ?? "unknown"} (${task.project_id})` : "none"} | status ${task.status}${task.details ? ` | details ${task.details.slice(0, 240)}` : ""}`,
     );
   }
   if (!context.tasks.length) lines.push("- none");
@@ -445,7 +447,7 @@ function buildActionContextBlock(context: ActionContext) {
   lines.push("UPCOMING MEETINGS:");
   for (const meeting of context.meetings) {
     lines.push(
-      `- MEETING ${meeting.id}: ${meeting.title ?? "Untitled"} | at ${meeting.meeting_at ?? "unknown"} | participants ${JSON.stringify(meeting.participants ?? [])}`,
+      `- MEETING ${meeting.id}: ${meeting.title ?? "Untitled"} | at ${meeting.meeting_at ?? "unknown"} | project ${typeof safeObject(meeting.metadata)["project_id"] === "string" ? `${projectNames.get(String(safeObject(meeting.metadata)["project_id"])) ?? "unknown"} (${String(safeObject(meeting.metadata)["project_id"])})` : "none"} | participants ${JSON.stringify(meeting.participants ?? [])}`,
     );
   }
   if (!context.meetings.length) lines.push("- none");

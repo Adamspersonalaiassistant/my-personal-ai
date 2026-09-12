@@ -91,8 +91,18 @@ export function OperatingContextCard() {
 
       <div className="mt-3 grid grid-cols-4 gap-2">
         <ContextLink to="/tasks" icon={CheckSquare} value={snapshot.tasks.length} label="Tasks" />
-        <ContextLink to="/projects" icon={FolderKanban} value={snapshot.projects.length} label="Projects" />
-        <ContextLink to="/meetings" icon={CalendarDays} value={snapshot.meetings.length} label="Meetings" />
+        <ContextLink
+          to="/projects"
+          icon={FolderKanban}
+          value={snapshot.projects.length}
+          label="Projects"
+        />
+        <ContextLink
+          to="/meetings"
+          icon={CalendarDays}
+          value={snapshot.meetings.length}
+          label="Meetings"
+        />
         <ContextLink
           to="/settings"
           icon={FileText}
@@ -122,7 +132,9 @@ function ContextLink({
     >
       <Icon className="size-4 text-primary" />
       <span className="mt-1 text-sm font-semibold">{value}</span>
-      <span className="truncate text-[9px] uppercase tracking-[0.1em] text-muted-foreground">{label}</span>
+      <span className="truncate text-[9px] uppercase tracking-[0.1em] text-muted-foreground">
+        {label}
+      </span>
     </Link>
   );
 }

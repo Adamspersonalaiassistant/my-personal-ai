@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Check, CheckCircle2, Circle, Plus, X } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
-import { createTask, listTasks, setTaskCompleted } from "@/lib/emery.functions";
+import { setTaskCompleted } from "@/lib/emery.functions";
+import { createLinkedTask, listProjectOptions, listUnifiedTasks } from "@/lib/os.functions";
 
 export const Route = createFileRoute("/_authenticated/tasks")({ component: Tasks });
 
@@ -16,13 +17,17 @@ type Task = {
   due_at: string | null;
   completed_at: string | null;
   project_id: string | null;
+  project_name: string | null;
   metadata: unknown;
   created_at: string;
 };
 
+type ProjectOption = { id: string; name: string; priority: number; status: string };
+
 function Tasks() {
-  const loadTasks = useServerFn(listTasks);
-  const addTask = useServerFn(createTask);
+  const loadTasks = useServerFn(listUnifiedTasks);
+  const loadProjects = useServerFn(listProjectOptions);
+  const addTask = useServerFn(createLinkedTask);
   const toggleTask = useServerFn(setTaskCompleted);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,6 +38,8 @@ function Tasks() {
   const [details, setDetails] = useState("");
   const [due, setDue] = useState("");
   const [priority, setPriority] = useState(3);
+  const [projectId, setProjectId] = useState("");
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
 
   async function refresh() {
     const result = await loadTasks({});
@@ -42,8 +49,11 @@ function Tasks() {
     let cancelled = false;
     (async () => {
       try {
-        const result = await loadTasks({});
-        if (!cancelled) setTasks((result?.tasks ?? []) as Task[]);
+        const [result, projectResult] = await Promise.all([loadTasks({}), loadProjects({})]);
+        if (!cancelled) {
+          setTasks((result?.tasks ?? []) as Task[]);
+          setProjects((projectResult?.projects ?? []) as ProjectOption[]);
+        }
       } catch {
         if (!cancelled) setError("Couldn't load your tasks.");
       } finally {
@@ -53,7 +63,7 @@ function Tasks() {
     return () => {
       cancelled = true;
     };
-  }, [loadTasks]);
+  }, [loadProjects, loadTasks]);
 
   const open = tasks.filter((task) => task.status !== "completed");
   const completed = tasks.filter((task) => task.status === "completed");
@@ -86,12 +96,19 @@ function Tasks() {
     setError(null);
     try {
       await addTask({
-        data: { title, details, dueAt: due ? new Date(due).toISOString() : null, priority },
+        data: {
+          title,
+          details,
+          dueAt: due ? new Date(due).toISOString() : null,
+          priority,
+          projectId: projectId || null,
+        },
       });
       setTitle("");
       setDetails("");
       setDue("");
       setPriority(3);
+      setProjectId("");
       setShowAdd(false);
       await refresh();
     } catch {
@@ -208,6 +225,21 @@ function Tasks() {
                 onChange={(event) => setDue(event.target.value)}
                 className="min-h-12 w-full rounded-2xl border border-border/60 bg-card/60 px-3.5 text-sm outline-none focus:border-primary/40"
               />
+              <label className="block text-xs font-medium text-muted-foreground">
+                Project (optional)
+              </label>
+              <select
+                value={projectId}
+                onChange={(event) => setProjectId(event.target.value)}
+                className="min-h-12 w-full rounded-2xl border border-border/60 bg-card/60 px-3.5 text-sm outline-none"
+              >
+                <option value="">No project</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
               <label className="block text-xs font-medium text-muted-foreground">Priority</label>
               <select
                 value={priority}
@@ -291,6 +323,9 @@ function TaskSection({
                     <span className="emery-chip text-muted-foreground">
                       Priority {task.priority}
                     </span>
+                    {task.project_name ? (
+                      <span className="emery-chip">{task.project_name}</span>
+                    ) : null}
                     {task.due_at ? (
                       <span className="emery-chip text-muted-foreground">
                         {dateOnly

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { CalendarDays, Clock3, Plus, Users, X } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
-import { createMeeting, listMeetings } from "@/lib/emery.functions";
+import { createLinkedMeeting, listProjectOptions, listUnifiedMeetings } from "@/lib/os.functions";
 
 export const Route = createFileRoute("/_authenticated/meetings")({ component: Meetings });
 
@@ -13,16 +13,22 @@ type Meeting = {
   meeting_at: string | null;
   participants: unknown;
   summary: string | null;
+  project_id: string | null;
+  project_name: string | null;
   created_at: string;
 };
 
+type ProjectOption = { id: string; name: string; priority: number; status: string };
+
 function Meetings() {
-  const loadMeetings = useServerFn(listMeetings);
-  const addMeeting = useServerFn(createMeeting);
+  const loadMeetings = useServerFn(listUnifiedMeetings);
+  const loadProjects = useServerFn(listProjectOptions);
+  const addMeeting = useServerFn(createLinkedMeeting);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
 
   async function refresh() {
     const result = await loadMeetings({});
@@ -32,8 +38,11 @@ function Meetings() {
     let cancelled = false;
     (async () => {
       try {
-        const result = await loadMeetings({});
-        if (!cancelled) setMeetings((result?.meetings ?? []) as Meeting[]);
+        const [result, projectResult] = await Promise.all([loadMeetings({}), loadProjects({})]);
+        if (!cancelled) {
+          setMeetings((result?.meetings ?? []) as Meeting[]);
+          setProjects((projectResult?.projects ?? []) as ProjectOption[]);
+        }
       } catch {
         if (!cancelled) setError("Couldn't load your meetings.");
       } finally {
@@ -43,7 +52,7 @@ function Meetings() {
     return () => {
       cancelled = true;
     };
-  }, [loadMeetings]);
+  }, [loadMeetings, loadProjects]);
 
   const now = Date.now();
   const upcoming = meetings.filter(
@@ -111,6 +120,7 @@ function Meetings() {
 
       {showAdd ? (
         <MeetingEditor
+          projects={projects}
           onClose={() => setShowAdd(false)}
           onSave={async (values) => {
             await addMeeting({ data: values });
@@ -166,6 +176,9 @@ function MeetingSection({
                         {meeting.title || "Untitled meeting"}
                       </h3>
                       {!past ? <span className="emery-chip">Upcoming</span> : null}
+                      {meeting.project_name ? (
+                        <span className="emery-chip">{meeting.project_name}</span>
+                      ) : null}
                     </div>
                     {meeting.meeting_at ? (
                       <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
@@ -201,15 +214,23 @@ function MeetingSection({
 }
 
 function MeetingEditor({
+  projects,
   onClose,
   onSave,
 }: {
+  projects: ProjectOption[];
   onClose: () => void;
-  onSave: (values: { title: string; meetingAt: string; participants?: string[] }) => Promise<void>;
+  onSave: (values: {
+    title: string;
+    meetingAt: string;
+    participants?: string[];
+    projectId?: string | null;
+  }) => Promise<void>;
 }) {
   const [title, setTitle] = useState("");
   const [meetingAt, setMeetingAt] = useState("");
   const [participants, setParticipants] = useState("");
+  const [projectId, setProjectId] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function submit(event: React.FormEvent) {
@@ -225,6 +246,7 @@ function MeetingEditor({
           .split(",")
           .map((item) => item.trim())
           .filter(Boolean),
+        projectId: projectId || null,
       });
     } catch {
       setError("Couldn't save that meeting.");
@@ -273,6 +295,21 @@ function MeetingEditor({
             onChange={(event) => setMeetingAt(event.target.value)}
             className="min-h-12 w-full rounded-2xl border border-border/60 bg-card/60 px-3.5 text-sm outline-none focus:border-primary/40"
           />
+          <label className="block text-xs font-medium text-muted-foreground">
+            Project (optional)
+          </label>
+          <select
+            value={projectId}
+            onChange={(event) => setProjectId(event.target.value)}
+            className="min-h-12 w-full rounded-2xl border border-border/60 bg-card/60 px-3.5 text-sm outline-none"
+          >
+            <option value="">No project</option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
           <input
             value={participants}
             onChange={(event) => setParticipants(event.target.value)}
