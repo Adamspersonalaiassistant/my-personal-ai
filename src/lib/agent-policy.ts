@@ -1,4 +1,5 @@
 export type HpoDelegate = "scout" | "route" | "relationship";
+export type MainSpecialist = "hpo-agent" | "research-agent" | "strategy-agent";
 
 export type AgentContextBundle = {
   profile?: Record<string, unknown>;
@@ -56,6 +57,38 @@ export function isExplicitAgentCreationCommand(message: string) {
   return /^(?:(?:hey\s+)?emery[,:]?\s*)?(?:please\s+)?(?:(?:can|could|would)\s+you\s+|i\s+want\s+you\s+to\s+)?(?:create|make|build)\b[\s\S]*\bagent\b/i.test(
     text,
   );
+}
+
+export function routeMainSpecialist(message: string): MainSpecialist | null {
+  const text = message.trim();
+  if (!text) return null;
+
+  if (
+    /\b(second opinion|second set of eyes|stress[- ]?test|challenge (?:this|my|the) plan|critique (?:this|my|the) plan|is this (?:really )?the best strategy|better strategy)\b/i.test(
+      text,
+    )
+  ) {
+    return "strategy-agent";
+  }
+
+  if (
+    /\b(hpo|hudson pro)\b/i.test(text) &&
+    /\b(route|office|doctor|physician|pcp|attorney|referral|relationship|patient|marketing|prospect|visit|account|lunch|follow[- ]?up|morris plains|hoboken|newark)\b/i.test(
+      text,
+    )
+  ) {
+    return "hpo-agent";
+  }
+
+  if (
+    /\b(research|look up|verify|fact[- ]?check|find current|compare current|latest|current data|current information|what does the research say|search the web)\b/i.test(
+      text,
+    )
+  ) {
+    return "research-agent";
+  }
+
+  return null;
 }
 
 function textOf(value: unknown): string {
