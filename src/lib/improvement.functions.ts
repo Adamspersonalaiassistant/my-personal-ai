@@ -424,17 +424,15 @@ export const recordAgentMetric = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     if (!data.agentSlug) throw new Error("Agent slug is required");
-    const { error } = await (context.supabase as any)
-      .from("emery_agent_metrics")
-      .insert({
-        user_id: context.userId,
-        agent_slug: data.agentSlug,
-        delegated_count: data.delegatedCount,
-        web_used: data.webUsed,
-        succeeded: data.succeeded,
-        duration_ms: data.durationMs,
-        metadata: data.metadata,
-      });
+    const { error } = await (context.supabase as any).from("emery_agent_metrics").insert({
+      user_id: context.userId,
+      agent_slug: data.agentSlug,
+      delegated_count: data.delegatedCount,
+      web_used: data.webUsed,
+      succeeded: data.succeeded,
+      duration_ms: data.durationMs,
+      metadata: data.metadata,
+    });
     if (error) throw error;
     return { ok: true };
   });
