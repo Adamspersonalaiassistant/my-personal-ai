@@ -807,10 +807,10 @@ function isMemoryCandidate(value: unknown): value is MemoryCandidate {
 
 /** True when the text is clearly a statement about the user's own name. */
 function isAboutOwnName(text: string): boolean {
-  return /\bmy\s+(?:full\s+|first\s+|legal\s+)?name\s+(?:is|=|:)/i.test(text) ||
+  return (
+    /\bmy\s+(?:full\s+|first\s+|legal\s+)?name\s+(?:is|=|:)/i.test(text) ||
     /\b(?:i am called|i'm called|you can call me|call me)\b/i.test(text)
-    ? true
-    : false;
+  );
 }
 
 /** Words that clearly end a name and start another clause. */
