@@ -70,7 +70,8 @@ function Projects() {
                 Keep the daily work connected to the bigger result.
               </h2>
               <p className="mt-2 max-w-lg text-sm leading-6 text-muted-foreground">
-                Projects give Emery the goal behind your tasks and meetings so she can help protect the next move that matters most.
+                Projects give Emery the goal behind your tasks and meetings so she can help protect
+                the next move that matters most.
               </p>
             </div>
             <button
@@ -89,17 +90,22 @@ function Projects() {
                   <Sparkles className="size-4" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary/80">Current focus project</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary/80">
+                    Current focus project
+                  </p>
                   <p className="mt-1 truncate text-sm font-semibold">{focusProject.name}</p>
                   <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    {focusProject.next_action ? `Next: ${focusProject.next_action}` : "This project still needs a clear next action."}
+                    {focusProject.next_action
+                      ? `Next: ${focusProject.next_action}`
+                      : "This project still needs a clear next action."}
                   </p>
                 </div>
               </div>
             </div>
           ) : (
             <div className="mt-4 flex items-center gap-2.5 rounded-2xl border border-border/40 bg-card/25 px-3.5 py-3 text-xs text-muted-foreground">
-              <FolderKanban className="size-4 text-primary" /> No active projects are competing for your attention.
+              <FolderKanban className="size-4 text-primary" /> No active projects are competing for
+              your attention.
             </div>
           )}
         </section>
@@ -107,7 +113,10 @@ function Projects() {
         <ProjectExecutionOverview />
 
         {error ? (
-          <p className="rounded-2xl border border-destructive/25 bg-destructive/10 px-3.5 py-3 text-sm text-destructive" role="alert">
+          <p
+            className="rounded-2xl border border-destructive/25 bg-destructive/10 px-3.5 py-3 text-sm text-destructive"
+            role="alert"
+          >
             {error}
           </p>
         ) : null}
@@ -120,9 +129,18 @@ function Projects() {
           </div>
         ) : (
           <>
-            <ProjectSection title={`Active · ${active.length}`} projects={active} onEdit={openEditor} />
+            <ProjectSection
+              title={`Active · ${active.length}`}
+              projects={active}
+              onEdit={openEditor}
+            />
             {other.length ? (
-              <ProjectSection title={`Paused / Completed · ${other.length}`} projects={other} onEdit={openEditor} muted />
+              <ProjectSection
+                title={`Paused / Completed · ${other.length}`}
+                projects={other}
+                onEdit={openEditor}
+                muted
+              />
             ) : null}
           </>
         )}
@@ -156,12 +174,16 @@ function ProjectSection({
 }) {
   return (
     <section>
-      <p className="mb-2.5 px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{title}</p>
+      <p className="mb-2.5 px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        {title}
+      </p>
       {projects.length === 0 ? (
         <div className="emery-glass rounded-[1.55rem] p-6 text-center">
           <FolderKanban className="mx-auto size-7 text-primary" />
           <p className="mt-2 text-sm font-medium">No projects here yet.</p>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">Say “Emery, create a project for…” and she can add it for you.</p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            Say “Emery, create a project for…” and she can add it for you.
+          </p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -174,25 +196,37 @@ function ProjectSection({
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <h3 className="text-sm font-semibold">{project.name}</h3>
-                    <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-primary/75">P{project.priority}</span>
+                    <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-primary/75">
+                      P{project.priority}
+                    </span>
                     {project.status !== "active" ? (
-                      <span className="text-[10px] capitalize text-muted-foreground">{project.status}</span>
+                      <span className="text-[10px] capitalize text-muted-foreground">
+                        {project.status}
+                      </span>
                     ) : null}
                   </div>
 
                   {project.goal ? (
                     <div className="mt-3">
-                      <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Goal</p>
+                      <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        Goal
+                      </p>
                       <p className="mt-1 text-sm leading-6 text-foreground/90">{project.goal}</p>
                     </div>
                   ) : project.description ? (
-                    <p className="mt-2.5 text-sm leading-6 text-muted-foreground">{project.description}</p>
+                    <p className="mt-2.5 text-sm leading-6 text-muted-foreground">
+                      {project.description}
+                    </p>
                   ) : null}
 
                   {project.next_action ? (
                     <div className="mt-3.5 rounded-2xl border border-primary/10 bg-primary/[0.025] px-3.5 py-3">
-                      <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-primary/75">Next action</p>
-                      <p className="mt-1.5 text-xs leading-5 text-foreground/90">{project.next_action}</p>
+                      <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-primary/75">
+                        Next action
+                      </p>
+                      <p className="mt-1.5 text-xs leading-5 text-foreground/90">
+                        {project.next_action}
+                      </p>
                     </div>
                   ) : !muted ? (
                     <div className="mt-3 rounded-xl border border-dashed border-border/45 px-3 py-2 text-[11px] text-muted-foreground">
@@ -265,7 +299,10 @@ function ProjectEditor({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-black/65 p-2 backdrop-blur-md sm:items-center sm:justify-center sm:p-4" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-end bg-black/65 p-2 backdrop-blur-md sm:items-center sm:justify-center sm:p-4"
+      onClick={onClose}
+    >
       <form
         onSubmit={submit}
         onClick={(event) => event.stopPropagation()}
@@ -274,10 +311,19 @@ function ProjectEditor({
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="emery-kicker">Project context</p>
-            <h3 className="mt-1 text-xl font-semibold tracking-[-0.02em]">{project ? "Edit project" : "New project"}</h3>
-            <p className="mt-1.5 text-xs leading-5 text-muted-foreground">Give Emery the outcome, why it matters, and the next concrete move.</p>
+            <h3 className="mt-1 text-xl font-semibold tracking-[-0.02em]">
+              {project ? "Edit project" : "New project"}
+            </h3>
+            <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
+              Give Emery the outcome, why it matters, and the next concrete move.
+            </p>
           </div>
-          <button type="button" onClick={onClose} className="emery-press flex size-11 shrink-0 items-center justify-center rounded-2xl text-muted-foreground hover:bg-white/5" aria-label="Close project editor">
+          <button
+            type="button"
+            onClick={onClose}
+            className="emery-press flex size-11 shrink-0 items-center justify-center rounded-2xl text-muted-foreground hover:bg-white/5"
+            aria-label="Close project editor"
+          >
             <X className="size-4" />
           </button>
         </div>
@@ -345,7 +391,11 @@ function ProjectEditor({
             </Field>
           </div>
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          <button type="submit" disabled={!name.trim() || saving} className="emery-press min-h-12 w-full rounded-2xl bg-primary font-semibold text-primary-foreground disabled:opacity-40">
+          <button
+            type="submit"
+            disabled={!name.trim() || saving}
+            className="emery-press min-h-12 w-full rounded-2xl bg-primary font-semibold text-primary-foreground disabled:opacity-40"
+          >
             {saving ? "Saving…" : "Save project"}
           </button>
         </div>
@@ -354,12 +404,22 @@ function ProjectEditor({
   );
 }
 
-function Field({ label, optional = false, children }: { label: string; optional?: boolean; children: React.ReactNode }) {
+function Field({
+  label,
+  optional = false,
+  children,
+}: {
+  label: string;
+  optional?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <label className="block">
       <span className="flex items-center gap-2 text-sm font-semibold">
         {label}
-        {optional ? <span className="text-[10px] font-normal text-muted-foreground">Optional</span> : null}
+        {optional ? (
+          <span className="text-[10px] font-normal text-muted-foreground">Optional</span>
+        ) : null}
       </span>
       <span className="mt-2 block">{children}</span>
     </label>

@@ -75,7 +75,8 @@ function Meetings() {
                 Conversations Emery can prepare around.
               </h2>
               <p className="mt-2 max-w-lg text-sm leading-6 text-muted-foreground">
-                Keep important conversations visible so Emery can connect them to projects, priorities, and the work that should happen next.
+                Keep important conversations visible so Emery can connect them to projects,
+                priorities, and the work that should happen next.
               </p>
             </div>
             <button
@@ -94,11 +95,18 @@ function Meetings() {
                   <Sparkles className="size-4" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary/80">Next conversation</p>
-                  <p className="mt-1 truncate text-sm font-semibold">{nextMeeting.title || "Untitled meeting"}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary/80">
+                    Next conversation
+                  </p>
+                  <p className="mt-1 truncate text-sm font-semibold">
+                    {nextMeeting.title || "Untitled meeting"}
+                  </p>
                   {nextMeeting.meeting_at ? (
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {new Date(nextMeeting.meeting_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}
+                      {new Date(nextMeeting.meeting_at).toLocaleString([], {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })}
                       {nextMeeting.project_name ? ` · ${nextMeeting.project_name}` : ""}
                     </p>
                   ) : null}
@@ -113,7 +121,10 @@ function Meetings() {
         </section>
 
         {error ? (
-          <p className="rounded-2xl border border-destructive/25 bg-destructive/10 px-3.5 py-3 text-sm text-destructive" role="alert">
+          <p
+            className="rounded-2xl border border-destructive/25 bg-destructive/10 px-3.5 py-3 text-sm text-destructive"
+            role="alert"
+          >
             {error}
           </p>
         ) : null}
@@ -121,13 +132,18 @@ function Meetings() {
         {loading ? (
           <div className="space-y-2">
             {[0, 1].map((i) => (
-              <div key={i} className="emery-glass h-24 animate-pulse rounded-[1.45rem] opacity-55" />
+              <div
+                key={i}
+                className="emery-glass h-24 animate-pulse rounded-[1.45rem] opacity-55"
+              />
             ))}
           </div>
         ) : (
           <>
             <MeetingSection title={`Upcoming · ${upcoming.length}`} meetings={upcoming} />
-            {past.length ? <MeetingSection title={`Past · ${past.length}`} meetings={past.slice(0, 20)} past /> : null}
+            {past.length ? (
+              <MeetingSection title={`Past · ${past.length}`} meetings={past.slice(0, 20)} past />
+            ) : null}
           </>
         )}
       </div>
@@ -158,12 +174,16 @@ function MeetingSection({
 }) {
   return (
     <section>
-      <p className="mb-2.5 px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{title}</p>
+      <p className="mb-2.5 px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        {title}
+      </p>
       {meetings.length === 0 ? (
         <div className="emery-glass rounded-[1.55rem] p-6 text-center">
           <CalendarDays className="mx-auto size-7 text-primary" />
           <p className="mt-2 text-sm font-medium">Nothing scheduled here.</p>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">Tell Emery about a meeting and she can save it into your internal meeting system.</p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            Tell Emery about a meeting and she can save it into your internal meeting system.
+          </p>
         </div>
       ) : (
         <div className="space-y-2.5">
@@ -184,21 +204,36 @@ function MeetingSection({
                 }`}
               >
                 <div className="flex items-start gap-3.5">
-                  <div className={`flex size-11 shrink-0 items-center justify-center rounded-2xl border ${isNext ? "border-primary/15 bg-primary/[0.06] text-primary" : "border-border/45 bg-card/40 text-muted-foreground"}`}>
+                  <div
+                    className={`flex size-11 shrink-0 items-center justify-center rounded-2xl border ${isNext ? "border-primary/15 bg-primary/[0.06] text-primary" : "border-border/45 bg-card/40 text-muted-foreground"}`}
+                  >
                     <CalendarDays className="size-5" strokeWidth={1.8} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <h3 className="text-sm font-semibold">{meeting.title || "Untitled meeting"}</h3>
-                      {isNext ? <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-primary/80">Next</span> : null}
+                      <h3 className="text-sm font-semibold">
+                        {meeting.title || "Untitled meeting"}
+                      </h3>
+                      {isNext ? (
+                        <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-primary/80">
+                          Next
+                        </span>
+                      ) : null}
                       {meeting.project_name ? (
-                        <span className="rounded-full border border-border/45 bg-card/35 px-2 py-0.5 text-[10px] text-muted-foreground">{meeting.project_name}</span>
+                        <span className="rounded-full border border-border/45 bg-card/35 px-2 py-0.5 text-[10px] text-muted-foreground">
+                          {meeting.project_name}
+                        </span>
                       ) : null}
                     </div>
                     {meeting.meeting_at ? (
                       <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
                         <Clock3 className="size-3.5" />
-                        <span>{new Date(meeting.meeting_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</span>
+                        <span>
+                          {new Date(meeting.meeting_at).toLocaleString([], {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          })}
+                        </span>
                       </div>
                     ) : null}
                     {participants.length ? (
@@ -207,7 +242,11 @@ function MeetingSection({
                         <span className="truncate">{participants.join(", ")}</span>
                       </div>
                     ) : null}
-                    {meeting.summary ? <p className="mt-2.5 text-xs leading-5 text-muted-foreground">{meeting.summary}</p> : null}
+                    {meeting.summary ? (
+                      <p className="mt-2.5 text-xs leading-5 text-muted-foreground">
+                        {meeting.summary}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
               </article>
@@ -249,7 +288,10 @@ function MeetingEditor({
       await onSave({
         title,
         meetingAt: new Date(meetingAt).toISOString(),
-        participants: participants.split(",").map((item) => item.trim()).filter(Boolean),
+        participants: participants
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
         projectId: projectId || null,
       });
     } catch {
@@ -259,7 +301,10 @@ function MeetingEditor({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-black/65 p-2 backdrop-blur-md sm:items-center sm:justify-center sm:p-4" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-end bg-black/65 p-2 backdrop-blur-md sm:items-center sm:justify-center sm:p-4"
+      onClick={onClose}
+    >
       <form
         onSubmit={submit}
         onClick={(event) => event.stopPropagation()}
@@ -269,9 +314,17 @@ function MeetingEditor({
           <div>
             <p className="emery-kicker">New conversation</p>
             <h3 className="mt-1 text-xl font-semibold tracking-[-0.02em]">Add meeting</h3>
-            <p className="mt-1.5 text-xs leading-5 text-muted-foreground">This saves inside Emery so she can use it as context. External calendar sync is not enabled yet.</p>
+            <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
+              This saves inside Emery so she can use it as context. External calendar sync is not
+              enabled yet.
+            </p>
           </div>
-          <button type="button" onClick={onClose} className="emery-press flex size-11 shrink-0 items-center justify-center rounded-2xl text-muted-foreground hover:bg-white/5" aria-label="Close add meeting">
+          <button
+            type="button"
+            onClick={onClose}
+            className="emery-press flex size-11 shrink-0 items-center justify-center rounded-2xl text-muted-foreground hover:bg-white/5"
+            aria-label="Close add meeting"
+          >
             <X className="size-4" />
           </button>
         </div>
@@ -302,7 +355,9 @@ function MeetingEditor({
             >
               <option value="">No linked project</option>
               {projects.map((project) => (
-                <option key={project.id} value={project.id}>{project.name}</option>
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
               ))}
             </select>
           </Field>
@@ -328,12 +383,22 @@ function MeetingEditor({
   );
 }
 
-function Field({ label, optional = false, children }: { label: string; optional?: boolean; children: React.ReactNode }) {
+function Field({
+  label,
+  optional = false,
+  children,
+}: {
+  label: string;
+  optional?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <label className="block">
       <span className="flex items-center gap-2 text-sm font-semibold">
         {label}
-        {optional ? <span className="text-[10px] font-normal text-muted-foreground">Optional</span> : null}
+        {optional ? (
+          <span className="text-[10px] font-normal text-muted-foreground">Optional</span>
+        ) : null}
       </span>
       <span className="mt-2 block">{children}</span>
     </label>

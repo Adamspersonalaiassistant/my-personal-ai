@@ -80,7 +80,10 @@ function Agents() {
     };
   }, [loadAgents]);
 
-  const specialistCount = useMemo(() => agents.filter((agent) => !agent.is_custom).length, [agents]);
+  const specialistCount = useMemo(
+    () => agents.filter((agent) => !agent.is_custom).length,
+    [agents],
+  );
   const customCount = useMemo(() => agents.filter((agent) => agent.is_custom).length, [agents]);
 
   async function handleCreate(event: React.FormEvent) {
@@ -121,8 +124,8 @@ function Agents() {
                 Your specialist team, organized around one leader.
               </h2>
               <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-                You talk to Emery. She brings in the right specialist, keeps the bigger picture in view,
-                and stays responsible for the final recommendation.
+                You talk to Emery. She brings in the right specialist, keeps the bigger picture in
+                view, and stays responsible for the final recommendation.
               </p>
             </div>
             <button
@@ -158,8 +161,8 @@ function Agents() {
           <div className="mt-3 flex items-start gap-2.5 rounded-2xl border border-primary/10 bg-primary/[0.025] px-3.5 py-3 text-xs leading-5 text-muted-foreground">
             <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
             <span>
-              Every specialist inherits Emery's privacy, truthfulness, and approval boundaries. You can
-              also ask Emery in the main chat to create a new specialist for a recurring need.
+              Every specialist inherits Emery's privacy, truthfulness, and approval boundaries. You
+              can also ask Emery in the main chat to create a new specialist for a recurring need.
             </span>
           </div>
         </section>
@@ -176,7 +179,10 @@ function Agents() {
         {loading ? (
           <div className="space-y-3 py-1">
             {[0, 1, 2].map((item) => (
-              <div key={item} className="emery-glass h-40 animate-pulse rounded-[1.6rem] opacity-55" />
+              <div
+                key={item}
+                className="emery-glass h-40 animate-pulse rounded-[1.6rem] opacity-55"
+              />
             ))}
           </div>
         ) : (
@@ -184,9 +190,13 @@ function Agents() {
             <div className="flex items-center justify-between px-1">
               <div>
                 <p className="text-sm font-semibold">Specialists</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">Tap a specialist to open the persistent group chat.</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Tap a specialist to open the persistent group chat.
+                </p>
               </div>
-              <span className="text-xs font-medium text-muted-foreground">{agents.length} active</span>
+              <span className="text-xs font-medium text-muted-foreground">
+                {agents.length} active
+              </span>
             </div>
 
             {agents.map((agent) => {
@@ -196,7 +206,9 @@ function Agents() {
                 <button
                   key={agent.id}
                   type="button"
-                  onClick={() => navigate({ to: "/agents/$agentId", params: { agentId: agent.id } })}
+                  onClick={() =>
+                    navigate({ to: "/agents/$agentId", params: { agentId: agent.id } })
+                  }
                   className="emery-press emery-glass group w-full rounded-[1.65rem] p-4 text-left hover:border-primary/25 sm:p-5"
                 >
                   <div className="flex items-start gap-3.5">
@@ -207,12 +219,16 @@ function Agents() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <h3 className="truncate text-base font-semibold tracking-[-0.018em]">{agent.name}</h3>
+                            <h3 className="truncate text-base font-semibold tracking-[-0.018em]">
+                              {agent.name}
+                            </h3>
                             <span className="text-[10px] font-semibold uppercase tracking-[0.13em] text-primary/80">
                               {agentRole(agent)}
                             </span>
                           </div>
-                          <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">{agent.description}</p>
+                          <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">
+                            {agent.description}
+                          </p>
                         </div>
                         <ChevronRight className="mt-1 size-5 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary" />
                       </div>
@@ -236,13 +252,20 @@ function Agents() {
                           </div>
                           <div className="mt-3 grid gap-2 sm:grid-cols-3">
                             {agent.children.map((child) => (
-                              <div key={child.id} className="rounded-xl border border-border/40 bg-card/35 px-3 py-2.5">
+                              <div
+                                key={child.id}
+                                className="rounded-xl border border-border/40 bg-card/35 px-3 py-2.5"
+                              >
                                 <div className="flex items-center gap-2">
                                   <span className="size-1.5 rounded-full bg-primary/75" />
-                                  <span className="text-xs font-semibold">{child.name.replace(" Agent", "")}</span>
+                                  <span className="text-xs font-semibold">
+                                    {child.name.replace(" Agent", "")}
+                                  </span>
                                 </div>
                                 {child.description ? (
-                                  <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-muted-foreground">{child.description}</p>
+                                  <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-muted-foreground">
+                                    {child.description}
+                                  </p>
                                 ) : null}
                               </div>
                             ))}
@@ -271,9 +294,12 @@ function Agents() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="emery-kicker">New specialist</p>
-                <h3 className="mt-1.5 text-xl font-semibold tracking-[-0.025em]">Give Emery another expert.</h3>
+                <h3 className="mt-1.5 text-xl font-semibold tracking-[-0.025em]">
+                  Give Emery another expert.
+                </h3>
                 <p className="mt-1.5 max-w-sm text-sm leading-6 text-muted-foreground">
-                  Start with one clear responsibility. Emery will remain the leader and bring this specialist in when it helps.
+                  Start with one clear responsibility. Emery will remain the leader and bring this
+                  specialist in when it helps.
                 </p>
               </div>
               <button
@@ -327,7 +353,9 @@ function Agents() {
               </div>
 
               <div className="rounded-2xl border border-primary/10 bg-primary/[0.025] px-3.5 py-3 text-xs leading-5 text-muted-foreground">
-                After creation, you’ll go straight into a persistent <span className="font-semibold text-foreground">Adam + Emery + specialist</span> group chat.
+                After creation, you’ll go straight into a persistent{" "}
+                <span className="font-semibold text-foreground">Adam + Emery + specialist</span>{" "}
+                group chat.
               </div>
 
               <button
@@ -350,12 +378,22 @@ function TeamMetric({ label, value }: { label: string; value: number }) {
   return (
     <div className="emery-surface rounded-2xl px-3 py-2.5 text-center">
       <p className="text-lg font-semibold tracking-tight">{value}</p>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        {label}
+      </p>
     </div>
   );
 }
 
-function Field({ label, hint, children }: { label: string; hint: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint: string;
+  children: React.ReactNode;
+}) {
   return (
     <label className="block">
       <span className="flex items-baseline justify-between gap-3">

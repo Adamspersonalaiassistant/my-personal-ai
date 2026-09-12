@@ -68,13 +68,14 @@ function Tasks() {
 
   const open = tasks.filter((task) => task.status !== "completed");
   const completed = tasks.filter((task) => task.status === "completed");
-  const focusTask = [...open].sort((a, b) => {
-    if (b.priority !== a.priority) return b.priority - a.priority;
-    if (a.due_at && b.due_at) return new Date(a.due_at).getTime() - new Date(b.due_at).getTime();
-    if (a.due_at) return -1;
-    if (b.due_at) return 1;
-    return 0;
-  })[0] ?? null;
+  const focusTask =
+    [...open].sort((a, b) => {
+      if (b.priority !== a.priority) return b.priority - a.priority;
+      if (a.due_at && b.due_at) return new Date(a.due_at).getTime() - new Date(b.due_at).getTime();
+      if (a.due_at) return -1;
+      if (b.due_at) return 1;
+      return 0;
+    })[0] ?? null;
 
   async function handleToggle(task: Task) {
     const completedNow = task.status !== "completed";
@@ -133,9 +134,12 @@ function Tasks() {
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="emery-kicker">Action system</p>
-              <h2 className="mt-1.5 text-xl font-semibold tracking-[-0.03em] sm:text-[1.35rem]">Your next moves, without the noise.</h2>
+              <h2 className="mt-1.5 text-xl font-semibold tracking-[-0.03em] sm:text-[1.35rem]">
+                Your next moves, without the noise.
+              </h2>
               <p className="mt-2 max-w-lg text-sm leading-6 text-muted-foreground">
-                Keep execution visible and simple. Emery can capture new work from conversation and connect it to the right project.
+                Keep execution visible and simple. Emery can capture new work from conversation and
+                connect it to the right project.
               </p>
             </div>
             <button
@@ -154,7 +158,9 @@ function Tasks() {
                   <Sparkles className="size-4" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary/80">Highest-leverage open task</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary/80">
+                    Highest-leverage open task
+                  </p>
                   <p className="mt-1 text-sm font-semibold">{focusTask.title}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     Priority {focusTask.priority}
@@ -172,25 +178,43 @@ function Tasks() {
         </section>
 
         {error ? (
-          <p className="rounded-2xl border border-destructive/25 bg-destructive/10 px-3.5 py-3 text-sm text-destructive" role="alert">{error}</p>
+          <p
+            className="rounded-2xl border border-destructive/25 bg-destructive/10 px-3.5 py-3 text-sm text-destructive"
+            role="alert"
+          >
+            {error}
+          </p>
         ) : null}
 
         {loading ? (
           <div className="space-y-2">
             {[0, 1, 2].map((i) => (
-              <div key={i} className="emery-glass h-20 animate-pulse rounded-[1.45rem] opacity-55" />
+              <div
+                key={i}
+                className="emery-glass h-20 animate-pulse rounded-[1.45rem] opacity-55"
+              />
             ))}
           </div>
         ) : (
           <>
             <TaskSection title={`Open · ${open.length}`} tasks={open} onToggle={handleToggle} />
-            {completed.length ? <TaskSection title={`Completed · ${completed.length}`} tasks={completed} onToggle={handleToggle} completed /> : null}
+            {completed.length ? (
+              <TaskSection
+                title={`Completed · ${completed.length}`}
+                tasks={completed}
+                onToggle={handleToggle}
+                completed
+              />
+            ) : null}
           </>
         )}
       </div>
 
       {showAdd ? (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/65 p-2 backdrop-blur-md sm:items-center sm:justify-center sm:p-4" onClick={() => setShowAdd(false)}>
+        <div
+          className="fixed inset-0 z-50 flex items-end bg-black/65 p-2 backdrop-blur-md sm:items-center sm:justify-center sm:p-4"
+          onClick={() => setShowAdd(false)}
+        >
           <form
             onSubmit={handleAdd}
             onClick={(event) => event.stopPropagation()}
@@ -200,9 +224,16 @@ function Tasks() {
               <div>
                 <p className="emery-kicker">New action</p>
                 <h3 className="mt-1 text-xl font-semibold tracking-[-0.02em]">Add task</h3>
-                <p className="mt-1.5 text-xs leading-5 text-muted-foreground">You can also tell Emery in the main chat and she can capture it for you.</p>
+                <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
+                  You can also tell Emery in the main chat and she can capture it for you.
+                </p>
               </div>
-              <button type="button" onClick={() => setShowAdd(false)} className="emery-press flex size-11 shrink-0 items-center justify-center rounded-2xl text-muted-foreground hover:bg-white/5" aria-label="Close add task">
+              <button
+                type="button"
+                onClick={() => setShowAdd(false)}
+                className="emery-press flex size-11 shrink-0 items-center justify-center rounded-2xl text-muted-foreground hover:bg-white/5"
+                aria-label="Close add task"
+              >
                 <X className="size-4" />
               </button>
             </div>
@@ -243,7 +274,9 @@ function Tasks() {
                   >
                     <option value="">No linked project</option>
                     {projects.map((project) => (
-                      <option key={project.id} value={project.id}>{project.name}</option>
+                      <option key={project.id} value={project.id}>
+                        {project.name}
+                      </option>
                     ))}
                   </select>
                 </Field>
@@ -289,12 +322,16 @@ function TaskSection({
 }) {
   return (
     <section>
-      <p className="mb-2.5 px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{title}</p>
+      <p className="mb-2.5 px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        {title}
+      </p>
       {tasks.length === 0 ? (
         <div className="emery-glass rounded-[1.55rem] p-6 text-center">
           <CheckCircle2 className="mx-auto size-7 text-primary" />
           <p className="mt-2 text-sm font-medium">Nothing waiting here.</p>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">Say “Emery, add a task…” whenever something comes up.</p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            Say “Emery, add a task…” whenever something comes up.
+          </p>
         </div>
       ) : (
         <div className="space-y-2.5">
@@ -313,12 +350,24 @@ function TaskSection({
               </button>
               <div className="min-w-0 flex-1 py-1">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <p className={`text-sm font-semibold leading-5 ${completed ? "line-through" : ""}`}>{task.title}</p>
-                  {!completed ? <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-primary/75">P{task.priority}</span> : null}
+                  <p
+                    className={`text-sm font-semibold leading-5 ${completed ? "line-through" : ""}`}
+                  >
+                    {task.title}
+                  </p>
+                  {!completed ? (
+                    <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-primary/75">
+                      P{task.priority}
+                    </span>
+                  ) : null}
                 </div>
-                {task.details ? <p className="mt-1.5 text-xs leading-5 text-muted-foreground">{task.details}</p> : null}
+                {task.details ? (
+                  <p className="mt-1.5 text-xs leading-5 text-muted-foreground">{task.details}</p>
+                ) : null}
                 <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1.5 text-[11px] text-muted-foreground">
-                  {task.project_name ? <span className="font-medium text-foreground/75">{task.project_name}</span> : null}
+                  {task.project_name ? (
+                    <span className="font-medium text-foreground/75">{task.project_name}</span>
+                  ) : null}
                   {task.due_at ? <span>{formatDue(task)}</span> : null}
                 </div>
               </div>
@@ -338,12 +387,22 @@ function formatDue(task: Task) {
     : new Date(task.due_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 }
 
-function Field({ label, optional = false, children }: { label: string; optional?: boolean; children: React.ReactNode }) {
+function Field({
+  label,
+  optional = false,
+  children,
+}: {
+  label: string;
+  optional?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <label className="block">
       <span className="flex items-center gap-2 text-sm font-semibold">
         {label}
-        {optional ? <span className="text-[10px] font-normal text-muted-foreground">Optional</span> : null}
+        {optional ? (
+          <span className="text-[10px] font-normal text-muted-foreground">Optional</span>
+        ) : null}
       </span>
       <span className="mt-2 block">{children}</span>
     </label>

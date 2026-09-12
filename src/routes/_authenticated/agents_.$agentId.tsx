@@ -151,7 +151,10 @@ function AgentChat() {
               </p>
             </div>
 
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-primary/10 bg-primary/[0.035] text-primary sm:hidden" aria-label="Emery leads this group">
+            <div
+              className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-primary/10 bg-primary/[0.035] text-primary sm:hidden"
+              aria-label="Emery leads this group"
+            >
               <Crown className="size-4" />
             </div>
           </div>
@@ -160,15 +163,22 @@ function AgentChat() {
             <div className="mx-auto mt-3 flex max-w-2xl items-start gap-2.5 rounded-2xl border border-border/40 bg-card/28 px-3.5 py-2.5">
               <Sparkles className="mt-0.5 size-3.5 shrink-0 text-primary" />
               <p className="line-clamp-2 text-[11px] leading-5 text-muted-foreground">
-                <span className="font-semibold text-foreground/90">{agent.name}'s mission:</span> {agent.mission}
+                <span className="font-semibold text-foreground/90">{agent.name}'s mission:</span>{" "}
+                {agent.mission}
               </p>
             </div>
           ) : null}
         </section>
 
-        <div className="emery-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-5 sm:px-6 sm:py-6" aria-label="Specialist group conversation">
+        <div
+          className="emery-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-5 sm:px-6 sm:py-6"
+          aria-label="Specialist group conversation"
+        >
           {loading ? (
-            <div className="flex min-h-[45vh] flex-col items-center justify-center gap-3 text-sm text-muted-foreground" role="status">
+            <div
+              className="flex min-h-[45vh] flex-col items-center justify-center gap-3 text-sm text-muted-foreground"
+              role="status"
+            >
               <div className="emery-glass flex size-12 items-center justify-center rounded-2xl text-primary">
                 <Loader2 className="size-5 animate-spin" />
               </div>
@@ -185,14 +195,20 @@ function AgentChat() {
                 </div>
               </div>
               <p className="emery-kicker mt-5">Persistent group chat</p>
-              <h2 className="mt-2 text-xl font-semibold tracking-[-0.025em]">The right people are already in the room.</h2>
+              <h2 className="mt-2 text-xl font-semibold tracking-[-0.025em]">
+                The right people are already in the room.
+              </h2>
               <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
-                Talk normally. {agent.name} brings the specialty. Emery keeps your priorities, context, and final decision connected.
+                Talk normally. {agent.name} brings the specialty. Emery keeps your priorities,
+                context, and final decision connected.
               </p>
               <div className="mt-5 grid w-full gap-2 sm:grid-cols-3">
                 <Participant label="You" detail="Goal & context" />
                 <Participant label="Emery" detail="Leader & synthesis" primary />
-                <Participant label={agent.name.replace(" Agent", "")} detail="Specialist judgment" />
+                <Participant
+                  label={agent.name.replace(" Agent", "")}
+                  detail="Specialist judgment"
+                />
               </div>
             </div>
           ) : null}
@@ -202,7 +218,11 @@ function AgentChat() {
               <GroupMessage key={message.id} message={message} agentName={agent?.name ?? "Agent"} />
             ))}
             {pending ? (
-              <div className="flex items-center gap-2.5 pl-1 text-xs text-muted-foreground" role="status" aria-live="polite">
+              <div
+                className="flex items-center gap-2.5 pl-1 text-xs text-muted-foreground"
+                role="status"
+                aria-live="polite"
+              >
                 <div className="flex size-8 items-center justify-center rounded-xl border border-primary/10 bg-primary/[0.035] text-primary">
                   <Loader2 className="size-3.5 animate-spin" />
                 </div>
@@ -214,7 +234,10 @@ function AgentChat() {
         </div>
 
         {error ? (
-          <div className="mx-3 mb-2 rounded-2xl border border-destructive/25 bg-destructive/10 px-3.5 py-3 text-sm text-destructive sm:mx-6" role="alert">
+          <div
+            className="mx-3 mb-2 rounded-2xl border border-destructive/25 bg-destructive/10 px-3.5 py-3 text-sm text-destructive sm:mx-6"
+            role="alert"
+          >
             {error}
           </div>
         ) : null}
@@ -231,7 +254,8 @@ function AgentChat() {
               onKeyDown={(event) => {
                 if (event.nativeEvent.isComposing) return;
                 if (event.key === "Enter" && !event.shiftKey) {
-                  const finePointer = typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches;
+                  const finePointer =
+                    typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches;
                   if (finePointer) {
                     event.preventDefault();
                     event.currentTarget.form?.requestSubmit();
@@ -253,7 +277,8 @@ function AgentChat() {
             </button>
           </div>
           <p className="mx-auto mt-1.5 max-w-2xl px-2 text-center text-[9px] leading-4 text-muted-foreground/70">
-            <ShieldCheck className="mr-1 inline size-2.5" /> Emery keeps specialist advice inside your privacy and approval boundaries.
+            <ShieldCheck className="mr-1 inline size-2.5" /> Emery keeps specialist advice inside
+            your privacy and approval boundaries.
           </p>
         </form>
       </div>
@@ -261,11 +286,23 @@ function AgentChat() {
   );
 }
 
-function Participant({ label, detail, primary = false }: { label: string; detail: string; primary?: boolean }) {
+function Participant({
+  label,
+  detail,
+  primary = false,
+}: {
+  label: string;
+  detail: string;
+  primary?: boolean;
+}) {
   return (
-    <div className={`rounded-2xl border px-3 py-3 text-left ${primary ? "border-primary/18 bg-primary/[0.055]" : "border-border/45 bg-card/30"}`}>
+    <div
+      className={`rounded-2xl border px-3 py-3 text-left ${primary ? "border-primary/18 bg-primary/[0.055]" : "border-border/45 bg-card/30"}`}
+    >
       <div className="flex items-center gap-2">
-        <span className={`size-2 rounded-full ${primary ? "bg-primary shadow-[0_0_8px_oklch(0.805_0.175_155/0.55)]" : "bg-muted-foreground/55"}`} />
+        <span
+          className={`size-2 rounded-full ${primary ? "bg-primary shadow-[0_0_8px_oklch(0.805_0.175_155/0.55)]" : "bg-muted-foreground/55"}`}
+        />
         <span className="text-xs font-semibold">{label}</span>
       </div>
       <p className="mt-1 text-[10px] leading-4 text-muted-foreground">{detail}</p>
@@ -284,13 +321,19 @@ function GroupMessage({ message, agentName }: { message: Message; agentName: str
   return (
     <div className={`emery-fade-up flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div className={`max-w-[94%] sm:max-w-[88%] ${isUser ? "items-end" : "items-start"}`}>
-        <div className={`mb-1.5 flex items-center gap-2 px-1 ${isUser ? "justify-end" : "justify-start"}`}>
+        <div
+          className={`mb-1.5 flex items-center gap-2 px-1 ${isUser ? "justify-end" : "justify-start"}`}
+        >
           {!isUser ? (
-            <span className={`flex size-6 items-center justify-center rounded-lg border ${isEmery ? "border-primary/14 bg-primary/[0.055] text-primary" : "border-border/45 bg-card/35 text-foreground/75"}`}>
+            <span
+              className={`flex size-6 items-center justify-center rounded-lg border ${isEmery ? "border-primary/14 bg-primary/[0.055] text-primary" : "border-border/45 bg-card/35 text-foreground/75"}`}
+            >
               {isEmery ? <Crown className="size-3" /> : <BrainCircuit className="size-3" />}
             </span>
           ) : null}
-          <span className="text-[10px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">{label}</span>
+          <span className="text-[10px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
+            {label}
+          </span>
           {time ? <span className="text-[9px] text-muted-foreground/55">{time}</span> : null}
         </div>
         <div

@@ -53,7 +53,11 @@ export function AppShell({
             className="emery-press relative flex size-11 shrink-0 items-center justify-center rounded-[1.05rem]"
           >
             <div className="relative flex size-10 items-center justify-center overflow-hidden rounded-2xl border border-primary/18 bg-primary/[0.045] shadow-[0_0_22px_oklch(0.805_0.175_155/0.08)]">
-              <img src={brainImage} alt="" className="h-9 w-9 object-cover object-center opacity-95" />
+              <img
+                src={brainImage}
+                alt=""
+                className="h-9 w-9 object-cover object-center opacity-95"
+              />
             </div>
             <span className="absolute bottom-0.5 right-0.5 size-2.5 rounded-full border-2 border-background bg-primary shadow-[0_0_8px_oklch(0.805_0.175_155/0.6)]" />
           </Link>
@@ -64,7 +68,9 @@ export function AppShell({
               {showSectionTitle ? (
                 <>
                   <span className="text-border/80">/</span>
-                  <span className="truncate text-xs font-medium text-muted-foreground">{title}</span>
+                  <span className="truncate text-xs font-medium text-muted-foreground">
+                    {title}
+                  </span>
                 </>
               ) : null}
             </div>
@@ -84,7 +90,9 @@ export function AppShell({
         </Link>
       </header>
 
-      <main className={`relative z-10 min-h-0 flex-1 ${padded ? "overflow-y-auto px-4 py-5 sm:px-6 sm:py-6" : ""}`}>
+      <main
+        className={`relative z-10 min-h-0 flex-1 ${padded ? "overflow-y-auto px-4 py-5 sm:px-6 sm:py-6" : ""}`}
+      >
         {children}
       </main>
 
@@ -104,7 +112,10 @@ export function AppShell({
                   "bg-primary/[0.085] text-primary shadow-[inset_0_0_0_1px_oklch(0.805_0.175_155/0.12)]",
               }}
             >
-              <Icon className="size-[18px] transition-transform duration-200 group-active:scale-95" strokeWidth={1.9} />
+              <Icon
+                className="size-[18px] transition-transform duration-200 group-active:scale-95"
+                strokeWidth={1.9}
+              />
               <span className="max-w-full truncate sm:hidden">{compactLabel}</span>
               <span className="hidden sm:inline">{label}</span>
             </Link>
