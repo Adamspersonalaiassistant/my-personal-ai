@@ -146,7 +146,8 @@ function AgentChat() {
               </div>
               <h2 className="mt-4 text-lg font-semibold tracking-tight">The team is here.</h2>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                Talk normally. {agent.name} brings the specialty; Emery keeps the bigger picture, your goals and your other systems in view.
+                Talk normally. {agent.name} brings the specialty; Emery keeps the bigger picture,
+                your goals and your other systems in view.
               </p>
               <p className="mt-3 text-xs leading-5 text-muted-foreground/80">{agent.mission}</p>
             </div>

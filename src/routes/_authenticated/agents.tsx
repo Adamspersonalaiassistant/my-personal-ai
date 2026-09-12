@@ -105,9 +105,12 @@ function Agents() {
                 <Sparkles className="size-4" />
                 <p className="text-xs font-semibold uppercase tracking-[0.18em]">Emery's team</p>
               </div>
-              <h2 className="mt-2 text-xl font-semibold tracking-tight">One family. Different specialties.</h2>
+              <h2 className="mt-2 text-xl font-semibold tracking-tight">
+                One family. Different specialties.
+              </h2>
               <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-                Emery stays in charge. You can work with a specialist here without losing the context, judgment and accountability of your main assistant.
+                Emery stays in charge. You can work with a specialist here without losing the
+                context, judgment and accountability of your main assistant.
               </p>
             </div>
             <button
@@ -154,11 +157,15 @@ function Agents() {
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <h3 className="text-base font-semibold tracking-tight">{agent.name}</h3>
-                          <p className="mt-0.5 text-xs font-medium text-primary/90">{agent.description}</p>
+                          <p className="mt-0.5 text-xs font-medium text-primary/90">
+                            {agent.description}
+                          </p>
                         </div>
                         <ChevronRight className="size-5 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary" />
                       </div>
-                      <p className="mt-2 text-sm leading-6 text-muted-foreground">{agent.mission}</p>
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                        {agent.mission}
+                      </p>
 
                       {agent.children?.length ? (
                         <div className="mt-3 rounded-2xl border border-border/55 bg-card/55 p-3">

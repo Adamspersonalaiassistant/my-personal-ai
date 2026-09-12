@@ -106,7 +106,9 @@ function Settings() {
             </div>
             <div>
               <p className="text-sm font-semibold">About Adam / Memories</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">Review what Emery has learned and saved.</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Review what Emery has learned and saved.
+              </p>
             </div>
           </div>
           <span className="text-xs font-semibold text-primary">Open</span>

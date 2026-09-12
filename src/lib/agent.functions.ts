@@ -43,7 +43,10 @@ const DEFAULTS = {
     persona:
       "Operational, relationship-savvy, decisive, field-aware and practical. Synthesizes specialist reports into one clear recommendation for Adam and Emery.",
     sort_order: 10,
-    capabilities: { orchestration: true, internal_team: ["scout-agent", "route-agent", "relationship-agent"] },
+    capabilities: {
+      orchestration: true,
+      internal_team: ["scout-agent", "route-agent", "relationship-agent"],
+    },
   },
   research: {
     name: "Research Agent",
@@ -73,7 +76,8 @@ const DEFAULTS = {
     description: "HPO prospect and field intelligence",
     mission:
       "Discover and verify strong HPO prospects, current office facts, target quality, closures, duplicates and practical field intelligence.",
-    persona: "Persistent investigator. Verifies before recommending and prefers high-quality targets over long lists.",
+    persona:
+      "Persistent investigator. Verifies before recommending and prefers high-quality targets over long lists.",
     sort_order: 11,
     capabilities: { web_search: true, hpo_internal: true },
   },
@@ -93,7 +97,8 @@ const DEFAULTS = {
     description: "HPO referral relationship intelligence",
     mission:
       "Connect account history, visit/follow-up context, referral signals and relationship opportunities into the next best relationship action.",
-    persona: "Relationship-first, context-sensitive, commercially sharp and careful with patient/referral boundaries.",
+    persona:
+      "Relationship-first, context-sensitive, commercially sharp and careful with patient/referral boundaries.",
     sort_order: 13,
     capabilities: { hpo_internal: true },
   },
@@ -171,7 +176,12 @@ async function getOrCreateThread(db: any, userId: string, agent: AgentRow) {
   if (existing) return existing;
   const { data, error } = await db
     .from("agent_threads")
-    .insert({ user_id: userId, agent_id: agent.id, title: `${agent.name} Group Chat`, metadata: {} })
+    .insert({
+      user_id: userId,
+      agent_id: agent.id,
+      title: `${agent.name} Group Chat`,
+      metadata: {},
+    })
     .select("*")
     .single();
   if (error || !data) throw error ?? new Error("Could not create agent thread");
@@ -180,42 +190,47 @@ async function getOrCreateThread(db: any, userId: string, agent: AgentRow) {
 
 async function loadAdamContext(db: any, userId: string) {
   const now = new Date().toISOString();
-  const [{ data: profile }, { data: memories }, { data: tasks }, { data: projects }, { data: meetings }] =
-    await Promise.all([
-      db
-        .from("profiles")
-        .select("display_name, assistant_name, timezone, profile_summary")
-        .eq("user_id", userId)
-        .maybeSingle(),
-      db
-        .from("memories")
-        .select("memory_type, title, content, importance")
-        .eq("user_id", userId)
-        .or(`expires_at.is.null,expires_at.gt.${now}`)
-        .order("importance", { ascending: false })
-        .limit(24),
-      db
-        .from("tasks")
-        .select("title, status, priority, due_at")
-        .eq("user_id", userId)
-        .neq("status", "completed")
-        .order("priority", { ascending: false })
-        .limit(10),
-      db
-        .from("projects")
-        .select("name, goal, next_action, priority, status")
-        .eq("user_id", userId)
-        .eq("status", "active")
-        .order("priority", { ascending: false })
-        .limit(8),
-      db
-        .from("meetings")
-        .select("title, meeting_at, participants")
-        .eq("user_id", userId)
-        .gte("meeting_at", now)
-        .order("meeting_at", { ascending: true })
-        .limit(8),
-    ]);
+  const [
+    { data: profile },
+    { data: memories },
+    { data: tasks },
+    { data: projects },
+    { data: meetings },
+  ] = await Promise.all([
+    db
+      .from("profiles")
+      .select("display_name, assistant_name, timezone, profile_summary")
+      .eq("user_id", userId)
+      .maybeSingle(),
+    db
+      .from("memories")
+      .select("memory_type, title, content, importance")
+      .eq("user_id", userId)
+      .or(`expires_at.is.null,expires_at.gt.${now}`)
+      .order("importance", { ascending: false })
+      .limit(24),
+    db
+      .from("tasks")
+      .select("title, status, priority, due_at")
+      .eq("user_id", userId)
+      .neq("status", "completed")
+      .order("priority", { ascending: false })
+      .limit(10),
+    db
+      .from("projects")
+      .select("name, goal, next_action, priority, status")
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .order("priority", { ascending: false })
+      .limit(8),
+    db
+      .from("meetings")
+      .select("title, meeting_at, participants")
+      .eq("user_id", userId)
+      .gte("meeting_at", now)
+      .order("meeting_at", { ascending: true })
+      .limit(8),
+  ]);
 
   return {
     profile: profile ?? {},
@@ -229,16 +244,22 @@ async function loadAdamContext(db: any, userId: string) {
 function extractResponse(payload: any): AgentResponse {
   const texts: string[] = [];
   const sourceMap = new Map<string, { title: string; url: string }>();
-  if (typeof payload?.output_text === "string" && payload.output_text.trim()) texts.push(payload.output_text.trim());
+  if (typeof payload?.output_text === "string" && payload.output_text.trim())
+    texts.push(payload.output_text.trim());
   for (const item of Array.isArray(payload?.output) ? payload.output : []) {
     for (const content of Array.isArray(item?.content) ? item.content : []) {
-      if (content?.type === "output_text" && typeof content.text === "string" && !payload?.output_text) {
+      if (
+        content?.type === "output_text" &&
+        typeof content.text === "string" &&
+        !payload?.output_text
+      ) {
         texts.push(content.text.trim());
       }
       for (const annotation of Array.isArray(content?.annotations) ? content.annotations : []) {
         const url = annotation?.url ?? annotation?.url_citation?.url;
         const title = annotation?.title ?? annotation?.url_citation?.title ?? url;
-        if (typeof url === "string" && url.startsWith("http")) sourceMap.set(url, { title: String(title || url), url });
+        if (typeof url === "string" && url.startsWith("http"))
+          sourceMap.set(url, { title: String(title || url), url });
       }
     }
   }
@@ -289,7 +310,14 @@ async function saveAgentMessage(
 ) {
   const { data, error } = await db
     .from("agent_messages")
-    .insert({ user_id: userId, thread_id: threadId, speaker, speaker_name: speakerName, content, metadata })
+    .insert({
+      user_id: userId,
+      thread_id: threadId,
+      speaker,
+      speaker_name: speakerName,
+      content,
+      metadata,
+    })
     .select("id, speaker, speaker_name, content, created_at")
     .single();
   if (error || !data) throw error ?? new Error("Could not save agent message");
@@ -309,7 +337,10 @@ async function recentThread(db: any, userId: string, threadId: string) {
 }
 
 function conciseHistory(messages: AgentMessage[]) {
-  return messages.slice(-18).map((message) => ({ speaker: message.speaker_name || message.speaker, content: message.content }));
+  return messages.slice(-18).map((message) => ({
+    speaker: message.speaker_name || message.speaker,
+    content: message.content,
+  }));
 }
 
 async function runHpoTeam(
@@ -370,10 +401,17 @@ async function runResearchAgent(
   const result = await callModel(
     apiKey,
     `${FAMILY_FOUNDATION}\nYou are ${agent.name}. ${agent.mission} Personality: ${agent.persona}\n${DAN_PRINCIPLES}\nResearch current facts when the request benefits from freshness. Distinguish sourced facts from your inference. After the research, tell Adam what this means for him and the highest-value thing he can do today. Apply Dan principles only when they genuinely fit. Do not force them. Keep the answer natural and focused, but include enough evidence to trust the recommendation.`,
-    JSON.stringify({ newest_message: message, group_history: conciseHistory(history), adam_context: adamContext }),
+    JSON.stringify({
+      newest_message: message,
+      group_history: conciseHistory(history),
+      adam_context: adamContext,
+    }),
     { web: true },
   );
-  return { response: withSources(result), metadata: { web_research: true, sources: result.sources } };
+  return {
+    response: withSources(result),
+    metadata: { web_research: true, sources: result.sources },
+  };
 }
 
 async function runStrategyAgent(
@@ -386,7 +424,11 @@ async function runStrategyAgent(
   const result = await callModel(
     apiKey,
     `${FAMILY_FOUNDATION}\nYou are ${agent.name}. ${agent.mission} Personality: ${agent.persona} You are Emery's independent second set of eyes. Stress-test the strategy in Adam's newest message and the surrounding context. Look for hidden assumptions, opportunity cost, execution friction and conflicts with Adam's stated goals. If Emery's current direction is already best, say so. If you see a better route, recommend it clearly. Do not disagree just to sound independent.`,
-    JSON.stringify({ newest_message: message, group_history: conciseHistory(history), adam_context: adamContext }),
+    JSON.stringify({
+      newest_message: message,
+      group_history: conciseHistory(history),
+      adam_context: adamContext,
+    }),
   );
   return { response: result.text, metadata: { strategy_review: true } };
 }
@@ -402,7 +444,11 @@ async function runGenericAgent(
   const result = await callModel(
     apiKey,
     `${FAMILY_FOUNDATION}\nYou are ${agent.name}. Mission: ${agent.mission}. Personality: ${agent.persona}. Specialty: ${agent.description}. Escalate to Emery when the request falls outside your mission or creates important cross-life tradeoffs.`,
-    JSON.stringify({ newest_message: message, group_history: conciseHistory(history), adam_context: adamContext }),
+    JSON.stringify({
+      newest_message: message,
+      group_history: conciseHistory(history),
+      adam_context: adamContext,
+    }),
     { web: canWeb },
   );
   return { response: canWeb ? withSources(result) : result.text, metadata: { custom_agent: true } };
@@ -419,7 +465,13 @@ async function emeryCommanderReply(
   const result = await callModel(
     apiKey,
     `${ASSISTANT_IDENTITY}\nYou are speaking inside a group chat with Adam and ${agent.name}. ${agent.name} just answered. Stay visibly in command without repeating the whole answer. In 1-4 natural sentences: endorse the specialist, correct/challenge it if needed, connect it to Adam's priorities, or give the single next move. If the specialist already nailed it and no extra thought adds value, respond very briefly.`,
-    JSON.stringify({ user_message: userMessage, specialist: agent.name, specialist_answer: agentResponse, recent_group_history: conciseHistory(history), adam_context: adamContext }),
+    JSON.stringify({
+      user_message: userMessage,
+      specialist: agent.name,
+      specialist_answer: agentResponse,
+      recent_group_history: conciseHistory(history),
+      adam_context: adamContext,
+    }),
   );
   return result.text;
 }
@@ -427,17 +479,36 @@ async function emeryCommanderReply(
 export async function createSpecialistAgentRecord(
   db: any,
   userId: string,
-  input: { name: string; mission: string; description?: string; persona?: string; capabilities?: Record<string, unknown> },
+  input: {
+    name: string;
+    mission: string;
+    description?: string;
+    persona?: string;
+    capabilities?: Record<string, unknown>;
+  },
 ) {
   await ensureDefaultAgentTeam(db, userId);
   const name = input.name.trim().slice(0, 80);
   const mission = input.mission.trim().slice(0, 1000);
   if (!name || !mission) throw new Error("Agent name and mission are required");
+  const { data: existingExactAgent } = await db
+    .from("agents")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("name", name)
+    .maybeSingle();
+  if (existingExactAgent) return existingExactAgent as AgentRow;
+
   const baseSlug = slugify(name) || "specialist-agent";
   let slug = baseSlug;
   let suffix = 2;
   while (true) {
-    const { data } = await db.from("agents").select("id").eq("user_id", userId).eq("slug", slug).maybeSingle();
+    const { data } = await db
+      .from("agents")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("slug", slug)
+      .maybeSingle();
     if (!data) break;
     slug = `${baseSlug}-${suffix++}`;
   }
@@ -467,7 +538,12 @@ export async function createSpecialistAgentRecord(
   return data as AgentRow;
 }
 
-export async function createAgentFromInstruction(apiKey: string, db: any, userId: string, instruction: string) {
+export async function createAgentFromInstruction(
+  apiKey: string,
+  db: any,
+  userId: string,
+  instruction: string,
+) {
   const analysis = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -503,7 +579,12 @@ export async function createAgentFromInstruction(apiKey: string, db: any, userId
   });
   if (!analysis.ok) throw new Error(`Agent charter failed ${analysis.status}`);
   const parsed = extractResponse(await analysis.json()).text;
-  const charter = JSON.parse(parsed) as { name: string; mission: string; description: string; persona: string };
+  const charter = JSON.parse(parsed) as {
+    name: string;
+    mission: string;
+    description: string;
+    persona: string;
+  };
   return createSpecialistAgentRecord(db, userId, charter);
 }
 
@@ -514,7 +595,9 @@ export const listAgents = createServerFn({ method: "GET" })
     await ensureDefaultAgentTeam(db, context.userId);
     const { data, error } = await db
       .from("agents")
-      .select("id, name, slug, description, mission, parent_agent_id, is_internal, is_active, sort_order, capabilities, metadata")
+      .select(
+        "id, name, slug, description, mission, parent_agent_id, is_internal, is_active, sort_order, capabilities, metadata",
+      )
       .eq("user_id", context.userId)
       .eq("is_active", true)
       .order("sort_order", { ascending: true })
@@ -524,22 +607,37 @@ export const listAgents = createServerFn({ method: "GET" })
     const visible = rows.filter((agent) => !agent.is_internal);
     return {
       agents: visible.map((agent) => ({
-        ...agent,
+        id: agent.id,
+        name: agent.name,
+        slug: agent.slug,
+        description: agent.description,
+        mission: agent.mission,
+        parent_agent_id: agent.parent_agent_id,
+        is_internal: agent.is_internal,
+        is_active: agent.is_active,
+        sort_order: agent.sort_order,
         children: rows
           .filter((child) => child.parent_agent_id === agent.id)
-          .map((child) => ({ id: child.id, name: child.name, slug: child.slug, description: child.description })),
+          .map((child) => ({
+            id: child.id,
+            name: child.name,
+            slug: child.slug,
+            description: child.description,
+          })),
       })),
     };
   });
 
 export const createAgent = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { name: string; mission: string; description?: string; persona?: string }) => ({
-    name: String(input?.name ?? "").trim(),
-    mission: String(input?.mission ?? "").trim(),
-    description: String(input?.description ?? "").trim(),
-    persona: String(input?.persona ?? "").trim(),
-  }))
+  .inputValidator(
+    (input: { name: string; mission: string; description?: string; persona?: string }) => ({
+      name: String(input?.name ?? "").trim(),
+      mission: String(input?.mission ?? "").trim(),
+      description: String(input?.description ?? "").trim(),
+      persona: String(input?.persona ?? "").trim(),
+    }),
+  )
   .handler(async ({ data, context }) => {
     const agent = await createSpecialistAgentRecord(context.supabase as any, context.userId, data);
     return { agent: { id: agent.id, name: agent.name, slug: agent.slug } };
@@ -600,15 +698,25 @@ export const sendAgentMessage = createServerFn({ method: "POST" })
     if (agent.is_internal) return { error: "HPO subagents report through HPO Agent." } as const;
 
     const thread = await getOrCreateThread(db, context.userId, agent);
-    const userRow = await saveAgentMessage(db, context.userId, thread.id, "user", "Adam", data.message);
+    const userRow = await saveAgentMessage(
+      db,
+      context.userId,
+      thread.id,
+      "user",
+      "Adam",
+      data.message,
+    );
     const history = await recentThread(db, context.userId, thread.id);
     const adamContext = await loadAdamContext(db, context.userId);
 
     let specialist: { response: string; metadata: Record<string, unknown> };
     try {
-      if (agent.slug === "hpo-agent") specialist = await runHpoTeam(apiKey, agent, data.message, adamContext, history);
-      else if (agent.slug === "research-agent") specialist = await runResearchAgent(apiKey, agent, data.message, adamContext, history);
-      else if (agent.slug === "strategy-agent") specialist = await runStrategyAgent(apiKey, agent, data.message, adamContext, history);
+      if (agent.slug === "hpo-agent")
+        specialist = await runHpoTeam(apiKey, agent, data.message, adamContext, history);
+      else if (agent.slug === "research-agent")
+        specialist = await runResearchAgent(apiKey, agent, data.message, adamContext, history);
+      else if (agent.slug === "strategy-agent")
+        specialist = await runStrategyAgent(apiKey, agent, data.message, adamContext, history);
       else specialist = await runGenericAgent(apiKey, agent, data.message, adamContext, history);
     } catch (agentError) {
       console.error("Specialist agent failed", agentError);
@@ -627,15 +735,75 @@ export const sendAgentMessage = createServerFn({ method: "POST" })
 
     let emeryText = "";
     try {
-      emeryText = await emeryCommanderReply(apiKey, agent, data.message, specialist.response, adamContext, history);
+      emeryText = await emeryCommanderReply(
+        apiKey,
+        agent,
+        data.message,
+        specialist.response,
+        adamContext,
+        history,
+      );
     } catch (emeryError) {
       console.error("Emery commander reply failed", emeryError);
     }
     const emeryRow = emeryText
-      ? await saveAgentMessage(db, context.userId, thread.id, "emery", "Emery", emeryText, { commander: true })
+      ? await saveAgentMessage(db, context.userId, thread.id, "emery", "Emery", emeryText, {
+          commander: true,
+        })
       : null;
 
-    await db.from("agent_threads").update({ updated_at: new Date().toISOString() }).eq("id", thread.id).eq("user_id", context.userId);
+    await db
+      .from("agent_threads")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("id", thread.id)
+      .eq("user_id", context.userId);
 
     return { userMessage: userRow, agentMessage: agentRow, emeryMessage: emeryRow } as const;
   });
+
+export async function consultSpecialistFromEmery(
+  apiKey: string,
+  db: any,
+  userId: string,
+  slug: "hpo-agent" | "research-agent" | "strategy-agent",
+  assignment: string,
+) {
+  await ensureDefaultAgentTeam(db, userId);
+  const { data: rawAgent, error } = await db
+    .from("agents")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("slug", slug)
+    .eq("is_active", true)
+    .single();
+  if (error || !rawAgent) throw error ?? new Error("Specialist agent not found");
+  const agent = rawAgent as AgentRow;
+  const thread = await getOrCreateThread(db, userId, agent);
+  await saveAgentMessage(
+    db,
+    userId,
+    thread.id,
+    "emery",
+    "Emery",
+    `I’m bringing you in from my main conversation with Adam. Assignment: ${assignment}`,
+    { delegated_from_main_chat: true },
+  );
+  const history = await recentThread(db, userId, thread.id);
+  const adamContext = await loadAdamContext(db, userId);
+  let specialist: { response: string; metadata: Record<string, unknown> };
+  if (slug === "hpo-agent")
+    specialist = await runHpoTeam(apiKey, agent, assignment, adamContext, history);
+  else if (slug === "research-agent")
+    specialist = await runResearchAgent(apiKey, agent, assignment, adamContext, history);
+  else specialist = await runStrategyAgent(apiKey, agent, assignment, adamContext, history);
+  await saveAgentMessage(db, userId, thread.id, "agent", agent.name, specialist.response, {
+    ...specialist.metadata,
+    delegated_from_main_chat: true,
+  });
+  await db
+    .from("agent_threads")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", thread.id)
+    .eq("user_id", userId);
+  return { agentName: agent.name, response: specialist.response };
+}

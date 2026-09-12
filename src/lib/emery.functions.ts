@@ -2,6 +2,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { ASSISTANT_IDENTITY } from "@/lib/assistant-identity";
+import { createAgentFromInstruction, consultSpecialistFromEmery } from "@/lib/agent.functions";
 
 type AttachmentInput = {
   storagePath: string;
@@ -1073,6 +1074,48 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const db = supabase as any;
 
+    let agentTeamInstruction = "";
+    const explicitAgentCreation =
+      /\b(?:create|make|build)\s+(?:me\s+)?(?:(?:a|an)\s+)?(?:new\s+)?(?:specialist\s+)?agent\b/i.test(
+        data.message,
+      );
+    if (explicitAgentCreation) {
+      try {
+        const createdAgent = await createAgentFromInstruction(apiKey, db, userId, data.message);
+        agentTeamInstruction += `Agent creation succeeded. ${createdAgent.name} is now part of Emery's agent family. Its mission is: ${createdAgent.mission}`;
+      } catch (error) {
+        console.error("Agent creation from main chat failed", error);
+        agentTeamInstruction +=
+          "Adam explicitly asked to create an agent, but the database write failed. Say so briefly and do not claim success.";
+      }
+    }
+
+    const consultMatch = data.message.match(
+      /\b(?:ask|consult|check\s+with|bring\s+in|have)\s+(?:the\s+)?(hpo|research|strategy)(?:\s+agent)?\b/i,
+    );
+    if (consultMatch?.[1]) {
+      const slugMap = {
+        hpo: "hpo-agent",
+        research: "research-agent",
+        strategy: "strategy-agent",
+      } as const;
+      const key = consultMatch[1].toLowerCase() as keyof typeof slugMap;
+      try {
+        const consultation = await consultSpecialistFromEmery(
+          apiKey,
+          db,
+          userId,
+          slugMap[key],
+          data.message,
+        );
+        agentTeamInstruction += `${agentTeamInstruction ? "\n" : ""}Emery consulted ${consultation.agentName} from the main conversation. Use this specialist report as an input, challenge it if needed, and give Adam one coherent Emery answer:
+${consultation.response}`;
+      } catch (error) {
+        console.error("Agent consultation from main chat failed", error);
+        agentTeamInstruction += `${agentTeamInstruction ? "\n" : ""}A requested specialist consultation failed. Tell Adam briefly if relevant; do not pretend the agent responded.`;
+      }
+    }
+
     let conversation: { id: string; metadata: unknown };
     try {
       conversation = await getOrCreateMainConversation(db, userId);
@@ -1308,6 +1351,7 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
               content:
                 ASSISTANT_IDENTITY +
                 `\n\nACTION CONTROL FOR THIS TURN:\n${actionInstruction}\nFollow this control instruction exactly. Do not claim any database action unless it says the action succeeded.` +
+                `\n\nAGENT TEAM CONTROL FOR THIS TURN:\n${agentTeamInstruction || "No agent was created or consulted on this turn."}\nTreat specialist reports as advisory input. Emery remains the final synthesizer for Adam.` +
                 (savedMemory
                   ? `\n\nAdam explicitly asked you to remember this and it was saved: "${savedMemory}". Confirm briefly if relevant.`
                   : ""),
