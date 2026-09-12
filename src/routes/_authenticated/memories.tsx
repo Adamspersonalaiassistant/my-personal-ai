@@ -102,7 +102,9 @@ const editableTypes = [
 ] as const;
 
 function categoryForMemory(memory: Memory) {
-  return categories.find((category) => category.types.includes(memory.memory_type)) ?? categories.at(-1)!;
+  return (
+    categories.find((category) => category.types.includes(memory.memory_type)) ?? categories.at(-1)!
+  );
 }
 
 function displayType(type: string) {
@@ -166,7 +168,8 @@ function Memories() {
   }, [memories]);
 
   const representedCategories = useMemo(
-    () => categories.slice(1).filter((category) => (categoryCounts.get(category.key) ?? 0) > 0).length,
+    () =>
+      categories.slice(1).filter((category) => (categoryCounts.get(category.key) ?? 0) > 0).length,
     [categoryCounts],
   );
   const importantCount = memories.filter((memory) => memory.importance >= 4).length;
@@ -204,7 +207,10 @@ function Memories() {
           </p>
         </div>
       ) : error ? (
-        <div className="mx-auto flex max-w-sm flex-col items-center gap-3 py-20 text-center" role="alert">
+        <div
+          className="mx-auto flex max-w-sm flex-col items-center gap-3 py-20 text-center"
+          role="alert"
+        >
           <div className="flex size-14 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
             <AlertCircle className="size-6" />
           </div>
@@ -221,7 +227,9 @@ function Memories() {
                 </div>
                 <div>
                   <p className="emery-kicker">About Adam</p>
-                  <h2 className="mt-1 text-xl font-semibold tracking-[-0.025em]">What Emery knows</h2>
+                  <h2 className="mt-1 text-xl font-semibold tracking-[-0.025em]">
+                    What Emery knows
+                  </h2>
                 </div>
               </div>
               <span className="emery-chip shrink-0">
@@ -229,18 +237,27 @@ function Memories() {
               </span>
             </div>
             <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
-              Durable context that helps Emery understand the person, priorities and life behind the work.
+              Durable context that helps Emery understand the person, priorities and life behind the
+              work.
             </p>
             {profileError ? (
-              <p className="mt-4 text-sm text-destructive" role="alert">{profileError}</p>
+              <p className="mt-4 text-sm text-destructive" role="alert">
+                {profileError}
+              </p>
             ) : profile && Object.values(profile).some(Boolean) ? (
               <dl className="mt-5 grid gap-3 sm:grid-cols-2">
-                {profile.display_name ? <ProfileCell label="Name" value={profile.display_name} /> : null}
+                {profile.display_name ? (
+                  <ProfileCell label="Name" value={profile.display_name} />
+                ) : null}
                 <ProfileCell label="Companion" value={profile.assistant_name || "Emery"} />
-                {profile.timezone ? <ProfileCell label="Timezone" value={profile.timezone} /> : null}
+                {profile.timezone ? (
+                  <ProfileCell label="Timezone" value={profile.timezone} />
+                ) : null}
                 {profile.profile_summary ? (
                   <div className="emery-surface rounded-2xl p-3.5 sm:col-span-2">
-                    <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Profile</dt>
+                    <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                      Profile
+                    </dt>
                     <dd className="mt-1.5 text-sm leading-6">{profile.profile_summary}</dd>
                   </div>
                 ) : null}
@@ -258,7 +275,14 @@ function Memories() {
             <HealthCell label="High importance" value={String(importantCount)} />
             <HealthCell
               label="Last updated"
-              value={latestUpdated ? new Date(latestUpdated).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—"}
+              value={
+                latestUpdated
+                  ? new Date(latestUpdated).toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                    })
+                  : "—"
+              }
             />
           </section>
 
@@ -270,7 +294,11 @@ function Memories() {
               <div>
                 <p className="text-sm font-semibold">Memory stays selective</p>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  Emery carries forward durable context that can improve future conversations. Not every message becomes permanent memory, and tasks, meetings or passing thoughts are not treated as long-term facts just because you mentioned them. Corrections should replace outdated information. These memories stay tied to your Emery account.
+                  Emery carries forward durable context that can improve future conversations. Not
+                  every message becomes permanent memory, and tasks, meetings or passing thoughts
+                  are not treated as long-term facts just because you mentioned them. Corrections
+                  should replace outdated information. These memories stay tied to your Emery
+                  account.
                 </p>
               </div>
             </div>
@@ -310,19 +338,29 @@ function Memories() {
             <div>
               <p className="text-sm font-semibold">Memory bank</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                {query || activeCategory !== "all" ? `${filtered.length} matching memories` : "Long-term context across your Emery system."}
+                {query || activeCategory !== "all"
+                  ? `${filtered.length} matching memories`
+                  : "Long-term context across your Emery system."}
               </p>
             </div>
-            <div className="emery-chip"><CircleDot className="size-3.5" /> Online</div>
+            <div className="emery-chip">
+              <CircleDot className="size-3.5" /> Online
+            </div>
           </div>
 
           {memories.length === 0 ? (
-            <EmptyState icon={Brain} title="Memory is ready" description="Preferences, goals, relationships and durable context Emery learns will appear here." />
+            <EmptyState
+              icon={Brain}
+              title="Memory is ready"
+              description="Preferences, goals, relationships and durable context Emery learns will appear here."
+            />
           ) : filtered.length === 0 ? (
             <div className="emery-glass rounded-[1.55rem] px-5 py-10 text-center">
               <Search className="mx-auto size-5 text-muted-foreground" />
               <p className="mt-3 text-sm font-semibold">Nothing matches that view</p>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">Try another search or switch back to All.</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Try another search or switch back to All.
+              </p>
             </div>
           ) : (
             <ul className="space-y-3">
@@ -330,7 +368,11 @@ function Memories() {
                 const category = categoryForMemory(memory);
                 const Icon = category.icon;
                 return (
-                  <li key={memory.id} className="emery-fade-up emery-glass rounded-[1.5rem] p-4" style={{ animationDelay: `${index * 18}ms` }}>
+                  <li
+                    key={memory.id}
+                    className="emery-fade-up emery-glass rounded-[1.5rem] p-4"
+                    style={{ animationDelay: `${index * 18}ms` }}
+                  >
                     <div className="flex items-start gap-3.5">
                       <div className="emery-icon-well mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-2xl">
                         <Icon className="size-4" strokeWidth={1.8} />
@@ -339,21 +381,39 @@ function Memories() {
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
-                              {memory.title ? <h3 className="text-sm font-semibold">{memory.title}</h3> : null}
-                              <span className="emery-chip text-muted-foreground">{category.label}</span>
-                              {memory.importance >= 4 ? <span className="emery-chip">Important</span> : null}
+                              {memory.title ? (
+                                <h3 className="text-sm font-semibold">{memory.title}</h3>
+                              ) : null}
+                              <span className="emery-chip text-muted-foreground">
+                                {category.label}
+                              </span>
+                              {memory.importance >= 4 ? (
+                                <span className="emery-chip">Important</span>
+                              ) : null}
                             </div>
                           </div>
                           <div className="flex shrink-0 items-center gap-1">
-                            <button type="button" onClick={() => setEditing(memory)} aria-label="Correct memory" className="flex size-9 items-center justify-center rounded-xl text-muted-foreground transition hover:bg-primary/[0.07] hover:text-primary">
+                            <button
+                              type="button"
+                              onClick={() => setEditing(memory)}
+                              aria-label="Correct memory"
+                              className="flex size-9 items-center justify-center rounded-xl text-muted-foreground transition hover:bg-primary/[0.07] hover:text-primary"
+                            >
                               <Pencil className="size-3.5" />
                             </button>
-                            <button type="button" onClick={() => setDeleting(memory)} aria-label="Delete memory" className="flex size-9 items-center justify-center rounded-xl text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive">
+                            <button
+                              type="button"
+                              onClick={() => setDeleting(memory)}
+                              aria-label="Delete memory"
+                              className="flex size-9 items-center justify-center rounded-xl text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+                            >
                               <Trash2 className="size-3.5" />
                             </button>
                           </div>
                         </div>
-                        <p className="mt-2.5 whitespace-pre-wrap text-sm leading-6 text-foreground/95">{memory.content}</p>
+                        <p className="mt-2.5 whitespace-pre-wrap text-sm leading-6 text-foreground/95">
+                          {memory.content}
+                        </p>
                         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
                           <span>Importance {memory.importance}/5</span>
                           <span>Updated {new Date(memory.updated_at).toLocaleDateString()}</span>
@@ -395,10 +455,26 @@ function Memories() {
   );
 }
 
-function EditMemorySheet({ memory, onClose, onSave }: { memory: Memory; onClose: () => void; onSave: (input: { id: string; title: string; content: string; memoryType: string; importance: number }) => Promise<void> }) {
+function EditMemorySheet({
+  memory,
+  onClose,
+  onSave,
+}: {
+  memory: Memory;
+  onClose: () => void;
+  onSave: (input: {
+    id: string;
+    title: string;
+    content: string;
+    memoryType: string;
+    importance: number;
+  }) => Promise<void>;
+}) {
   const [title, setTitle] = useState(memory.title ?? "");
   const [content, setContent] = useState(memory.content);
-  const [memoryType, setMemoryType] = useState(editableTypes.some(([value]) => value === memory.memory_type) ? memory.memory_type : "core");
+  const [memoryType, setMemoryType] = useState(
+    editableTypes.some(([value]) => value === memory.memory_type) ? memory.memory_type : "core",
+  );
   const [importance, setImportance] = useState(memory.importance);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -417,48 +493,142 @@ function EditMemorySheet({ memory, onClose, onSave }: { memory: Memory; onClose:
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-black/65 p-3 backdrop-blur-sm sm:items-center sm:justify-center" onClick={onClose}>
-      <form onSubmit={submit} onClick={(event) => event.stopPropagation()} className="emery-glass-strong max-h-[88dvh] w-full max-w-md overflow-y-auto rounded-[1.75rem] p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+    <div
+      className="fixed inset-0 z-50 flex items-end bg-black/65 p-3 backdrop-blur-sm sm:items-center sm:justify-center"
+      onClick={onClose}
+    >
+      <form
+        onSubmit={submit}
+        onClick={(event) => event.stopPropagation()}
+        className="emery-glass-strong max-h-[88dvh] w-full max-w-md overflow-y-auto rounded-[1.75rem] p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+      >
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="emery-kicker">Correct memory</p>
             <h3 className="mt-1 text-lg font-semibold">Keep Emery accurate</h3>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">Your correction replaces the saved version of this memory.</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Your correction replaces the saved version of this memory.
+            </p>
           </div>
-          <button type="button" onClick={onClose} className="flex size-10 items-center justify-center rounded-2xl text-muted-foreground"><X className="size-4" /></button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex size-10 items-center justify-center rounded-2xl text-muted-foreground"
+          >
+            <X className="size-4" />
+          </button>
         </div>
         <div className="mt-4 space-y-3">
-          <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Title (optional)" className="min-h-12 w-full rounded-2xl border border-border/60 bg-card/70 px-3.5 text-sm outline-none focus:border-primary/40" />
-          <textarea value={content} onChange={(event) => setContent(event.target.value)} rows={5} placeholder="What should Emery remember instead?" className="w-full rounded-2xl border border-border/60 bg-card/70 px-3.5 py-3 text-sm leading-6 outline-none focus:border-primary/40" />
-          <select value={memoryType} onChange={(event) => setMemoryType(event.target.value)} className="min-h-12 w-full rounded-2xl border border-border/60 bg-card/70 px-3.5 text-sm outline-none">
-            {editableTypes.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          <input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="Title (optional)"
+            className="min-h-12 w-full rounded-2xl border border-border/60 bg-card/70 px-3.5 text-sm outline-none focus:border-primary/40"
+          />
+          <textarea
+            value={content}
+            onChange={(event) => setContent(event.target.value)}
+            rows={5}
+            placeholder="What should Emery remember instead?"
+            className="w-full rounded-2xl border border-border/60 bg-card/70 px-3.5 py-3 text-sm leading-6 outline-none focus:border-primary/40"
+          />
+          <select
+            value={memoryType}
+            onChange={(event) => setMemoryType(event.target.value)}
+            className="min-h-12 w-full rounded-2xl border border-border/60 bg-card/70 px-3.5 text-sm outline-none"
+          >
+            {editableTypes.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
           </select>
           <div>
-            <div className="flex items-center justify-between text-xs text-muted-foreground"><span>Importance</span><span>{importance}/5</span></div>
-            <input type="range" min={1} max={5} value={importance} onChange={(event) => setImportance(Number(event.target.value))} className="mt-2 w-full accent-[var(--primary)]" />
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Importance</span>
+              <span>{importance}/5</span>
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={5}
+              value={importance}
+              onChange={(event) => setImportance(Number(event.target.value))}
+              className="mt-2 w-full accent-[var(--primary)]"
+            />
           </div>
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          <button type="submit" disabled={!content.trim() || saving} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary font-semibold text-primary-foreground disabled:opacity-40"><Check className="size-4" />{saving ? "Saving…" : "Save correction"}</button>
+          <button
+            type="submit"
+            disabled={!content.trim() || saving}
+            className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary font-semibold text-primary-foreground disabled:opacity-40"
+          >
+            <Check className="size-4" />
+            {saving ? "Saving…" : "Save correction"}
+          </button>
         </div>
       </form>
     </div>
   );
 }
 
-function DeleteMemorySheet({ memory, onClose, onDelete }: { memory: Memory; onClose: () => void; onDelete: () => Promise<void> }) {
+function DeleteMemorySheet({
+  memory,
+  onClose,
+  onDelete,
+}: {
+  memory: Memory;
+  onClose: () => void;
+  onDelete: () => Promise<void>;
+}) {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-black/65 p-3 backdrop-blur-sm sm:items-center sm:justify-center" onClick={onClose}>
-      <div onClick={(event) => event.stopPropagation()} className="emery-glass-strong w-full max-w-md rounded-[1.75rem] p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-        <div className="flex size-11 items-center justify-center rounded-2xl bg-destructive/10 text-destructive"><Trash2 className="size-4" /></div>
+    <div
+      className="fixed inset-0 z-50 flex items-end bg-black/65 p-3 backdrop-blur-sm sm:items-center sm:justify-center"
+      onClick={onClose}
+    >
+      <div
+        onClick={(event) => event.stopPropagation()}
+        className="emery-glass-strong w-full max-w-md rounded-[1.75rem] p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+      >
+        <div className="flex size-11 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
+          <Trash2 className="size-4" />
+        </div>
         <h3 className="mt-4 text-lg font-semibold">Remove this memory?</h3>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">Emery will stop carrying this saved fact forward. This does not delete the original conversation it may have come from.</p>
-        <div className="mt-3 rounded-2xl border border-border/55 bg-card/55 p-3 text-sm leading-6">{memory.content}</div>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          Emery will stop carrying this saved fact forward. This does not delete the original
+          conversation it may have come from.
+        </p>
+        <div className="mt-3 rounded-2xl border border-border/55 bg-card/55 p-3 text-sm leading-6">
+          {memory.content}
+        </div>
         {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
         <div className="mt-4 grid grid-cols-2 gap-2">
-          <button type="button" onClick={onClose} className="min-h-12 rounded-2xl border border-border/60 bg-card/60 text-sm font-semibold">Keep it</button>
-          <button type="button" disabled={deleting} onClick={async () => { setDeleting(true); setError(null); try { await onDelete(); } catch { setError("That memory couldn't be removed. Please try again."); setDeleting(false); } }} className="min-h-12 rounded-2xl bg-destructive text-sm font-semibold text-destructive-foreground disabled:opacity-40">{deleting ? "Removing…" : "Remove"}</button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-12 rounded-2xl border border-border/60 bg-card/60 text-sm font-semibold"
+          >
+            Keep it
+          </button>
+          <button
+            type="button"
+            disabled={deleting}
+            onClick={async () => {
+              setDeleting(true);
+              setError(null);
+              try {
+                await onDelete();
+              } catch {
+                setError("That memory couldn't be removed. Please try again.");
+                setDeleting(false);
+              }
+            }}
+            className="min-h-12 rounded-2xl bg-destructive text-sm font-semibold text-destructive-foreground disabled:opacity-40"
+          >
+            {deleting ? "Removing…" : "Remove"}
+          </button>
         </div>
       </div>
     </div>
@@ -466,9 +636,23 @@ function DeleteMemorySheet({ memory, onClose, onDelete }: { memory: Memory; onCl
 }
 
 function ProfileCell({ label, value }: { label: string; value: string }) {
-  return <div className="emery-surface rounded-2xl p-3.5"><dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</dt><dd className="mt-1.5 text-sm font-semibold">{value}</dd></div>;
+  return (
+    <div className="emery-surface rounded-2xl p-3.5">
+      <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="mt-1.5 text-sm font-semibold">{value}</dd>
+    </div>
+  );
 }
 
 function HealthCell({ label, value }: { label: string; value: string }) {
-  return <div className="emery-glass rounded-2xl p-3.5"><p className="text-lg font-semibold tracking-tight">{value}</p><p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{label}</p></div>;
+  return (
+    <div className="emery-glass rounded-2xl p-3.5">
+      <p className="text-lg font-semibold tracking-tight">{value}</p>
+      <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </p>
+    </div>
+  );
 }

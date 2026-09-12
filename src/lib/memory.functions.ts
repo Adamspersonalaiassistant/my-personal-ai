@@ -28,7 +28,10 @@ export const updateSavedMemory = createServerFn({ method: "POST" })
       const content = String(input?.content ?? "").trim();
       const memoryType = String(input?.memoryType ?? "core").trim();
       const importance = Math.min(5, Math.max(1, Number(input?.importance ?? 3)));
-      const title = String(input?.title ?? "").trim().slice(0, 160) || null;
+      const title =
+        String(input?.title ?? "")
+          .trim()
+          .slice(0, 160) || null;
       if (!id) throw new Error("Memory id is required");
       if (!content) throw new Error("Memory content is required");
       if (content.length > 2000) throw new Error("Memory content is too long");
