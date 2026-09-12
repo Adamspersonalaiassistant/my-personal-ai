@@ -85,8 +85,8 @@ function AgentChat() {
 
     try {
       const result = await sendMessage({ data: { agentId: agent.id, message: text } });
-      if (result && "error" in result && result.error) {
-        setError(result.error);
+      if (!result || "error" in result) {
+        setError(result?.error ?? "That turn didn't finish. Try again.");
         setMessages((prev) => prev.filter((message) => message.id !== optimistic.id));
         return;
       }
