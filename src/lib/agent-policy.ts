@@ -43,7 +43,7 @@ export function isExplicitAgentCreationCommand(message: string) {
   );
 }
 
-function textOf(value: unknown) {
+function textOf(value: unknown): string {
   if (!value) return "";
   if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
