@@ -19,6 +19,8 @@ create table if not exists public.agents (
 
 create index if not exists agents_user_parent_idx
   on public.agents(user_id, parent_agent_id, sort_order);
+create index if not exists agents_parent_agent_idx
+  on public.agents(parent_agent_id);
 
 alter table public.agents enable row level security;
 revoke all on table public.agents from anon;
@@ -58,6 +60,8 @@ create table if not exists public.agent_threads (
 
 create index if not exists agent_threads_user_idx
   on public.agent_threads(user_id, updated_at desc);
+create index if not exists agent_threads_agent_idx
+  on public.agent_threads(agent_id);
 
 alter table public.agent_threads enable row level security;
 revoke all on table public.agent_threads from anon;
