@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { ASSISTANT_IDENTITY } from "@/lib/assistant-identity";
 
 type ChatInput = { message: string; conversationId?: string | null };
 type StoredMessage = { role: "user" | "assistant"; text: string };
