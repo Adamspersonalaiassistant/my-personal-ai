@@ -12,9 +12,9 @@ import type { ReactNode } from "react";
 import brainImage from "@/assets/neural-brain.png";
 
 const navItems = [
-  { to: "/chat", label: "Emery", icon: MessageCircle },
-  { to: "/agents", label: "Agents", icon: UsersRound },
-  { to: "/tasks", label: "Tasks", icon: CheckSquare },
+  { to: "/chat", label: "Emery", compactLabel: "Emery", icon: MessageCircle },
+  { to: "/agents", label: "Agents", compactLabel: "Agents", icon: UsersRound },
+  { to: "/tasks", label: "Tasks", compactLabel: "Tasks", icon: CheckSquare },
   { to: "/meetings", label: "Meetings", compactLabel: "Meet", icon: CalendarDays },
   { to: "/projects", label: "Projects", compactLabel: "Projects", icon: FolderKanban },
 ] as const;
@@ -116,7 +116,7 @@ export function AppShell({
                 className="size-[18px] transition-transform duration-200 group-active:scale-95"
                 strokeWidth={1.9}
               />
-              <span className="max-w-full truncate sm:hidden">{compactLabel ?? label}</span>
+              <span className="max-w-full truncate sm:hidden">{compactLabel}</span>
               <span className="hidden sm:inline">{label}</span>
             </Link>
           ))}
