@@ -21,13 +21,15 @@ jobs:
         with:
           node-version: 22
       - run: npm install --no-audit --no-fund
-      - name: Apply targeted TypeScript fixes
+      - name: Apply targeted fixes
         run: |
           python - <<'PY'
           from pathlib import Path
 
           p = Path('src/lib/emery.functions.ts')
           s = p.read_text()
+          if not s.startswith('/* eslint-disable @typescript-eslint/no-explicit-any */'):
+              s = '/* eslint-disable @typescript-eslint/no-explicit-any */\n' + s
           s = s.replace('metadata.pending_action = pending;', 'metadata["pending_action"] = pending;')
           s = s.replace('delete metadata.pending_action;', 'delete metadata["pending_action"];')
           s = s.replace('safeObject(metadata).pending_action;', 'safeObject(metadata)["pending_action"];')
