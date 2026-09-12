@@ -67,7 +67,8 @@ function Settings() {
               </div>
               <p className="mt-2 truncate text-xs text-muted-foreground">{user?.email}</p>
               <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
-                One private operating system for conversation, memory, execution and specialist intelligence.
+                One private operating system for conversation, memory, execution and specialist
+                intelligence.
               </p>
             </div>
           </div>
@@ -111,17 +112,23 @@ function Settings() {
                   } ${i >= 2 ? "sm:border-t sm:border-border/35" : ""} ${i % 2 === 1 ? "sm:border-l sm:border-border/35" : ""}`}
                 >
                   <div className="flex min-w-0 items-center gap-3">
-                    <div className={`flex size-10 shrink-0 items-center justify-center rounded-2xl border ${row.live ? "border-primary/15 bg-primary/[0.055] text-primary" : "border-border/55 bg-card/55 text-muted-foreground"}`}>
+                    <div
+                      className={`flex size-10 shrink-0 items-center justify-center rounded-2xl border ${row.live ? "border-primary/15 bg-primary/[0.055] text-primary" : "border-border/55 bg-card/55 text-muted-foreground"}`}
+                    >
                       <Icon className="size-[17px]" strokeWidth={1.8} />
                     </div>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{row.label}</p>
-                      <p className={`mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${row.live ? "text-primary/85" : "text-muted-foreground"}`}>
+                      <p
+                        className={`mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${row.live ? "text-primary/85" : "text-muted-foreground"}`}
+                      >
                         {row.value}
                       </p>
                     </div>
                   </div>
-                  <span className={`size-2 rounded-full ${row.live ? "bg-primary shadow-[0_0_8px_oklch(0.805_0.175_155/0.55)]" : "bg-muted-foreground/30"}`} />
+                  <span
+                    className={`size-2 rounded-full ${row.live ? "bg-primary shadow-[0_0_8px_oklch(0.805_0.175_155/0.55)]" : "bg-muted-foreground/30"}`}
+                  />
                 </div>
               );
             })}
@@ -136,7 +143,8 @@ function Settings() {
             <div>
               <p className="text-sm font-semibold">Next milestone: Emery Voice</p>
               <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                Voice stays intentionally untouched until Adam designs the live experience with Emery. The same memory, agents and action system will sit underneath it.
+                Voice stays intentionally untouched until Adam designs the live experience with
+                Emery. The same memory, agents and action system will sit underneath it.
               </p>
             </div>
           </div>

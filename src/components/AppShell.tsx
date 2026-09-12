@@ -32,7 +32,10 @@ export function AppShell({
 
   return (
     <div className="relative mx-auto flex min-h-[100dvh] w-full max-w-3xl flex-col overflow-hidden bg-background/72 text-foreground md:min-h-[calc(100dvh-36px)] md:rounded-[2rem] md:border md:border-border/60 md:shadow-[0_30px_100px_rgba(0,0,0,0.5)]">
-      <div aria-hidden className="emery-grid pointer-events-none absolute inset-x-0 top-0 h-[34rem] opacity-90" />
+      <div
+        aria-hidden
+        className="emery-grid pointer-events-none absolute inset-x-0 top-0 h-[34rem] opacity-90"
+      />
       <div
         aria-hidden
         className="pointer-events-none absolute -left-28 top-28 size-64 rounded-full bg-primary/[0.055] blur-[90px]"
@@ -49,7 +52,11 @@ export function AppShell({
               <div className="size-full rounded-[1.02rem] bg-background" />
             </div>
             <div className="relative flex size-10 items-center justify-center overflow-hidden rounded-2xl border border-primary/20 bg-primary/[0.055] shadow-[0_0_26px_oklch(0.805_0.175_155/0.11)]">
-              <img src={brainImage} alt="" className="h-9 w-9 object-cover object-center opacity-95" />
+              <img
+                src={brainImage}
+                alt=""
+                className="h-9 w-9 object-cover object-center opacity-95"
+              />
             </div>
             <span className="absolute bottom-0.5 right-0.5 size-2.5 rounded-full border-2 border-background bg-primary shadow-[0_0_10px_oklch(0.805_0.175_155/0.72)]" />
           </div>
@@ -60,7 +67,9 @@ export function AppShell({
               {showSectionTitle ? (
                 <>
                   <span className="text-border">/</span>
-                  <span className="truncate text-xs font-medium text-muted-foreground">{title}</span>
+                  <span className="truncate text-xs font-medium text-muted-foreground">
+                    {title}
+                  </span>
                 </>
               ) : null}
             </div>
@@ -86,7 +95,10 @@ export function AppShell({
       </main>
 
       <div className="sticky bottom-0 z-40 border-t border-border/45 bg-background/82 px-2 pb-[max(0.45rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-2xl supports-[backdrop-filter]:bg-background/72 sm:px-3">
-        <nav className="emery-surface mx-auto grid max-w-2xl grid-cols-5 gap-1 rounded-[1.45rem] p-1.5" aria-label="Primary">
+        <nav
+          className="emery-surface mx-auto grid max-w-2xl grid-cols-5 gap-1 rounded-[1.45rem] p-1.5"
+          aria-label="Primary"
+        >
           {navItems.map(({ to, label, icon: Icon }) => (
             <Link
               key={to}
@@ -97,7 +109,10 @@ export function AppShell({
                   "bg-primary/[0.095] text-primary shadow-[inset_0_0_0_1px_oklch(0.805_0.175_155/0.14),0_0_18px_oklch(0.805_0.175_155/0.05)]",
               }}
             >
-              <Icon className="size-[18px] transition-transform duration-200 group-active:scale-95" strokeWidth={1.9} />
+              <Icon
+                className="size-[18px] transition-transform duration-200 group-active:scale-95"
+                strokeWidth={1.9}
+              />
               <span>{label}</span>
             </Link>
           ))}

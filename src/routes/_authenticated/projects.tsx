@@ -7,25 +7,330 @@ import { listProjects, saveProject } from "@/lib/emery.functions";
 
 export const Route = createFileRoute("/_authenticated/projects")({ component: Projects });
 
-type Project = { id: string; name: string; description: string | null; status: string; priority: number; goal: string | null; next_action: string | null; created_at: string; updated_at: string };
+type Project = {
+  id: string;
+  name: string;
+  description: string | null;
+  status: string;
+  priority: number;
+  goal: string | null;
+  next_action: string | null;
+  created_at: string;
+  updated_at: string;
+};
 
 function Projects() {
-  const loadProjects = useServerFn(listProjects); const save = useServerFn(saveProject);
-  const [projects, setProjects] = useState<Project[]>([]); const [loading, setLoading] = useState(true); const [error, setError] = useState<string | null>(null); const [editing, setEditing] = useState<Project | null>(null); const [showEditor, setShowEditor] = useState(false);
-  async function refresh() { const result = await loadProjects({}); setProjects((result?.projects ?? []) as Project[]); }
-  useEffect(() => { let cancelled = false; (async () => { try { const result = await loadProjects({}); if (!cancelled) setProjects((result?.projects ?? []) as Project[]); } catch { if (!cancelled) setError("Couldn't load your projects."); } finally { if (!cancelled) setLoading(false); } })(); return () => { cancelled = true; }; }, [loadProjects]);
-  const active = projects.filter((project) => project.status === "active"); const other = projects.filter((project) => project.status !== "active");
-  const openEditor = (project: Project | null) => { setEditing(project); setShowEditor(true); };
+  const loadProjects = useServerFn(listProjects);
+  const save = useServerFn(saveProject);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Project | null>(null);
+  const [showEditor, setShowEditor] = useState(false);
+  async function refresh() {
+    const result = await loadProjects({});
+    setProjects((result?.projects ?? []) as Project[]);
+  }
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await loadProjects({});
+        if (!cancelled) setProjects((result?.projects ?? []) as Project[]);
+      } catch {
+        if (!cancelled) setError("Couldn't load your projects.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadProjects]);
+  const active = projects.filter((project) => project.status === "active");
+  const other = projects.filter((project) => project.status !== "active");
+  const openEditor = (project: Project | null) => {
+    setEditing(project);
+    setShowEditor(true);
+  };
 
-  return <AppShell title="Projects"><div className="space-y-4"><section className="emery-glass-strong rounded-[1.7rem] p-5"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="emery-kicker">Current context</p><h2 className="mt-1.5 text-xl font-semibold tracking-[-0.025em]">The bigger picture</h2><p className="mt-2 max-w-lg text-sm leading-6 text-muted-foreground">Projects give Emery the outcomes behind your daily actions, so the next move stays connected to the goal.</p><div className="mt-3 flex flex-wrap gap-2"><span className="emery-chip">{active.length} active</span><span className="emery-chip text-muted-foreground">{other.length} paused / done</span></div></div><button type="button" onClick={() => openEditor(null)} className="emery-press flex min-h-11 shrink-0 items-center gap-2 rounded-2xl bg-primary px-3.5 text-sm font-semibold text-primary-foreground"><Plus className="size-4" /> Add</button></div></section>{error ? <p className="rounded-2xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">{error}</p> : null}{loading ? <div className="space-y-3">{[0,1].map((i) => <div key={i} className="emery-glass h-36 animate-pulse rounded-[1.5rem] opacity-60" />)}</div> : <><ProjectSection title={`Active · ${active.length}`} projects={active} onEdit={openEditor} />{other.length ? <ProjectSection title={`Paused / Completed · ${other.length}`} projects={other} onEdit={openEditor} /> : null}</>}</div>{showEditor ? <ProjectEditor project={editing} onClose={() => setShowEditor(false)} onSave={async (values) => { await save({ data: values }); setShowEditor(false); await refresh(); }} /> : null}</AppShell>;
+  return (
+    <AppShell title="Projects">
+      <div className="space-y-4">
+        <section className="emery-glass-strong rounded-[1.7rem] p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="emery-kicker">Current context</p>
+              <h2 className="mt-1.5 text-xl font-semibold tracking-[-0.025em]">
+                The bigger picture
+              </h2>
+              <p className="mt-2 max-w-lg text-sm leading-6 text-muted-foreground">
+                Projects give Emery the outcomes behind your daily actions, so the next move stays
+                connected to the goal.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <span className="emery-chip">{active.length} active</span>
+                <span className="emery-chip text-muted-foreground">
+                  {other.length} paused / done
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => openEditor(null)}
+              className="emery-press flex min-h-11 shrink-0 items-center gap-2 rounded-2xl bg-primary px-3.5 text-sm font-semibold text-primary-foreground"
+            >
+              <Plus className="size-4" /> Add
+            </button>
+          </div>
+        </section>
+        {error ? (
+          <p
+            className="rounded-2xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            role="alert"
+          >
+            {error}
+          </p>
+        ) : null}
+        {loading ? (
+          <div className="space-y-3">
+            {[0, 1].map((i) => (
+              <div key={i} className="emery-glass h-36 animate-pulse rounded-[1.5rem] opacity-60" />
+            ))}
+          </div>
+        ) : (
+          <>
+            <ProjectSection
+              title={`Active · ${active.length}`}
+              projects={active}
+              onEdit={openEditor}
+            />
+            {other.length ? (
+              <ProjectSection
+                title={`Paused / Completed · ${other.length}`}
+                projects={other}
+                onEdit={openEditor}
+              />
+            ) : null}
+          </>
+        )}
+      </div>
+      {showEditor ? (
+        <ProjectEditor
+          project={editing}
+          onClose={() => setShowEditor(false)}
+          onSave={async (values) => {
+            await save({ data: values });
+            setShowEditor(false);
+            await refresh();
+          }}
+        />
+      ) : null}
+    </AppShell>
+  );
 }
 
-function ProjectSection({ title, projects, onEdit }: { title: string; projects: Project[]; onEdit: (project: Project) => void }) {
-  return <section><p className="mb-2.5 px-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">{title}</p>{projects.length === 0 ? <div className="emery-glass rounded-[1.55rem] p-6 text-center"><FolderKanban className="mx-auto size-7 text-primary" /><p className="mt-2 text-sm font-medium">No projects here yet.</p><p className="mt-1 text-xs text-muted-foreground">Say “Emery, create a project for…” and she can add it for you.</p></div> : <div className="space-y-3">{projects.map((project) => <article key={project.id} className="emery-press emery-glass rounded-[1.5rem] p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-semibold">{project.name}</h3><span className="emery-chip">{project.status}</span><span className="emery-chip text-muted-foreground">Priority {project.priority}</span></div>{project.goal ? <p className="mt-2.5 text-sm leading-6 text-foreground/92">{project.goal}</p> : null}{!project.goal && project.description ? <p className="mt-2.5 text-sm leading-6 text-muted-foreground">{project.description}</p> : null}{project.next_action ? <div className="emery-surface mt-3.5 rounded-2xl px-3.5 py-3"><p className="emery-kicker text-[9px]">Next action</p><p className="mt-1.5 text-xs leading-5">{project.next_action}</p></div> : null}</div><button type="button" onClick={() => onEdit(project)} aria-label={`Edit ${project.name}`} className="emery-press emery-surface flex size-11 shrink-0 items-center justify-center rounded-2xl text-muted-foreground hover:border-primary/25 hover:text-primary"><Edit3 className="size-4" /></button></div></article>)}</div>}</section>;
+function ProjectSection({
+  title,
+  projects,
+  onEdit,
+}: {
+  title: string;
+  projects: Project[];
+  onEdit: (project: Project) => void;
+}) {
+  return (
+    <section>
+      <p className="mb-2.5 px-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+        {title}
+      </p>
+      {projects.length === 0 ? (
+        <div className="emery-glass rounded-[1.55rem] p-6 text-center">
+          <FolderKanban className="mx-auto size-7 text-primary" />
+          <p className="mt-2 text-sm font-medium">No projects here yet.</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Say “Emery, create a project for…” and she can add it for you.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {projects.map((project) => (
+            <article key={project.id} className="emery-press emery-glass rounded-[1.5rem] p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-semibold">{project.name}</h3>
+                    <span className="emery-chip">{project.status}</span>
+                    <span className="emery-chip text-muted-foreground">
+                      Priority {project.priority}
+                    </span>
+                  </div>
+                  {project.goal ? (
+                    <p className="mt-2.5 text-sm leading-6 text-foreground/92">{project.goal}</p>
+                  ) : null}
+                  {!project.goal && project.description ? (
+                    <p className="mt-2.5 text-sm leading-6 text-muted-foreground">
+                      {project.description}
+                    </p>
+                  ) : null}
+                  {project.next_action ? (
+                    <div className="emery-surface mt-3.5 rounded-2xl px-3.5 py-3">
+                      <p className="emery-kicker text-[9px]">Next action</p>
+                      <p className="mt-1.5 text-xs leading-5">{project.next_action}</p>
+                    </div>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onEdit(project)}
+                  aria-label={`Edit ${project.name}`}
+                  className="emery-press emery-surface flex size-11 shrink-0 items-center justify-center rounded-2xl text-muted-foreground hover:border-primary/25 hover:text-primary"
+                >
+                  <Edit3 className="size-4" />
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
 }
 
-function ProjectEditor({ project, onClose, onSave }: { project: Project | null; onClose: () => void; onSave: (values: { id?: string; name: string; description?: string; status?: string; priority?: number; goal?: string; nextAction?: string }) => Promise<void> }) {
-  const [name, setName] = useState(project?.name ?? ""); const [goal, setGoal] = useState(project?.goal ?? ""); const [description, setDescription] = useState(project?.description ?? ""); const [nextAction, setNextAction] = useState(project?.next_action ?? ""); const [priority, setPriority] = useState(project?.priority ?? 3); const [status, setStatus] = useState(project?.status ?? "active"); const [saving, setSaving] = useState(false); const [error, setError] = useState<string | null>(null);
-  async function submit(event: React.FormEvent) { event.preventDefault(); if (!name.trim() || saving) return; setSaving(true); setError(null); try { await onSave({ ...(project?.id ? { id: project.id } : {}), name, goal, description, nextAction, priority, status }); } catch { setError("Couldn't save that project."); setSaving(false); } }
-  return <div className="fixed inset-0 z-50 flex items-end bg-black/65 p-3 backdrop-blur-md sm:items-center sm:justify-center" onClick={onClose}><form onSubmit={submit} onClick={(event) => event.stopPropagation()} className="emery-glass-strong max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-[1.8rem] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-5"><div className="flex items-center justify-between"><div><p className="emery-kicker">Project context</p><h3 className="mt-1 text-lg font-semibold">{project ? "Edit project" : "New project"}</h3><p className="mt-1 text-xs text-muted-foreground">Give Emery the outcome and the next move.</p></div><button type="button" onClick={onClose} className="emery-press flex size-11 items-center justify-center rounded-2xl text-muted-foreground hover:bg-white/5" aria-label="Close project editor"><X className="size-4" /></button></div><div className="mt-4 space-y-3"><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Project name" className="min-h-12 w-full rounded-2xl border border-border/60 bg-card/60 px-3.5 text-sm outline-none focus:border-primary/40" autoFocus /><textarea value={goal} onChange={(event) => setGoal(event.target.value)} placeholder="Goal" rows={2} className="w-full rounded-2xl border border-border/60 bg-card/60 px-3.5 py-3 text-sm outline-none focus:border-primary/40" /><textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Description (optional)" rows={3} className="w-full rounded-2xl border border-border/60 bg-card/60 px-3.5 py-3 text-sm outline-none focus:border-primary/40" /><input value={nextAction} onChange={(event) => setNextAction(event.target.value)} placeholder="Next action (optional)" className="min-h-12 w-full rounded-2xl border border-border/60 bg-card/60 px-3.5 text-sm outline-none focus:border-primary/40" /><div className="grid grid-cols-2 gap-2"><select value={priority} onChange={(event) => setPriority(Number(event.target.value))} className="min-h-12 rounded-2xl border border-border/60 bg-card/60 px-3 text-sm outline-none"><option value={5}>Priority 5</option><option value={4}>Priority 4</option><option value={3}>Priority 3</option><option value={2}>Priority 2</option><option value={1}>Priority 1</option></select><select value={status} onChange={(event) => setStatus(event.target.value)} className="min-h-12 rounded-2xl border border-border/60 bg-card/60 px-3 text-sm outline-none"><option value="active">Active</option><option value="paused">Paused</option><option value="completed">Completed</option></select></div>{error ? <p className="text-sm text-destructive">{error}</p> : null}<button type="submit" disabled={!name.trim() || saving} className="emery-press min-h-12 w-full rounded-2xl bg-primary font-semibold text-primary-foreground disabled:opacity-40">{saving ? "Saving…" : "Save project"}</button></div></form></div>;
+function ProjectEditor({
+  project,
+  onClose,
+  onSave,
+}: {
+  project: Project | null;
+  onClose: () => void;
+  onSave: (values: {
+    id?: string;
+    name: string;
+    description?: string;
+    status?: string;
+    priority?: number;
+    goal?: string;
+    nextAction?: string;
+  }) => Promise<void>;
+}) {
+  const [name, setName] = useState(project?.name ?? "");
+  const [goal, setGoal] = useState(project?.goal ?? "");
+  const [description, setDescription] = useState(project?.description ?? "");
+  const [nextAction, setNextAction] = useState(project?.next_action ?? "");
+  const [priority, setPriority] = useState(project?.priority ?? 3);
+  const [status, setStatus] = useState(project?.status ?? "active");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!name.trim() || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave({
+        ...(project?.id ? { id: project.id } : {}),
+        name,
+        goal,
+        description,
+        nextAction,
+        priority,
+        status,
+      });
+    } catch {
+      setError("Couldn't save that project.");
+      setSaving(false);
+    }
+  }
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end bg-black/65 p-3 backdrop-blur-md sm:items-center sm:justify-center"
+      onClick={onClose}
+    >
+      <form
+        onSubmit={submit}
+        onClick={(event) => event.stopPropagation()}
+        className="emery-glass-strong max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-[1.8rem] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-5"
+      >
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="emery-kicker">Project context</p>
+            <h3 className="mt-1 text-lg font-semibold">
+              {project ? "Edit project" : "New project"}
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Give Emery the outcome and the next move.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="emery-press flex size-11 items-center justify-center rounded-2xl text-muted-foreground hover:bg-white/5"
+            aria-label="Close project editor"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+        <div className="mt-4 space-y-3">
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Project name"
+            className="min-h-12 w-full rounded-2xl border border-border/60 bg-card/60 px-3.5 text-sm outline-none focus:border-primary/40"
+            autoFocus
+          />
+          <textarea
+            value={goal}
+            onChange={(event) => setGoal(event.target.value)}
+            placeholder="Goal"
+            rows={2}
+            className="w-full rounded-2xl border border-border/60 bg-card/60 px-3.5 py-3 text-sm outline-none focus:border-primary/40"
+          />
+          <textarea
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder="Description (optional)"
+            rows={3}
+            className="w-full rounded-2xl border border-border/60 bg-card/60 px-3.5 py-3 text-sm outline-none focus:border-primary/40"
+          />
+          <input
+            value={nextAction}
+            onChange={(event) => setNextAction(event.target.value)}
+            placeholder="Next action (optional)"
+            className="min-h-12 w-full rounded-2xl border border-border/60 bg-card/60 px-3.5 text-sm outline-none focus:border-primary/40"
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <select
+              value={priority}
+              onChange={(event) => setPriority(Number(event.target.value))}
+              className="min-h-12 rounded-2xl border border-border/60 bg-card/60 px-3 text-sm outline-none"
+            >
+              <option value={5}>Priority 5</option>
+              <option value={4}>Priority 4</option>
+              <option value={3}>Priority 3</option>
+              <option value={2}>Priority 2</option>
+              <option value={1}>Priority 1</option>
+            </select>
+            <select
+              value={status}
+              onChange={(event) => setStatus(event.target.value)}
+              className="min-h-12 rounded-2xl border border-border/60 bg-card/60 px-3 text-sm outline-none"
+            >
+              <option value="active">Active</option>
+              <option value="paused">Paused</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          <button
+            type="submit"
+            disabled={!name.trim() || saving}
+            className="emery-press min-h-12 w-full rounded-2xl bg-primary font-semibold text-primary-foreground disabled:opacity-40"
+          >
+            {saving ? "Saving…" : "Save project"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
 }
