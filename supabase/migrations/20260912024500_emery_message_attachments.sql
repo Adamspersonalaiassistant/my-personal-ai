@@ -20,17 +20,17 @@ alter table public.message_attachments enable row level security;
 drop policy if exists "Users can read own attachments" on public.message_attachments;
 create policy "Users can read own attachments"
   on public.message_attachments for select to authenticated
-  using (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id);
 
 drop policy if exists "Users can insert own attachments" on public.message_attachments;
 create policy "Users can insert own attachments"
   on public.message_attachments for insert to authenticated
-  with check (auth.uid() = user_id);
+  with check ((select auth.uid()) = user_id);
 
 drop policy if exists "Users can delete own attachments" on public.message_attachments;
 create policy "Users can delete own attachments"
   on public.message_attachments for delete to authenticated
-  using (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id);
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
@@ -56,7 +56,7 @@ create policy "Users can upload own Emery attachments"
   on storage.objects for insert to authenticated
   with check (
     bucket_id = 'emery-attachments'
-    and split_part(name, '/', 1) = auth.uid()::text
+    and split_part(name, '/', 1) = (select auth.uid())::text
   );
 
 drop policy if exists "Users can read own Emery attachments" on storage.objects;
@@ -64,7 +64,7 @@ create policy "Users can read own Emery attachments"
   on storage.objects for select to authenticated
   using (
     bucket_id = 'emery-attachments'
-    and split_part(name, '/', 1) = auth.uid()::text
+    and split_part(name, '/', 1) = (select auth.uid())::text
   );
 
 drop policy if exists "Users can delete own Emery attachments" on storage.objects;
@@ -72,5 +72,5 @@ create policy "Users can delete own Emery attachments"
   on storage.objects for delete to authenticated
   using (
     bucket_id = 'emery-attachments'
-    and split_part(name, '/', 1) = auth.uid()::text
+    and split_part(name, '/', 1) = (select auth.uid())::text
   );
