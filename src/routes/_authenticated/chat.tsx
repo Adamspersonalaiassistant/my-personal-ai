@@ -24,6 +24,14 @@ const quickPrompts = [
   "Help me think this through",
 ];
 
+function cleanAssistantText(text: string) {
+  return text
+    .replace(/\*\*/g, "")
+    .replace(/__/g, "")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/`([^`]+)`/g, "$1");
+}
+
 function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
@@ -256,7 +264,7 @@ function Chat() {
                       <img src={brainImage} alt="" className="size-7 object-cover" />
                     </div>
                     <div className="emery-glass max-w-[88%] whitespace-pre-wrap rounded-[1.35rem] rounded-tl-md px-4 py-3 text-[15px] leading-6 text-foreground">
-                      {m.text}
+                      {cleanAssistantText(m.text)}
                     </div>
                   </div>
                 ),
