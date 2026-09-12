@@ -148,6 +148,6 @@ export const getMainConversationPage = createServerFn({ method: "GET" })
       conversationId: conversation.id,
       messages,
       hasMore,
-      nextCursor: hasMore && messages.length ? messages[0]?.createdAt ?? null : null,
+      nextCursor: hasMore && messages.length ? (messages[0]?.createdAt ?? null) : null,
     };
   });

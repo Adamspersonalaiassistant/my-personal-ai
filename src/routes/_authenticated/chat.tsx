@@ -105,13 +105,7 @@ function AttachmentCard({ attachment }: { attachment: Attachment }) {
   );
 }
 
-function SelectedFileCard({
-  file,
-  onRemove,
-}: {
-  file: File;
-  onRemove: () => void;
-}) {
+function SelectedFileCard({ file, onRemove }: { file: File; onRemove: () => void }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -127,12 +121,7 @@ function SelectedFileCard({
   return (
     <div className="emery-glass flex min-w-[150px] max-w-[210px] items-center gap-2 rounded-2xl px-2.5 py-2">
       {previewUrl ? (
-        <img
-          src={previewUrl}
-          alt=""
-          className="size-10 rounded-xl object-cover"
-          decoding="async"
-        />
+        <img src={previewUrl} alt="" className="size-10 rounded-xl object-cover" decoding="async" />
       ) : (
         <div className="emery-icon-well flex size-10 shrink-0 items-center justify-center rounded-xl">
           <FileText className="size-4" />
@@ -417,7 +406,10 @@ function Chat() {
           ) : null}
 
           {loading ? (
-            <div className="flex min-h-[48vh] flex-col items-center justify-center gap-4" role="status">
+            <div
+              className="flex min-h-[48vh] flex-col items-center justify-center gap-4"
+              role="status"
+            >
               <div className="emery-breathe flex size-16 items-center justify-center overflow-hidden rounded-[1.35rem] border border-primary/15 bg-primary/[0.04]">
                 <img src={brainImage} alt="" className="size-14 object-cover opacity-90" />
               </div>
@@ -430,7 +422,11 @@ function Chat() {
               <div className="relative">
                 <div className="absolute inset-1 rounded-full bg-primary/14 blur-3xl" />
                 <div className="emery-breathe emery-glass-strong relative flex size-28 items-center justify-center overflow-hidden rounded-[2rem]">
-                  <img src={brainImage} alt="Emery neural brain" className="h-24 w-24 object-cover" />
+                  <img
+                    src={brainImage}
+                    alt="Emery neural brain"
+                    className="h-24 w-24 object-cover"
+                  />
                 </div>
               </div>
               <div className="mt-6 flex items-center gap-2 text-primary">
@@ -441,7 +437,8 @@ function Chat() {
                 I’m here, Adam.
               </h2>
               <p className="mt-2 max-w-xs text-sm leading-6 text-muted-foreground">
-                Same conversation. Same Emery. Bring me the mess and we’ll turn it into the next move.
+                Same conversation. Same Emery. Bring me the mess and we’ll turn it into the next
+                move.
               </p>
               <div className="mt-7 grid w-full gap-2 sm:grid-cols-3">
                 {quickPrompts.map((prompt) => (
@@ -463,21 +460,32 @@ function Chat() {
                   <div key={message.id} className="emery-fade-up flex justify-end pl-5 sm:pl-16">
                     <div className="max-w-[94%] rounded-[1.45rem] rounded-br-[0.45rem] bg-[linear-gradient(145deg,oklch(0.79_0.17_155),oklch(0.64_0.15_158))] px-4 py-3 text-[15px] leading-6 text-[oklch(0.09_0.02_160)] shadow-[0_12px_34px_oklch(0.3_0.09_158/0.15)] sm:max-w-[90%]">
                       {message.attachments.length ? (
-                        <div className={`grid gap-2 ${message.attachments.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+                        <div
+                          className={`grid gap-2 ${message.attachments.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}
+                        >
                           {message.attachments.map((attachment) => (
                             <AttachmentCard key={attachment.id} attachment={attachment} />
                           ))}
                         </div>
                       ) : null}
                       {message.text ? (
-                        <p className={message.attachments.length ? "mt-2.5 whitespace-pre-wrap" : "whitespace-pre-wrap"}>
+                        <p
+                          className={
+                            message.attachments.length
+                              ? "mt-2.5 whitespace-pre-wrap"
+                              : "whitespace-pre-wrap"
+                          }
+                        >
                           {message.text}
                         </p>
                       ) : null}
                     </div>
                   </div>
                 ) : (
-                  <div key={message.id} className="emery-fade-up flex items-start gap-2.5 pr-1 sm:gap-3 sm:pr-10">
+                  <div
+                    key={message.id}
+                    className="emery-fade-up flex items-start gap-2.5 pr-1 sm:gap-3 sm:pr-10"
+                  >
                     <div className="emery-icon-well mt-0.5 flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-[0.9rem]">
                       <img src={brainImage} alt="" className="size-8 object-cover" />
                     </div>
@@ -491,7 +499,11 @@ function Chat() {
           )}
 
           {pending ? (
-            <div className="mx-auto mt-5 flex max-w-2xl items-center gap-3" role="status" aria-live="polite">
+            <div
+              className="mx-auto mt-5 flex max-w-2xl items-center gap-3"
+              role="status"
+              aria-live="polite"
+            >
               <div className="emery-icon-well flex size-9 items-center justify-center overflow-hidden rounded-[0.9rem]">
                 <img src={brainImage} alt="" className="size-8 object-cover" />
               </div>
@@ -506,7 +518,10 @@ function Chat() {
             </div>
           ) : null}
           {error ? (
-            <p className="mx-auto mt-4 max-w-2xl rounded-2xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-center text-sm text-destructive" role="alert">
+            <p
+              className="mx-auto mt-4 max-w-2xl rounded-2xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-center text-sm text-destructive"
+              role="alert"
+            >
               {error}
             </p>
           ) : null}
@@ -575,7 +590,8 @@ function Chat() {
               onKeyDown={(event) => {
                 if (event.nativeEvent.isComposing) return;
                 if (event.key === "Enter" && !event.shiftKey) {
-                  const finePointer = typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches;
+                  const finePointer =
+                    typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches;
                   if (finePointer) {
                     event.preventDefault();
                     void sendMessage(draft);
