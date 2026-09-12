@@ -24,6 +24,7 @@ create index if not exists agents_parent_agent_idx
 
 alter table public.agents enable row level security;
 revoke all on table public.agents from anon;
+revoke all on table public.agents from authenticated;
 grant select, insert, update, delete on table public.agents to authenticated;
 
 drop policy if exists "Users can read own agents" on public.agents;
@@ -65,6 +66,7 @@ create index if not exists agent_threads_agent_idx
 
 alter table public.agent_threads enable row level security;
 revoke all on table public.agent_threads from anon;
+revoke all on table public.agent_threads from authenticated;
 grant select, insert, update, delete on table public.agent_threads to authenticated;
 
 drop policy if exists "Users can read own agent threads" on public.agent_threads;
@@ -104,6 +106,7 @@ create index if not exists agent_messages_thread_idx
 
 alter table public.agent_messages enable row level security;
 revoke all on table public.agent_messages from anon;
+revoke all on table public.agent_messages from authenticated;
 grant select, insert, delete on table public.agent_messages to authenticated;
 
 drop policy if exists "Users can read own agent messages" on public.agent_messages;
