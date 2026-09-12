@@ -34,6 +34,13 @@ function agentIcon(slug: string) {
   return BrainCircuit;
 }
 
+function agentAccent(slug: string) {
+  if (slug === "hpo-agent") return "from-emerald-300/14 to-primary/4";
+  if (slug === "research-agent") return "from-cyan-300/10 to-primary/4";
+  if (slug === "strategy-agent") return "from-lime-200/10 to-primary/4";
+  return "from-primary/12 to-primary/3";
+}
+
 function Agents() {
   const navigate = useNavigate();
   const loadAgents = useServerFn(listAgents);
@@ -98,92 +105,93 @@ function Agents() {
   return (
     <AppShell title="Agents">
       <div className="space-y-4">
-        <section className="emery-glass overflow-hidden rounded-3xl p-5">
+        <section className="emery-glass-strong overflow-hidden rounded-[1.75rem] p-5 sm:p-6">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-primary">
                 <Sparkles className="size-4" />
-                <p className="text-xs font-semibold uppercase tracking-[0.18em]">Emery's team</p>
+                <p className="emery-kicker">Emery's team</p>
               </div>
-              <h2 className="mt-2 text-xl font-semibold tracking-tight">
+              <h2 className="mt-2 text-[1.35rem] font-semibold tracking-[-0.025em]">
                 One family. Different specialties.
               </h2>
               <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-                Emery stays in charge. You can work with a specialist here without losing the
-                context, judgment and accountability of your main assistant.
+                Emery stays in command while specialists bring focused judgment to the work that needs it.
               </p>
             </div>
             <button
               type="button"
               onClick={() => setShowCreate(true)}
-              className="flex min-h-11 shrink-0 items-center gap-2 rounded-2xl bg-primary px-3.5 text-sm font-semibold text-primary-foreground"
+              className="emery-press flex min-h-11 shrink-0 items-center gap-2 rounded-2xl bg-primary px-3.5 text-sm font-semibold text-primary-foreground shadow-[0_0_22px_oklch(0.805_0.175_155/0.1)]"
             >
               <Plus className="size-4" />
               <span className="hidden sm:inline">Create agent</span>
             </button>
           </div>
-          <div className="mt-4 flex items-center gap-2 rounded-2xl border border-primary/15 bg-primary/[0.045] px-3 py-2.5 text-xs text-muted-foreground">
+          <div className="mt-4 flex items-center gap-2 rounded-2xl border border-primary/12 bg-primary/[0.035] px-3 py-2.5 text-xs leading-5 text-muted-foreground">
             <ShieldCheck className="size-4 shrink-0 text-primary" />
-            New agents inherit Emery's privacy, truthfulness and approval boundaries by default.
+            Specialists inherit Emery's privacy, truthfulness and approval boundaries by default.
           </div>
         </section>
 
         {error ? (
-          <p className="rounded-2xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p className="rounded-2xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
             {error}
           </p>
         ) : null}
 
         {loading ? (
-          <p className="py-12 text-center text-sm text-muted-foreground">Gathering the team…</p>
+          <div className="space-y-3 py-1">
+            {[0, 1, 2].map((item) => (
+              <div key={item} className="emery-glass h-36 animate-pulse rounded-[1.6rem] opacity-60" />
+            ))}
+          </div>
         ) : (
           <section className="space-y-3">
-            {agents.map((agent) => {
+            {agents.map((agent, index) => {
               const Icon = agentIcon(agent.slug);
               return (
                 <button
                   key={agent.id}
                   type="button"
-                  onClick={() =>
-                    navigate({ to: "/agents/$agentId", params: { agentId: agent.id } })
-                  }
-                  className="emery-glass group w-full rounded-3xl p-4 text-left transition hover:border-primary/25"
+                  onClick={() => navigate({ to: "/agents/$agentId", params: { agentId: agent.id } })}
+                  className="emery-press emery-glass group relative w-full overflow-hidden rounded-[1.6rem] p-4 text-left hover:border-primary/25 sm:p-5"
+                  style={{ animationDelay: `${index * 45}ms` }}
                 >
-                  <div className="flex items-start gap-3">
-                    <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/[0.07] text-primary shadow-[0_0_22px_oklch(0.78_0.19_154/0.08)]">
-                      <Icon className="size-5" />
+                  <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${agentAccent(agent.slug)} opacity-80`} />
+                  <div className="relative flex items-start gap-3.5">
+                    <div className="emery-icon-well flex size-12 shrink-0 items-center justify-center rounded-[1.05rem]">
+                      <Icon className="size-5" strokeWidth={1.8} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-start justify-between gap-3">
                         <div>
-                          <h3 className="text-base font-semibold tracking-tight">{agent.name}</h3>
-                          <p className="mt-0.5 text-xs font-medium text-primary/90">
-                            {agent.description}
-                          </p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-base font-semibold tracking-[-0.015em]">{agent.name}</h3>
+                            <span className="emery-chip">Active</span>
+                          </div>
+                          <p className="mt-1 text-xs font-medium text-primary/85">{agent.description}</p>
                         </div>
-                        <ChevronRight className="size-5 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary" />
+                        <ChevronRight className="mt-1 size-5 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary" />
                       </div>
-                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                        {agent.mission}
-                      </p>
+                      <p className="mt-2.5 text-sm leading-6 text-muted-foreground">{agent.mission}</p>
 
                       {agent.children?.length ? (
-                        <div className="mt-3 rounded-2xl border border-border/55 bg-card/55 p-3">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                            HPO internal team
-                          </p>
-                          <div className="mt-2 flex flex-wrap gap-2">
+                        <div className="emery-surface mt-4 rounded-2xl p-3.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">HPO internal team</p>
+                            <span className="text-[10px] font-medium text-primary/75">Reports to HPO Agent</span>
+                          </div>
+                          <div className="mt-2.5 flex flex-wrap gap-2">
                             {agent.children.map((child) => (
-                              <span
-                                key={child.id}
-                                className="rounded-full border border-primary/15 bg-primary/[0.05] px-2.5 py-1 text-[11px] font-medium text-foreground/90"
-                              >
+                              <span key={child.id} className="emery-chip text-foreground/90">
+                                <span className="size-1.5 rounded-full bg-primary/70" />
                                 {child.name.replace(" Agent", "")}
                               </span>
                             ))}
                           </div>
-                          <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
-                            They report to HPO Agent. You never have to manage them directly.
+                          <p className="mt-2.5 text-[11px] leading-5 text-muted-foreground">
+                            Scout, Route and Relationship work behind the scenes. Adam never has to manage them directly.
                           </p>
                         </div>
                       ) : null}
@@ -197,64 +205,31 @@ function Agents() {
       </div>
 
       {showCreate ? (
-        <div
-          className="fixed inset-0 z-50 flex items-end bg-black/60 p-3 backdrop-blur-sm sm:items-center sm:justify-center"
-          onClick={() => setShowCreate(false)}
-        >
+        <div className="fixed inset-0 z-50 flex items-end bg-black/65 p-3 backdrop-blur-md sm:items-center sm:justify-center" onClick={() => setShowCreate(false)}>
           <form
             onSubmit={handleCreate}
             onClick={(event) => event.stopPropagation()}
-            className="emery-glass max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-[1.75rem] p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+            className="emery-glass-strong max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-[1.8rem] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-5"
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold">Create a specialist</p>
+                <p className="emery-kicker">Agent builder</p>
+                <h3 className="mt-1.5 text-lg font-semibold tracking-tight">Create a specialist</h3>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
                   Emery stays in charge. Give the new family member one clear mission.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowCreate(false)}
-                className="flex size-11 shrink-0 items-center justify-center rounded-2xl text-muted-foreground"
-              >
+              <button type="button" onClick={() => setShowCreate(false)} className="emery-press flex size-11 shrink-0 items-center justify-center rounded-2xl text-muted-foreground hover:bg-white/5 hover:text-foreground" aria-label="Close create agent">
                 <X className="size-4" />
               </button>
             </div>
 
             <div className="mt-4 space-y-3">
-              <input
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="Agent name — e.g. Finance Agent"
-                autoFocus
-                className="min-h-12 w-full rounded-2xl border border-border/60 bg-card/70 px-3.5 text-sm outline-none focus:border-primary/40"
-              />
-              <textarea
-                value={mission}
-                onChange={(event) => setMission(event.target.value)}
-                placeholder="What should this agent be responsible for?"
-                rows={4}
-                className="w-full rounded-2xl border border-border/60 bg-card/70 px-3.5 py-3 text-sm outline-none focus:border-primary/40"
-              />
-              <input
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                placeholder="Short specialty (optional)"
-                className="min-h-12 w-full rounded-2xl border border-border/60 bg-card/70 px-3.5 text-sm outline-none focus:border-primary/40"
-              />
-              <textarea
-                value={persona}
-                onChange={(event) => setPersona(event.target.value)}
-                placeholder="Personality / working style (optional)"
-                rows={3}
-                className="w-full rounded-2xl border border-border/60 bg-card/70 px-3.5 py-3 text-sm outline-none focus:border-primary/40"
-              />
-              <button
-                type="submit"
-                disabled={!name.trim() || !mission.trim() || saving}
-                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary font-semibold text-primary-foreground disabled:opacity-40"
-              >
+              <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Agent name — e.g. Finance Agent" autoFocus className="min-h-12 w-full rounded-2xl border border-border/60 bg-card/60 px-3.5 text-sm outline-none focus:border-primary/40" />
+              <textarea value={mission} onChange={(event) => setMission(event.target.value)} placeholder="What should this agent be responsible for?" rows={4} className="w-full rounded-2xl border border-border/60 bg-card/60 px-3.5 py-3 text-sm outline-none focus:border-primary/40" />
+              <input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Short specialty (optional)" className="min-h-12 w-full rounded-2xl border border-border/60 bg-card/60 px-3.5 text-sm outline-none focus:border-primary/40" />
+              <textarea value={persona} onChange={(event) => setPersona(event.target.value)} placeholder="Personality / working style (optional)" rows={3} className="w-full rounded-2xl border border-border/60 bg-card/60 px-3.5 py-3 text-sm outline-none focus:border-primary/40" />
+              <button type="submit" disabled={!name.trim() || !mission.trim() || saving} className="emery-press flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary font-semibold text-primary-foreground shadow-[0_0_22px_oklch(0.805_0.175_155/0.1)] disabled:opacity-40">
                 <BrainCircuit className="size-4" />
                 {saving ? "Creating…" : "Create agent"}
               </button>
