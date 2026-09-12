@@ -46,3 +46,5 @@ jobs:
       - name: Fail if validation failed
         if: steps.tsc.outcome != 'success' || steps.lint.outcome != 'success' || steps.build.outcome != 'success'
         run: exit 1
+
+# This workflow is temporary and exists only to validate the Emery action/files milestone.
