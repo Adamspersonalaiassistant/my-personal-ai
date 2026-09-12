@@ -15,8 +15,8 @@ const navItems = [
   { to: "/chat", label: "Emery", icon: MessageCircle },
   { to: "/agents", label: "Agents", icon: UsersRound },
   { to: "/tasks", label: "Tasks", icon: CheckSquare },
-  { to: "/meetings", label: "Meetings", icon: CalendarDays },
-  { to: "/projects", label: "Projects", icon: FolderKanban },
+  { to: "/meetings", label: "Meetings", compactLabel: "Meet", icon: CalendarDays },
+  { to: "/projects", label: "Projects", compactLabel: "Projects", icon: FolderKanban },
 ] as const;
 
 export function AppShell({
@@ -45,7 +45,7 @@ export function AppShell({
         className="pointer-events-none absolute -right-24 top-[38%] size-56 rounded-full bg-emerald-300/[0.035] blur-[90px]"
       />
 
-      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-border/45 bg-background/78 px-4 pb-2.5 pt-[max(0.7rem,env(safe-area-inset-top))] backdrop-blur-2xl supports-[backdrop-filter]:bg-background/68 sm:px-5">
+      <header className="sticky top-0 z-40 flex shrink-0 items-center justify-between border-b border-border/45 bg-background/78 px-4 pb-2.5 pt-[max(0.7rem,env(safe-area-inset-top))] backdrop-blur-2xl supports-[backdrop-filter]:bg-background/68 sm:px-5">
         <div className="flex min-w-0 items-center gap-3">
           <div className="relative flex size-11 shrink-0 items-center justify-center">
             <div className="emery-orbit absolute inset-0 rounded-[1.05rem] bg-[conic-gradient(from_180deg,transparent,oklch(0.805_0.175_155/0.42),transparent_48%)] p-px opacity-70">
@@ -90,20 +90,23 @@ export function AppShell({
         </Link>
       </header>
 
-      <main className={`relative z-10 flex-1 ${padded ? "px-4 py-5 sm:px-6 sm:py-6" : ""}`}>
+      <main
+        className={`relative z-10 min-h-0 flex-1 ${padded ? "overflow-y-auto px-4 py-5 sm:px-6 sm:py-6" : ""}`}
+      >
         {children}
       </main>
 
-      <div className="sticky bottom-0 z-40 border-t border-border/45 bg-background/82 px-2 pb-[max(0.45rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-2xl supports-[backdrop-filter]:bg-background/72 sm:px-3">
+      <div className="sticky bottom-0 z-40 shrink-0 border-t border-border/45 bg-background/82 px-1.5 pb-[max(0.45rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-2xl supports-[backdrop-filter]:bg-background/72 sm:px-3">
         <nav
-          className="emery-surface mx-auto grid max-w-2xl grid-cols-5 gap-1 rounded-[1.45rem] p-1.5"
+          className="emery-surface mx-auto grid max-w-2xl grid-cols-5 gap-0.5 rounded-[1.45rem] p-1 sm:gap-1 sm:p-1.5"
           aria-label="Primary"
         >
-          {navItems.map(({ to, label, icon: Icon }) => (
+          {navItems.map(({ to, label, compactLabel, icon: Icon }) => (
             <Link
               key={to}
               to={to}
-              className="emery-press group relative flex min-h-[54px] flex-col items-center justify-center gap-1 rounded-[1.05rem] px-1.5 text-[10px] font-semibold text-muted-foreground transition-colors"
+              aria-label={label}
+              className="emery-press group relative flex min-h-[54px] min-w-0 flex-col items-center justify-center gap-1 rounded-[1.05rem] px-0.5 text-[9px] font-semibold text-muted-foreground transition-colors min-[390px]:px-1.5 min-[390px]:text-[10px]"
               activeProps={{
                 className:
                   "bg-primary/[0.095] text-primary shadow-[inset_0_0_0_1px_oklch(0.805_0.175_155/0.14),0_0_18px_oklch(0.805_0.175_155/0.05)]",
@@ -113,7 +116,8 @@ export function AppShell({
                 className="size-[18px] transition-transform duration-200 group-active:scale-95"
                 strokeWidth={1.9}
               />
-              <span>{label}</span>
+              <span className="max-w-full truncate sm:hidden">{compactLabel ?? label}</span>
+              <span className="hidden sm:inline">{label}</span>
             </Link>
           ))}
         </nav>
