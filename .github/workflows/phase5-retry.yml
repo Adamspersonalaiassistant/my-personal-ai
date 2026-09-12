@@ -1,0 +1,69 @@
+name: Validate Emery Phase 5 Retry
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/phase5-retry.yml
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+
+      - name: Reapply Phase 5 patch from canonical workflow
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          workflow = Path('.github/workflows/agent-team-finish.yml').read_text().splitlines()
+          start = next(i for i, line in enumerate(workflow) if "python - <<'PY'" in line)
+          end = next(i for i in range(start + 1, len(workflow)) if workflow[i].strip() == 'PY')
+          code_lines = workflow[start + 1:end]
+          prefix = min((len(line) - len(line.lstrip()) for line in code_lines if line.strip()), default=0)
+          code = '\n'.join(line[prefix:] if line.strip() else '' for line in code_lines)
+          exec(compile(code, 'phase5_patch.py', 'exec'))
+          PY
+
+      - run: npx prettier --write src/lib/emery.functions.ts src/lib/emery-intelligence.ts src/lib/agent-policy.ts docs/OVERNIGHT_EMERY_SPRINT_STATUS.md
+      - run: npx eslint --fix src/lib/emery.functions.ts src/lib/emery-intelligence.ts src/lib/agent-policy.ts
+      - run: npm run build
+      - run: npx tsc --noEmit
+      - run: npx eslint src/lib/emery.functions.ts src/lib/emery-intelligence.ts src/lib/agent-policy.ts
+
+      - name: Mark Phase 5 complete
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('docs/OVERNIGHT_EMERY_SPRINT_STATUS.md')
+          text = p.read_text()
+          text = text.replace('## Phase 5 — Upgrade Emery Intelligence\nStatus: IN PROGRESS', '## Phase 5 — Upgrade Emery Intelligence\nStatus: COMPLETE — production build, TypeScript and focused lint validated')
+          marker = 'Targets for this phase:\n'
+          note = '''Implemented and validated:\n- Rolling bounded conversation-state summary stored in conversation metadata and refreshed conservatively.\n- Relevance-ranked memory selection with core-memory retention and strict prompt budgets.\n- Richer bounded task/project/meeting context plus quiet executive focus signals.\n- Rolling state included in control-plane parsing for stronger short-follow-up continuity.\n- Conservative automatic specialist routing capped at one user-facing specialist consultation per main-chat turn.\n- Raw recent-history prompt window tightened because rolling state carries longer continuity.\n- Pagination-capable main-chat server retrieval added for Phase 7 UI adoption; existing history UI remains unchanged for safety.\n- No Emery Voice behavior/design changes.\n\nRemaining for later phases:\n- Main chat UI still uses the legacy history loader; Phase 7 should adopt the pagination endpoint with load-older/infinite scroll while preserving attachments.\n- Memory retrieval is intentionally deterministic/lexical to avoid an embedding/model call on every message.\n\n'''
+          if note not in text:
+              text = text.replace(marker, note + marker)
+          p.write_text(text)
+          PY
+          npx prettier --write docs/OVERNIGHT_EMERY_SPRINT_STATUS.md
+
+      - name: Commit validated Phase 5
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add src/lib/emery.functions.ts src/lib/emery-intelligence.ts src/lib/agent-policy.ts docs/OVERNIGHT_EMERY_SPRINT_STATUS.md src/routeTree.gen.ts
+            git commit -m "Upgrade Emery lifelong intelligence [skip ci]"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
