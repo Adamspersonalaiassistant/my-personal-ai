@@ -11,7 +11,7 @@ import type { ReactNode } from "react";
 import brainImage from "@/assets/neural-brain.png";
 
 const navItems = [
-  { to: "/chat", label: "Chat", icon: MessageCircle },
+  { to: "/chat", label: "Emery", icon: MessageCircle },
   { to: "/memories", label: "Memories", icon: Brain },
   { to: "/tasks", label: "Tasks", icon: CheckSquare },
   { to: "/meetings", label: "Meetings", icon: CalendarDays },
@@ -27,6 +27,8 @@ export function AppShell({
   children: ReactNode;
   padded?: boolean;
 }) {
+  const showSectionTitle = title !== "Chat" && title !== "Emery";
+
   return (
     <div className="relative mx-auto flex min-h-[100dvh] w-full max-w-3xl flex-col overflow-x-hidden bg-background text-foreground md:border-x md:border-border/50 md:shadow-2xl">
       <div aria-hidden className="emery-grid pointer-events-none absolute inset-x-0 top-0 h-80 opacity-70" />
@@ -39,7 +41,7 @@ export function AppShell({
           <div className="min-w-0">
             <div className="flex items-baseline gap-2">
               <p className="truncate text-[15px] font-semibold tracking-tight">Emery</p>
-              {title !== "Chat" ? (
+              {showSectionTitle ? (
                 <span className="truncate text-xs text-muted-foreground">/ {title}</span>
               ) : null}
             </div>
