@@ -1,19 +1,23 @@
-name: Validate Emery UI
+name: Validate Emery OS
 
 on:
   push:
     branches: [main]
     paths:
       - 'src/**'
+      - 'supabase/migrations/**'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/validate-ui.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -24,6 +28,25 @@ jobs:
         run: npm run build
       - name: TypeScript
         run: npx tsc --noEmit
-      - name: Focused UI lint
-        run: npx eslint src/components/AppShell.tsx src/lib/memory.functions.ts src/routes/_authenticated/chat.tsx src/routes/_authenticated/agents.tsx 'src/routes/_authenticated/agents_.$agentId.tsx' src/routes/_authenticated/tasks.tsx src/routes/_authenticated/projects.tsx src/routes/_authenticated/meetings.tsx src/routes/_authenticated/memories.tsx src/routes/_authenticated/settings.tsx
-      # Keep this workflow as the final gate for visual-system changes.
+      - name: Focused Emery OS lint
+        run: >-
+          npx eslint
+          src/components/AppShell.tsx
+          src/lib/agent-policy.ts
+          src/lib/agent.functions.ts
+          src/lib/assistant-identity.ts
+          src/lib/chat-history.functions.ts
+          src/lib/chat.functions.ts
+          src/lib/emery-intelligence.ts
+          src/lib/emery.functions.ts
+          src/lib/memory.functions.ts
+          src/lib/os.functions.ts
+          src/routes/__root.tsx
+          src/routes/_authenticated/chat.tsx
+          src/routes/_authenticated/agents.tsx
+          'src/routes/_authenticated/agents_.$agentId.tsx'
+          src/routes/_authenticated/tasks.tsx
+          src/routes/_authenticated/projects.tsx
+          src/routes/_authenticated/meetings.tsx
+          src/routes/_authenticated/memories.tsx
+          src/routes/_authenticated/settings.tsx
