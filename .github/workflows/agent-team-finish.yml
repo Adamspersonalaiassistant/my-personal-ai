@@ -1,0 +1,84 @@
+name: Finish Emery Agent Team
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/agent-team-finish.yml
+
+permissions:
+  contents: write
+
+jobs:
+  finish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+
+      - name: Patch Emery agent orchestration
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          agent_path = Path('src/lib/agent.functions.ts')
+          agent = agent_path.read_text()
+
+          marker = '  const baseSlug = slugify(name) || "specialist-agent";'
+          if 'existingExactAgent' not in agent:
+              replacement = '''  const { data: existingExactAgent } = await db\n    .from("agents")\n    .select("*")\n    .eq("user_id", userId)\n    .eq("name", name)\n    .maybeSingle();\n  if (existingExactAgent) return existingExactAgent as AgentRow;\n\n  const baseSlug = slugify(name) || "specialist-agent";'''
+              agent = agent.replace(marker, replacement)
+
+          if 'export async function consultSpecialistFromEmery' not in agent:
+              agent += '''\n\nexport async function consultSpecialistFromEmery(\n  apiKey: string,\n  db: any,\n  userId: string,\n  slug: "hpo-agent" | "research-agent" | "strategy-agent",\n  assignment: string,\n) {\n  await ensureDefaultAgentTeam(db, userId);\n  const { data: rawAgent, error } = await db\n    .from("agents")\n    .select("*")\n    .eq("user_id", userId)\n    .eq("slug", slug)\n    .eq("is_active", true)\n    .single();\n  if (error || !rawAgent) throw error ?? new Error("Specialist agent not found");\n  const agent = rawAgent as AgentRow;\n  const thread = await getOrCreateThread(db, userId, agent);\n  await saveAgentMessage(\n    db,\n    userId,\n    thread.id,\n    "emery",\n    "Emery",\n    `I’m bringing you in from my main conversation with Adam. Assignment: ${assignment}`,\n    { delegated_from_main_chat: true },\n  );\n  const history = await recentThread(db, userId, thread.id);\n  const adamContext = await loadAdamContext(db, userId);\n  let specialist: { response: string; metadata: Record<string, unknown> };\n  if (slug === "hpo-agent") specialist = await runHpoTeam(apiKey, agent, assignment, adamContext, history);\n  else if (slug === "research-agent") specialist = await runResearchAgent(apiKey, agent, assignment, adamContext, history);\n  else specialist = await runStrategyAgent(apiKey, agent, assignment, adamContext, history);\n  await saveAgentMessage(\n    db,\n    userId,\n    thread.id,\n    "agent",\n    agent.name,\n    specialist.response,\n    { ...specialist.metadata, delegated_from_main_chat: true },\n  );\n  await db\n    .from("agent_threads")\n    .update({ updated_at: new Date().toISOString() })\n    .eq("id", thread.id)\n    .eq("user_id", userId);\n  return { agentName: agent.name, response: specialist.response };\n}\n'''
+          agent_path.write_text(agent)
+
+          emery_path = Path('src/lib/emery.functions.ts')
+          emery = emery_path.read_text()
+
+          import_line = 'import { ASSISTANT_IDENTITY } from "@/lib/assistant-identity";'
+          agent_import = 'import { createAgentFromInstruction, consultSpecialistFromEmery } from "@/lib/agent.functions";'
+          if agent_import not in emery:
+              emery = emery.replace(import_line, import_line + '\n' + agent_import)
+
+          db_marker = '    const db = supabase as any;\n\n    let conversation: { id: string; metadata: unknown };'
+          if 'let agentTeamInstruction = "";' not in emery:
+              block = '''    const db = supabase as any;\n\n    let agentTeamInstruction = "";\n    const explicitAgentCreation =\n      /\\b(?:create|make|build)\\s+(?:me\\s+)?(?:(?:a|an)\\s+)?(?:new\\s+)?(?:specialist\\s+)?agent\\b/i.test(\n        data.message,\n      );\n    if (explicitAgentCreation) {\n      try {\n        const createdAgent = await createAgentFromInstruction(apiKey, db, userId, data.message);\n        agentTeamInstruction += `Agent creation succeeded. ${createdAgent.name} is now part of Emery's agent family. Its mission is: ${createdAgent.mission}`;\n      } catch (error) {\n        console.error("Agent creation from main chat failed", error);\n        agentTeamInstruction +=\n          "Adam explicitly asked to create an agent, but the database write failed. Say so briefly and do not claim success.";\n      }\n    }\n\n    const consultMatch = data.message.match(\n      /\\b(?:ask|consult|check\\s+with|bring\\s+in|have)\\s+(?:the\\s+)?(hpo|research|strategy)(?:\\s+agent)?\\b/i,\n    );\n    if (consultMatch?.[1]) {\n      const slugMap = {\n        hpo: "hpo-agent",\n        research: "research-agent",\n        strategy: "strategy-agent",\n      } as const;\n      const key = consultMatch[1].toLowerCase() as keyof typeof slugMap;\n      try {\n        const consultation = await consultSpecialistFromEmery(\n          apiKey,\n          db,\n          userId,\n          slugMap[key],\n          data.message,\n        );\n        agentTeamInstruction += `${agentTeamInstruction ? "\\n" : ""}Emery consulted ${consultation.agentName} from the main conversation. Use this specialist report as an input, challenge it if needed, and give Adam one coherent Emery answer:\n${consultation.response}`;\n      } catch (error) {\n        console.error("Agent consultation from main chat failed", error);\n        agentTeamInstruction += `${agentTeamInstruction ? "\\n" : ""}A requested specialist consultation failed. Tell Adam briefly if relevant; do not pretend the agent responded.`;\n      }\n    }\n\n    let conversation: { id: string; metadata: unknown };'''
+              emery = emery.replace(db_marker, block)
+
+          action_marker = '`\\n\\nACTION CONTROL FOR THIS TURN:\\n${actionInstruction}\\nFollow this control instruction exactly. Do not claim any database action unless it says the action succeeded.` +'
+          if 'AGENT TEAM CONTROL FOR THIS TURN' not in emery:
+              action_replacement = '`\\n\\nACTION CONTROL FOR THIS TURN:\\n${actionInstruction}\\nFollow this control instruction exactly. Do not claim any database action unless it says the action succeeded.` +\n                `\\n\\nAGENT TEAM CONTROL FOR THIS TURN:\\n${agentTeamInstruction || "No agent was created or consulted on this turn."}\\nTreat specialist reports as advisory input. Emery remains the final synthesizer for Adam.` +'
+              emery = emery.replace(action_marker, action_replacement)
+
+          emery_path.write_text(emery)
+          PY
+
+      - name: Format changed feature files
+        run: npx prettier --write src/lib/agent.functions.ts src/lib/emery.functions.ts src/components/AppShell.tsx src/routes/_authenticated/agents.tsx 'src/routes/_authenticated/agents.$agentId.tsx' src/routes/_authenticated/settings.tsx
+
+      - name: Generate route tree and production build
+        run: npm run build
+
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+      - name: Scoped lint
+        run: npx eslint src/lib/agent.functions.ts src/lib/emery.functions.ts src/components/AppShell.tsx src/routes/_authenticated/agents.tsx 'src/routes/_authenticated/agents.$agentId.tsx' src/routes/_authenticated/settings.tsx
+
+      - name: Commit generated and patched files
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add src/lib/agent.functions.ts src/lib/emery.functions.ts src/components/AppShell.tsx src/routes/_authenticated/agents.tsx 'src/routes/_authenticated/agents.$agentId.tsx' src/routes/_authenticated/settings.tsx src/routeTree.gen.ts
+            git commit -m "Finish and validate Emery Agent Team V1 [skip ci]"
+            git push origin HEAD:main
+          fi
