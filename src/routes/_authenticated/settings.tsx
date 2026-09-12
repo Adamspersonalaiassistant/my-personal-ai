@@ -16,6 +16,7 @@ import {
   Workflow,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { ImprovementHealthCard } from "@/components/ImprovementHealthCard";
 import { RecentFilesCard } from "@/components/RecentFilesCard";
 import { Button } from "@/components/ui/button";
 import { listMemories } from "@/lib/chat.functions";
@@ -30,6 +31,7 @@ const status = [
   { label: "Memory", value: "Online", icon: Database, live: true },
   { label: "Action layer", value: "Connected", icon: CheckSquare, live: true },
   { label: "Agent Team", value: "Connected", icon: UsersRound, live: true },
+  { label: "Self-improvement", value: "Bounded", icon: Sparkles, live: true },
   { label: "File uploads", value: "Connected", icon: FileUp, live: true },
   { label: "Meetings", value: "Internal", icon: Radio, live: true },
   { label: "Emery Voice", value: "Next", icon: Mic2, live: false },
@@ -109,8 +111,7 @@ function Settings() {
               </div>
               <p className="mt-2 truncate text-xs text-muted-foreground">{user?.email}</p>
               <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
-                One private operating system for conversation, memory, execution and specialist
-                intelligence.
+                One private operating system for conversation, memory, execution, specialist intelligence and bounded self-improvement.
               </p>
             </div>
           </div>
@@ -143,6 +144,8 @@ function Settings() {
             </div>
           ) : null}
         </Link>
+
+        <ImprovementHealthCard />
 
         <RecentFilesCard />
 
@@ -195,8 +198,7 @@ function Settings() {
             <div>
               <p className="text-sm font-semibold">Next milestone: Emery Voice</p>
               <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                Voice stays intentionally untouched until Adam designs the live experience with
-                Emery. The same memory, agents and action system will sit underneath it.
+                Voice stays intentionally untouched until Adam designs the live experience with Emery. The same memory, agents, action and improvement systems will sit underneath it.
               </p>
             </div>
           </div>
