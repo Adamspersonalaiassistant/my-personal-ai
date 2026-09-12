@@ -805,13 +805,50 @@ function isMemoryCandidate(value: unknown): value is MemoryCandidate {
   );
 }
 
+/** True when the text is clearly a statement about the user's own name. */
+function isAboutOwnName(text: string): boolean {
+  return /\bmy\s+(?:full\s+|first\s+|legal\s+)?name\s+(?:is|=|:)/i.test(text) ||
+    /\b(?:i am called|i'm called|you can call me|call me)\b/i.test(text)
+    ? true
+    : false;
+}
+
+/** Words that clearly end a name and start another clause. */
+const NAME_STOP_WORDS = new Set([
+  "and",
+  "but",
+  "so",
+  "then",
+  "also",
+  "please",
+  "remember",
+  "moving",
+  "forward",
+  "from",
+  "for",
+  "in",
+  "to",
+  "that",
+  "thanks",
+  "thank",
+  "ok",
+  "okay",
+]);
+
 /** Detects an explicit, unambiguous statement of the user's own name. */
 function extractName(message: string): string | null {
   const m = message.match(
-    /^\s*(?:hi[, ]+|hello[, ]+)?(?:my name is|i am called|i'm called|you can call me|call me)\s+([A-Za-zÀ-ÿ'’-]+(?:\s+[A-Za-zÀ-ÿ'’-]+){0,2})\s*[.!]?\s*$/i,
+    /\b(?:my\s+(?:full\s+|first\s+|legal\s+)?name\s+(?:is|=|:)|i am called|i'm called|you can call me|call me)\s+([A-Za-zÀ-ÿ'’-]+(?:\s+[A-Za-zÀ-ÿ'’-]+){0,3})/i,
   );
   if (!m?.[1]) return null;
-  const name = m[1].trim();
+
+  const words: string[] = [];
+  for (const word of m[1].trim().split(/\s+/)) {
+    if (NAME_STOP_WORDS.has(word.toLowerCase())) break;
+    words.push(word);
+    if (words.length === 3) break;
+  }
+  const name = words.join(" ").replace(/[.,!?;:]+$/, "");
   if (name.length < 2 || name.length > 60) return null;
   return name
     .split(/\s+/)
