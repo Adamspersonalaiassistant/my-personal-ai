@@ -70,6 +70,9 @@ jobs:
       - name: Format changed feature files
         run: npx prettier --write src/lib/agent.functions.ts src/lib/emery.functions.ts src/components/AppShell.tsx src/routes/_authenticated/agents.tsx 'src/routes/_authenticated/agents_.$agentId.tsx' src/routes/_authenticated/settings.tsx
 
+      - name: Autofix focused lint
+        run: npx eslint --fix src/lib/agent.functions.ts src/lib/emery.functions.ts src/components/AppShell.tsx src/routes/_authenticated/agents.tsx 'src/routes/_authenticated/agents_.$agentId.tsx' src/routes/_authenticated/settings.tsx
+
       - name: Production build
         run: npm run build
 
