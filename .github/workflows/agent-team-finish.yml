@@ -1,4 +1,4 @@
-name: Finish Emery Agent Team
+name: Upgrade Emery Intelligence
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  finish:
+  phase5:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -24,54 +24,90 @@ jobs:
           node-version: 22
       - run: npm install --no-audit --no-fund
 
-      - name: Patch Emery agent orchestration and serialization
+      - name: Patch bounded intelligence into Emery
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
-          agent_path = Path('src/lib/agent.functions.ts')
-          agent = agent_path.read_text()
+          path = Path('src/lib/emery.functions.ts')
+          text = path.read_text()
 
-          marker = '  const baseSlug = slugify(name) || "specialist-agent";'
-          if 'existingExactAgent' not in agent:
-              replacement = '''  const { data: existingExactAgent } = await db\n    .from("agents")\n    .select("*")\n    .eq("user_id", userId)\n    .eq("name", name)\n    .maybeSingle();\n  if (existingExactAgent) return existingExactAgent as AgentRow;\n\n  const baseSlug = slugify(name) || "specialist-agent";'''
-              agent = agent.replace(marker, replacement)
+          old_import = 'import { isExplicitAgentCreationCommand } from "@/lib/agent-policy";'
+          new_import = '''import { isExplicitAgentCreationCommand, routeMainSpecialist } from "@/lib/agent-policy";\nimport {\n  buildExecutiveFocus,\n  readConversationState,\n  refreshRollingConversationState,\n  selectRelevantMemories,\n} from "@/lib/emery-intelligence";'''
+          if old_import in text:
+              text = text.replace(old_import, new_import)
 
-          old_list = '''    const rows = (data ?? []) as AgentRow[];\n    const visible = rows.filter((agent) => !agent.is_internal);\n    return {\n      agents: visible.map((agent) => ({\n        ...agent,\n        children: rows\n          .filter((child) => child.parent_agent_id === agent.id)\n          .map((child) => ({ id: child.id, name: child.name, slug: child.slug, description: child.description })),\n      })),\n    };'''
-          new_list = '''    const rows = (data ?? []) as AgentRow[];\n    const visible = rows.filter((agent) => !agent.is_internal);\n    return {\n      agents: visible.map((agent) => ({\n        id: agent.id,\n        name: agent.name,\n        slug: agent.slug,\n        description: agent.description,\n        mission: agent.mission,\n        parent_agent_id: agent.parent_agent_id,\n        is_internal: agent.is_internal,\n        is_active: agent.is_active,\n        sort_order: agent.sort_order,\n        children: rows\n          .filter((child) => child.parent_agent_id === agent.id)\n          .map((child) => ({ id: child.id, name: child.name, slug: child.slug, description: child.description })),\n      })),\n    };'''
-          if old_list in agent:
-              agent = agent.replace(old_list, new_list)
+          old_existing = '''      .from("memories")\n      .select("id, title, content, memory_type")\n      .eq("user_id", userId)\n      .order("updated_at", { ascending: false })\n      .limit(100);'''
+          new_existing = '''      .from("memories")\n      .select("id, title, content, memory_type, importance, confidence, created_at, updated_at")\n      .eq("user_id", userId)\n      .order("updated_at", { ascending: false })\n      .limit(100);'''
+          text = text.replace(old_existing, new_existing)
 
-          if 'export async function consultSpecialistFromEmery' not in agent:
-              agent += '''\n\nexport async function consultSpecialistFromEmery(\n  apiKey: string,\n  db: any,\n  userId: string,\n  slug: "hpo-agent" | "research-agent" | "strategy-agent",\n  assignment: string,\n) {\n  await ensureDefaultAgentTeam(db, userId);\n  const { data: rawAgent, error } = await db\n    .from("agents")\n    .select("*")\n    .eq("user_id", userId)\n    .eq("slug", slug)\n    .eq("is_active", true)\n    .single();\n  if (error || !rawAgent) throw error ?? new Error("Specialist agent not found");\n  const agent = rawAgent as AgentRow;\n  const thread = await getOrCreateThread(db, userId, agent);\n  await saveAgentMessage(\n    db,\n    userId,\n    thread.id,\n    "emery",\n    "Emery",\n    `I’m bringing you in from my main conversation with Adam. Assignment: ${assignment}`,\n    { delegated_from_main_chat: true },\n  );\n  const history = await recentThread(db, userId, thread.id);\n  const adamContext = await loadAdamContext(db, userId);\n  let specialist: { response: string; metadata: Record<string, unknown> };\n  if (slug === "hpo-agent") specialist = await runHpoTeam(apiKey, agent, assignment, adamContext, history);\n  else if (slug === "research-agent") specialist = await runResearchAgent(apiKey, agent, assignment, adamContext, history);\n  else specialist = await runStrategyAgent(apiKey, agent, assignment, adamContext, history);\n  await saveAgentMessage(\n    db,\n    userId,\n    thread.id,\n    "agent",\n    agent.name,\n    specialist.response,\n    { ...specialist.metadata, delegated_from_main_chat: true },\n  );\n  await db\n    .from("agent_threads")\n    .update({ updated_at: new Date().toISOString() })\n    .eq("id", thread.id)\n    .eq("user_id", userId);\n  return { agentName: agent.name, response: specialist.response };\n}\n'''
-          agent_path.write_text(agent)
+          # Richer bounded action context + focus signal.
+          start = text.find('function buildActionContextBlock(context: ActionContext) {')
+          end = text.find('\nasync function loadRecentHistory(', start)
+          if start != -1 and end != -1:
+              replacement = '''function buildActionContextBlock(context: ActionContext) {\n  const maxCharacters = 7000;\n  const lines: string[] = ["OPEN TASKS:"];\n  for (const task of context.tasks) {\n    lines.push(\n      `- TASK ${task.id}: ${task.title} | priority ${task.priority} | due ${task.due_at ?? "none"} | project ${task.project_id ?? "none"} | status ${task.status}${task.details ? ` | details ${task.details.slice(0, 240)}` : ""}`,\n    );\n  }\n  if (!context.tasks.length) lines.push("- none");\n  lines.push("ACTIVE PROJECTS:");\n  for (const project of context.projects) {\n    lines.push(\n      `- PROJECT ${project.id}: ${project.name} | priority ${project.priority} | status ${project.status} | goal ${project.goal ?? "none"} | next ${project.next_action ?? "none"}${project.description ? ` | context ${project.description.slice(0, 280)}` : ""}`,\n    );\n  }\n  if (!context.projects.length) lines.push("- none");\n  lines.push("UPCOMING MEETINGS:");\n  for (const meeting of context.meetings) {\n    lines.push(\n      `- MEETING ${meeting.id}: ${meeting.title ?? "Untitled"} | at ${meeting.meeting_at ?? "unknown"} | participants ${JSON.stringify(meeting.participants ?? [])}`,\n    );\n  }\n  if (!context.meetings.length) lines.push("- none");\n  let output = lines.join("\\n");\n  if (output.length > maxCharacters) output = `${output.slice(0, maxCharacters)}\\n- context truncated to stay bounded`;\n  return output;\n}\n'''
+              text = text[:start] + replacement + text[end:]
 
-          emery_path = Path('src/lib/emery.functions.ts')
-          emery = emery_path.read_text()
+          # Add rolling state to turn analysis so short follow-ups survive outside raw context.
+          sig_old = '''  actionContext: ActionContext,\n  recentHistory: Array<{ role: "user" | "assistant"; text: string }>,\n  existingMemories: ExistingMemory[],\n): Promise<TurnAnalysis> {'''
+          sig_new = '''  actionContext: ActionContext,\n  recentHistory: Array<{ role: "user" | "assistant"; text: string }>,\n  rollingSummary: string,\n  existingMemories: ExistingMemory[],\n): Promise<TurnAnalysis> {'''
+          text = text.replace(sig_old, sig_new)
+          text = text.replace(
+              '            recent_history: recentHistory.slice(-10),\n            existing_memories: existingMemories.slice(0, 60),',
+              '            recent_history: recentHistory.slice(-10),\n            rolling_conversation_state: rollingSummary,\n            existing_memories: existingMemories.slice(0, 24),',
+          )
+          control_phrase = 'A short approval like yes/9am/Friday/high priority should apply to PENDING ACTION.'
+          if control_phrase in text and 'ROLLING CONVERSATION STATE' not in text:
+              text = text.replace(
+                  control_phrase,
+                  control_phrase + ' Use the rolling conversation state and recent history to resolve short follow-ups like “do that”, “the first one”, or “what about the other one” when there is one clear referent. If two or more targets remain plausible, ask one concise clarification instead of guessing.',
+              )
 
-          import_line = 'import { ASSISTANT_IDENTITY } from "@/lib/assistant-identity";'
-          agent_import = 'import { createAgentFromInstruction, consultSpecialistFromEmery } from "@/lib/agent.functions";'
-          if agent_import not in emery:
-              emery = emery.replace(import_line, import_line + '\n' + agent_import)
+          # Refresh rolling state at a low-frequency cadence and select analysis memories deterministically.
+          recent_marker = '''    const recentHistory = await loadRecentHistory(db, userId, conversation.id);\n    const pendingAction = readPendingAction(conversation.metadata);\n    const actionContextBefore = await loadActionContext(db, userId);'''
+          recent_replacement = '''    const recentHistory = await loadRecentHistory(db, userId, conversation.id);\n    let conversationState = readConversationState(conversation.metadata);\n    try {\n      conversationState = await refreshRollingConversationState({\n        apiKey,\n        db,\n        userId,\n        conversation,\n        newestMessage: data.message,\n        recentHistory,\n      });\n    } catch (error) {\n      console.error("Rolling conversation state refresh failed", error);\n    }\n    const relevantMemoriesForAnalysis = selectRelevantMemories(\n      existingMemories,\n      data.message,\n      recentHistory,\n      { maxItems: 20, maxCharacters: 7000 },\n    );\n    const pendingAction = readPendingAction(conversation.metadata);\n    const actionContextBefore = await loadActionContext(db, userId);'''
+          text = text.replace(recent_marker, recent_replacement)
 
-          db_marker = '    const db = supabase as any;\n\n    let conversation: { id: string; metadata: unknown };'
-          if 'let agentTeamInstruction = "";' not in emery:
-              block = '''    const db = supabase as any;\n\n    let agentTeamInstruction = "";\n    const explicitAgentCreation =\n      /\\b(?:create|make|build)\\s+(?:me\\s+)?(?:(?:a|an)\\s+)?(?:new\\s+)?(?:specialist\\s+)?agent\\b/i.test(\n        data.message,\n      );\n    if (explicitAgentCreation) {\n      try {\n        const createdAgent = await createAgentFromInstruction(apiKey, db, userId, data.message);\n        agentTeamInstruction += `Agent creation succeeded. ${createdAgent.name} is now part of Emery's agent family. Its mission is: ${createdAgent.mission}`;\n      } catch (error) {\n        console.error("Agent creation from main chat failed", error);\n        agentTeamInstruction +=\n          "Adam explicitly asked to create an agent, but the database write failed. Say so briefly and do not claim success.";\n      }\n    }\n\n    const consultMatch = data.message.match(\n      /\\b(?:ask|consult|check\\s+with|bring\\s+in|have)\\s+(?:the\\s+)?(hpo|research|strategy)(?:\\s+agent)?\\b/i,\n    );\n    if (consultMatch?.[1]) {\n      const slugMap = {\n        hpo: "hpo-agent",\n        research: "research-agent",\n        strategy: "strategy-agent",\n      } as const;\n      const key = consultMatch[1].toLowerCase() as keyof typeof slugMap;\n      try {\n        const consultation = await consultSpecialistFromEmery(\n          apiKey,\n          db,\n          userId,\n          slugMap[key],\n          data.message,\n        );\n        agentTeamInstruction += `${agentTeamInstruction ? "\\n" : ""}Emery consulted ${consultation.agentName} from the main conversation. Use this specialist report as an input, challenge it if needed, and give Adam one coherent Emery answer:\n${consultation.response}`;\n      } catch (error) {\n        console.error("Agent consultation from main chat failed", error);\n        agentTeamInstruction += `${agentTeamInstruction ? "\\n" : ""}A requested specialist consultation failed. Tell Adam briefly if relevant; do not pretend the agent responded.`;\n      }\n    }\n\n    let conversation: { id: string; metadata: unknown };'''
-              emery = emery.replace(db_marker, block)
+          call_old = '''        actionContextBefore,\n        recentHistory.slice(-10),\n        existingMemories,\n      );'''
+          call_new = '''        actionContextBefore,\n        recentHistory.slice(-10),\n        conversationState.summary,\n        relevantMemoriesForAnalysis as ExistingMemory[],\n      );'''
+          text = text.replace(call_old, call_new)
 
-          action_marker = '`\\n\\nACTION CONTROL FOR THIS TURN:\\n${actionInstruction}\\nFollow this control instruction exactly. Do not claim any database action unless it says the action succeeded.` +'
-          if 'AGENT TEAM CONTROL FOR THIS TURN' not in emery:
-              action_replacement = '`\\n\\nACTION CONTROL FOR THIS TURN:\\n${actionInstruction}\\nFollow this control instruction exactly. Do not claim any database action unless it says the action succeeded.` +\n                `\\n\\nAGENT TEAM CONTROL FOR THIS TURN:\\n${agentTeamInstruction || "No agent was created or consulted on this turn."}\\nTreat specialist reports as advisory input. Emery remains the final synthesizer for Adam.` +'
-              emery = emery.replace(action_marker, action_replacement)
+          # Memory retrieval for the actual answer: query enough candidates, inject only relevant/core subset.
+          text = text.replace('.select("title, content, memory_type, importance, created_at, expires_at")', '.select("id, title, content, memory_type, importance, confidence, created_at, updated_at, expires_at")')
+          text = text.replace('.limit(40),\n      loadActionContext(db, userId),', '.limit(100),\n      loadActionContext(db, userId),')
+          memory_marker = '''    const memoryBlock = memories?.length ? buildMemoryBlock(memories) : "";\n    const actionBlock = buildActionContextBlock(actionContextAfter);'''
+          memory_replacement = '''    const promptMemories = memories?.length\n      ? selectRelevantMemories(memories, data.message, recentHistory, {\n          maxItems: 16,\n          maxCharacters: 6500,\n        })\n      : [];\n    const memoryBlock = promptMemories.length ? buildMemoryBlock(promptMemories) : "";\n    const actionBlock = buildActionContextBlock(actionContextAfter);\n    const focusBlock = buildExecutiveFocus(actionContextAfter);'''
+          text = text.replace(memory_marker, memory_replacement)
 
-          emery_path.write_text(emery)
+          # Conservative automatic specialist routing; explicit consultation still wins and calls max one specialist.
+          consult_end = '''    if (consultMatch?.[1]) {\n      const slugMap = {\n        hpo: "hpo-agent",\n        research: "research-agent",\n        strategy: "strategy-agent",\n      } as const;\n      const key = consultMatch[1].toLowerCase() as keyof typeof slugMap;\n      try {\n        const consultation = await consultSpecialistFromEmery(\n          apiKey,\n          db,\n          userId,\n          slugMap[key],\n          data.message,\n        );\n        agentTeamInstruction += `${agentTeamInstruction ? "\\n" : ""}Emery consulted ${consultation.agentName} from the main conversation. Use this specialist report as an input, challenge it if needed, and give Adam one coherent Emery answer:\n${consultation.response}`;\n      } catch (error) {\n        console.error("Agent consultation from main chat failed", error);\n        agentTeamInstruction += `${agentTeamInstruction ? "\\n" : ""}A requested specialist consultation failed. Tell Adam briefly if relevant; do not pretend the agent responded.`;\n      }\n    }'''
+          if consult_end in text and 'routeMainSpecialist(data.message)' not in text:
+              routed = consult_end + '''\n\n    if (!consultMatch?.[1] && !explicitAgentCreation) {\n      const routedSpecialist = routeMainSpecialist(data.message);\n      if (routedSpecialist) {\n        try {\n          const consultation = await consultSpecialistFromEmery(\n            apiKey,\n            db,\n            userId,\n            routedSpecialist,\n            data.message,\n          );\n          agentTeamInstruction += `${agentTeamInstruction ? "\\n" : ""}Emery conservatively routed this turn to ${consultation.agentName} because the request clearly matched that specialty. Use the report only if it improves the answer; Emery remains responsible for the final recommendation:\n${consultation.response}`;\n        } catch (error) {\n          console.error("Routed specialist consultation failed", error);\n        }\n      }\n    }'''
+              text = text.replace(consult_end, routed)
+
+          # Inject rolling state + quiet executive focus into the answer, without forcing dashboard prose.
+          action_context_marker = '{ role: "system" as const, content: `CURRENT ACTION CONTEXT:\\n${actionBlock}` },'
+          action_context_replacement = '''...(conversationState.summary\n              ? [\n                  {\n                    role: "system" as const,\n                    content: `ROLLING CONVERSATION STATE (continuity only; prefer newer explicit user corrections):\\n${conversationState.summary}`,\n                  },\n                ]\n              : []),\n            {\n              role: "system" as const,\n              content: `CURRENT ACTION CONTEXT:\\n${actionBlock}\\n\\nQUIET EXECUTIVE FOCUS SIGNAL:\\n${focusBlock}\\nUse this focus signal only when relevant. If Adam is overloaded or asks what to do, reduce choices and lead with the highest-leverage next action. Do not turn casual chat into a dashboard. Call out overcomplication or tool-chasing only when the evidence supports it.`,\n            },'''
+          text = text.replace(action_context_marker, action_context_replacement)
+
+          # Keep raw history bounded tighter now that rolling state exists.
+          text = text.replace('slice(-30);', 'slice(-24);')
+
+          # Add a pagination-capable server retrieval without changing current UI behavior yet.
+          pagination_marker = '\nexport const listTasks = createServerFn({ method: "GET" })'
+          if pagination_marker in text and 'export const getMainConversationPage' not in text:
+              page_fn = '''\nexport const getMainConversationPage = createServerFn({ method: "GET" })\n  .middleware([requireSupabaseAuth])\n  .inputValidator((input: { before?: string | null; limit?: number } = {}) => ({\n    before: input?.before ? String(input.before) : null,\n    limit: Math.min(100, Math.max(20, Number(input?.limit ?? 80))),\n  }))\n  .handler(async ({ data, context }) => {\n    const db = context.supabase as any;\n    const conversation = await getOrCreateMainConversation(db, context.userId);\n    let query = db\n      .from("conversation_messages")\n      .select("id, role, content, created_at")\n      .eq("user_id", context.userId)\n      .eq("conversation_id", conversation.id)\n      .order("created_at", { ascending: false })\n      .limit(data.limit + 1);\n    if (data.before) query = query.lt("created_at", data.before);\n    const { data: rows, error } = await query;\n    if (error) throw error;\n    const pageRows = (rows ?? []).slice(0, data.limit).reverse();\n    const messageIds = pageRows.map((row: any) => row.id);\n    const { data: attachmentRows } = messageIds.length\n      ? await db\n          .from("message_attachments")\n          .select("id, message_id, storage_path, file_name, mime_type, size_bytes")\n          .eq("user_id", context.userId)\n          .eq("conversation_id", conversation.id)\n          .in("message_id", messageIds)\n          .order("created_at", { ascending: true })\n      : { data: [] };\n    const byMessage = new Map<string, ChatAttachment[]>();\n    for (const row of attachmentRows ?? []) {\n      const signed = await signAttachments(db, [row]);\n      const list = byMessage.get(row.message_id) ?? [];\n      list.push(...signed);\n      byMessage.set(row.message_id, list);\n    }\n    const messages: StoredMessage[] = pageRows\n      .filter((row: any) => row.role === "user" || row.role === "assistant")\n      .map((row: any) => ({\n        id: row.id,\n        role: row.role,\n        text: row.content,\n        createdAt: row.created_at,\n        attachments: byMessage.get(row.id) ?? [],\n      }));\n    return {\n      conversationId: conversation.id,\n      messages,\n      hasMore: (rows ?? []).length > data.limit,\n      nextBefore: messages.length ? messages[0]?.createdAt ?? null : null,\n    };\n  });\n'''
+              text = text.replace(pagination_marker, page_fn + pagination_marker)
+
+          path.write_text(text)
           PY
 
-      - name: Format changed feature files
-        run: npx prettier --write src/lib/agent.functions.ts src/lib/emery.functions.ts src/components/AppShell.tsx src/routes/_authenticated/agents.tsx 'src/routes/_authenticated/agents_.$agentId.tsx' src/routes/_authenticated/settings.tsx
+      - name: Format changed intelligence files
+        run: npx prettier --write src/lib/emery.functions.ts src/lib/emery-intelligence.ts src/lib/agent-policy.ts docs/OVERNIGHT_EMERY_SPRINT_STATUS.md
 
       - name: Autofix focused lint
-        run: npx eslint --fix src/lib/agent.functions.ts src/lib/emery.functions.ts src/components/AppShell.tsx src/routes/_authenticated/agents.tsx 'src/routes/_authenticated/agents_.$agentId.tsx' src/routes/_authenticated/settings.tsx
+        run: npx eslint --fix src/lib/emery.functions.ts src/lib/emery-intelligence.ts src/lib/agent-policy.ts
 
       - name: Production build
         run: npm run build
@@ -80,15 +116,30 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Focused lint
-        run: npx eslint src/lib/agent.functions.ts src/lib/emery.functions.ts src/components/AppShell.tsx src/routes/_authenticated/agents.tsx 'src/routes/_authenticated/agents_.$agentId.tsx' src/routes/_authenticated/settings.tsx
+        run: npx eslint src/lib/emery.functions.ts src/lib/emery-intelligence.ts src/lib/agent-policy.ts
 
-      - name: Commit validated Agent Team foundation
+      - name: Mark Phase 5 validated
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('docs/OVERNIGHT_EMERY_SPRINT_STATUS.md')
+          text = p.read_text()
+          text = text.replace('## Phase 5 — Upgrade Emery Intelligence\nStatus: IN PROGRESS', '## Phase 5 — Upgrade Emery Intelligence\nStatus: COMPLETE — build, TypeScript and focused lint validated')
+          marker = 'Targets for this phase:\n'
+          note = '''Implemented and validated:\n- Rolling bounded conversation-state summary in conversation metadata, refreshed conservatively rather than on every turn.\n- Deterministic relevance-ranked memory selection with core-memory retention and strict prompt budgets.\n- Richer bounded task/project/meeting context plus a quiet executive focus signal.\n- Rolling state supplied to the action parser for better short-follow-up continuity.\n- Conservative automatic specialist routing with max one user-facing specialist consultation per main-chat turn.\n- Raw recent-history prompt window reduced because rolling state now carries longer continuity.\n- Pagination-capable main-chat server retrieval added for Phase 7 UI adoption; existing history UX remains unchanged for safety.\n- No voice behavior/design changes.\n\nRemaining for later phases:\n- Main chat UI still uses the legacy full-history loader; Phase 7 should switch it to the pagination endpoint and add Load older/infinite scroll without losing attachment access.\n- Retrieval is deterministic lexical relevance, intentionally avoiding an extra model/embedding call on every turn.\n\n'''
+          if note not in text:
+              text = text.replace(marker, note + marker)
+          p.write_text(text)
+          PY
+          npx prettier --write docs/OVERNIGHT_EMERY_SPRINT_STATUS.md
+
+      - name: Commit validated Phase 5
         run: |
           if ! git diff --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add src/lib/agent.functions.ts src/lib/emery.functions.ts src/components/AppShell.tsx src/routes/_authenticated/agents.tsx 'src/routes/_authenticated/agents_.$agentId.tsx' src/routes/_authenticated/settings.tsx src/routeTree.gen.ts
-            git commit -m "Stabilize Emery Agent Team foundation [skip ci]"
+            git add src/lib/emery.functions.ts src/lib/emery-intelligence.ts src/lib/agent-policy.ts docs/OVERNIGHT_EMERY_SPRINT_STATUS.md src/routeTree.gen.ts
+            git commit -m "Upgrade Emery lifelong intelligence [skip ci]"
             git pull --rebase origin main
             git push origin HEAD:main
           fi
