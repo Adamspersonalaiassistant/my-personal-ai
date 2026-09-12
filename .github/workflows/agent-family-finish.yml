@@ -29,28 +29,10 @@ jobs:
       - name: Production build
         run: npm run build
       - name: TypeScript
-        id: tsc
-        continue-on-error: true
-        run: |
-          set -o pipefail
-          npx tsc --noEmit 2>&1 | tee tsc.txt
+        run: npx tsc --noEmit
       - name: Focused lint
-        id: lint
-        continue-on-error: true
-        run: |
-          set -o pipefail
-          npx eslint src/lib/agent-policy.ts src/lib/agent.functions.ts src/lib/emery.functions.ts src/routes/_authenticated/agents.tsx 'src/routes/_authenticated/agents_.$agentId.tsx' src/components/AppShell.tsx 2>&1 | tee lint.txt
-      - name: Upload validation output
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: agent-family-validation
-          path: |
-            tsc.txt
-            lint.txt
-          retention-days: 1
+        run: npx eslint src/lib/agent-policy.ts src/lib/agent.functions.ts src/lib/emery.functions.ts src/routes/_authenticated/agents.tsx 'src/routes/_authenticated/agents_.$agentId.tsx' src/components/AppShell.tsx
       - name: Commit validated Agent Family
-        if: steps.tsc.outcome == 'success' && steps.lint.outcome == 'success'
         run: |
           if ! git diff --quiet; then
             git config user.name "github-actions[bot]"
@@ -60,6 +42,3 @@ jobs:
             git pull --rebase origin main
             git push origin HEAD:main
           fi
-      - name: Fail if validation failed
-        if: steps.tsc.outcome != 'success' || steps.lint.outcome != 'success'
-        run: exit 1
