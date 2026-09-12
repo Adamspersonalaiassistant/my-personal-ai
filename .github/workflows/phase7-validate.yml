@@ -56,3 +56,4 @@ jobs:
             echo "Phase 7 validation failed"
             exit 1
           fi
+      # Final gate runs against the latest formatted Phase 7 implementation on main.
