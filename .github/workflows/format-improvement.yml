@@ -1,0 +1,42 @@
+name: Format Emery Improvement
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/format-improvement.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - name: Format improvement files
+        run: >-
+          npx prettier --write
+          src/lib/improvement.functions.ts
+          src/components/ImprovementHealthCard.tsx
+          src/routes/_authenticated/settings.tsx
+          scripts/validate-emery-improvement.mjs
+      - name: Commit formatting if needed
+        run: |
+          if git diff --quiet; then
+            echo "No formatting changes needed"
+            exit 0
+          fi
+          git config user.name "Adamspersonalaiassistant"
+          git config user.email "adam.emailassistant@gmail.com"
+          git add src/lib/improvement.functions.ts src/components/ImprovementHealthCard.tsx src/routes/_authenticated/settings.tsx scripts/validate-emery-improvement.mjs
+          git commit -m "Format Emery self-improvement core [skip ci]"
+          git push origin HEAD:main
