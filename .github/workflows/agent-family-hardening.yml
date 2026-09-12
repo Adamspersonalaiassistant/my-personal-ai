@@ -29,6 +29,16 @@ jobs:
       - name: Apply hardening patch
         run: python scripts/harden_agent_family.py
 
+      - name: Repair generated regex escapes
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          p = Path('src/lib/agent-policy.ts')
+          text = p.read_text()
+          text = text.replace('\x08', r'\b')
+          p.write_text(text)
+          PY
+
       - name: Format changed files
         run: npx prettier --write src/lib/agent-policy.ts src/lib/agent.functions.ts src/routes/_authenticated/agents.tsx 'src/routes/_authenticated/agents_.$agentId.tsx'
 
