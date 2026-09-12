@@ -1,4 +1,4 @@
-# Core validation gate for Emery OS, including bounded self-improvement.
+# Final validation gate for Emery OS, including bounded self-improvement.
 name: Validate Emery OS
 
 on:
