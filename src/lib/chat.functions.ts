@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { ASSISTANT_IDENTITY } from "@/lib/assistant-identity";
 
 type ChatInput = { message: string; conversationId?: string | null };
 type StoredMessage = { role: "user" | "assistant"; text: string };
@@ -264,7 +265,24 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     // --- Explicit and automatic memory write -----------------------------
     const fact = extractExplicitMemory(data.message);
     let savedMemory: string | null = null;
-    if (fact) {
+    if (fact && (statedName || extractName(fact)) && isAboutOwnName(fact)) {
+      // "Please save in memories my name is Adam Ashraf" — this belongs on the
+      // profile, not as an awkward literal long-term memory row.
+      const name = statedName ?? extractName(fact);
+      if (name) {
+        const { error: nameError } = await supabase
+          .from("profiles")
+          .upsert({ user_id: userId, display_name: name }, { onConflict: "user_id" });
+        if (nameError) {
+          console.error("Profile UPSERT failed for display_name", nameError.message);
+          memoryResult.memoryError ??= "Your profile couldn't be saved right now.";
+        } else {
+          savedMemory = `Adam's name is ${name}`;
+          memoryResult.memorySaved = true;
+          memoryResult.memoryUpdated = true;
+        }
+      }
+    } else if (fact) {
       const duplicate = existingMemories.some((m) => normalize(m.content) === normalize(fact));
       if (!existingError && !duplicate) {
         const { error: insertError } = await supabase.from("memories").insert({
@@ -440,12 +458,9 @@ export const sendChatMessage = createServerFn({ method: "POST" })
             {
               role: "system",
               content:
-                "You are a helpful personal AI assistant. Be concise, warm and practical. " +
-                "You are given CORE PROFILE (permanent identity), LONG-TERM MEMORY (persistent facts and preferences), " +
-                "and CURRENT CONVERSATION. Treat CORE PROFILE and LONG-TERM MEMORY as known facts about the user, " +
-                "but always prefer newer explicit corrections from the current conversation." +
+                ASSISTANT_IDENTITY +
                 (savedMemory
-                  ? ` The user just asked you to remember something and it has been saved permanently: "${savedMemory}". Briefly confirm it.`
+                  ? `\n\nAdam just asked you to remember something and it has been saved permanently: "${savedMemory}". Briefly confirm it.`
                   : ""),
             },
             ...(profileBlock
@@ -790,13 +805,50 @@ function isMemoryCandidate(value: unknown): value is MemoryCandidate {
   );
 }
 
+/** True when the text is clearly a statement about the user's own name. */
+function isAboutOwnName(text: string): boolean {
+  return (
+    /\bmy\s+(?:full\s+|first\s+|legal\s+)?name\s+(?:is|=|:)/i.test(text) ||
+    /\b(?:i am called|i'm called|you can call me|call me)\b/i.test(text)
+  );
+}
+
+/** Words that clearly end a name and start another clause. */
+const NAME_STOP_WORDS = new Set([
+  "and",
+  "but",
+  "so",
+  "then",
+  "also",
+  "please",
+  "remember",
+  "moving",
+  "forward",
+  "from",
+  "for",
+  "in",
+  "to",
+  "that",
+  "thanks",
+  "thank",
+  "ok",
+  "okay",
+]);
+
 /** Detects an explicit, unambiguous statement of the user's own name. */
 function extractName(message: string): string | null {
   const m = message.match(
-    /^\s*(?:hi[, ]+|hello[, ]+)?(?:my name is|i am called|i'm called|you can call me|call me)\s+([A-Za-zÀ-ÿ'’-]+(?:\s+[A-Za-zÀ-ÿ'’-]+){0,2})\s*[.!]?\s*$/i,
+    /\b(?:my\s+(?:full\s+|first\s+|legal\s+)?name\s+(?:is|=|:)|i am called|i'm called|you can call me|call me)\s+([A-Za-zÀ-ÿ'’-]+(?:\s+[A-Za-zÀ-ÿ'’-]+){0,3})/i,
   );
   if (!m?.[1]) return null;
-  const name = m[1].trim();
+
+  const words: string[] = [];
+  for (const word of m[1].trim().split(/\s+/)) {
+    if (NAME_STOP_WORDS.has(word.toLowerCase())) break;
+    words.push(word);
+    if (words.length === 3) break;
+  }
+  const name = words.join(" ").replace(/[.,!?;:]+$/, "");
   if (name.length < 2 || name.length > 60) return null;
   return name
     .split(/\s+/)
