@@ -251,7 +251,9 @@ function Chat() {
       });
       setSelectedFiles([]);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Couldn't send your message. Please try again.");
+      setError(
+        caught instanceof Error ? caught.message : "Couldn't send your message. Please try again.",
+      );
       try {
         await refreshMain();
       } catch {
@@ -289,14 +291,22 @@ function Chat() {
               <div className="relative">
                 <div className="absolute inset-3 rounded-full bg-primary/20 blur-3xl" />
                 <div className="emery-breathe relative flex size-28 items-center justify-center overflow-hidden rounded-[2rem] border border-primary/20 bg-primary/[0.05]">
-                  <img src={brainImage} alt="Emery neural brain" className="h-24 w-24 object-cover" />
+                  <img
+                    src={brainImage}
+                    alt="Emery neural brain"
+                    className="h-24 w-24 object-cover"
+                  />
                 </div>
               </div>
               <div className="mt-6 flex items-center gap-2 text-primary">
                 <Sparkles className="size-4" />
-                <span className="text-[11px] font-semibold uppercase tracking-[0.2em]">Emery online</span>
+                <span className="text-[11px] font-semibold uppercase tracking-[0.2em]">
+                  Emery online
+                </span>
               </div>
-              <h2 className="emery-text-gradient mt-3 text-2xl font-semibold tracking-tight">I’m here, Adam.</h2>
+              <h2 className="emery-text-gradient mt-3 text-2xl font-semibold tracking-tight">
+                I’m here, Adam.
+              </h2>
               <p className="mt-2 max-w-xs text-sm leading-6 text-muted-foreground">
                 Same conversation. Same Emery. What are we working through?
               </p>
@@ -320,13 +330,25 @@ function Chat() {
                   <div key={message.id} className="flex justify-end pl-8">
                     <div className="max-w-[88%] rounded-[1.35rem] rounded-br-md bg-[linear-gradient(145deg,oklch(0.72_0.18_154),oklch(0.56_0.15_157))] px-3.5 py-3 text-[15px] leading-6 text-[oklch(0.11_0.025_158)] shadow-[0_10px_30px_oklch(0.3_0.1_158/0.18)]">
                       {message.attachments.length ? (
-                        <div className={`grid gap-2 ${message.attachments.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+                        <div
+                          className={`grid gap-2 ${message.attachments.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}
+                        >
                           {message.attachments.map((attachment) => (
                             <AttachmentCard key={attachment.id} attachment={attachment} />
                           ))}
                         </div>
                       ) : null}
-                      {message.text ? <p className={message.attachments.length ? "mt-2.5 whitespace-pre-wrap" : "whitespace-pre-wrap"}>{message.text}</p> : null}
+                      {message.text ? (
+                        <p
+                          className={
+                            message.attachments.length
+                              ? "mt-2.5 whitespace-pre-wrap"
+                              : "whitespace-pre-wrap"
+                          }
+                        >
+                          {message.text}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                 ) : (
@@ -360,7 +382,10 @@ function Chat() {
           ) : null}
 
           {error ? (
-            <p className="mt-4 rounded-2xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-center text-sm text-destructive" role="alert">
+            <p
+              className="mt-4 rounded-2xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-center text-sm text-destructive"
+              role="alert"
+            >
               {error}
             </p>
           ) : null}
@@ -371,9 +396,16 @@ function Chat() {
           {selectedFiles.length ? (
             <div className="mx-auto mb-2 flex max-w-3xl gap-2 overflow-x-auto pb-1">
               {selectedFiles.map((file, index) => (
-                <div key={`${file.name}-${file.lastModified}-${index}`} className="emery-glass flex min-w-[150px] max-w-[220px] items-center gap-2 rounded-2xl px-2.5 py-2">
+                <div
+                  key={`${file.name}-${file.lastModified}-${index}`}
+                  className="emery-glass flex min-w-[150px] max-w-[220px] items-center gap-2 rounded-2xl px-2.5 py-2"
+                >
                   {isImage(file.type) ? (
-                    <img src={URL.createObjectURL(file)} alt="" className="size-9 rounded-xl object-cover" />
+                    <img
+                      src={URL.createObjectURL(file)}
+                      alt=""
+                      className="size-9 rounded-xl object-cover"
+                    />
                   ) : (
                     <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                       <FileText className="size-4" />
@@ -386,7 +418,9 @@ function Chat() {
                   <button
                     type="button"
                     aria-label={`Remove ${file.name}`}
-                    onClick={() => setSelectedFiles((prev) => prev.filter((_, itemIndex) => itemIndex !== index))}
+                    onClick={() =>
+                      setSelectedFiles((prev) => prev.filter((_, itemIndex) => itemIndex !== index))
+                    }
                     className="flex size-8 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:bg-white/5 hover:text-foreground"
                   >
                     <X className="size-3.5" />
@@ -396,7 +430,10 @@ function Chat() {
             </div>
           ) : null}
 
-          <form onSubmit={send} className="emery-glass mx-auto flex max-w-3xl items-end gap-1.5 rounded-[1.6rem] p-2">
+          <form
+            onSubmit={send}
+            className="emery-glass mx-auto flex max-w-3xl items-end gap-1.5 rounded-[1.6rem] p-2"
+          >
             <input
               ref={fileInputRef}
               type="file"

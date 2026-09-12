@@ -1,6 +1,15 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Brain, CheckSquare, Database, FileUp, Mic2, Radio, ShieldCheck, Workflow } from "lucide-react";
+import {
+  Brain,
+  CheckSquare,
+  Database,
+  FileUp,
+  Mic2,
+  Radio,
+  ShieldCheck,
+  Workflow,
+} from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
@@ -40,7 +49,9 @@ function Settings() {
               <ShieldCheck className="size-5" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Private system</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+                Private system
+              </p>
               <h2 className="mt-1 text-lg font-semibold tracking-tight">Adam + Emery</h2>
               <p className="mt-0.5 truncate text-xs text-muted-foreground">{user?.email}</p>
             </div>
@@ -50,7 +61,9 @@ function Settings() {
         <section className="emery-glass overflow-hidden rounded-3xl">
           <div className="border-b border-border/50 px-4 py-3.5">
             <p className="text-sm font-semibold">Emery System</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">What is active now and what we’re building next.</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              What is active now and what we’re building next.
+            </p>
           </div>
           {status.map((row, i) => {
             const Icon = row.icon;
@@ -84,7 +97,8 @@ function Settings() {
         <section className="rounded-3xl border border-primary/15 bg-primary/[0.045] p-4">
           <p className="text-sm font-semibold">Next milestone</p>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            Emery Voice — a natural, low-friction voice layer on top of the same memory, action system, files and main conversation working now.
+            Emery Voice — a natural, low-friction voice layer on top of the same memory, action
+            system, files and main conversation working now.
           </p>
         </section>
 

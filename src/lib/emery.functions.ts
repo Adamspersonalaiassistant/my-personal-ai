@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { ASSISTANT_IDENTITY } from "@/lib/assistant-identity";
@@ -247,7 +248,11 @@ function extractName(message: string): string | null {
 function isSafeMemoryCandidate(candidate: MemoryCandidate) {
   if (candidate.action === "none") return false;
   if (!Number.isFinite(candidate.confidence) || candidate.confidence < 0.9) return false;
-  if (!Number.isInteger(candidate.importance) || candidate.importance < 3 || candidate.importance > 5)
+  if (
+    !Number.isInteger(candidate.importance) ||
+    candidate.importance < 3 ||
+    candidate.importance > 5
+  )
     return false;
   if (!candidate.content.trim() || candidate.content.length > 1000) return false;
   if (!candidate.reason.trim() || looksSensitive(candidate.content)) return false;
@@ -260,7 +265,8 @@ function isSafeMemoryCandidate(candidate: MemoryCandidate) {
 function profileUpdateForCandidate(candidate: MemoryCandidate): Partial<Profile> | null {
   const content = candidate.content.trim();
   if (!content) return null;
-  if (candidate.memory_type === "profile_name" && content.length <= 60) return { display_name: content };
+  if (candidate.memory_type === "profile_name" && content.length <= 60)
+    return { display_name: content };
   if (candidate.memory_type === "profile_assistant_name" && content.length <= 60)
     return { assistant_name: content };
   if (candidate.memory_type === "profile_timezone" && content.length <= 100)
@@ -361,8 +367,8 @@ async function setPendingAction(
   pending: PendingAction,
 ) {
   const metadata = { ...safeObject(currentMetadata) };
-  if (pending) metadata.pending_action = pending;
-  else delete metadata.pending_action;
+  if (pending) metadata["pending_action"] = pending;
+  else delete metadata["pending_action"];
   const { error } = await supabase
     .from("conversations")
     .update({ metadata, updated_at: new Date().toISOString() })
@@ -373,7 +379,7 @@ async function setPendingAction(
 }
 
 function readPendingAction(metadata: unknown): PendingAction {
-  const pending = safeObject(metadata).pending_action;
+  const pending = safeObject(metadata)["pending_action"];
   if (!pending || typeof pending !== "object" || Array.isArray(pending)) return null;
   return pending as ActionCandidate;
 }
@@ -435,7 +441,11 @@ function buildActionContextBlock(context: ActionContext) {
   ].join("\n");
 }
 
-async function loadRecentHistory(supabase: any, userId: string, conversationId: string) {
+async function loadRecentHistory(
+  supabase: any,
+  userId: string,
+  conversationId: string,
+): Promise<Array<{ id: string; role: "user" | "assistant"; text: string; createdAt: string }>> {
   const { data: rows } = await supabase
     .from("conversation_messages")
     .select("id, role, content, created_at")
@@ -703,7 +713,10 @@ async function analyzeTurn(
                   type: "object",
                   additionalProperties: false,
                   properties: {
-                    action: { type: "string", enum: ["create", "update", "profile_update", "none"] },
+                    action: {
+                      type: "string",
+                      enum: ["create", "update", "profile_update", "none"],
+                    },
                     memory_type: { type: "string" },
                     title: { type: "string" },
                     content: { type: "string" },
@@ -783,14 +796,22 @@ async function applyAction(
 
   if (action.cancel_pending) {
     metadata = await setPendingAction(supabase, userId, conversation.id, metadata, null);
-    return { instruction: "Adam cancelled the pending action. Acknowledge briefly if useful; do not create anything.", metadata };
+    return {
+      instruction:
+        "Adam cancelled the pending action. Acknowledge briefly if useful; do not create anything.",
+      metadata,
+    };
   }
 
   if (action.confidence < 0.86 || action.action === "none") {
     return { instruction: "No action write occurred.", metadata };
   }
 
-  if (action.action === "propose_task" || action.action === "propose_project" || action.action === "propose_meeting") {
+  if (
+    action.action === "propose_task" ||
+    action.action === "propose_project" ||
+    action.action === "propose_meeting"
+  ) {
     metadata = await setPendingAction(supabase, userId, conversation.id, metadata, action);
     const domain = action.action.replace("propose_", "");
     const fallback =
@@ -831,7 +852,11 @@ async function applyAction(
       .select("id, title, priority, due_at")
       .single();
     if (error || !data) {
-      return { instruction: "The task write failed. Tell Adam briefly that it could not be saved; do not claim success.", metadata };
+      return {
+        instruction:
+          "The task write failed. Tell Adam briefly that it could not be saved; do not claim success.",
+        metadata,
+      };
     }
     metadata = await setPendingAction(supabase, userId, conversation.id, metadata, null);
     return {
@@ -842,14 +867,31 @@ async function applyAction(
 
   if (action.action === "complete_task") {
     const target = actionContext.tasks.find((task) => task.id === action.target_id);
-    if (!target) return { instruction: "No uniquely verified open task matched. Ask one short clarification instead of guessing.", metadata };
+    if (!target)
+      return {
+        instruction:
+          "No uniquely verified open task matched. Ask one short clarification instead of guessing.",
+        metadata,
+      };
     const { error } = await supabase
       .from("tasks")
-      .update({ status: "completed", completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .update({
+        status: "completed",
+        completed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", target.id)
       .eq("user_id", userId);
-    if (error) return { instruction: "The task could not be marked complete. Say so briefly and do not claim success.", metadata };
-    return { instruction: `Task completion succeeded. Briefly confirm that ${target.title} is done.`, metadata };
+    if (error)
+      return {
+        instruction:
+          "The task could not be marked complete. Say so briefly and do not claim success.",
+        metadata,
+      };
+    return {
+      instruction: `Task completion succeeded. Briefly confirm that ${target.title} is done.`,
+      metadata,
+    };
   }
 
   if (action.action === "create_project") {
@@ -870,23 +912,46 @@ async function applyAction(
       })
       .select("id, name")
       .single();
-    if (error || !data) return { instruction: "The project could not be saved. Say so briefly and do not claim success.", metadata };
+    if (error || !data)
+      return {
+        instruction: "The project could not be saved. Say so briefly and do not claim success.",
+        metadata,
+      };
     metadata = await setPendingAction(supabase, userId, conversation.id, metadata, null);
-    return { instruction: `Project creation succeeded. Confirm briefly: ${data.name} is now an active project.`, metadata };
+    return {
+      instruction: `Project creation succeeded. Confirm briefly: ${data.name} is now an active project.`,
+      metadata,
+    };
   }
 
   if (action.action === "update_project") {
     const target = actionContext.projects.find((project) => project.id === action.target_id);
-    if (!target) return { instruction: "No uniquely verified project matched. Ask one short clarification instead of guessing.", metadata };
+    if (!target)
+      return {
+        instruction:
+          "No uniquely verified project matched. Ask one short clarification instead of guessing.",
+        metadata,
+      };
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
-    if (action.description.trim()) updates.description = action.description.trim();
-    if (action.goal.trim()) updates.goal = action.goal.trim();
-    if (action.next_action.trim()) updates.next_action = action.next_action.trim();
-    if (action.project_status.trim()) updates.status = action.project_status.trim();
-    if (action.priority !== null) updates.priority = action.priority;
-    const { error } = await supabase.from("projects").update(updates).eq("id", target.id).eq("user_id", userId);
-    if (error) return { instruction: "The project update failed. Say so briefly and do not claim success.", metadata };
-    return { instruction: `Project update succeeded for ${target.name}. Confirm only the change that Adam asked for.`, metadata };
+    if (action.description.trim()) updates["description"] = action.description.trim();
+    if (action.goal.trim()) updates["goal"] = action.goal.trim();
+    if (action.next_action.trim()) updates["next_action"] = action.next_action.trim();
+    if (action.project_status.trim()) updates["status"] = action.project_status.trim();
+    if (action.priority !== null) updates["priority"] = action.priority;
+    const { error } = await supabase
+      .from("projects")
+      .update(updates)
+      .eq("id", target.id)
+      .eq("user_id", userId);
+    if (error)
+      return {
+        instruction: "The project update failed. Say so briefly and do not claim success.",
+        metadata,
+      };
+    return {
+      instruction: `Project update succeeded for ${target.name}. Confirm only the change that Adam asked for.`,
+      metadata,
+    };
   }
 
   if (action.action === "create_meeting") {
@@ -910,7 +975,11 @@ async function applyAction(
       })
       .select("id, title, meeting_at")
       .single();
-    if (error || !data) return { instruction: "The meeting could not be saved. Say so briefly and do not claim success.", metadata };
+    if (error || !data)
+      return {
+        instruction: "The meeting could not be saved. Say so briefly and do not claim success.",
+        metadata,
+      };
     metadata = await setPendingAction(supabase, userId, conversation.id, metadata, null);
     return {
       instruction: `Meeting creation succeeded in Emery's internal Meetings system. Confirm briefly: ${data.title} at ${data.meeting_at}. Do not claim external calendar sync.`,
@@ -933,7 +1002,9 @@ async function applyMemoryCandidates(
     if (candidate.action === "profile_update") {
       const update = profileUpdateForCandidate(candidate);
       if (!update) continue;
-      await supabase.from("profiles").upsert({ user_id: userId, ...update }, { onConflict: "user_id" });
+      await supabase
+        .from("profiles")
+        .upsert({ user_id: userId, ...update }, { onConflict: "user_id" });
       continue;
     }
     if (candidate.action === "update") {
@@ -991,7 +1062,8 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
       ) {
         throw new Error("Invalid attachment metadata");
       }
-      if (attachment.sizeBytes < 0 || attachment.sizeBytes > 26214400) throw new Error("Attachment is too large");
+      if (attachment.sizeBytes < 0 || attachment.sizeBytes > 26214400)
+        throw new Error("Attachment is too large");
     }
     return { message, attachments };
   })
@@ -1044,13 +1116,17 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
       const { error } = await db.from("message_attachments").insert(rows);
       if (error) {
         console.error("Attachment metadata save failed", error.message);
-        return { error: "Your message was saved, but the attachment couldn't be linked. Please try again." } as const;
+        return {
+          error: "Your message was saved, but the attachment couldn't be linked. Please try again.",
+        } as const;
       }
     }
 
     const statedName = extractName(data.message);
     if (statedName) {
-      await db.from("profiles").upsert({ user_id: userId, display_name: statedName }, { onConflict: "user_id" });
+      await db
+        .from("profiles")
+        .upsert({ user_id: userId, display_name: statedName }, { onConflict: "user_id" });
     }
 
     const { data: initialProfile } = await db
@@ -1073,7 +1149,9 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
       if ((statedName || extractName(explicitFact)) && isAboutOwnName(explicitFact)) {
         const name = statedName ?? extractName(explicitFact);
         if (name) {
-          await db.from("profiles").upsert({ user_id: userId, display_name: name }, { onConflict: "user_id" });
+          await db
+            .from("profiles")
+            .upsert({ user_id: userId, display_name: name }, { onConflict: "user_id" });
           savedMemory = `Adam's name is ${name}`;
         }
       } else {
@@ -1157,7 +1235,8 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
       conversation.metadata = actionResult.metadata;
     } catch (error) {
       console.error("Action application failed", error);
-      actionInstruction = "An attempted action failed. Tell Adam briefly that it could not be saved and do not claim success.";
+      actionInstruction =
+        "An attempted action failed. Tell Adam briefly that it could not be saved and do not claim success.";
     }
 
     const [{ data: profile }, { data: memories }, actionContextAfter] = await Promise.all([
@@ -1287,7 +1366,8 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
       })
       .select("id, created_at")
       .single();
-    if (assistantMessageError) console.error("Assistant message save failed", assistantMessageError.message);
+    if (assistantMessageError)
+      console.error("Assistant message save failed", assistantMessageError.message);
 
     return {
       reply,
@@ -1317,7 +1397,9 @@ export const listTasks = createServerFn({ method: "GET" })
     const { supabase, userId } = context;
     const { data, error } = await supabase
       .from("tasks")
-      .select("id, title, details, status, priority, due_at, completed_at, project_id, metadata, created_at")
+      .select(
+        "id, title, details, status, priority, due_at, completed_at, project_id, metadata, created_at",
+      )
       .eq("user_id", userId)
       .order("completed_at", { ascending: false, nullsFirst: true })
       .order("priority", { ascending: false })
@@ -1328,17 +1410,32 @@ export const listTasks = createServerFn({ method: "GET" })
 
 export const createTask = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { title: string; details?: string; dueAt?: string | null; priority?: number }) => {
-    const title = input?.title?.trim();
-    if (!title) throw new Error("Task title is required");
-    const priority = Math.min(5, Math.max(1, Number(input.priority ?? 3)));
-    return { title, details: input.details?.trim() || null, dueAt: input.dueAt || null, priority };
-  })
+  .inputValidator(
+    (input: { title: string; details?: string; dueAt?: string | null; priority?: number }) => {
+      const title = input?.title?.trim();
+      if (!title) throw new Error("Task title is required");
+      const priority = Math.min(5, Math.max(1, Number(input.priority ?? 3)));
+      return {
+        title,
+        details: input.details?.trim() || null,
+        dueAt: input.dueAt || null,
+        priority,
+      };
+    },
+  )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { data: task, error } = await supabase
       .from("tasks")
-      .insert({ user_id: userId, title: data.title, details: data.details, due_at: data.dueAt, priority: data.priority, status: "inbox", source_type: "manual" })
+      .insert({
+        user_id: userId,
+        title: data.title,
+        details: data.details,
+        due_at: data.dueAt,
+        priority: data.priority,
+        status: "inbox",
+        source_type: "manual",
+      })
       .select("id")
       .single();
     if (error) throw error;
@@ -1347,7 +1444,10 @@ export const createTask = createServerFn({ method: "POST" })
 
 export const setTaskCompleted = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { id: string; completed: boolean }) => ({ id: String(input.id), completed: Boolean(input.completed) }))
+  .inputValidator((input: { id: string; completed: boolean }) => ({
+    id: String(input.id),
+    completed: Boolean(input.completed),
+  }))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { error } = await supabase
@@ -1379,25 +1479,43 @@ export const listProjects = createServerFn({ method: "GET" })
 
 export const saveProject = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { id?: string; name: string; description?: string; status?: string; priority?: number; goal?: string; nextAction?: string }) => {
-    const name = input?.name?.trim();
-    if (!name) throw new Error("Project name is required");
-    return {
-      id: input.id ? String(input.id) : null,
-      name,
-      description: input.description?.trim() || null,
-      status: input.status?.trim() || "active",
-      priority: Math.min(5, Math.max(1, Number(input.priority ?? 3))),
-      goal: input.goal?.trim() || null,
-      nextAction: input.nextAction?.trim() || null,
-    };
-  })
+  .inputValidator(
+    (input: {
+      id?: string;
+      name: string;
+      description?: string;
+      status?: string;
+      priority?: number;
+      goal?: string;
+      nextAction?: string;
+    }) => {
+      const name = input?.name?.trim();
+      if (!name) throw new Error("Project name is required");
+      return {
+        id: input.id ? String(input.id) : null,
+        name,
+        description: input.description?.trim() || null,
+        status: input.status?.trim() || "active",
+        priority: Math.min(5, Math.max(1, Number(input.priority ?? 3))),
+        goal: input.goal?.trim() || null,
+        nextAction: input.nextAction?.trim() || null,
+      };
+    },
+  )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     if (data.id) {
       const { error } = await supabase
         .from("projects")
-        .update({ name: data.name, description: data.description, status: data.status, priority: data.priority, goal: data.goal, next_action: data.nextAction, updated_at: new Date().toISOString() })
+        .update({
+          name: data.name,
+          description: data.description,
+          status: data.status,
+          priority: data.priority,
+          goal: data.goal,
+          next_action: data.nextAction,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", data.id)
         .eq("user_id", userId);
       if (error) throw error;
@@ -1405,7 +1523,15 @@ export const saveProject = createServerFn({ method: "POST" })
     }
     const { data: project, error } = await supabase
       .from("projects")
-      .insert({ user_id: userId, name: data.name, description: data.description, status: data.status, priority: data.priority, goal: data.goal, next_action: data.nextAction })
+      .insert({
+        user_id: userId,
+        name: data.name,
+        description: data.description,
+        status: data.status,
+        priority: data.priority,
+        goal: data.goal,
+        next_action: data.nextAction,
+      })
       .select("id")
       .single();
     if (error) throw error;
@@ -1430,14 +1556,27 @@ export const createMeeting = createServerFn({ method: "POST" })
   .inputValidator((input: { title: string; meetingAt: string; participants?: string[] }) => {
     const title = input?.title?.trim();
     if (!title) throw new Error("Meeting title is required");
-    if (!input?.meetingAt || Number.isNaN(Date.parse(input.meetingAt))) throw new Error("Meeting date and time are required");
-    return { title, meetingAt: input.meetingAt, participants: Array.isArray(input.participants) ? input.participants.map(String).filter(Boolean).slice(0, 20) : [] };
+    if (!input?.meetingAt || Number.isNaN(Date.parse(input.meetingAt)))
+      throw new Error("Meeting date and time are required");
+    return {
+      title,
+      meetingAt: input.meetingAt,
+      participants: Array.isArray(input.participants)
+        ? input.participants.map(String).filter(Boolean).slice(0, 20)
+        : [],
+    };
   })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { data: meeting, error } = await supabase
       .from("meetings")
-      .insert({ user_id: userId, title: data.title, meeting_at: data.meetingAt, participants: data.participants, metadata: { source_type: "manual" } })
+      .insert({
+        user_id: userId,
+        title: data.title,
+        meeting_at: data.meetingAt,
+        participants: data.participants,
+        metadata: { source_type: "manual" },
+      })
       .select("id")
       .single();
     if (error) throw error;
