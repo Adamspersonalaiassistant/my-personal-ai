@@ -24,6 +24,7 @@ type Agent = {
   slug: string;
   description: string;
   mission: string;
+  is_custom: boolean;
   children: ChildAgent[];
 };
 
@@ -182,6 +183,9 @@ function Agents() {
                               {agent.name}
                             </h3>
                             <span className="emery-chip">Active</span>
+                            <span className="emery-chip">
+                              {agent.is_custom ? "Custom" : "Core"}
+                            </span>
                           </div>
                           <p className="mt-1 text-xs font-medium text-primary/85">
                             {agent.description}

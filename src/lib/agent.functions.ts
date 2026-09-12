@@ -181,12 +181,23 @@ async function getOrCreateThread(db: any, userId: string, agent: AgentRow) {
       user_id: userId,
       agent_id: agent.id,
       title: `${agent.name} Group Chat`,
-      metadata: {},
+      metadata: { commander: "Emery" },
     })
     .select("*")
     .single();
-  if (error || !data) throw error ?? new Error("Could not create agent thread");
-  return data;
+  if (!error && data) return data;
+  // The schema has unique(user_id, agent_id). A concurrent creator can win between our
+  // select and insert; recover by reading the canonical thread instead of surfacing a false error.
+  if (error?.code === "23505") {
+    const { data: racedThread, error: racedError } = await db
+      .from("agent_threads")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("agent_id", agent.id)
+      .single();
+    if (!racedError && racedThread) return racedThread;
+  }
+  throw error ?? new Error("Could not create agent thread");
 }
 
 async function loadAdamContext(db: any, userId: string) {
@@ -518,7 +529,10 @@ export async function createSpecialistAgentRecord(
     .eq("user_id", userId)
     .eq("name", name)
     .maybeSingle();
-  if (existingExactAgent) return existingExactAgent as AgentRow;
+  if (existingExactAgent) {
+    await getOrCreateThread(db, userId, existingExactAgent as AgentRow);
+    return existingExactAgent as AgentRow;
+  }
 
   const baseSlug = slugify(name) || "specialist-agent";
   let slug = baseSlug;
@@ -549,8 +563,15 @@ export async function createSpecialistAgentRecord(
       is_internal: false,
       is_active: true,
       sort_order: 100,
-      capabilities: input.capabilities ?? {},
-      metadata: { created_by: "emery_or_adam", family: "Emery" },
+      // Custom specialists start with no authority. The only optional capability currently
+      // allowlisted is read-only web research; all external actions remain under Emery/Adam.
+      capabilities: { web_search: input.capabilities?.["web_search"] === true },
+      metadata: {
+        created_by: "emery_or_adam",
+        family: "Emery",
+        commander: "Emery",
+        safety_boundaries: "no_spend_no_external_writes_no_secrets_no_recursive_agents",
+      },
     })
     .select("*")
     .single();
@@ -574,7 +595,7 @@ export async function createAgentFromInstruction(
         {
           role: "system",
           content:
-            "Convert Adam's explicit instruction to create an Emery specialist agent into a concise charter. Do not create tools, spending authority, external messaging authority or recursive agent powers. Return only JSON with name, mission, description, persona. Name should end with Agent unless Adam named it otherwise. Mission is one clear paragraph. Persona should support the mission and Emery family principles.",
+            "Convert Adam's explicit instruction to create an Emery specialist agent into a concise charter. Emery remains commander and Adam remains final authority. Do not grant tools, spending authority, external messaging or calendar-write authority, destructive database authority, secret access, or recursive agent-creation powers even if the instruction asks for them. Return only JSON with name, mission, description, persona. Name should end with Agent unless Adam named it otherwise. Mission is one clear paragraph. Persona should support the mission and Emery family principles.",
         },
         { role: "user", content: instruction },
       ],
@@ -637,6 +658,7 @@ export const listAgents = createServerFn({ method: "GET" })
         is_internal: agent.is_internal,
         is_active: agent.is_active,
         sort_order: agent.sort_order,
+        is_custom: agent.metadata?.["created_by"] === "emery_or_adam",
         children: rows
           .filter((child) => child.parent_agent_id === agent.id)
           .map((child) => ({
@@ -660,8 +682,10 @@ export const createAgent = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data, context }) => {
-    const agent = await createSpecialistAgentRecord(context.supabase as any, context.userId, data);
-    return { agent: { id: agent.id, name: agent.name, slug: agent.slug } };
+    const db = context.supabase as any;
+    const agent = await createSpecialistAgentRecord(db, context.userId, data);
+    const thread = await getOrCreateThread(db, context.userId, agent);
+    return { agent: { id: agent.id, name: agent.name, slug: agent.slug, threadId: thread.id } };
   });
 
 export const getAgentThread = createServerFn({ method: "GET" })
@@ -745,7 +769,22 @@ export const sendAgentMessage = createServerFn({ method: "POST" })
       else specialist = await runGenericAgent(apiKey, agent, data.message, adamContext, history);
     } catch (agentError) {
       console.error("Specialist agent failed", agentError);
-      return { error: `${agent.name} couldn't finish that turn. Please try again.` } as const;
+      const failureText = `${agent.name} couldn't finish that turn. Your message is saved, so you can retry without losing the conversation.`;
+      const failureRow = await saveAgentMessage(
+        db,
+        context.userId,
+        thread.id,
+        "emery",
+        "Emery",
+        failureText,
+        { commander: true, recoverable_error: true },
+      ).catch(() => null);
+      return {
+        error: failureText,
+        userMessage: userRow,
+        agentMessage: null,
+        emeryMessage: failureRow,
+      } as const;
     }
 
     const agentRow = await saveAgentMessage(

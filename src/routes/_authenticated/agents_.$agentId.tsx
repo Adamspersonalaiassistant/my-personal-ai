@@ -74,7 +74,15 @@ function AgentChat() {
       const result = await sendMessage({ data: { agentId: agent.id, message: text } });
       if (!result || "error" in result) {
         setError(result?.error ?? "That turn didn't finish. Try again.");
-        setMessages((prev) => prev.filter((message) => message.id !== optimistic.id));
+        setMessages((prev) => {
+          const withoutOptimistic = prev.filter((message) => message.id !== optimistic.id);
+          if (!result?.userMessage) return withoutOptimistic;
+          return [
+            ...withoutOptimistic,
+            result.userMessage as Message,
+            ...(result.emeryMessage ? [result.emeryMessage as Message] : []),
+          ];
+        });
         return;
       }
       setMessages((prev) => [
@@ -113,8 +121,10 @@ function AgentChat() {
                 {agent?.description ?? "Emery specialist group chat"}
               </p>
             </div>
-            <div className="emery-chip hidden sm:flex">
-              <ShieldCheck className="size-3" /> Emery leads
+            <div className="emery-chip flex shrink-0">
+              <ShieldCheck className="size-3" />
+              <span className="hidden min-[380px]:inline">Emery leads</span>
+              <span className="min-[380px]:hidden">Lead</span>
             </div>
           </div>
         </section>

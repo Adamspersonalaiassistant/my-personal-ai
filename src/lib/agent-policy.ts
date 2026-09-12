@@ -19,7 +19,7 @@ export function selectHpoDelegates(message: string): HpoDelegate[] {
   const delegates: HpoDelegate[] = [];
 
   const scout =
-    /\b(find|research|verify|prospect|office|doctor|physician|attorney|law firm|closed|open|hours|current|latest|address|phone|provider|pcp|primary care|target|duplicate)\b/i.test(
+    /\b(find|research|verify|look up|search|discover|prospect|new target|new targets|closed|open now|hours|current|latest|address|phone|website|duplicate|confirm|fact[- ]?check)\b/i.test(
       text,
     );
   const route =
@@ -54,9 +54,12 @@ export function isExplicitAgentCreationCommand(message: string) {
   ) {
     return false;
   }
-  return /^(?:(?:hey\s+)?emery[,:]?\s*)?(?:please\s+)?(?:(?:can|could|would)\s+you\s+|i\s+want\s+you\s+to\s+)?(?:create|make|build)\b[\s\S]*\bagent\b/i.test(
-    text,
-  );
+  const normalized = text.replace(/\s+/g, " ");
+  const directVerb =
+    /^(?:(?:hey\s+)?emery[,:]?\s*)?(?:please\s+)?(?:(?:can|could|would)\s+you\s+|i\s+want\s+you\s+to\s+)?(?:create|make|build|add|set up|spin up)\b[\s\S]*\bagent\b/i;
+  const needAgent =
+    /^(?:(?:hey\s+)?emery[,:]?\s*)?(?:please\s+)?i\s+(?:need|want)\s+(?:an?\s+)?[a-z0-9 '&/-]{1,60}\s+agent\b/i;
+  return directVerb.test(normalized) || needAgent.test(normalized);
 }
 
 export function routeMainSpecialist(message: string): MainSpecialist | null {
@@ -104,15 +107,37 @@ function textOf(value: unknown): string {
 }
 
 function relevantToRequest(row: Record<string, unknown>, request: string, extra?: RegExp) {
-  const haystack = textOf(row);
-  if (extra?.test(haystack)) return true;
-  const words = request
-    .toLowerCase()
+  const haystack = textOf(row).toLowerCase();
+  const normalizedRequest = request.toLowerCase();
+  // Domain fallback is allowed only when the request itself is in that domain. This prevents
+  // unrelated family/finance/work memories from leaking into a generic research request.
+  if (extra?.test(normalizedRequest) && extra.test(haystack)) return true;
+  const words = normalizedRequest
     .replace(/[^a-z0-9 ]+/g, " ")
     .split(/\s+/)
     .filter((word) => word.length >= 5)
     .slice(0, 12);
-  return words.some((word) => haystack.toLowerCase().includes(word));
+  return words.some((word) => haystack.includes(word));
+}
+
+function scopedProfile(
+  profile: Record<string, unknown>,
+  scope: string,
+  request: string,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  if (profile["display_name"]) result["display_name"] = profile["display_name"];
+  const schedulingRelevant =
+    /\b(today|tomorrow|date|time|schedule|meeting|route|morning|afternoon|evening)\b/i.test(
+      request,
+    );
+  if (schedulingRelevant && profile["timezone"]) result["timezone"] = profile["timezone"];
+  // Strategy is the one specialist allowed a broader stable summary because its job is
+  // explicitly cross-life tradeoff analysis. Other specialists receive request-scoped context.
+  if (scope === "strategy-agent" && profile["profile_summary"]) {
+    result["profile_summary"] = profile["profile_summary"];
+  }
+  return result;
 }
 
 export function scopeAgentContext(
@@ -129,7 +154,7 @@ export function scopeAgentContext(
 
   if (scope === "hpo-agent") {
     return {
-      profile,
+      profile: scopedProfile(profile, scope, request),
       memories: memories.filter((row) => relevantToRequest(row, request, HPO_TERMS)).slice(0, 12),
       active_tasks: tasks.filter((row) => relevantToRequest(row, request, HPO_TERMS)).slice(0, 8),
       active_projects: projects
@@ -143,10 +168,8 @@ export function scopeAgentContext(
 
   if (scope === "research-agent") {
     return {
-      profile,
-      memories: memories
-        .filter((row) => relevantToRequest(row, request, GENERAL_GOAL_TERMS))
-        .slice(0, 8),
+      profile: scopedProfile(profile, scope, request),
+      memories: memories.filter((row) => relevantToRequest(row, request)).slice(0, 8),
       active_tasks: tasks.filter((row) => relevantToRequest(row, request)).slice(0, 5),
       active_projects: projects
         .filter((row) => relevantToRequest(row, request, GENERAL_GOAL_TERMS))
@@ -157,7 +180,7 @@ export function scopeAgentContext(
 
   if (scope === "strategy-agent") {
     return {
-      profile,
+      profile: scopedProfile(profile, scope, request),
       memories: memories
         .filter((row) => relevantToRequest(row, request, GENERAL_GOAL_TERMS))
         .slice(0, 12),
@@ -170,7 +193,7 @@ export function scopeAgentContext(
   const customTerms = `${agent?.mission ?? ""} ${agent?.description ?? ""}`.trim();
   const customRequest = `${request} ${customTerms}`.trim();
   return {
-    profile,
+    profile: scopedProfile(profile, scope, request),
     memories: memories.filter((row) => relevantToRequest(row, customRequest)).slice(0, 8),
     active_tasks: tasks.filter((row) => relevantToRequest(row, customRequest)).slice(0, 5),
     active_projects: projects.filter((row) => relevantToRequest(row, customRequest)).slice(0, 5),
