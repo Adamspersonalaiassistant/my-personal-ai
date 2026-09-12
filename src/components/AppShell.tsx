@@ -8,6 +8,7 @@ import {
   Settings as SettingsIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import brainImage from "@/assets/neural-brain.png";
 
 const navItems = [
   { to: "/chat", label: "Chat", icon: MessageCircle },
@@ -27,30 +28,53 @@ export function AppShell({
   padded?: boolean;
 }) {
   return (
-    <div className="flex min-h-[100dvh] flex-col bg-background text-foreground">
-      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-border/60 bg-background/85 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur">
-        <h1 className="text-base font-semibold tracking-tight">{title}</h1>
+    <div className="relative mx-auto flex min-h-[100dvh] w-full max-w-3xl flex-col overflow-x-hidden bg-background text-foreground md:border-x md:border-border/50 md:shadow-2xl">
+      <div aria-hidden className="emery-grid pointer-events-none absolute inset-x-0 top-0 h-80 opacity-70" />
+      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border/50 bg-background/80 px-4 pb-2.5 pt-[max(0.7rem,env(safe-area-inset-top))] backdrop-blur-2xl">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-primary/25 bg-primary/8 shadow-[0_0_24px_oklch(0.78_0.19_154/0.15)]">
+            <img src={brainImage} alt="" className="h-9 w-9 object-cover object-center opacity-95" />
+            <span className="absolute bottom-1 right-1 size-2 rounded-full border border-background bg-primary shadow-[0_0_8px_oklch(0.78_0.19_154)]" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-baseline gap-2">
+              <p className="truncate text-[15px] font-semibold tracking-tight">Emery</p>
+              {title !== "Chat" ? (
+                <span className="truncate text-xs text-muted-foreground">/ {title}</span>
+              ) : null}
+            </div>
+            <p className="truncate text-[11px] font-medium text-muted-foreground">
+              Personal AI <span className="mx-1 text-primary/70">•</span> Memory online
+            </p>
+          </div>
+        </div>
+
         <Link
           to="/settings"
-          aria-label="Settings"
-          className="flex size-11 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          aria-label="Emery settings"
+          className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-card/70 text-muted-foreground transition hover:border-primary/30 hover:bg-accent hover:text-foreground"
         >
-          <SettingsIcon className="size-5" />
+          <SettingsIcon className="size-[18px]" />
         </Link>
       </header>
 
-      <main className={`flex-1 ${padded ? "px-4 py-5" : ""}`}>{children}</main>
+      <main className={`relative z-10 flex-1 ${padded ? "px-4 py-5 sm:px-6" : ""}`}>
+        {children}
+      </main>
 
-      <nav className="sticky bottom-0 z-20 grid grid-cols-5 border-t border-border/60 bg-background/95 px-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur">
+      <nav className="sticky bottom-0 z-30 grid grid-cols-5 gap-0.5 border-t border-border/50 bg-background/88 px-1.5 pb-[max(0.45rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-2xl">
         {navItems.map(({ to, label, icon: Icon }) => (
           <Link
             key={to}
             to={to}
-            className="flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-medium text-muted-foreground transition-colors"
-            activeProps={{ className: "text-primary" }}
+            className="group flex min-h-[58px] flex-col items-center justify-center gap-1 rounded-2xl px-1 text-[10px] font-medium text-muted-foreground transition-colors"
+            activeProps={{
+              className:
+                "bg-primary/[0.09] text-primary shadow-[inset_0_0_0_1px_oklch(0.78_0.19_154/0.12)]",
+            }}
           >
-            <Icon className="size-5" />
-            {label}
+            <Icon className="size-[19px] transition-transform group-active:scale-95" />
+            <span>{label}</span>
           </Link>
         ))}
       </nav>
@@ -68,12 +92,12 @@ export function EmptyState({
   description: string;
 }) {
   return (
-    <div className="mx-auto flex max-w-sm flex-col items-center gap-3 py-20 text-center">
-      <div className="flex size-14 items-center justify-center rounded-2xl bg-secondary text-muted-foreground">
+    <div className="mx-auto flex max-w-sm flex-col items-center gap-3 py-16 text-center">
+      <div className="emery-glass flex size-16 items-center justify-center rounded-[1.35rem] text-primary emery-glow">
         <Icon className="size-6" />
       </div>
-      <h2 className="text-base font-semibold">{title}</h2>
-      <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>
+      <h2 className="mt-1 text-base font-semibold tracking-tight">{title}</h2>
+      <p className="max-w-xs text-sm leading-6 text-muted-foreground">{description}</p>
     </div>
   );
 }
