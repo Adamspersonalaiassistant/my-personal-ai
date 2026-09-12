@@ -1,0 +1,24 @@
+name: Validate Emery Phase 7
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/phase7-validate.yml
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - name: Production build
+        run: npm run build
+      - name: TypeScript
+        run: npx tsc --noEmit
+      - name: Focused lint
+        run: npx eslint src/lib/chat-history.functions.ts src/routes/_authenticated/chat.tsx src/components/AppShell.tsx src/styles.css src/routes/__root.tsx
