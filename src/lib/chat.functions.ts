@@ -440,12 +440,9 @@ export const sendChatMessage = createServerFn({ method: "POST" })
             {
               role: "system",
               content:
-                "You are a helpful personal AI assistant. Be concise, warm and practical. " +
-                "You are given CORE PROFILE (permanent identity), LONG-TERM MEMORY (persistent facts and preferences), " +
-                "and CURRENT CONVERSATION. Treat CORE PROFILE and LONG-TERM MEMORY as known facts about the user, " +
-                "but always prefer newer explicit corrections from the current conversation." +
+                ASSISTANT_IDENTITY +
                 (savedMemory
-                  ? ` The user just asked you to remember something and it has been saved permanently: "${savedMemory}". Briefly confirm it.`
+                  ? `\n\nAdam just asked you to remember something and it has been saved permanently: "${savedMemory}". Briefly confirm it.`
                   : ""),
             },
             ...(profileBlock
