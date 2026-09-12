@@ -26,3 +26,4 @@ jobs:
         run: npx tsc --noEmit
       - name: Focused UI lint
         run: npx eslint src/components/AppShell.tsx src/routes/_authenticated/chat.tsx src/routes/_authenticated/agents.tsx 'src/routes/_authenticated/agents_.$agentId.tsx' src/routes/_authenticated/tasks.tsx src/routes/_authenticated/projects.tsx src/routes/_authenticated/meetings.tsx src/routes/_authenticated/memories.tsx src/routes/_authenticated/settings.tsx
+      # Keep this workflow as the final gate for visual-system changes.
