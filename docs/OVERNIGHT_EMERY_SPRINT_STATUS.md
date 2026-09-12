@@ -62,7 +62,37 @@ Validation:
 
 ## Phase 7 — Mobile + Performance Polish
 
-Status: NOT STARTED
+Status: COMPLETE — production build, TypeScript, and focused lint validated.
+
+Implemented and validated:
+
+- Replaced the main chat's legacy up-to-500-message initial history load with an authenticated paginated loader that fetches a bounded recent window of 80 messages by default and supports loading older history without splitting the lifelong Emery conversation.
+- Added a clear “Load earlier messages” control and preserved the reader's scroll position when older messages are prepended, preventing long-history navigation from jumping unexpectedly.
+- Main chat now tracks whether Adam is near the bottom before auto-scrolling. New messages no longer yank the view down while he is reading older history, and a compact jump-to-latest control appears when useful.
+- Composer behavior is more iPhone-friendly: mobile text stays at 16px to avoid Safari input zoom, the textarea grows with content, IME composition is protected, and coarse-pointer/mobile Enter remains available for multiline writing while desktop/fine-pointer Enter can still send.
+- Tightened the mobile shell/navigation for narrow screens while retaining 44px+ touch targets, safe-area handling, and the same five primary Emery OS destinations.
+- Fixed local image-preview lifecycle so selected-file object URLs are created once and revoked cleanly rather than being regenerated during render.
+- Signed historical attachment access is preserved; stored attachment images use lazy loading/async decoding and narrow-screen attachment presentation was tightened.
+- Send/history errors now recover without wiping the already-rendered conversation, and earlier-message loading has its own recoverable state.
+- Existing PWA/installability foundations were verified: standalone manifest, viewport-fit/safe-area metadata, theme color, and Apple mobile-web-app metadata were already present. No fragile service-worker/offline-cache layer was added.
+- Existing reduced-motion/reduced-transparency support was verified and preserved.
+- Emery Voice behavior/design was not changed; only the existing disabled placeholder remains.
+
+Implementation note:
+
+- The Phase 5 status had described a pagination-capable retrieval path, but the live main-chat loader still used the legacy 500-message path. Phase 7 therefore added and adopted a concrete `getMainConversationPage` path rather than assuming that note reflected the current UI implementation.
+
+Validation:
+
+- Production build passed on the final Phase 7 implementation.
+- TypeScript (`npx tsc --noEmit`) passed.
+- Focused lint passed on the Phase 7 chat-history, chat UI, AppShell, and root mobile-meta files after formatting cleanup.
+- The final validation gate completed successfully on main.
+
+Remaining for later phases:
+
+- Phase 8 should perform the final end-to-end regression/cleanup pass across the entire overnight diff, including removal of temporary validation helpers if appropriate and an honest morning handoff.
+- No browser/device farm was available in this run, so real-device Safari behavior should be treated as a final manual acceptance check rather than claimed as physically device-tested.
 
 ## Phase 8 — Final QA + Morning Handoff
 
