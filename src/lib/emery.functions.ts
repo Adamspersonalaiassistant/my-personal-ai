@@ -3,7 +3,13 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { ASSISTANT_IDENTITY } from "@/lib/assistant-identity";
 import { createAgentFromInstruction, consultSpecialistFromEmery } from "@/lib/agent.functions";
-import { isExplicitAgentCreationCommand } from "@/lib/agent-policy";
+import { isExplicitAgentCreationCommand, routeMainSpecialist } from "@/lib/agent-policy";
+import {
+  buildExecutiveFocus,
+  readConversationState,
+  refreshRollingConversationState,
+  selectRelevantMemories,
+} from "@/lib/emery-intelligence";
 
 type AttachmentInput = {
   storagePath: string;
@@ -421,26 +427,32 @@ async function loadActionContext(supabase: any, userId: string): Promise<ActionC
 }
 
 function buildActionContextBlock(context: ActionContext) {
-  const taskLines = context.tasks.map(
-    (task) =>
-      `- TASK ${task.id}: ${task.title} | priority ${task.priority} | due ${task.due_at ?? "none"} | status ${task.status}`,
-  );
-  const projectLines = context.projects.map(
-    (project) =>
-      `- PROJECT ${project.id}: ${project.name} | priority ${project.priority} | status ${project.status} | goal ${project.goal ?? "none"} | next ${project.next_action ?? "none"}`,
-  );
-  const meetingLines = context.meetings.map(
-    (meeting) =>
+  const maxCharacters = 7000;
+  const lines: string[] = ["OPEN TASKS:"];
+  for (const task of context.tasks) {
+    lines.push(
+      `- TASK ${task.id}: ${task.title} | priority ${task.priority} | due ${task.due_at ?? "none"} | project ${task.project_id ?? "none"} | status ${task.status}${task.details ? ` | details ${task.details.slice(0, 240)}` : ""}`,
+    );
+  }
+  if (!context.tasks.length) lines.push("- none");
+  lines.push("ACTIVE PROJECTS:");
+  for (const project of context.projects) {
+    lines.push(
+      `- PROJECT ${project.id}: ${project.name} | priority ${project.priority} | status ${project.status} | goal ${project.goal ?? "none"} | next ${project.next_action ?? "none"}${project.description ? ` | context ${project.description.slice(0, 280)}` : ""}`,
+    );
+  }
+  if (!context.projects.length) lines.push("- none");
+  lines.push("UPCOMING MEETINGS:");
+  for (const meeting of context.meetings) {
+    lines.push(
       `- MEETING ${meeting.id}: ${meeting.title ?? "Untitled"} | at ${meeting.meeting_at ?? "unknown"} | participants ${JSON.stringify(meeting.participants ?? [])}`,
-  );
-  return [
-    "OPEN TASKS:",
-    ...(taskLines.length ? taskLines : ["- none"]),
-    "ACTIVE PROJECTS:",
-    ...(projectLines.length ? projectLines : ["- none"]),
-    "UPCOMING MEETINGS:",
-    ...(meetingLines.length ? meetingLines : ["- none"]),
-  ].join("\n");
+    );
+  }
+  if (!context.meetings.length) lines.push("- none");
+  let output = lines.join("\n");
+  if (output.length > maxCharacters)
+    output = `${output.slice(0, maxCharacters)}\n- context truncated to stay bounded`;
+  return output;
 }
 
 async function loadRecentHistory(
@@ -590,6 +602,7 @@ async function analyzeTurn(
   pendingAction: PendingAction,
   actionContext: ActionContext,
   recentHistory: Array<{ role: "user" | "assistant"; text: string }>,
+  rollingSummary: string,
   existingMemories: ExistingMemory[],
 ): Promise<TurnAnalysis> {
   const emptyAction: ActionCandidate = {
@@ -627,7 +640,7 @@ async function analyzeTurn(
         {
           role: "system",
           content:
-            "You are Emery's private control-plane parser. Analyze the newest user turn for actionable intent and durable memory. Do not answer the user. ACTION RULES: casual mentions of tasks/meetings/projects should usually PROPOSE and require confirmation; direct commands like add/create/save/schedule are already permission and should CREATE when required fields are available. A short approval like yes/9am/Friday/high priority should apply to PENDING ACTION. A clear never mind/cancel sets cancel_pending=true. For complete_task/update_project, target_id MUST be an exact ID supplied in CURRENT ACTION CONTEXT; never invent IDs. Tasks do not require an exact time. Meetings require a usable date/time; if missing, preserve as proposal/pending and put one short clarification question in question. Use CURRENT_TIME and PROFILE timezone for relative dates. Return due_at/meeting_at as ISO-8601 timestamps with offsets when known. For a task with a date but no time, due_date_only=true and choose a neutral local timestamp for storage; the UI will hide the artificial time. MEMORY RULES: extract only durable explicitly user-stated personal context. Return none for temporary plans, tasks, meetings, casual chat, one-off questions, speculation, assumptions, assistant ideas, or secrets. Durable types: goal, preference, relationship, routine, responsibility, working_preference, decision, constraint, project_context. profile_update only for name, assistant name, timezone, or stable profile summary. update only for a clear correction using an exact existing memory ID. Confidence >=0.9 only when explicit. Never store action items as long-term memory just because they are actionable.",
+            "You are Emery's private control-plane parser. Analyze the newest user turn for actionable intent and durable memory. Do not answer the user. ACTION RULES: casual mentions of tasks/meetings/projects should usually PROPOSE and require confirmation; direct commands like add/create/save/schedule are already permission and should CREATE when required fields are available. A short approval like yes/9am/Friday/high priority should apply to PENDING ACTION. Use the rolling conversation state and recent history to resolve short follow-ups like “do that”, “the first one”, or “what about the other one” when there is one clear referent. If two or more targets remain plausible, ask one concise clarification instead of guessing. A clear never mind/cancel sets cancel_pending=true. For complete_task/update_project, target_id MUST be an exact ID supplied in CURRENT ACTION CONTEXT; never invent IDs. Tasks do not require an exact time. Meetings require a usable date/time; if missing, preserve as proposal/pending and put one short clarification question in question. Use CURRENT_TIME and PROFILE timezone for relative dates. Return due_at/meeting_at as ISO-8601 timestamps with offsets when known. For a task with a date but no time, due_date_only=true and choose a neutral local timestamp for storage; the UI will hide the artificial time. MEMORY RULES: extract only durable explicitly user-stated personal context. Return none for temporary plans, tasks, meetings, casual chat, one-off questions, speculation, assumptions, assistant ideas, or secrets. Durable types: goal, preference, relationship, routine, responsibility, working_preference, decision, constraint, project_context. profile_update only for name, assistant name, timezone, or stable profile summary. update only for a clear correction using an exact existing memory ID. Confidence >=0.9 only when explicit. Never store action items as long-term memory just because they are actionable.",
         },
         {
           role: "user",
@@ -637,7 +650,8 @@ async function analyzeTurn(
             pending_action: pendingAction,
             current_action_context: actionContext,
             recent_history: recentHistory.slice(-10),
-            existing_memories: existingMemories.slice(0, 60),
+            rolling_conversation_state: rollingSummary,
+            existing_memories: existingMemories.slice(0, 24),
             newest_message: message,
           }),
         },
@@ -1114,6 +1128,25 @@ ${consultation.response}`;
       }
     }
 
+    if (!consultMatch?.[1] && !explicitAgentCreation) {
+      const routedSpecialist = routeMainSpecialist(data.message);
+      if (routedSpecialist) {
+        try {
+          const consultation = await consultSpecialistFromEmery(
+            apiKey,
+            db,
+            userId,
+            routedSpecialist,
+            data.message,
+          );
+          agentTeamInstruction += `${agentTeamInstruction ? "\n" : ""}Emery conservatively routed this turn to ${consultation.agentName} because the request clearly matched that specialty. Use the report only if it improves the answer; Emery remains responsible for the final recommendation:
+${consultation.response}`;
+        } catch (error) {
+          console.error("Routed specialist consultation failed", error);
+        }
+      }
+    }
+
     let conversation: { id: string; metadata: unknown };
     try {
       conversation = await getOrCreateMainConversation(db, userId);
@@ -1178,7 +1211,7 @@ ${consultation.response}`;
 
     const { data: existingRows } = await db
       .from("memories")
-      .select("id, title, content, memory_type")
+      .select("id, title, content, memory_type, importance, confidence, created_at, updated_at")
       .eq("user_id", userId)
       .order("updated_at", { ascending: false })
       .limit(100);
@@ -1215,6 +1248,25 @@ ${consultation.response}`;
     }
 
     const recentHistory = await loadRecentHistory(db, userId, conversation.id);
+    let conversationState = readConversationState(conversation.metadata);
+    try {
+      conversationState = await refreshRollingConversationState({
+        apiKey,
+        db,
+        userId,
+        conversation,
+        newestMessage: data.message,
+        recentHistory,
+      });
+    } catch (error) {
+      console.error("Rolling conversation state refresh failed", error);
+    }
+    const relevantMemoriesForAnalysis = selectRelevantMemories(
+      existingMemories,
+      data.message,
+      recentHistory,
+      { maxItems: 20, maxCharacters: 7000 },
+    );
     const pendingAction = readPendingAction(conversation.metadata);
     const actionContextBefore = await loadActionContext(db, userId);
 
@@ -1251,7 +1303,8 @@ ${consultation.response}`;
         pendingAction,
         actionContextBefore,
         recentHistory.slice(-10),
-        existingMemories,
+        conversationState.summary,
+        relevantMemoriesForAnalysis as ExistingMemory[],
       );
     } catch (error) {
       console.error("Emery control-plane analysis failed", error);
@@ -1288,12 +1341,14 @@ ${consultation.response}`;
         .maybeSingle(),
       db
         .from("memories")
-        .select("title, content, memory_type, importance, created_at, expires_at")
+        .select(
+          "id, title, content, memory_type, importance, confidence, created_at, updated_at, expires_at",
+        )
         .eq("user_id", userId)
         .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
         .order("importance", { ascending: false })
         .order("created_at", { ascending: false })
-        .limit(40),
+        .limit(100),
       loadActionContext(db, userId),
     ]);
 
@@ -1305,8 +1360,15 @@ ${consultation.response}`;
           profile.profile_summary ? `About: ${profile.profile_summary}` : null,
         ].filter(Boolean)
       : [];
-    const memoryBlock = memories?.length ? buildMemoryBlock(memories) : "";
+    const promptMemories = memories?.length
+      ? selectRelevantMemories(memories, data.message, recentHistory, {
+          maxItems: 16,
+          maxCharacters: 6500,
+        })
+      : [];
+    const memoryBlock = promptMemories.length ? buildMemoryBlock(promptMemories) : "";
     const actionBlock = buildActionContextBlock(actionContextAfter);
+    const focusBlock = buildExecutiveFocus(actionContextAfter);
 
     const attachmentRows = data.attachments.length
       ? await db
@@ -1331,7 +1393,7 @@ ${consultation.response}`;
       }
     }
 
-    const previousHistory = recentHistory.filter((turn) => turn.id !== userMessage.id).slice(-30);
+    const previousHistory = recentHistory.filter((turn) => turn.id !== userMessage.id).slice(-24);
 
     let response: Response;
     try {
@@ -1360,7 +1422,18 @@ ${consultation.response}`;
             ...(memoryBlock
               ? [{ role: "system" as const, content: `LONG-TERM MEMORY:\n${memoryBlock}` }]
               : []),
-            { role: "system" as const, content: `CURRENT ACTION CONTEXT:\n${actionBlock}` },
+            ...(conversationState.summary
+              ? [
+                  {
+                    role: "system" as const,
+                    content: `ROLLING CONVERSATION STATE (continuity only; prefer newer explicit user corrections):\n${conversationState.summary}`,
+                  },
+                ]
+              : []),
+            {
+              role: "system" as const,
+              content: `CURRENT ACTION CONTEXT:\n${actionBlock}\n\nQUIET EXECUTIVE FOCUS SIGNAL:\n${focusBlock}\nUse this focus signal only when relevant. If Adam is overloaded or asks what to do, reduce choices and lead with the highest-leverage next action. Do not turn casual chat into a dashboard. Call out overcomplication or tool-chasing only when the evidence supports it.`,
+            },
             ...previousHistory.map((turn) => ({
               role: turn.role,
               content: [
@@ -1431,6 +1504,60 @@ ${consultation.response}`;
           }
         : null,
     } as const;
+  });
+
+export const getMainConversationPage = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { before?: string | null; limit?: number } = {}) => ({
+    before: input?.before ? String(input.before) : null,
+    limit: Math.min(100, Math.max(20, Number(input?.limit ?? 80))),
+  }))
+  .handler(async ({ data, context }) => {
+    const db = context.supabase as any;
+    const conversation = await getOrCreateMainConversation(db, context.userId);
+    let query = db
+      .from("conversation_messages")
+      .select("id, role, content, created_at")
+      .eq("user_id", context.userId)
+      .eq("conversation_id", conversation.id)
+      .order("created_at", { ascending: false })
+      .limit(data.limit + 1);
+    if (data.before) query = query.lt("created_at", data.before);
+    const { data: rows, error } = await query;
+    if (error) throw error;
+    const pageRows = (rows ?? []).slice(0, data.limit).reverse();
+    const messageIds = pageRows.map((row: any) => row.id);
+    const { data: attachmentRows } = messageIds.length
+      ? await db
+          .from("message_attachments")
+          .select("id, message_id, storage_path, file_name, mime_type, size_bytes")
+          .eq("user_id", context.userId)
+          .eq("conversation_id", conversation.id)
+          .in("message_id", messageIds)
+          .order("created_at", { ascending: true })
+      : { data: [] };
+    const byMessage = new Map<string, ChatAttachment[]>();
+    for (const row of attachmentRows ?? []) {
+      const signed = await signAttachments(db, [row]);
+      const list = byMessage.get(row.message_id) ?? [];
+      list.push(...signed);
+      byMessage.set(row.message_id, list);
+    }
+    const messages: StoredMessage[] = pageRows
+      .filter((row: any) => row.role === "user" || row.role === "assistant")
+      .map((row: any) => ({
+        id: row.id,
+        role: row.role,
+        text: row.content,
+        createdAt: row.created_at,
+        attachments: byMessage.get(row.id) ?? [],
+      }));
+    return {
+      conversationId: conversation.id,
+      messages,
+      hasMore: (rows ?? []).length > data.limit,
+      nextBefore: messages.length ? (messages[0]?.createdAt ?? null) : null,
+    };
   });
 
 export const listTasks = createServerFn({ method: "GET" })
