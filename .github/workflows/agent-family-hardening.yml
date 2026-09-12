@@ -1,0 +1,77 @@
+name: Agent Family Hardening
+
+on:
+  push:
+    paths:
+      - scripts/harden_agent_family.py
+      - .github/workflows/agent-family-hardening.yml
+
+permissions:
+  contents: write
+
+jobs:
+  harden-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply hardening patch
+        run: python scripts/harden_agent_family.py
+
+      - name: Format changed files
+        run: npx prettier --write src/lib/agent-policy.ts src/lib/agent.functions.ts src/routes/_authenticated/agents.tsx 'src/routes/_authenticated/agents_.$agentId.tsx'
+
+      - name: Production build
+        run: npm run build
+
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+      - name: Focused lint
+        run: npx eslint src/lib/agent-policy.ts src/lib/agent.functions.ts src/routes/_authenticated/agents.tsx 'src/routes/_authenticated/agents_.$agentId.tsx'
+
+      - name: Deterministic policy checks
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const policy = fs.readFileSync('src/lib/agent-policy.ts', 'utf8');
+          const fn = fs.readFileSync('src/lib/agent.functions.ts', 'utf8');
+          const chat = fs.readFileSync('src/routes/_authenticated/agents_.$agentId.tsx', 'utf8');
+          const checks = [
+            ['creation supports set up', policy.includes('set up|spin up')],
+            ['hypothetical guard preserved', policy.includes('should i|could i|would i|what if')],
+            ['scout no longer triggers on bare office keyword', !/find\|research\|verify\|prospect\|office\|doctor/.test(policy)],
+            ['profile summary restricted to strategy', policy.includes('scope === "strategy-agent" && profile["profile_summary"]')],
+            ['thread race recovery exists', fn.includes('error?.code === "23505"')],
+            ['custom authority is allowlisted', fn.includes('no_spend_no_external_writes_no_secrets_no_recursive_agents')],
+            ['recoverable group error is persisted', fn.includes('recoverable_error: true')],
+            ['mobile commander indicator exists', chat.includes('min-[380px]:hidden">Lead')],
+          ];
+          const failed = checks.filter(([, ok]) => !ok);
+          for (const [name, ok] of checks) console.log(`${ok ? 'PASS' : 'FAIL'} ${name}`);
+          if (failed.length) process.exit(1);
+          NODE
+
+      - name: Commit validated hardening
+        run: |
+          git config user.name "Emery Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/lib/agent-policy.ts src/lib/agent.functions.ts src/routes/_authenticated/agents.tsx 'src/routes/_authenticated/agents_.$agentId.tsx'
+          if git diff --cached --quiet; then
+            echo "No agent hardening changes to commit"
+            exit 0
+          fi
+          git commit -m "Harden Emery agent family"
+          git push origin HEAD:main
