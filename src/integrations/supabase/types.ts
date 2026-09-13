@@ -14,6 +14,147 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          metadata: Json
+          speaker: string
+          speaker_name: string
+          thread_id: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          speaker: string
+          speaker_name?: string
+          thread_id: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          speaker?: string
+          speaker_name?: string
+          thread_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "agent_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_threads: {
+        Row: {
+          agent_id: string
+          created_at: string
+          id: string
+          metadata: Json
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          agent_id: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          agent_id?: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_threads_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agents: {
+        Row: {
+          capabilities: Json
+          created_at: string
+          description: string
+          id: string
+          is_active: boolean
+          is_internal: boolean
+          metadata: Json
+          mission: string
+          name: string
+          parent_agent_id: string | null
+          persona: string
+          slug: string
+          sort_order: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          capabilities?: Json
+          created_at?: string
+          description?: string
+          id?: string
+          is_active?: boolean
+          is_internal?: boolean
+          metadata?: Json
+          mission?: string
+          name: string
+          parent_agent_id?: string | null
+          persona?: string
+          slug: string
+          sort_order?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          capabilities?: Json
+          created_at?: string
+          description?: string
+          id?: string
+          is_active?: boolean
+          is_internal?: boolean
+          metadata?: Json
+          mission?: string
+          name?: string
+          parent_agent_id?: string | null
+          persona?: string
+          slug?: string
+          sort_order?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agents_parent_agent_id_fkey"
+            columns: ["parent_agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       assistant_preferences: {
         Row: {
           category: string
@@ -175,6 +316,227 @@ export type Database = {
         }
         Relationships: []
       }
+      emery_agent_metrics: {
+        Row: {
+          agent_slug: string
+          conversation_id: string | null
+          created_at: string
+          delegated_count: number
+          duration_ms: number | null
+          id: string
+          message_id: string | null
+          metadata: Json
+          succeeded: boolean | null
+          user_id: string
+          web_used: boolean
+        }
+        Insert: {
+          agent_slug: string
+          conversation_id?: string | null
+          created_at?: string
+          delegated_count?: number
+          duration_ms?: number | null
+          id?: string
+          message_id?: string | null
+          metadata?: Json
+          succeeded?: boolean | null
+          user_id: string
+          web_used?: boolean
+        }
+        Update: {
+          agent_slug?: string
+          conversation_id?: string | null
+          created_at?: string
+          delegated_count?: number
+          duration_ms?: number | null
+          id?: string
+          message_id?: string | null
+          metadata?: Json
+          succeeded?: boolean | null
+          user_id?: string
+          web_used?: boolean
+        }
+        Relationships: []
+      }
+      emery_config: {
+        Row: {
+          agent_route_confidence: number
+          auto_apply_low_risk: boolean
+          memory_max_characters: number
+          memory_max_items: number
+          proactive_focus_enabled: boolean
+          response_verbosity: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          agent_route_confidence?: number
+          auto_apply_low_risk?: boolean
+          memory_max_characters?: number
+          memory_max_items?: number
+          proactive_focus_enabled?: boolean
+          response_verbosity?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          agent_route_confidence?: number
+          auto_apply_low_risk?: boolean
+          memory_max_characters?: number
+          memory_max_items?: number
+          proactive_focus_enabled?: boolean
+          response_verbosity?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      emery_improvement_backlog: {
+        Row: {
+          area: string
+          confidence: number
+          created_at: string
+          evidence: Json
+          expected_benefit: string | null
+          id: string
+          last_observed_at: string
+          occurrence_count: number
+          problem_statement: string
+          severity: number
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          area: string
+          confidence?: number
+          created_at?: string
+          evidence?: Json
+          expected_benefit?: string | null
+          id?: string
+          last_observed_at?: string
+          occurrence_count?: number
+          problem_statement: string
+          severity?: number
+          status?: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          area?: string
+          confidence?: number
+          created_at?: string
+          evidence?: Json
+          expected_benefit?: string | null
+          id?: string
+          last_observed_at?: string
+          occurrence_count?: number
+          problem_statement?: string
+          severity?: number
+          status?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      emery_improvement_changes: {
+        Row: {
+          after_state: Json
+          applied_at: string | null
+          backlog_id: string | null
+          before_state: Json
+          change_type: string
+          created_at: string
+          id: string
+          rationale: string
+          rollback_state: Json
+          rolled_back_at: string | null
+          scope: string
+          status: string
+          user_id: string
+          validation: Json
+        }
+        Insert: {
+          after_state?: Json
+          applied_at?: string | null
+          backlog_id?: string | null
+          before_state?: Json
+          change_type: string
+          created_at?: string
+          id?: string
+          rationale: string
+          rollback_state?: Json
+          rolled_back_at?: string | null
+          scope: string
+          status?: string
+          user_id: string
+          validation?: Json
+        }
+        Update: {
+          after_state?: Json
+          applied_at?: string | null
+          backlog_id?: string | null
+          before_state?: Json
+          change_type?: string
+          created_at?: string
+          id?: string
+          rationale?: string
+          rollback_state?: Json
+          rolled_back_at?: string | null
+          scope?: string
+          status?: string
+          user_id?: string
+          validation?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "emery_improvement_changes_backlog_id_fkey"
+            columns: ["backlog_id"]
+            isOneToOne: false
+            referencedRelation: "emery_improvement_backlog"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      emery_self_evaluations: {
+        Row: {
+          created_at: string
+          findings: Json
+          id: string
+          metadata: Json
+          rubric_version: string
+          scores: Json
+          target_ref: string | null
+          target_type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          findings?: Json
+          id?: string
+          metadata?: Json
+          rubric_version?: string
+          scores?: Json
+          target_ref?: string | null
+          target_type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          findings?: Json
+          id?: string
+          metadata?: Json
+          rubric_version?: string
+          scores?: Json
+          target_ref?: string | null
+          target_type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       meetings: {
         Row: {
           action_items: Json
@@ -288,6 +650,57 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      message_attachments: {
+        Row: {
+          conversation_id: string
+          created_at: string
+          file_name: string
+          id: string
+          message_id: string | null
+          mime_type: string
+          size_bytes: number
+          storage_path: string
+          user_id: string
+        }
+        Insert: {
+          conversation_id: string
+          created_at?: string
+          file_name: string
+          id?: string
+          message_id?: string | null
+          mime_type: string
+          size_bytes?: number
+          storage_path: string
+          user_id: string
+        }
+        Update: {
+          conversation_id?: string
+          created_at?: string
+          file_name?: string
+          id?: string
+          message_id?: string | null
+          mime_type?: string
+          size_bytes?: number
+          storage_path?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_attachments_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_attachments_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "conversation_messages"
             referencedColumns: ["id"]
           },
         ]
