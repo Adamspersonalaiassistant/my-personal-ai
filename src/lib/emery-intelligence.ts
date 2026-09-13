@@ -209,7 +209,9 @@ export function selectRelevantMemories(
       memory,
       score: memoryScore(memory, queryTokens, query, newestMessage),
     }))
-    .filter(({ score, memory }) => score >= 4.2 || (Number(memory.importance ?? 0) >= 5 && score >= 3))
+    .filter(
+      ({ score, memory }) => score >= 4.2 || (Number(memory.importance ?? 0) >= 5 && score >= 3),
+    )
     .sort((a, b) => b.score - a.score || newerFirst(a.memory, b.memory))
     .map(({ memory }) => memory);
 
@@ -309,7 +311,8 @@ export async function refreshRollingConversationState(args: {
   recentHistory: RecentTurn[];
 }) {
   const current = readConversationState(args.conversation.metadata);
-  if (!shouldRefreshConversationState(current, args.recentHistory, args.newestMessage)) return current;
+  if (!shouldRefreshConversationState(current, args.recentHistory, args.newestMessage))
+    return current;
 
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -436,16 +439,28 @@ export function buildExecutiveFocus(context: {
   const lines = [
     primary ? `Highest-leverage next move: ${primary}` : null,
     overdue.length
-      ? `Overdue (${overdue.length}): ${overdue.slice(0, 2).map((task) => task.title).join("; ")}`
+      ? `Overdue (${overdue.length}): ${overdue
+          .slice(0, 2)
+          .map((task) => task.title)
+          .join("; ")}`
       : null,
     dueSoon.length
-      ? `Due soon (${dueSoon.length}): ${dueSoon.slice(0, 2).map((task) => task.title).join("; ")}`
+      ? `Due soon (${dueSoon.length}): ${dueSoon
+          .slice(0, 2)
+          .map((task) => task.title)
+          .join("; ")}`
       : null,
     high.length
-      ? `Other high-priority work: ${high.slice(0, 2).map((task) => task.title).join("; ")}`
+      ? `Other high-priority work: ${high
+          .slice(0, 2)
+          .map((task) => task.title)
+          .join("; ")}`
       : null,
     missingNext.length
-      ? `Projects missing a next action: ${missingNext.slice(0, 2).map((project) => project.name).join("; ")}`
+      ? `Projects missing a next action: ${missingNext
+          .slice(0, 2)
+          .map((project) => project.name)
+          .join("; ")}`
       : null,
     nearestMeeting
       ? `Nearest meeting: ${nearestMeeting.title ?? "Untitled"} at ${nearestMeeting.meeting_at}`
