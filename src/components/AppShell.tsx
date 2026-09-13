@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import {
   MessageCircle,
   UsersRound,
@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import brainImage from "@/assets/neural-brain.png";
+import { normalizePrefill, resolveEmeryReturn } from "@/lib/emery-handoff";
 
 const navItems = [
   { to: "/chat", label: "Emery", compactLabel: "Emery", icon: MessageCircle },
@@ -23,12 +24,20 @@ export function AppShell({
   title,
   children,
   padded = true,
+  askEmery,
 }: {
   title: string;
   children: ReactNode;
   padded?: boolean;
+  /** Optional context question this page hands off to the main Emery chat. */
+  askEmery?: string;
 }) {
   const showSectionTitle = title !== "Chat" && title !== "Emery";
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const returnTo = resolveEmeryReturn(pathname);
+  const prefill = normalizePrefill(askEmery);
+  const onChat = pathname.startsWith("/chat");
+
 
   return (
     <div className="relative mx-auto flex min-h-[100dvh] w-full max-w-3xl flex-col overflow-hidden bg-background/82 text-foreground md:min-h-[calc(100dvh-36px)] md:rounded-[2rem] md:border md:border-border/55 md:shadow-[0_30px_90px_rgba(0,0,0,0.46)]">
