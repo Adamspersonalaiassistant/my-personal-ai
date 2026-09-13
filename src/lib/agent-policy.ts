@@ -11,6 +11,11 @@ export type AgentContextBundle = {
 
 const HPO_TERMS =
   /\b(hpo|hudson pro|orthop|referr|attorney|law firm|doctor|physician|pcp|primary care|office|account|patient|pip|workers? comp|wc|marketing|route|visit|vein|hand|morris plains|hoboken|jersey|newark)\b/i;
+const HPO_EXPLICIT =
+  /\b(hpo|hudson pro|hudson pro orthop|hudson pro orthopaedics|hudson pro orthopedics)\b/i;
+const HPO_WORKFLOW =
+  /\b(referral source|referral relationship|marketing route|pcp outreach|attorney outreach|patient management|pip|workers? comp|workers? compensation|office visit|marketing visit|prospect office|account follow[- ]?up)\b/i;
+const HPO_GEOGRAPHY = /\b(hoboken|morris plains|newark|north bergen|fort lee|edgewater|jersey city)\b/i;
 const GENERAL_GOAL_TERMS =
   /\b(goal|priority|project|task|deadline|income|money|wealth|family|business|career|time|focus|plan|strategy|decision|next action)\b/i;
 
@@ -39,7 +44,7 @@ export function selectHpoDelegates(message: string): HpoDelegate[] {
 }
 
 export function shouldResearchWithWeb(message: string) {
-  return /\b(latest|current|today|tonight|tomorrow|this week|news|price|cost|available|availability|hours|open now|closed|law|legal rule|regulation|policy|software version|release|update|company|ceo|president|election|weather|score|schedule|event|restaurant|hotel|flight|office|doctor|physician|attorney|address|phone|website|verify|research|find|search|look up|compare current)\b/i.test(
+  return /\b(latest|current|today|tonight|tomorrow|this week|news|price|cost|available|availability|hours|open now|closed|law|legal rule|regulation|policy|software version|release|update|company|ceo|president|election|weather|score|schedule|event|restaurant|hotel|flight|address|phone|website|verify|research|find|search|look up|compare current)\b/i.test(
     message,
   );
 }
@@ -62,12 +67,18 @@ export function isExplicitAgentCreationCommand(message: string) {
   return directVerb.test(normalized) || needAgent.test(normalized);
 }
 
+function clearlyHpoWork(text: string) {
+  if (HPO_EXPLICIT.test(text)) return true;
+  if (HPO_WORKFLOW.test(text)) return true;
+  return HPO_GEOGRAPHY.test(text) && /\b(marketing|route|referral|prospect|office visit|outreach)\b/i.test(text);
+}
+
 export function routeMainSpecialist(message: string): MainSpecialist | null {
   const text = message.trim();
   if (!text) return null;
 
   if (
-    /\b(second opinion|second set of eyes|stress[- ]?test|challenge (?:this|my|the) plan|critique (?:this|my|the) plan|is this (?:really )?the best strategy|better strategy)\b/i.test(
+    /\b(second opinion|second set of eyes|stress[- ]?test|challenge (?:this|my|the) plan|critique (?:this|my|the) plan|is this (?:really )?the best strategy|better strategy|trade[- ]?off|what am i missing|poke holes)\b/i.test(
       text,
     )
   ) {
@@ -75,8 +86,8 @@ export function routeMainSpecialist(message: string): MainSpecialist | null {
   }
 
   if (
-    /\b(hpo|hudson pro)\b/i.test(text) &&
-    /\b(route|office|doctor|physician|pcp|attorney|referral|relationship|patient|marketing|prospect|visit|account|lunch|follow[- ]?up|morris plains|hoboken|newark)\b/i.test(
+    clearlyHpoWork(text) &&
+    /\b(route|office|doctor|physician|pcp|attorney|referral|relationship|patient|marketing|prospect|visit|account|lunch|follow[- ]?up|case|pcc|outreach)\b/i.test(
       text,
     )
   ) {
@@ -84,7 +95,7 @@ export function routeMainSpecialist(message: string): MainSpecialist | null {
   }
 
   if (
-    /\b(research|look up|verify|fact[- ]?check|find current|compare current|latest|current data|current information|what does the research say|search the web)\b/i.test(
+    /\b(research|look up|verify|fact[- ]?check|find current|compare current|latest|current data|current information|what does the research say|search the web|check online|source this)\b/i.test(
       text,
     )
   ) {
@@ -109,8 +120,6 @@ function textOf(value: unknown): string {
 function relevantToRequest(row: Record<string, unknown>, request: string, extra?: RegExp) {
   const haystack = textOf(row).toLowerCase();
   const normalizedRequest = request.toLowerCase();
-  // Domain fallback is allowed only when the request itself is in that domain. This prevents
-  // unrelated family/finance/work memories from leaking into a generic research request.
   if (extra?.test(normalizedRequest) && extra.test(haystack)) return true;
   const words = normalizedRequest
     .replace(/[^a-z0-9 ]+/g, " ")
@@ -132,8 +141,6 @@ function scopedProfile(
       request,
     );
   if (schedulingRelevant && profile["timezone"]) result["timezone"] = profile["timezone"];
-  // Strategy is the one specialist allowed a broader stable summary because its job is
-  // explicitly cross-life tradeoff analysis. Other specialists receive request-scoped context.
   if (scope === "strategy-agent" && profile["profile_summary"]) {
     result["profile_summary"] = profile["profile_summary"];
   }
