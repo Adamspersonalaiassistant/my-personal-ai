@@ -15,7 +15,8 @@ const HPO_EXPLICIT =
   /\b(hpo|hudson pro|hudson pro orthop|hudson pro orthopaedics|hudson pro orthopedics)\b/i;
 const HPO_WORKFLOW =
   /\b(referral source|referral relationship|marketing route|pcp outreach|attorney outreach|patient management|pip|workers? comp|workers? compensation|office visit|marketing visit|prospect office|account follow[- ]?up)\b/i;
-const HPO_GEOGRAPHY = /\b(hoboken|morris plains|newark|north bergen|fort lee|edgewater|jersey city)\b/i;
+const HPO_GEOGRAPHY =
+  /\b(hoboken|morris plains|newark|north bergen|fort lee|edgewater|jersey city)\b/i;
 const GENERAL_GOAL_TERMS =
   /\b(goal|priority|project|task|deadline|income|money|wealth|family|business|career|time|focus|plan|strategy|decision|next action)\b/i;
 
@@ -70,7 +71,10 @@ export function isExplicitAgentCreationCommand(message: string) {
 function clearlyHpoWork(text: string) {
   if (HPO_EXPLICIT.test(text)) return true;
   if (HPO_WORKFLOW.test(text)) return true;
-  return HPO_GEOGRAPHY.test(text) && /\b(marketing|route|referral|prospect|office visit|outreach)\b/i.test(text);
+  return (
+    HPO_GEOGRAPHY.test(text) &&
+    /\b(marketing|route|referral|prospect|office visit|outreach)\b/i.test(text)
+  );
 }
 
 export function routeMainSpecialist(message: string): MainSpecialist | null {
