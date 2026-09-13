@@ -1,5 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
+  ArrowLeft,
   MessageCircle,
   UsersRound,
   CheckSquare,
@@ -8,9 +9,15 @@ import {
   Settings as SettingsIcon,
   Brain,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import brainImage from "@/assets/neural-brain.png";
-import { normalizePrefill, resolveEmeryReturn } from "@/lib/emery-handoff";
+import {
+  emeryReturnLabel,
+  isEmeryReturnPath,
+  normalizePrefill,
+  resolveEmeryReturn,
+  type EmeryReturnPath,
+} from "@/lib/emery-handoff";
 
 const navItems = [
   { to: "/chat", label: "Emery", compactLabel: "Emery", icon: MessageCircle },
@@ -19,6 +26,9 @@ const navItems = [
   { to: "/meetings", label: "Meetings", compactLabel: "Meet", icon: CalendarDays },
   { to: "/projects", label: "Projects", compactLabel: "Projects", icon: FolderKanban },
 ] as const;
+
+const RETURN_KEY = "emery:return";
+const PREFILL_KEY = "emery:prefill";
 
 export function AppShell({
   title,
@@ -29,7 +39,7 @@ export function AppShell({
   title: string;
   children: ReactNode;
   padded?: boolean;
-  /** Optional context question this page hands off to the main Emery chat. */
+  /** Optional bounded context saved for the next handoff into the main Emery chat. */
   askEmery?: string;
 }) {
   const showSectionTitle = title !== "Chat" && title !== "Emery";
@@ -37,7 +47,28 @@ export function AppShell({
   const returnTo = resolveEmeryReturn(pathname);
   const prefill = normalizePrefill(askEmery);
   const onChat = pathname.startsWith("/chat");
+  const [lastReturn, setLastReturn] = useState<EmeryReturnPath | null>(null);
 
+  useEffect(() => {
+    if (!onChat || typeof window === "undefined") return;
+    const stored = window.sessionStorage.getItem(RETURN_KEY);
+    setLastReturn(isEmeryReturnPath(stored) ? stored : null);
+  }, [onChat]);
+
+  function rememberEmeryHandoff() {
+    if (typeof window === "undefined" || !returnTo) return;
+    window.sessionStorage.setItem(RETURN_KEY, returnTo);
+    if (prefill) window.sessionStorage.setItem(PREFILL_KEY, prefill);
+    else window.sessionStorage.removeItem(PREFILL_KEY);
+  }
+
+  function clearReturnContext() {
+    if (typeof window !== "undefined") {
+      window.sessionStorage.removeItem(RETURN_KEY);
+      window.sessionStorage.removeItem(PREFILL_KEY);
+    }
+    setLastReturn(null);
+  }
 
   return (
     <div className="relative mx-auto flex min-h-[100dvh] w-full max-w-3xl flex-col overflow-hidden bg-background/82 text-foreground md:min-h-[calc(100dvh-36px)] md:rounded-[2rem] md:border md:border-border/55 md:shadow-[0_30px_90px_rgba(0,0,0,0.46)]">
@@ -58,7 +89,9 @@ export function AppShell({
         <div className="flex min-w-0 items-center gap-3">
           <Link
             to="/chat"
-            aria-label="Open Emery main conversation"
+            aria-label={onChat ? "Emery main conversation" : "Return to Emery main conversation"}
+            title={onChat ? "Emery" : "Return to Emery"}
+            onClick={rememberEmeryHandoff}
             className="emery-press relative flex size-11 shrink-0 items-center justify-center rounded-[1.05rem]"
           >
             <div className="relative flex size-10 items-center justify-center overflow-hidden rounded-2xl border border-primary/18 bg-primary/[0.045] shadow-[0_0_22px_oklch(0.805_0.175_155/0.08)]">
@@ -85,18 +118,32 @@ export function AppShell({
             </div>
             <div className="mt-0.5 flex items-center gap-1.5 text-[10px] font-medium tracking-wide text-muted-foreground">
               <span className="size-1.5 rounded-full bg-primary" />
-              <span>Ready · memory connected</span>
+              <span>{onChat ? "Main conversation · memory connected" : "Tap Emery anytime"}</span>
             </div>
           </div>
         </div>
 
-        <Link
-          to="/settings"
-          aria-label="Open Emery system settings"
-          className="emery-press emery-surface flex size-11 shrink-0 items-center justify-center rounded-2xl text-muted-foreground hover:border-primary/20 hover:bg-primary/[0.045] hover:text-foreground"
-        >
-          <SettingsIcon className="size-[18px]" />
-        </Link>
+        <div className="flex items-center gap-2">
+          {onChat && lastReturn ? (
+            <Link
+              to={lastReturn}
+              onClick={clearReturnContext}
+              aria-label={`Back to ${emeryReturnLabel(lastReturn)}`}
+              title={`Back to ${emeryReturnLabel(lastReturn)}`}
+              className="emery-press emery-surface flex min-h-11 items-center gap-2 rounded-2xl px-3 text-xs font-semibold text-muted-foreground hover:border-primary/20 hover:bg-primary/[0.045] hover:text-foreground"
+            >
+              <ArrowLeft className="size-4" aria-hidden />
+              <span className="hidden min-[390px]:inline">{emeryReturnLabel(lastReturn)}</span>
+            </Link>
+          ) : null}
+          <Link
+            to="/settings"
+            aria-label="Open Emery system settings"
+            className="emery-press emery-surface flex size-11 shrink-0 items-center justify-center rounded-2xl text-muted-foreground hover:border-primary/20 hover:bg-primary/[0.045] hover:text-foreground"
+          >
+            <SettingsIcon className="size-[18px]" />
+          </Link>
+        </div>
       </header>
 
       <main
@@ -115,6 +162,9 @@ export function AppShell({
               key={to}
               to={to}
               aria-label={label}
+              onClick={() => {
+                if (to === "/chat") rememberEmeryHandoff();
+              }}
               className="emery-press group relative flex min-h-[54px] min-w-0 flex-col items-center justify-center gap-1 rounded-[1.05rem] px-0.5 text-[9px] font-semibold text-muted-foreground transition-colors min-[390px]:px-1.5 min-[390px]:text-[10px]"
               activeProps={{
                 className:
