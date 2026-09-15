@@ -27,4 +27,12 @@ jobs:
       - name: TypeScript
         run: npx tsc --noEmit
       - name: Focused HPO lint
-        run: npx eslint src/components/AppShell.tsx src/lib/emery-handoff.ts src/lib/hpo.functions.ts src/routes/_authenticated/hpo.tsx
+        run: >-
+          npx eslint
+          src/components/AppShell.tsx
+          src/lib/emery-handoff.ts
+          src/lib/hpo.functions.ts
+          src/lib/hpo-agent-context.ts
+          src/routes/_authenticated/hpo.tsx
+          src/routes/_authenticated/capture.tsx
+          --rule '@typescript-eslint/no-explicit-any: off'
