@@ -1,0 +1,64 @@
+name: Patch HPO Agent Context
+
+on:
+  push:
+    branches: [feature/hpo-operating-system]
+    paths:
+      - '.github/workflows/patch-hpo-agent-context.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/hpo-operating-system
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Patch HPO Agent scoped context
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/lib/agent.functions.ts')
+          s = p.read_text()
+          old_import = 'import { scopeAgentContext, selectHpoDelegates, shouldResearchWithWeb } from "@/lib/agent-policy";\n'
+          new_import = old_import + 'import { loadHpoAgentContext } from "@/lib/hpo-agent-context";\n'
+          if 'from "@/lib/hpo-agent-context"' not in s:
+              if old_import not in s: raise SystemExit('agent-policy import anchor missing')
+              s = s.replace(old_import, new_import, 1)
+
+          old1 = '''    const rawAdamContext = await loadAdamContext(db, context.userId);\n    const adamContext = scopeAgentContext(rawAdamContext, agent.slug, data.message, {\n      mission: agent.mission,\n      description: agent.description,\n    });\n'''
+          new1 = '''    const rawAdamContext = await loadAdamContext(db, context.userId);\n    const scopedAdamContext = scopeAgentContext(rawAdamContext, agent.slug, data.message, {\n      mission: agent.mission,\n      description: agent.description,\n    });\n    const adamContext =\n      agent.slug === "hpo-agent"\n        ? {\n            ...scopedAdamContext,\n            hpo_operating_system: await loadHpoAgentContext(db, context.userId, data.message),\n          }\n        : scopedAdamContext;\n'''
+          if old1 in s:
+              s = s.replace(old1, new1, 1)
+          elif 'hpo_operating_system: await loadHpoAgentContext(db, context.userId, data.message)' not in s:
+              raise SystemExit('sendAgentMessage context anchor missing')
+
+          old2 = '''  const rawAdamContext = await loadAdamContext(db, userId);\n  const adamContext = scopeAgentContext(rawAdamContext, agent.slug, assignment, {\n    mission: agent.mission,\n    description: agent.description,\n  });\n'''
+          new2 = '''  const rawAdamContext = await loadAdamContext(db, userId);\n  const scopedAdamContext = scopeAgentContext(rawAdamContext, agent.slug, assignment, {\n    mission: agent.mission,\n    description: agent.description,\n  });\n  const adamContext =\n    slug === "hpo-agent"\n      ? {\n          ...scopedAdamContext,\n          hpo_operating_system: await loadHpoAgentContext(db, userId, assignment),\n        }\n      : scopedAdamContext;\n'''
+          if old2 in s:
+              s = s.replace(old2, new2, 1)
+          elif 'hpo_operating_system: await loadHpoAgentContext(db, userId, assignment)' not in s:
+              raise SystemExit('consult context anchor missing')
+
+          p.write_text(s)
+          PY
+      - run: npm install --no-audit --no-fund
+      - run: npx prettier --write src/lib/agent.functions.ts src/lib/hpo-agent-context.ts
+      - run: npm run build
+      - run: npx tsc --noEmit
+      - run: npx eslint src/lib/agent.functions.ts src/lib/hpo-agent-context.ts
+      - name: Commit validated patch
+        run: |
+          git config user.name "Emery Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/lib/agent.functions.ts src/lib/hpo-agent-context.ts src/routeTree.gen.ts
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Connect HPO Agent to operating system context"
+          git push origin HEAD:feature/hpo-operating-system
