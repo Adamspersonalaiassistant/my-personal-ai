@@ -33,7 +33,11 @@ function object(value: unknown): Json {
 
 function isHpoMetadata(value: unknown) {
   const metadata = object(value);
-  return metadata["domain"] === "hpo" || metadata["hpo"] === true || typeof metadata["hpo_account_id"] === "string";
+  return (
+    metadata["domain"] === "hpo" ||
+    metadata["hpo"] === true ||
+    typeof metadata["hpo_account_id"] === "string"
+  );
 }
 
 function clampPriority(value: unknown) {
@@ -49,60 +53,83 @@ export const getHpoDashboard = createServerFn({ method: "GET" })
     const nowIso = now.toISOString();
     const inThirtyDays = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
-    const [accountsResult, interactionsResult, metricsResult, routesResult, tasksResult, meetingsResult, importsResult] =
-      await Promise.all([
-        db
-          .from("hpo_accounts")
-          .select("id, name, account_type, specialty, territory, city, address, priority, owner_name, relationship_stage, status, notes, last_touch_at, next_action, next_action_due_at, metadata, updated_at")
-          .eq("user_id", userId)
-          .eq("status", "active")
-          .order("priority", { ascending: false })
-          .order("next_action_due_at", { ascending: true, nullsFirst: false })
-          .limit(100),
-        db
-          .from("hpo_interactions")
-          .select("id, account_id, interaction_type, occurred_at, summary, outcome, relationship_signal, next_action, next_action_due_at, source_type")
-          .eq("user_id", userId)
-          .order("occurred_at", { ascending: false })
-          .limit(30),
-        db
-          .from("hpo_sales_metrics")
-          .select("id, account_id, period_start, period_end, referral_count, entered_care_count, progressing_count, blocked_exception_count, relationship_impact_count, notes")
-          .eq("user_id", userId)
-          .order("period_end", { ascending: false })
-          .limit(24),
-        db
-          .from("hpo_route_plans")
-          .select("id, route_date, area, status, start_window, end_window, notes, metadata")
-          .eq("user_id", userId)
-          .gte("route_date", nowIso.slice(0, 10))
-          .order("route_date", { ascending: true })
-          .limit(7),
-        db
-          .from("tasks")
-          .select("id, title, details, status, priority, due_at, project_id, metadata")
-          .eq("user_id", userId)
-          .neq("status", "completed")
-          .order("priority", { ascending: false })
-          .order("due_at", { ascending: true, nullsFirst: false })
-          .limit(100),
-        db
-          .from("meetings")
-          .select("id, title, meeting_at, participants, metadata")
-          .eq("user_id", userId)
-          .gte("meeting_at", nowIso)
-          .lte("meeting_at", inThirtyDays)
-          .order("meeting_at", { ascending: true })
-          .limit(50),
-        db
-          .from("hpo_data_imports")
-          .select("id, source_type, source_name, status, row_count, imported_count, rejected_count, created_at")
-          .eq("user_id", userId)
-          .order("created_at", { ascending: false })
-          .limit(5),
-      ]);
+    const [
+      accountsResult,
+      interactionsResult,
+      metricsResult,
+      routesResult,
+      tasksResult,
+      meetingsResult,
+      importsResult,
+    ] = await Promise.all([
+      db
+        .from("hpo_accounts")
+        .select(
+          "id, name, account_type, specialty, territory, city, address, priority, owner_name, relationship_stage, status, notes, last_touch_at, next_action, next_action_due_at, metadata, updated_at",
+        )
+        .eq("user_id", userId)
+        .eq("status", "active")
+        .order("priority", { ascending: false })
+        .order("next_action_due_at", { ascending: true, nullsFirst: false })
+        .limit(100),
+      db
+        .from("hpo_interactions")
+        .select(
+          "id, account_id, interaction_type, occurred_at, summary, outcome, relationship_signal, next_action, next_action_due_at, source_type",
+        )
+        .eq("user_id", userId)
+        .order("occurred_at", { ascending: false })
+        .limit(30),
+      db
+        .from("hpo_sales_metrics")
+        .select(
+          "id, account_id, period_start, period_end, referral_count, entered_care_count, progressing_count, blocked_exception_count, relationship_impact_count, notes",
+        )
+        .eq("user_id", userId)
+        .order("period_end", { ascending: false })
+        .limit(24),
+      db
+        .from("hpo_route_plans")
+        .select("id, route_date, area, status, start_window, end_window, notes, metadata")
+        .eq("user_id", userId)
+        .gte("route_date", nowIso.slice(0, 10))
+        .order("route_date", { ascending: true })
+        .limit(7),
+      db
+        .from("tasks")
+        .select("id, title, details, status, priority, due_at, project_id, metadata")
+        .eq("user_id", userId)
+        .neq("status", "completed")
+        .order("priority", { ascending: false })
+        .order("due_at", { ascending: true, nullsFirst: false })
+        .limit(100),
+      db
+        .from("meetings")
+        .select("id, title, meeting_at, participants, metadata")
+        .eq("user_id", userId)
+        .gte("meeting_at", nowIso)
+        .lte("meeting_at", inThirtyDays)
+        .order("meeting_at", { ascending: true })
+        .limit(50),
+      db
+        .from("hpo_data_imports")
+        .select(
+          "id, source_type, source_name, status, row_count, imported_count, rejected_count, created_at",
+        )
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(5),
+    ]);
 
-    for (const result of [accountsResult, interactionsResult, metricsResult, routesResult, tasksResult, meetingsResult, importsResult]) {
+    for (const result of [
+      accountsResult,
+      interactionsResult,
+      metricsResult,
+      routesResult,
+      tasksResult,
+      meetingsResult,
+      importsResult,
+    ]) {
       if (result.error) throw result.error;
     }
 
@@ -110,11 +137,14 @@ export const getHpoDashboard = createServerFn({ method: "GET" })
     const interactions = interactionsResult.data ?? [];
     const metrics = metricsResult.data ?? [];
     const hpoTasks = (tasksResult.data ?? []).filter((task: any) => isHpoMetadata(task.metadata));
-    const hpoMeetings = (meetingsResult.data ?? []).filter((meeting: any) => isHpoMetadata(meeting.metadata));
+    const hpoMeetings = (meetingsResult.data ?? []).filter((meeting: any) =>
+      isHpoMetadata(meeting.metadata),
+    );
     const accountNames = new Map(accounts.map((account: any) => [account.id, account.name]));
 
     const overdueFollowups = accounts.filter(
-      (account: any) => account.next_action_due_at && Date.parse(account.next_action_due_at) < now.getTime(),
+      (account: any) =>
+        account.next_action_due_at && Date.parse(account.next_action_due_at) < now.getTime(),
     );
     const coldThreshold = now.getTime() - 30 * 24 * 60 * 60 * 1000;
     const coldAccounts = accounts.filter(
@@ -132,7 +162,8 @@ export const getHpoDashboard = createServerFn({ method: "GET" })
         enteredCare: sum.enteredCare + Number(metric.entered_care_count ?? 0),
         progressing: sum.progressing + Number(metric.progressing_count ?? 0),
         blocked: sum.blocked + Number(metric.blocked_exception_count ?? 0),
-        relationshipImpact: sum.relationshipImpact + Number(metric.relationship_impact_count ?? 0),
+        relationshipImpact:
+          sum.relationshipImpact + Number(metric.relationship_impact_count ?? 0),
       }),
       { referrals: 0, enteredCare: 0, progressing: 0, blocked: 0, relationshipImpact: 0 },
     );
@@ -142,7 +173,8 @@ export const getHpoDashboard = createServerFn({ method: "GET" })
       : overdueFollowups[0]
         ? {
             type: "followup",
-            title: overdueFollowups[0].next_action || `Follow up with ${overdueFollowups[0].name}`,
+            title:
+              overdueFollowups[0].next_action || `Follow up with ${overdueFollowups[0].name}`,
             detail: overdueFollowups[0].name,
           }
         : accounts[0]
@@ -179,9 +211,12 @@ export const getHpoDashboard = createServerFn({ method: "GET" })
 export const listHpoAccounts = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
+    const db = context.supabase as any;
+    const { data, error } = await db
       .from("hpo_accounts")
-      .select("id, name, account_type, specialty, territory, city, address, priority, owner_name, relationship_stage, status, notes, last_touch_at, next_action, next_action_due_at, metadata, created_at, updated_at")
+      .select(
+        "id, name, account_type, specialty, territory, city, address, priority, owner_name, relationship_stage, status, notes, last_touch_at, next_action, next_action_due_at, metadata, created_at, updated_at",
+      )
       .eq("user_id", context.userId)
       .order("priority", { ascending: false })
       .order("name", { ascending: true });
@@ -208,7 +243,8 @@ export const createHpoAccount = createServerFn({ method: "POST" })
     };
   })
   .handler(async ({ data, context }) => {
-    const { data: account, error } = await context.supabase
+    const db = context.supabase as any;
+    const { data: account, error } = await db
       .from("hpo_accounts")
       .insert({
         user_id: context.userId,
@@ -239,7 +275,10 @@ export const logHpoInteraction = createServerFn({ method: "POST" })
     return {
       accountId: String(input.accountId),
       interactionType: input.interactionType?.trim() || "visit",
-      occurredAt: input.occurredAt && !Number.isNaN(Date.parse(input.occurredAt)) ? input.occurredAt : new Date().toISOString(),
+      occurredAt:
+        input.occurredAt && !Number.isNaN(Date.parse(input.occurredAt))
+          ? input.occurredAt
+          : new Date().toISOString(),
       summary,
       outcome: input.outcome?.trim() || null,
       relationshipSignal: input.relationshipSignal?.trim() || null,
@@ -307,7 +346,8 @@ export const stageHpoImport = createServerFn({ method: "POST" })
     };
   })
   .handler(async ({ data, context }) => {
-    const { data: row, error } = await context.supabase
+    const db = context.supabase as any;
+    const { data: row, error } = await db
       .from("hpo_data_imports")
       .insert({
         user_id: context.userId,
