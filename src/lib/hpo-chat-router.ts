@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { loadHpoAgentContext } from "@/lib/hpo-agent-context";
 
 type JsonRecord = Record<string, unknown>;
@@ -39,9 +40,7 @@ export type HpoTurnResult = {
 };
 
 function object(value: unknown): JsonRecord {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as JsonRecord)
-    : {};
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : {};
 }
 
 function normalize(text: string) {
@@ -82,8 +81,7 @@ function explicitHpoWrite(message: string) {
   return (
     /\b(?:log|save|record|capture|add)\b[\s\S]{0,80}\b(?:hpo|hudson pro|account|office|visit|touch|relationship|route|follow[- ]?up)\b/i.test(
       message,
-    ) ||
-    /\b(?:add|create)\b[\s\S]{0,80}\b(?:to|in)\s+(?:my\s+)?HPO\b/i.test(message)
+    ) || /\b(?:add|create)\b[\s\S]{0,80}\b(?:to|in)\s+(?:my\s+)?HPO\b/i.test(message)
   );
 }
 
@@ -138,11 +136,9 @@ function readPending(metadata: unknown): HpoPending | null {
     interaction_type: typeof row.interaction_type === "string" ? row.interaction_type : "visit",
     summary: typeof row.summary === "string" ? row.summary : "",
     outcome: typeof row.outcome === "string" ? row.outcome : "",
-    relationship_signal:
-      typeof row.relationship_signal === "string" ? row.relationship_signal : "",
+    relationship_signal: typeof row.relationship_signal === "string" ? row.relationship_signal : "",
     next_action: typeof row.next_action === "string" ? row.next_action : "",
-    next_action_due_at:
-      typeof row.next_action_due_at === "string" ? row.next_action_due_at : null,
+    next_action_due_at: typeof row.next_action_due_at === "string" ? row.next_action_due_at : null,
     account_type: typeof row.account_type === "string" ? row.account_type : "",
     specialty: typeof row.specialty === "string" ? row.specialty : "",
     city: typeof row.city === "string" ? row.city : "",
@@ -247,12 +243,7 @@ async function parseHpoTurn(
   return JSON.parse(text) as HpoParse;
 }
 
-async function executePending(
-  db: any,
-  userId: string,
-  pending: HpoPending,
-  sourceRef: string,
-) {
+async function executePending(db: any, userId: string, pending: HpoPending, sourceRef: string) {
   if (pending.intent === "create_account") {
     const existing = await db
       .from("hpo_accounts")

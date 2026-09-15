@@ -162,8 +162,7 @@ export const getHpoDashboard = createServerFn({ method: "GET" })
         enteredCare: sum.enteredCare + Number(metric.entered_care_count ?? 0),
         progressing: sum.progressing + Number(metric.progressing_count ?? 0),
         blocked: sum.blocked + Number(metric.blocked_exception_count ?? 0),
-        relationshipImpact:
-          sum.relationshipImpact + Number(metric.relationship_impact_count ?? 0),
+        relationshipImpact: sum.relationshipImpact + Number(metric.relationship_impact_count ?? 0),
       }),
       { referrals: 0, enteredCare: 0, progressing: 0, blocked: 0, relationshipImpact: 0 },
     );
@@ -173,8 +172,7 @@ export const getHpoDashboard = createServerFn({ method: "GET" })
       : overdueFollowups[0]
         ? {
             type: "followup",
-            title:
-              overdueFollowups[0].next_action || `Follow up with ${overdueFollowups[0].name}`,
+            title: overdueFollowups[0].next_action || `Follow up with ${overdueFollowups[0].name}`,
             detail: overdueFollowups[0].name,
           }
         : accounts[0]

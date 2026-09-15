@@ -2,9 +2,7 @@
 type JsonRecord = Record<string, unknown>;
 
 function object(value: unknown): JsonRecord {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as JsonRecord)
-    : {};
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : {};
 }
 
 function hpoTagged(value: unknown) {
@@ -43,55 +41,61 @@ export async function loadHpoAgentContext(db: any, userId: string, assignment: s
   const nowIso = now.toISOString();
   const requestTokens = tokens(assignment);
 
-  const [accountsResult, interactionsResult, metricsResult, routesResult, tasksResult, meetingsResult] =
-    await Promise.all([
-      db
-        .from("hpo_accounts")
-        .select(
-          "id, name, account_type, specialty, territory, city, address, priority, owner_name, relationship_stage, status, notes, last_touch_at, next_action, next_action_due_at, metadata",
-        )
-        .eq("user_id", userId)
-        .eq("status", "active")
-        .order("priority", { ascending: false })
-        .limit(80),
-      db
-        .from("hpo_interactions")
-        .select(
-          "id, account_id, interaction_type, occurred_at, summary, outcome, relationship_signal, next_action, next_action_due_at, source_type",
-        )
-        .eq("user_id", userId)
-        .order("occurred_at", { ascending: false })
-        .limit(100),
-      db
-        .from("hpo_sales_metrics")
-        .select(
-          "account_id, period_start, period_end, referral_count, entered_care_count, progressing_count, blocked_exception_count, relationship_impact_count, notes",
-        )
-        .eq("user_id", userId)
-        .order("period_end", { ascending: false })
-        .limit(60),
-      db
-        .from("hpo_route_plans")
-        .select("id, route_date, area, status, start_window, end_window, notes, metadata")
-        .eq("user_id", userId)
-        .gte("route_date", nowIso.slice(0, 10))
-        .order("route_date", { ascending: true })
-        .limit(10),
-      db
-        .from("tasks")
-        .select("id, title, details, status, priority, due_at, metadata")
-        .eq("user_id", userId)
-        .neq("status", "completed")
-        .order("priority", { ascending: false })
-        .limit(80),
-      db
-        .from("meetings")
-        .select("id, title, meeting_at, participants, metadata")
-        .eq("user_id", userId)
-        .gte("meeting_at", nowIso)
-        .order("meeting_at", { ascending: true })
-        .limit(50),
-    ]);
+  const [
+    accountsResult,
+    interactionsResult,
+    metricsResult,
+    routesResult,
+    tasksResult,
+    meetingsResult,
+  ] = await Promise.all([
+    db
+      .from("hpo_accounts")
+      .select(
+        "id, name, account_type, specialty, territory, city, address, priority, owner_name, relationship_stage, status, notes, last_touch_at, next_action, next_action_due_at, metadata",
+      )
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .order("priority", { ascending: false })
+      .limit(80),
+    db
+      .from("hpo_interactions")
+      .select(
+        "id, account_id, interaction_type, occurred_at, summary, outcome, relationship_signal, next_action, next_action_due_at, source_type",
+      )
+      .eq("user_id", userId)
+      .order("occurred_at", { ascending: false })
+      .limit(100),
+    db
+      .from("hpo_sales_metrics")
+      .select(
+        "account_id, period_start, period_end, referral_count, entered_care_count, progressing_count, blocked_exception_count, relationship_impact_count, notes",
+      )
+      .eq("user_id", userId)
+      .order("period_end", { ascending: false })
+      .limit(60),
+    db
+      .from("hpo_route_plans")
+      .select("id, route_date, area, status, start_window, end_window, notes, metadata")
+      .eq("user_id", userId)
+      .gte("route_date", nowIso.slice(0, 10))
+      .order("route_date", { ascending: true })
+      .limit(10),
+    db
+      .from("tasks")
+      .select("id, title, details, status, priority, due_at, metadata")
+      .eq("user_id", userId)
+      .neq("status", "completed")
+      .order("priority", { ascending: false })
+      .limit(80),
+    db
+      .from("meetings")
+      .select("id, title, meeting_at, participants, metadata")
+      .eq("user_id", userId)
+      .gte("meeting_at", nowIso)
+      .order("meeting_at", { ascending: true })
+      .limit(50),
+  ]);
 
   for (const result of [
     accountsResult,
@@ -126,7 +130,8 @@ export async function loadHpoAgentContext(db: any, userId: string, assignment: s
             .filter(Boolean)
             .join(" "),
           requestTokens,
-        ) + Number(account.priority ?? 3) / 10,
+        ) +
+        Number(account.priority ?? 3) / 10,
     }))
     .sort((a: any, b: any) => b.relevance - a.relevance)
     .slice(0, 20)
@@ -142,13 +147,11 @@ export async function loadHpoAgentContext(db: any, userId: string, assignment: s
     }));
 
   const metrics = (metricsResult.data ?? [])
-    .filter(
-      (metric: any) => !metric.account_id || selectedAccountIds.has(metric.account_id),
-    )
+    .filter((metric: any) => !metric.account_id || selectedAccountIds.has(metric.account_id))
     .slice(0, 24)
     .map((metric: any) => ({
       ...metric,
-      account_name: metric.account_id ? accountMap.get(metric.account_id)?.name ?? null : null,
+      account_name: metric.account_id ? (accountMap.get(metric.account_id)?.name ?? null) : null,
     }));
 
   const hpoTasks = (tasksResult.data ?? [])

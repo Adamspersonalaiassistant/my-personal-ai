@@ -3,6 +3,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { ASSISTANT_IDENTITY } from "@/lib/assistant-identity";
 import { scopeAgentContext, selectHpoDelegates, shouldResearchWithWeb } from "@/lib/agent-policy";
+import { loadHpoAgentContext } from "@/lib/hpo-agent-context";
 
 type AgentRow = {
   id: string;
@@ -753,10 +754,17 @@ export const sendAgentMessage = createServerFn({ method: "POST" })
     );
     const history = await recentThread(db, context.userId, thread.id);
     const rawAdamContext = await loadAdamContext(db, context.userId);
-    const adamContext = scopeAgentContext(rawAdamContext, agent.slug, data.message, {
+    const scopedAdamContext = scopeAgentContext(rawAdamContext, agent.slug, data.message, {
       mission: agent.mission,
       description: agent.description,
     });
+    const adamContext =
+      agent.slug === "hpo-agent"
+        ? {
+            ...scopedAdamContext,
+            hpo_operating_system: await loadHpoAgentContext(db, context.userId, data.message),
+          }
+        : scopedAdamContext;
 
     let specialist: { response: string; metadata: Record<string, unknown> };
     try {
@@ -854,10 +862,17 @@ export async function consultSpecialistFromEmery(
   );
   const history = await recentThread(db, userId, thread.id);
   const rawAdamContext = await loadAdamContext(db, userId);
-  const adamContext = scopeAgentContext(rawAdamContext, agent.slug, assignment, {
+  const scopedAdamContext = scopeAgentContext(rawAdamContext, agent.slug, assignment, {
     mission: agent.mission,
     description: agent.description,
   });
+  const adamContext =
+    slug === "hpo-agent"
+      ? {
+          ...scopedAdamContext,
+          hpo_operating_system: await loadHpoAgentContext(db, userId, assignment),
+        }
+      : scopedAdamContext;
   let specialist: { response: string; metadata: Record<string, unknown> };
   if (slug === "hpo-agent")
     specialist = await runHpoTeam(apiKey, agent, assignment, adamContext, history);
