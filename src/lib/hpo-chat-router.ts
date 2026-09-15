@@ -19,7 +19,8 @@ type HpoPending = {
   priority: number | null;
 };
 
-type HpoParse = HpoPending & {
+type HpoParse = Omit<HpoPending, "intent"> & {
+  intent: HpoPending["intent"] | "none";
   is_hpo: boolean;
   confidence: number;
   needs_clarification: boolean;
