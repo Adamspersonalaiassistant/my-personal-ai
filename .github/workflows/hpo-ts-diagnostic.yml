@@ -1,0 +1,37 @@
+name: HPO TypeScript Diagnostic
+
+on:
+  push:
+    branches: [feature/hpo-operating-system]
+    paths:
+      - '.github/workflows/hpo-ts-diagnostic.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - name: Generate route tree
+        run: npm run build
+      - name: Capture TypeScript diagnostics
+        shell: bash
+        run: |
+          set +e
+          npx tsc --noEmit > hpo-ts-diagnostic.txt 2>&1
+          code=$?
+          echo "exit_code=$code" >> hpo-ts-diagnostic.txt
+          exit 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hpo-ts-diagnostic
+          path: hpo-ts-diagnostic.txt
+          retention-days: 1
