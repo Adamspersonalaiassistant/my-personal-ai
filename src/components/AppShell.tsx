@@ -4,7 +4,7 @@ import {
   MessageCircle,
   UsersRound,
   CheckSquare,
-  CalendarDays,
+  BriefcaseBusiness,
   FolderKanban,
   Settings as SettingsIcon,
   Brain,
@@ -21,9 +21,9 @@ import {
 
 const navItems = [
   { to: "/chat", label: "Emery", compactLabel: "Emery", icon: MessageCircle },
-  { to: "/agents", label: "Agents", compactLabel: "Agents", icon: UsersRound },
+  { to: "/hpo", label: "HPO", compactLabel: "HPO", icon: BriefcaseBusiness },
   { to: "/tasks", label: "Tasks", compactLabel: "Tasks", icon: CheckSquare },
-  { to: "/meetings", label: "Meetings", compactLabel: "Meet", icon: CalendarDays },
+  { to: "/agents", label: "Agents", compactLabel: "Agents", icon: UsersRound },
   { to: "/projects", label: "Projects", compactLabel: "Projects", icon: FolderKanban },
 ] as const;
 
