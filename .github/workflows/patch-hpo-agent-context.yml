@@ -5,6 +5,7 @@ on:
     branches: [feature/hpo-operating-system]
     paths:
       - '.github/workflows/patch-hpo-agent-context.yml'
+      - 'src/lib/hpo-agent-context.ts'
 
 permissions:
   contents: write
