@@ -16,17 +16,33 @@ HPO is a referral-source / relationship / field-sales operating system. It is **
 6. Aggregate referral / sales metrics
 7. Useful historical ChatGPT marketing-project notes after review/deduplication
 
+## Staging first, then promotion
+
+Large imports should enter `hpo_data_imports` as an import batch and `hpo_import_rows` as raw/normalized staging rows before becoming live account, contact, interaction, route or metric records. Each staged row keeps its raw source, normalized candidate, entity type, dedupe key, status, target record and any validation issue.
+
+This gives Emery a reversible workflow:
+
+1. Preserve the original source.
+2. Normalize only what the source actually supports.
+3. Compute or accept a stable dedupe key when confidence is high.
+4. Match against existing HPO records.
+5. Flag ambiguous rows instead of guessing.
+6. Promote validated rows into live HPO tables.
+7. Keep the import batch as provenance so a bad import can be traced or corrected.
+
+Never silently merge similar-looking offices, contacts or interactions merely because their names are close.
+
 ## Account record
 
 Required: account/office name.
 
-Useful fields: account type, specialty/category, territory, city, full address, priority, owner/marketer, relationship stage, active status, source/origin, durable relationship notes, last touch, next relationship action, next-action due date.
+Useful first-class fields: account type, specialty/category, territory, city, full address, priority, owner/marketer, relationship stage, relationship health, active status, opportunity, blockers, tags, source/origin, source reference, dedupe key, durable relationship notes, last touch, next interaction, next relationship action, next-action due date.
 
-Do not automatically merge similarly named accounts without evidence. Preserve source provenance so a bad import can be corrected later.
+Relationship stages may include prospect, warming, active, strong, at-risk/cold, reactivation and blocked/exception when supported by Adam's data. Do not invent a stage simply to fill a field.
 
 ## Contacts
 
-Contacts belong to an account. Store only business contact details Adam intentionally provides: name, business role/title, phone/email, preferred contact method, relationship notes. Avoid personal/sensitive information that is not needed for the professional relationship.
+Contacts belong to an account. Store only business contact details Adam intentionally provides: name, business role/title, phone/email, preferred contact method, relationship notes, source provenance and an optional dedupe key. Avoid personal/sensitive information that is not needed for the professional relationship.
 
 ## Relationship interactions
 
@@ -44,7 +60,8 @@ HPO does not create a second task system. Global Emery tasks remain the source o
 {
   "domain": "hpo",
   "hpo": true,
-  "hpo_account_id": "<uuid when applicable>"
+  "hpo_account_id": "<uuid when applicable>",
+  "hpo_account_name": "<name when useful>"
 }
 ```
 
@@ -62,9 +79,13 @@ Metrics may be global or account-linked and should be tied to a period. Supporte
 
 Route plans contain route date, area, status, optional time windows and notes. Route stops link to verified HPO accounts whenever possible and preserve order, priority, planned/visited status and field notes. Route Agent should use verified addresses; it should never invent an address to complete a route.
 
-## Supported source provenance
+## Source provenance and dedupe
 
-Use `source_type`, `source_ref`, `source_origin`, or import-batch metadata to distinguish manual entry, spreadsheet/CSV, ChatGPT marketing history, route history, marketing notes and future connected sources.
+Use `source_type`, `source_ref`, `source_origin`, import-batch metadata and dedupe keys to distinguish manual entry, spreadsheet/CSV, ChatGPT marketing history, route history, marketing notes and future connected sources.
+
+A dedupe key should be based on strong identifiers available in the source (for example normalized office + address, or account + business email for a contact). If strong identifiers are missing, leave the dedupe key blank and send the row to review rather than forcing a merge.
+
+Parent/child HPO records are ownership-bound by user in the schema so one user's child row cannot be attached to another user's account or route even if an ID were guessed.
 
 ## Chat-to-HPO routing target
 
@@ -76,4 +97,6 @@ When the account match is unambiguous, Emery should be able to log a relationshi
 
 ## Apple Shortcut / Voice readiness
 
-The final voice/shortcut layer must call the same Emery main conversation and the same action-routing layer. No separate 'voice Emery' identity or duplicate HPO database should be created. Quick Capture should be able to pass a short natural-language payload and optional context (`hpo`) into Emery, then let Emery route the information.
+The final voice/shortcut layer must call the same Emery main conversation and the same action-routing layer. No separate 'voice Emery' identity or duplicate HPO database should be created. Quick Capture can pass a short natural-language payload through `/capture` with optional `context=hpo`, `autosend=1` and a unique token, then let Emery route the information.
+
+Full Emery Voice remains a later layer. The shortcut bridge exists to reduce friction now without creating a second brain.
