@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/patch-hpo-agent-context.yml'
       - 'src/lib/hpo-agent-context.ts'
+      - 'src/lib/hpo-chat-router.ts'
 
 permissions:
   contents: write
@@ -22,10 +23,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Patch HPO Agent scoped context
+      - name: Patch HPO Agent scoped context and router typing
         run: |
           python - <<'PY'
           from pathlib import Path
+
           p = Path('src/lib/agent.functions.ts')
           s = p.read_text()
           old_import = 'import { scopeAgentContext, selectHpoDelegates, shouldResearchWithWeb } from "@/lib/agent-policy";\n'
@@ -47,19 +49,28 @@ jobs:
               s = s.replace(old2, new2, 1)
           elif 'hpo_operating_system: await loadHpoAgentContext(db, userId, assignment)' not in s:
               raise SystemExit('consult context anchor missing')
-
           p.write_text(s)
+
+          r = Path('src/lib/hpo-chat-router.ts')
+          rs = r.read_text()
+          old_type = '''type HpoParse = HpoPending & {\n  is_hpo: boolean;\n  confidence: number;\n  needs_clarification: boolean;\n  question: string;\n  privacy_risk: boolean;\n};\n'''
+          new_type = '''type HpoParse = Omit<HpoPending, "intent"> & {\n  intent: HpoPending["intent"] | "none";\n  is_hpo: boolean;\n  confidence: number;\n  needs_clarification: boolean;\n  question: string;\n  privacy_risk: boolean;\n};\n'''
+          if old_type in rs:
+              rs = rs.replace(old_type, new_type, 1)
+          elif 'intent: HpoPending["intent"] | "none";' not in rs:
+              raise SystemExit('HpoParse type anchor missing')
+          r.write_text(rs)
           PY
       - run: npm install --no-audit --no-fund
-      - run: npx prettier --write src/lib/agent.functions.ts src/lib/hpo-agent-context.ts
+      - run: npx prettier --write src/lib/agent.functions.ts src/lib/hpo-agent-context.ts src/lib/hpo-chat-router.ts
       - run: npm run build
       - run: npx tsc --noEmit
-      - run: npx eslint src/lib/agent.functions.ts src/lib/hpo-agent-context.ts
+      - run: npx eslint src/lib/agent.functions.ts src/lib/hpo-agent-context.ts src/lib/hpo-chat-router.ts
       - name: Commit validated patch
         run: |
           git config user.name "Emery Build Bot"
           git config user.email "actions@users.noreply.github.com"
-          git add src/lib/agent.functions.ts src/lib/hpo-agent-context.ts src/routeTree.gen.ts
+          git add src/lib/agent.functions.ts src/lib/hpo-agent-context.ts src/lib/hpo-chat-router.ts src/routeTree.gen.ts
           if git diff --cached --quiet; then exit 0; fi
           git commit -m "Connect HPO Agent to operating system context"
           git push origin HEAD:feature/hpo-operating-system
