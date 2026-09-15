@@ -1,0 +1,30 @@
+name: Validate HPO Operating System
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'supabase/migrations/**'
+      - '.github/workflows/validate-hpo.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - name: Production build
+        run: npm run build
+      - name: TypeScript
+        run: npx tsc --noEmit
+      - name: Focused HPO lint
+        run: npx eslint src/components/AppShell.tsx src/lib/emery-handoff.ts src/lib/hpo.functions.ts src/routes/_authenticated/hpo.tsx
