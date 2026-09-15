@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 type JsonRecord = Record<string, unknown>;
 
 function object(value: unknown): JsonRecord {
