@@ -1,6 +1,12 @@
 name: Validate HPO Operating System
 
 on:
+  push:
+    branches: [feature/hpo-operating-system]
+    paths:
+      - 'src/**'
+      - 'supabase/migrations/**'
+      - '.github/workflows/validate-hpo.yml'
   pull_request:
     branches: [main]
     paths:
@@ -30,9 +36,12 @@ jobs:
         run: >-
           npx eslint
           src/components/AppShell.tsx
+          src/lib/agent.functions.ts
           src/lib/emery-handoff.ts
-          src/lib/hpo.functions.ts
+          src/lib/emery.functions.ts
           src/lib/hpo-agent-context.ts
+          src/lib/hpo-chat-router.ts
+          src/lib/hpo.functions.ts
           src/routes/_authenticated/hpo.tsx
           src/routes/_authenticated/capture.tsx
           --rule '@typescript-eslint/no-explicit-any: off'
