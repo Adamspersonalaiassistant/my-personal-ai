@@ -4,6 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { ASSISTANT_IDENTITY } from "@/lib/assistant-identity";
 import { createAgentFromInstruction, consultSpecialistFromEmery } from "@/lib/agent.functions";
 import { isExplicitAgentCreationCommand, routeMainSpecialist } from "@/lib/agent-policy";
+import { processHpoTurn, type HpoTurnResult } from "@/lib/hpo-chat-router";
 import {
   buildExecutiveFocus,
   readConversationState,
@@ -1198,6 +1199,34 @@ ${consultation.response}`;
       }
     }
 
+    let hpoTurn: HpoTurnResult = {
+      isHpo: false,
+      accountId: null,
+      accountName: null,
+      suppressGenericAction: false,
+      instruction: "No HPO-specific write or routing occurred.",
+      context: null,
+      metadata: conversation.metadata,
+    };
+    if (data.message) {
+      try {
+        hpoTurn = await processHpoTurn({
+          apiKey,
+          db,
+          userId,
+          conversationId: conversation.id,
+          conversationMetadata: conversation.metadata,
+          message: data.message,
+          sourceRef: userMessage.id,
+        });
+        conversation.metadata = hpoTurn.metadata;
+      } catch (error) {
+        console.error("HPO routing failed", error);
+        hpoTurn.instruction =
+          "HPO routing failed for this turn. Do not claim an HPO write occurred.";
+      }
+    }
+
     const statedName = extractName(data.message);
     if (statedName) {
       await db
@@ -1312,6 +1341,17 @@ ${consultation.response}`;
       console.error("Emery control-plane analysis failed", error);
     }
 
+    if (hpoTurn.suppressGenericAction) {
+      analysis.action = {
+        ...analysis.action,
+        action: "none",
+        confidence: 1,
+        needs_confirmation: false,
+        question: "",
+        cancel_pending: false,
+      };
+    }
+
     if (!explicitFact && !looksSensitive(data.message)) {
       await applyMemoryCandidates(db, userId, data.message, analysis.memories, existingMemories);
     }
@@ -1333,6 +1373,40 @@ ${consultation.response}`;
       console.error("Action application failed", error);
       actionInstruction =
         "An attempted action failed. Tell Adam briefly that it could not be saved and do not claim success.";
+    }
+
+    if (hpoTurn.isHpo) {
+      const hpoTag: Record<string, unknown> = { domain: "hpo", hpo: true };
+      if (hpoTurn.accountId) hpoTag["hpo_account_id"] = hpoTurn.accountId;
+      if (hpoTurn.accountName) hpoTag["hpo_account_name"] = hpoTurn.accountName;
+      try {
+        const { data: createdTasks } = await db
+          .from("tasks")
+          .select("id, metadata")
+          .eq("user_id", userId)
+          .eq("source_ref", userMessage.id);
+        for (const task of createdTasks ?? []) {
+          await db
+            .from("tasks")
+            .update({ metadata: { ...safeObject(task.metadata), ...hpoTag } })
+            .eq("id", task.id)
+            .eq("user_id", userId);
+        }
+        const { data: createdMeetings } = await db
+          .from("meetings")
+          .select("id, metadata")
+          .eq("user_id", userId)
+          .contains("metadata", { source_ref: userMessage.id });
+        for (const meeting of createdMeetings ?? []) {
+          await db
+            .from("meetings")
+            .update({ metadata: { ...safeObject(meeting.metadata), ...hpoTag } })
+            .eq("id", meeting.id)
+            .eq("user_id", userId);
+        }
+      } catch (error) {
+        console.error("HPO task/meeting tagging failed", error);
+      }
     }
 
     const [{ data: profile }, { data: memories }, actionContextAfter] = await Promise.all([
@@ -1371,6 +1445,7 @@ ${consultation.response}`;
     const memoryBlock = promptMemories.length ? buildMemoryBlock(promptMemories) : "";
     const actionBlock = buildActionContextBlock(actionContextAfter);
     const focusBlock = buildExecutiveFocus(actionContextAfter);
+    const hpoContextBlock = hpoTurn.context ? JSON.stringify(hpoTurn.context).slice(0, 12000) : "";
 
     const attachmentRows = data.attachments.length
       ? await db
@@ -1413,6 +1488,10 @@ ${consultation.response}`;
               content:
                 ASSISTANT_IDENTITY +
                 `\n\nACTION CONTROL FOR THIS TURN:\n${actionInstruction}\nFollow this control instruction exactly. Do not claim any database action unless it says the action succeeded.` +
+                `\n\nHPO WORK CONTROL FOR THIS TURN:\n${hpoTurn.instruction}\nTreat HPO as Adam's Hudson Pro career operating system. Route work context into HPO when appropriate, keep identifiable patient/case/medical information out of this work OS, and ask at most one concise clarification when the account or write intent is genuinely ambiguous.` +
+                (hpoContextBlock
+                  ? `\n\nHPO OPERATING CONTEXT (bounded non-PHI account/relationship intelligence):\n${hpoContextBlock}`
+                  : "") +
                 `\n\nAGENT TEAM CONTROL FOR THIS TURN:\n${agentTeamInstruction || "No agent was created or consulted on this turn."}\nTreat specialist reports as advisory input. Emery remains the final synthesizer for Adam.` +
                 (savedMemory
                   ? `\n\nAdam explicitly asked you to remember this and it was saved: "${savedMemory}". Confirm briefly if relevant.`

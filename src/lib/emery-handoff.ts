@@ -3,6 +3,7 @@
 // lifelong Emery conversation, carrying a return path and an optional prefill.
 
 export const EMERY_RETURNS = {
+  "/hpo": "HPO",
   "/tasks": "Tasks",
   "/projects": "Projects",
   "/meetings": "Meetings",

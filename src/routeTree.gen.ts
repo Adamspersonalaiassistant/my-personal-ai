@@ -12,7 +12,9 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedAgentsRouteImport } from './routes/_authenticated/agents'
+import { Route as AuthenticatedCaptureRouteImport } from './routes/_authenticated/capture'
 import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/chat'
+import { Route as AuthenticatedHpoRouteImport } from './routes/_authenticated/hpo'
 import { Route as AuthenticatedMeetingsRouteImport } from './routes/_authenticated/meetings'
 import { Route as AuthenticatedMemoriesRouteImport } from './routes/_authenticated/memories'
 import { Route as AuthenticatedProjectsRouteImport } from './routes/_authenticated/projects'
@@ -34,9 +36,19 @@ const AuthenticatedAgentsRoute = AuthenticatedAgentsRouteImport.update({
   path: '/agents',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedCaptureRoute = AuthenticatedCaptureRouteImport.update({
+  id: '/capture',
+  path: '/capture',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedChatRoute = AuthenticatedChatRouteImport.update({
   id: '/chat',
   path: '/chat',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedHpoRoute = AuthenticatedHpoRouteImport.update({
+  id: '/hpo',
+  path: '/hpo',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedMeetingsRoute = AuthenticatedMeetingsRouteImport.update({
@@ -74,7 +86,9 @@ const AuthenticatedAgentsAgentIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agents': typeof AuthenticatedAgentsRoute
+  '/capture': typeof AuthenticatedCaptureRoute
   '/chat': typeof AuthenticatedChatRoute
+  '/hpo': typeof AuthenticatedHpoRoute
   '/meetings': typeof AuthenticatedMeetingsRoute
   '/memories': typeof AuthenticatedMemoriesRoute
   '/projects': typeof AuthenticatedProjectsRoute
@@ -85,7 +99,9 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agents': typeof AuthenticatedAgentsRoute
+  '/capture': typeof AuthenticatedCaptureRoute
   '/chat': typeof AuthenticatedChatRoute
+  '/hpo': typeof AuthenticatedHpoRoute
   '/meetings': typeof AuthenticatedMeetingsRoute
   '/memories': typeof AuthenticatedMemoriesRoute
   '/projects': typeof AuthenticatedProjectsRoute
@@ -98,7 +114,9 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/_authenticated/agents': typeof AuthenticatedAgentsRoute
+  '/_authenticated/capture': typeof AuthenticatedCaptureRoute
   '/_authenticated/chat': typeof AuthenticatedChatRoute
+  '/_authenticated/hpo': typeof AuthenticatedHpoRoute
   '/_authenticated/meetings': typeof AuthenticatedMeetingsRoute
   '/_authenticated/memories': typeof AuthenticatedMemoriesRoute
   '/_authenticated/projects': typeof AuthenticatedProjectsRoute
@@ -111,7 +129,9 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/agents'
+    | '/capture'
     | '/chat'
+    | '/hpo'
     | '/meetings'
     | '/memories'
     | '/projects'
@@ -122,7 +142,9 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/agents'
+    | '/capture'
     | '/chat'
+    | '/hpo'
     | '/meetings'
     | '/memories'
     | '/projects'
@@ -134,7 +156,9 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/_authenticated/agents'
+    | '/_authenticated/capture'
     | '/_authenticated/chat'
+    | '/_authenticated/hpo'
     | '/_authenticated/meetings'
     | '/_authenticated/memories'
     | '/_authenticated/projects'
@@ -171,11 +195,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAgentsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/capture': {
+      id: '/_authenticated/capture'
+      path: '/capture'
+      fullPath: '/capture'
+      preLoaderRoute: typeof AuthenticatedCaptureRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/chat': {
       id: '/_authenticated/chat'
       path: '/chat'
       fullPath: '/chat'
       preLoaderRoute: typeof AuthenticatedChatRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/hpo': {
+      id: '/_authenticated/hpo'
+      path: '/hpo'
+      fullPath: '/hpo'
+      preLoaderRoute: typeof AuthenticatedHpoRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/meetings': {
@@ -225,7 +263,9 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAgentsRoute: typeof AuthenticatedAgentsRoute
+  AuthenticatedCaptureRoute: typeof AuthenticatedCaptureRoute
   AuthenticatedChatRoute: typeof AuthenticatedChatRoute
+  AuthenticatedHpoRoute: typeof AuthenticatedHpoRoute
   AuthenticatedMeetingsRoute: typeof AuthenticatedMeetingsRoute
   AuthenticatedMemoriesRoute: typeof AuthenticatedMemoriesRoute
   AuthenticatedProjectsRoute: typeof AuthenticatedProjectsRoute
@@ -236,7 +276,9 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAgentsRoute: AuthenticatedAgentsRoute,
+  AuthenticatedCaptureRoute: AuthenticatedCaptureRoute,
   AuthenticatedChatRoute: AuthenticatedChatRoute,
+  AuthenticatedHpoRoute: AuthenticatedHpoRoute,
   AuthenticatedMeetingsRoute: AuthenticatedMeetingsRoute,
   AuthenticatedMemoriesRoute: AuthenticatedMemoriesRoute,
   AuthenticatedProjectsRoute: AuthenticatedProjectsRoute,
