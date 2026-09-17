@@ -1,22 +1,22 @@
 :root,
 .dark {
-  --background: oklch(0.105 0.03 255);
-  --foreground: oklch(0.975 0.009 245);
-  --card: oklch(0.155 0.042 255 / 0.9);
-  --card-foreground: oklch(0.975 0.009 245);
-  --popover: oklch(0.14 0.036 255 / 0.985);
-  --popover-foreground: oklch(0.975 0.009 245);
+  --background: oklch(0.095 0.028 255);
+  --foreground: oklch(0.976 0.008 245);
+  --card: oklch(0.145 0.036 255 / 0.9);
+  --card-foreground: oklch(0.976 0.008 245);
+  --popover: oklch(0.132 0.033 255 / 0.99);
+  --popover-foreground: oklch(0.976 0.008 245);
   --primary: oklch(0.72 0.185 250);
-  --primary-foreground: oklch(0.985 0.008 245);
-  --secondary: oklch(0.19 0.05 255);
-  --secondary-foreground: oklch(0.955 0.012 245);
-  --muted: oklch(0.176 0.036 255);
-  --muted-foreground: oklch(0.735 0.04 245);
-  --accent: oklch(0.225 0.075 250);
-  --accent-foreground: oklch(0.965 0.018 242);
-  --border: oklch(0.72 0.115 248 / 0.18);
-  --input: oklch(0.72 0.1 248 / 0.22);
-  --ring: oklch(0.73 0.185 250 / 0.72);
+  --primary-foreground: oklch(0.99 0.006 245);
+  --secondary: oklch(0.18 0.044 255);
+  --secondary-foreground: oklch(0.955 0.011 245);
+  --muted: oklch(0.168 0.032 255);
+  --muted-foreground: oklch(0.72 0.035 245);
+  --accent: oklch(0.215 0.065 250);
+  --accent-foreground: oklch(0.968 0.016 242);
+  --border: oklch(0.72 0.105 248 / 0.16);
+  --input: oklch(0.72 0.09 248 / 0.2);
+  --ring: oklch(0.73 0.185 250 / 0.7);
 
   --chart-1: oklch(0.72 0.185 250);
   --chart-2: oklch(0.69 0.16 235);
@@ -24,17 +24,15 @@
   --chart-4: oklch(0.78 0.12 225);
   --chart-5: oklch(0.72 0.14 275);
 
-  --sidebar: oklch(0.13 0.034 255 / 0.985);
-  --sidebar-foreground: oklch(0.955 0.012 245);
+  --sidebar: oklch(0.115 0.031 255 / 0.99);
+  --sidebar-foreground: oklch(0.955 0.011 245);
   --sidebar-primary: oklch(0.72 0.185 250);
-  --sidebar-primary-foreground: oklch(0.985 0.008 245);
-  --sidebar-accent: oklch(0.205 0.058 252);
-  --sidebar-accent-foreground: oklch(0.955 0.012 245);
-  --sidebar-border: oklch(0.72 0.115 248 / 0.18);
-  --sidebar-ring: oklch(0.73 0.185 250 / 0.64);
+  --sidebar-primary-foreground: oklch(0.99 0.006 245);
+  --sidebar-accent: oklch(0.19 0.052 252);
+  --sidebar-accent-foreground: oklch(0.955 0.011 245);
+  --sidebar-border: oklch(0.72 0.105 248 / 0.16);
+  --sidebar-ring: oklch(0.73 0.185 250 / 0.62);
 
-  /* Legacy semantic color utilities are intentionally remapped so older screens
-     inherit Emery's blue system without changing their behavior. */
   --color-emerald-50: oklch(0.97 0.02 240);
   --color-emerald-100: oklch(0.93 0.04 240);
   --color-emerald-200: oklch(0.87 0.08 242);
@@ -72,16 +70,18 @@
   --color-teal-950: oklch(0.25 0.07 260);
 }
 
+html {
+  overscroll-behavior: none;
+}
+
 body {
   background:
-    radial-gradient(circle at 12% -8%, oklch(0.54 0.18 248 / 0.18), transparent 31rem),
-    radial-gradient(circle at 98% 15%, oklch(0.46 0.145 232 / 0.11), transparent 28rem),
-    radial-gradient(circle at 50% 115%, oklch(0.34 0.12 268 / 0.09), transparent 32rem),
-    linear-gradient(180deg, oklch(0.118 0.036 255), oklch(0.082 0.026 258));
+    radial-gradient(circle at 50% -12%, oklch(0.43 0.13 248 / 0.12), transparent 34rem),
+    linear-gradient(180deg, oklch(0.104 0.031 255), oklch(0.078 0.023 258));
 }
 
 ::selection {
-  background: oklch(0.72 0.185 250 / 0.28);
+  background: oklch(0.72 0.185 250 / 0.26);
 }
 
 button:focus-visible,
@@ -89,127 +89,120 @@ a:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
-  outline-color: oklch(0.74 0.18 248 / 0.88);
+  outline-color: oklch(0.74 0.18 248 / 0.86);
 }
 
 .emery-grid {
   background-image:
-    linear-gradient(oklch(0.74 0.16 248 / 0.036) 1px, transparent 1px),
-    linear-gradient(90deg, oklch(0.74 0.16 248 / 0.036) 1px, transparent 1px);
+    linear-gradient(oklch(0.74 0.16 248 / 0.021) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(0.74 0.16 248 / 0.021) 1px, transparent 1px);
+  background-size: 36px 36px;
 }
 
 .emery-grid::after {
-  background: radial-gradient(circle at 50% 0%, oklch(0.76 0.19 246 / 0.105), transparent 38%);
+  background: radial-gradient(circle at 50% 0%, oklch(0.76 0.19 246 / 0.07), transparent 36%);
 }
 
 .emery-glass {
-  background: linear-gradient(
-    180deg,
-    oklch(0.198 0.052 254 / 0.82),
-    oklch(0.138 0.036 257 / 0.92)
-  );
-  border-color: oklch(0.74 0.145 248 / 0.18);
+  background: linear-gradient(180deg, oklch(0.174 0.043 254 / 0.78), oklch(0.126 0.032 257 / 0.9));
+  border-color: oklch(0.74 0.135 248 / 0.14);
   box-shadow:
-    inset 0 1px 0 oklch(0.95 0.04 235 / 0.065),
-    inset 0 -1px 0 oklch(0.03 0.015 260 / 0.3),
-    0 18px 46px oklch(0.025 0.025 260 / 0.31);
+    inset 0 1px 0 oklch(0.95 0.035 235 / 0.045),
+    0 12px 32px oklch(0.025 0.02 260 / 0.18);
+  backdrop-filter: blur(16px) saturate(112%);
+  -webkit-backdrop-filter: blur(16px) saturate(112%);
 }
 
 .emery-glass-strong {
-  background: linear-gradient(
-    180deg,
-    oklch(0.182 0.048 254 / 0.96),
-    oklch(0.124 0.034 258 / 0.985)
-  );
-  border-color: oklch(0.77 0.15 247 / 0.2);
+  background: linear-gradient(180deg, oklch(0.164 0.042 254 / 0.96), oklch(0.116 0.031 258 / 0.985));
+  border-color: oklch(0.76 0.14 247 / 0.16);
   box-shadow:
-    inset 0 1px 0 oklch(0.96 0.04 235 / 0.075),
-    0 24px 60px oklch(0.02 0.02 262 / 0.38);
+    inset 0 1px 0 oklch(0.96 0.035 235 / 0.05),
+    0 18px 44px oklch(0.02 0.02 262 / 0.24);
+  backdrop-filter: blur(18px) saturate(115%);
+  -webkit-backdrop-filter: blur(18px) saturate(115%);
 }
 
 .emery-surface {
-  background: linear-gradient(
-    180deg,
-    oklch(0.17 0.044 255 / 0.8),
-    oklch(0.132 0.032 258 / 0.88)
-  );
-  border-color: oklch(0.72 0.12 248 / 0.14);
-  box-shadow: inset 0 1px 0 oklch(0.94 0.035 235 / 0.045);
+  background: oklch(0.145 0.036 255 / 0.72);
+  border-color: oklch(0.72 0.11 248 / 0.11);
+  box-shadow: inset 0 1px 0 oklch(0.94 0.03 235 / 0.025);
 }
 
 .emery-glow {
-  box-shadow: 0 0 36px oklch(0.72 0.185 250 / 0.2);
+  box-shadow: 0 0 28px oklch(0.72 0.185 250 / 0.14);
 }
 
 .emery-text-gradient {
-  background: linear-gradient(
-    135deg,
-    oklch(0.99 0.007 245),
-    oklch(0.82 0.13 235) 44%,
-    oklch(0.72 0.19 255) 100%
-  );
+  background: linear-gradient(135deg, oklch(0.99 0.007 245), oklch(0.8 0.12 235) 58%, oklch(0.72 0.18 255));
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
 }
 
 .emery-chip {
-  border-color: oklch(0.75 0.16 248 / 0.18);
-  background: oklch(0.7 0.17 250 / 0.07);
-  color: oklch(0.82 0.11 235);
+  border-color: oklch(0.75 0.16 248 / 0.14);
+  background: oklch(0.7 0.17 250 / 0.055);
+  color: oklch(0.82 0.1 235);
 }
 
 .emery-icon-well {
-  border-color: oklch(0.75 0.16 248 / 0.19);
-  background: linear-gradient(
-    180deg,
-    oklch(0.72 0.18 250 / 0.11),
-    oklch(0.66 0.16 260 / 0.045)
-  );
-  box-shadow: inset 0 1px 0 oklch(0.95 0.04 235 / 0.06);
+  border-color: oklch(0.75 0.16 248 / 0.15);
+  background: oklch(0.66 0.16 250 / 0.065);
+  box-shadow: none;
 }
 
 .emery-scrollbar {
-  scrollbar-color: oklch(0.69 0.13 248 / 0.28) transparent;
+  scrollbar-color: oklch(0.69 0.13 248 / 0.22) transparent;
 }
 
 .emery-scrollbar::-webkit-scrollbar-thumb {
-  background: oklch(0.69 0.13 248 / 0.26);
+  background: oklch(0.69 0.13 248 / 0.22);
 }
 
-.emery-blue-brain,
-.emery-icon-well img {
-  filter: hue-rotate(95deg) saturate(1.45) brightness(1.05) contrast(1.06);
+.emery-blue-brain {
+  filter: hue-rotate(95deg) saturate(1.42) brightness(1.05) contrast(1.06);
 }
 
-/* A few early Emery components used literal emerald OKLCH values inside
-   Tailwind arbitrary classes. Keep their layout/logic untouched and skin them
-   into the blue system here. */
-[class*="oklch(0.79_0.17_155)"] {
-  background: linear-gradient(145deg, oklch(0.72 0.19 244), oklch(0.56 0.18 255)) !important;
-  color: oklch(0.985 0.008 242) !important;
-  box-shadow: 0 12px 34px oklch(0.35 0.13 250 / 0.22) !important;
+.emery-route-enter {
+  animation: emery-route-in 180ms cubic-bezier(0.22, 0.8, 0.25, 1) both;
 }
 
-[class*="oklch(0.805_0.175_155"] {
-  box-shadow: 0 0 22px oklch(0.72 0.185 250 / 0.26) !important;
+.emery-sheet-in {
+  animation: emery-sheet-up 220ms cubic-bezier(0.22, 0.85, 0.25, 1) both;
 }
 
-[class*="oklch(0.095_0.02_160"] {
-  background: linear-gradient(180deg, transparent, oklch(0.085 0.027 258 / 0.99) 18%) !important;
+@keyframes emery-route-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes emery-sheet-up {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 @keyframes emery-breathe-blue {
   0%,
   100% {
     transform: scale(1);
-    filter: hue-rotate(95deg) saturate(1.45) brightness(1.05) contrast(1.06)
-      drop-shadow(0 0 16px oklch(0.72 0.185 250 / 0.24));
+    filter: hue-rotate(95deg) saturate(1.42) brightness(1.05) contrast(1.06) drop-shadow(0 0 12px oklch(0.72 0.185 250 / 0.18));
   }
   50% {
-    transform: scale(1.018);
-    filter: hue-rotate(95deg) saturate(1.5) brightness(1.08) contrast(1.06)
-      drop-shadow(0 0 30px oklch(0.72 0.185 250 / 0.38));
+    transform: scale(1.012);
+    filter: hue-rotate(95deg) saturate(1.46) brightness(1.07) contrast(1.06) drop-shadow(0 0 20px oklch(0.72 0.185 250 / 0.26));
   }
 }
 
@@ -226,18 +219,39 @@ select:focus-visible {
 [class*="bg-emerald-"],
 [class*="bg-green-"],
 [class*="bg-teal-"] {
-  background-color: oklch(0.62 0.18 248 / 0.16) !important;
+  background-color: oklch(0.62 0.18 248 / 0.14) !important;
 }
 
 [class*="border-emerald-"],
 [class*="border-green-"],
 [class*="border-teal-"] {
-  border-color: oklch(0.72 0.16 248 / 0.28) !important;
+  border-color: oklch(0.72 0.16 248 / 0.24) !important;
+}
+
+@media (pointer: fine) {
+  .emery-press:hover {
+    transition-duration: 140ms;
+  }
+}
+
+@media (max-width: 767px) {
+  body {
+    background: linear-gradient(180deg, oklch(0.104 0.031 255), oklch(0.078 0.023 258));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .emery-route-enter,
+  .emery-sheet-in {
+    animation: none !important;
+  }
 }
 
 @media (prefers-reduced-transparency: reduce) {
   .emery-glass,
   .emery-glass-strong {
-    background: oklch(0.142 0.038 255);
+    background: oklch(0.132 0.034 255);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }
