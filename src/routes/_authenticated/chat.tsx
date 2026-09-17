@@ -28,6 +28,7 @@ type Attachment = {
   sizeBytes: number;
   url: string | null;
 };
+
 type Message = {
   id: string;
   role: "user" | "assistant";
@@ -54,14 +55,17 @@ function cleanAssistantText(text: string) {
     .replace(/^#{1,6}\s+/gm, "")
     .replace(/`([^`]+)`/g, "$1");
 }
+
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
+
 function sanitizeFileName(name: string) {
   return name.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-");
 }
+
 function isImage(mimeType: string) {
   return mimeType.startsWith("image/");
 }
@@ -73,22 +77,23 @@ function AttachmentCard({ attachment }: { attachment: Attachment }) {
         href={attachment.url}
         target="_blank"
         rel="noreferrer"
-        className="group block overflow-hidden rounded-2xl border border-white/10 bg-black/15"
+        className="group block overflow-hidden rounded-xl border border-white/10 bg-black/15"
       >
         <img
           src={attachment.url}
           alt={attachment.fileName}
           loading="lazy"
           decoding="async"
-          className="max-h-64 w-full object-cover transition duration-300 group-hover:scale-[1.01]"
+          className="max-h-64 w-full object-cover transition duration-200 group-hover:scale-[1.01]"
         />
       </a>
     );
   }
+
   const content = (
-    <div className="flex min-w-0 items-center gap-2.5 rounded-2xl border border-white/10 bg-black/15 px-3 py-2.5">
-      <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/10">
-        <FileText className="size-4" />
+    <div className="flex min-w-0 items-center gap-2.5 rounded-xl border border-white/10 bg-black/15 px-3 py-2.5">
+      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06]">
+        <FileText className="size-3.5" />
       </div>
       <div className="min-w-0">
         <p className="truncate text-xs font-medium">{attachment.fileName}</p>
@@ -96,6 +101,7 @@ function AttachmentCard({ attachment }: { attachment: Attachment }) {
       </div>
     </div>
   );
+
   return attachment.url ? (
     <a href={attachment.url} target="_blank" rel="noreferrer" className="block">
       {content}
@@ -119,12 +125,12 @@ function SelectedFileCard({ file, onRemove }: { file: File; onRemove: () => void
   }, [file]);
 
   return (
-    <div className="emery-glass flex min-w-[150px] max-w-[210px] items-center gap-2 rounded-2xl px-2.5 py-2">
+    <div className="flex min-w-[150px] max-w-[210px] items-center gap-2 rounded-xl border border-border/45 bg-card/72 px-2.5 py-2">
       {previewUrl ? (
-        <img src={previewUrl} alt="" className="size-10 rounded-xl object-cover" decoding="async" />
+        <img src={previewUrl} alt="" className="size-9 rounded-lg object-cover" decoding="async" />
       ) : (
-        <div className="emery-icon-well flex size-10 shrink-0 items-center justify-center rounded-xl">
-          <FileText className="size-4" />
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/[0.055] text-primary">
+          <FileText className="size-3.5" />
         </div>
       )}
       <div className="min-w-0 flex-1">
@@ -135,7 +141,7 @@ function SelectedFileCard({ file, onRemove }: { file: File; onRemove: () => void
         type="button"
         aria-label={`Remove ${file.name}`}
         onClick={onRemove}
-        className="emery-press flex size-11 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:bg-white/5 hover:text-foreground"
+        className="emery-press flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-white/[0.04] hover:text-foreground"
       >
         <X className="size-3.5" />
       </button>
@@ -213,9 +219,7 @@ function Chat() {
     setLoadingOlder(true);
     setError(null);
     try {
-      const result = await loadPage({
-        data: { limit: CHAT_PAGE_SIZE, beforeCreatedAt: historyCursor },
-      });
+      const result = await loadPage({ data: { limit: CHAT_PAGE_SIZE, beforeCreatedAt: historyCursor } });
       const older = (result?.messages ?? []) as Message[];
       setMessages((current) => {
         const ids = new Set(current.map((message) => message.id));
@@ -263,12 +267,14 @@ function Chat() {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) throw new Error("Please sign in again before attaching files.");
+
     const uploaded: Array<{
       storagePath: string;
       fileName: string;
       mimeType: string;
       sizeBytes: number;
     }> = [];
+
     for (const file of selectedFiles) {
       const storagePath = `${user.id}/${crypto.randomUUID()}-${sanitizeFileName(file.name || "attachment")}`;
       const { error: uploadError } = await supabase.storage
@@ -291,6 +297,7 @@ function Chat() {
   async function sendMessage(text: string) {
     const clean = text.trim();
     if ((!clean && selectedFiles.length === 0) || pending) return;
+
     const tempId = `temp-${Date.now()}`;
     const optimisticAttachments: Attachment[] = selectedFiles.map((file, index) => ({
       id: `${tempId}-${index}`,
@@ -299,6 +306,7 @@ function Chat() {
       sizeBytes: file.size,
       url: null,
     }));
+
     setMessages((prev) => [
       ...prev,
       {
@@ -313,11 +321,14 @@ function Chat() {
     setError(null);
     setPending(true);
     setNearBottom(true);
+
     try {
       const uploaded = await uploadFiles();
       const result = await askEmery({ data: { message: clean, attachments: uploaded } });
-      if (!("reply" in result) || !result.reply)
+      if (!("reply" in result) || !result.reply) {
         throw new Error(("error" in result && result.error) || "Something went wrong.");
+      }
+
       const serverUser = "userMessage" in result ? result.userMessage : null;
       const serverAssistant = "assistantMessage" in result ? result.assistantMessage : null;
       setMessages((prev) => {
@@ -349,13 +360,11 @@ function Chat() {
       });
       setSelectedFiles([]);
     } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "Couldn't send your message. Please try again.",
-      );
+      setError(caught instanceof Error ? caught.message : "Couldn't send your message. Please try again.");
       try {
         await refreshLatest();
       } catch {
-        // Keep the already-rendered conversation when recovery also fails.
+        // Preserve the already-rendered conversation if recovery also fails.
       }
     } finally {
       setPending(false);
@@ -369,84 +378,56 @@ function Chat() {
 
   return (
     <AppShell title="Emery" padded={false}>
-      <div className="relative flex h-[calc(100dvh-8.4rem)] min-h-0 flex-col md:h-[calc(100dvh-11rem)]">
-        <div className="flex shrink-0 items-center justify-center border-b border-border/35 bg-background/28 px-4 py-2.5 backdrop-blur-xl">
-          <div className="emery-chip">
-            <span className="size-1.5 rounded-full bg-primary shadow-[0_0_9px_oklch(0.805_0.175_155/0.72)]" />{" "}
-            Main conversation · Memory online
-          </div>
-        </div>
-
+      <div className="relative flex h-[calc(100dvh-7.45rem)] min-h-0 flex-col md:h-[calc(100dvh-5.85rem)]">
         <div
           ref={scrollRef}
           onScroll={handleScroll}
-          className="emery-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-6 pt-4 sm:px-6 sm:pt-6"
+          className="emery-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-5 pt-3 sm:px-5 sm:pb-6 sm:pt-4 md:px-7"
           aria-label="Emery conversation"
         >
-          <div className="mx-auto mb-4 max-w-2xl">
+          <div className="mx-auto mb-3 max-w-2xl">
             <OperatingContextCard />
           </div>
 
           {!loading && messages.length > 0 && hasMore ? (
-            <div className="mx-auto mb-4 flex max-w-2xl justify-center">
+            <div className="mx-auto mb-5 flex max-w-2xl justify-center">
               <button
                 type="button"
                 onClick={() => void loadOlder()}
                 disabled={loadingOlder}
-                className="emery-press emery-surface flex min-h-11 items-center gap-2 rounded-full px-4 text-xs font-semibold text-muted-foreground hover:border-primary/25 hover:text-foreground disabled:opacity-50"
+                className="emery-press flex min-h-10 items-center gap-2 rounded-full px-3 text-xs font-medium text-muted-foreground hover:bg-white/[0.03] hover:text-foreground disabled:opacity-50"
               >
-                {loadingOlder ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : (
-                  <ChevronUp className="size-3.5" />
-                )}
-                {loadingOlder ? "Loading earlier…" : "Load earlier messages"}
+                {loadingOlder ? <Loader2 className="size-3.5 animate-spin" /> : <ChevronUp className="size-3.5" />}
+                {loadingOlder ? "Loading earlier…" : "Earlier messages"}
               </button>
             </div>
           ) : null}
 
           {loading ? (
-            <div
-              className="flex min-h-[48vh] flex-col items-center justify-center gap-4"
-              role="status"
-            >
-              <div className="emery-breathe flex size-16 items-center justify-center overflow-hidden rounded-[1.35rem] border border-primary/15 bg-primary/[0.04]">
-                <img src={brainImage} alt="" className="size-14 object-cover opacity-90" />
+            <div className="flex min-h-[48vh] flex-col items-center justify-center gap-3" role="status">
+              <div className="emery-breathe flex size-12 items-center justify-center overflow-hidden rounded-xl bg-primary/[0.04]">
+                <img src={brainImage} alt="" className="emery-blue-brain size-11 object-cover opacity-90" />
               </div>
-              <p className="text-xs font-medium tracking-wide text-muted-foreground">
-                Opening your conversation…
-              </p>
+              <p className="text-xs text-muted-foreground">Opening your conversation…</p>
             </div>
           ) : messages.length === 0 ? (
-            <div className="emery-fade-up mx-auto flex min-h-[55vh] max-w-md flex-col items-center justify-center py-8 text-center">
-              <div className="relative">
-                <div className="absolute inset-1 rounded-full bg-primary/14 blur-3xl" />
-                <div className="emery-breathe emery-glass-strong relative flex size-28 items-center justify-center overflow-hidden rounded-[2rem]">
-                  <img
-                    src={brainImage}
-                    alt="Emery neural brain"
-                    className="h-24 w-24 object-cover"
-                  />
-                </div>
+            <div className="emery-fade-up mx-auto flex min-h-[54vh] max-w-md flex-col items-center justify-center py-8 text-center">
+              <div className="emery-breathe flex size-20 items-center justify-center overflow-hidden rounded-[1.35rem] border border-primary/14 bg-primary/[0.04]">
+                <img src={brainImage} alt="Emery neural brain" className="emery-blue-brain size-16 object-cover" />
               </div>
-              <div className="mt-6 flex items-center gap-2 text-primary">
-                <Sparkles className="size-4" />
-                <span className="emery-kicker">Emery online</span>
+              <div className="mt-5 flex items-center gap-2 text-primary">
+                <Sparkles className="size-3.5" />
+                <span className="text-[10px] font-semibold uppercase tracking-[0.13em]">Emery</span>
               </div>
-              <h2 className="emery-text-gradient mt-3 text-[1.7rem] font-semibold tracking-[-0.035em]">
-                I’m here, Adam.
-              </h2>
-              <p className="mt-2 max-w-xs text-sm leading-6 text-muted-foreground">
-                Same conversation. Same Emery. Bring me the mess and we’ll turn it into the next
-                move.
-              </p>
-              <div className="mt-7 grid w-full gap-2 sm:grid-cols-3">
+              <h2 className="mt-2 text-[1.55rem] font-semibold tracking-[-0.035em]">I’m here, Adam.</h2>
+              <p className="mt-1.5 max-w-xs text-sm leading-6 text-muted-foreground">What are we working through?</p>
+              <div className="mt-6 flex w-full flex-wrap justify-center gap-2">
                 {quickPrompts.map((prompt) => (
                   <button
                     key={prompt}
                     type="button"
                     onClick={() => void sendMessage(prompt)}
-                    className="emery-press emery-surface min-h-12 rounded-2xl px-3.5 text-xs font-medium text-muted-foreground hover:border-primary/25 hover:bg-primary/[0.05] hover:text-foreground"
+                    className="emery-press min-h-10 rounded-xl border border-border/40 bg-card/28 px-3 text-xs font-medium text-muted-foreground hover:border-primary/20 hover:bg-primary/[0.04] hover:text-foreground"
                   >
                     {prompt}
                   </button>
@@ -454,42 +435,29 @@ function Chat() {
               </div>
             </div>
           ) : (
-            <div className="mx-auto max-w-2xl space-y-5">
+            <div className="mx-auto max-w-2xl space-y-6">
               {messages.map((message) =>
                 message.role === "user" ? (
-                  <div key={message.id} className="emery-fade-up flex justify-end pl-5 sm:pl-16">
-                    <div className="max-w-[94%] rounded-[1.45rem] rounded-br-[0.45rem] bg-[linear-gradient(145deg,oklch(0.79_0.17_155),oklch(0.64_0.15_158))] px-4 py-3 text-[15px] leading-6 text-[oklch(0.09_0.02_160)] shadow-[0_12px_34px_oklch(0.3_0.09_158/0.15)] sm:max-w-[90%]">
+                  <div key={message.id} className="emery-fade-up flex justify-end pl-8 sm:pl-20">
+                    <div className="max-w-[92%] rounded-[1.2rem] rounded-br-[0.35rem] bg-[linear-gradient(145deg,oklch(0.69_0.19_248),oklch(0.56_0.17_255))] px-3.5 py-2.5 text-[15px] leading-6 text-white shadow-[0_8px_24px_rgba(0,70,160,0.16)] sm:max-w-[84%]">
                       {message.attachments.length ? (
-                        <div
-                          className={`grid gap-2 ${message.attachments.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}
-                        >
+                        <div className={`grid gap-2 ${message.attachments.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
                           {message.attachments.map((attachment) => (
                             <AttachmentCard key={attachment.id} attachment={attachment} />
                           ))}
                         </div>
                       ) : null}
                       {message.text ? (
-                        <p
-                          className={
-                            message.attachments.length
-                              ? "mt-2.5 whitespace-pre-wrap"
-                              : "whitespace-pre-wrap"
-                          }
-                        >
-                          {message.text}
-                        </p>
+                        <p className={message.attachments.length ? "mt-2.5 whitespace-pre-wrap" : "whitespace-pre-wrap"}>{message.text}</p>
                       ) : null}
                     </div>
                   </div>
                 ) : (
-                  <div
-                    key={message.id}
-                    className="emery-fade-up flex items-start gap-2.5 pr-1 sm:gap-3 sm:pr-10"
-                  >
-                    <div className="emery-icon-well mt-0.5 flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-[0.9rem]">
-                      <img src={brainImage} alt="" className="size-8 object-cover" />
+                  <div key={message.id} className="emery-fade-up flex items-start gap-2.5 pr-1 sm:gap-3 sm:pr-12">
+                    <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary/[0.045]">
+                      <img src={brainImage} alt="" className="emery-blue-brain size-7 object-cover" />
                     </div>
-                    <div className="emery-glass max-w-[calc(100%-2.8rem)] whitespace-pre-wrap rounded-[1.45rem] rounded-tl-[0.45rem] px-4 py-3.5 text-[15px] leading-6.5 text-foreground sm:max-w-[90%]">
+                    <div className="max-w-[calc(100%-2.6rem)] whitespace-pre-wrap pt-0.5 text-[15px] leading-7 text-foreground/96 sm:max-w-[88%]">
                       {cleanAssistantText(message.text)}
                     </div>
                   </div>
@@ -499,16 +467,12 @@ function Chat() {
           )}
 
           {pending ? (
-            <div
-              className="mx-auto mt-5 flex max-w-2xl items-center gap-3"
-              role="status"
-              aria-live="polite"
-            >
-              <div className="emery-icon-well flex size-9 items-center justify-center overflow-hidden rounded-[0.9rem]">
-                <img src={brainImage} alt="" className="size-8 object-cover" />
+            <div className="mx-auto mt-6 flex max-w-2xl items-center gap-2.5" role="status" aria-live="polite">
+              <div className="flex size-8 items-center justify-center overflow-hidden rounded-lg bg-primary/[0.045]">
+                <img src={brainImage} alt="" className="emery-blue-brain size-7 object-cover" />
               </div>
-              <div className="emery-glass flex min-h-11 items-center gap-2 rounded-2xl px-4 text-xs text-muted-foreground">
-                <span>Thinking with your context</span>
+              <div className="flex min-h-9 items-center gap-2 text-xs text-muted-foreground">
+                <span>Emery is thinking</span>
                 <span className="flex items-center gap-1" aria-hidden>
                   <span className="emery-dot size-1.5 rounded-full bg-primary" />
                   <span className="emery-dot size-1.5 rounded-full bg-primary" />
@@ -517,11 +481,9 @@ function Chat() {
               </div>
             </div>
           ) : null}
+
           {error ? (
-            <p
-              className="mx-auto mt-4 max-w-2xl rounded-2xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-center text-sm text-destructive"
-              role="alert"
-            >
+            <p className="mx-auto mt-4 max-w-2xl rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-center text-sm text-destructive" role="alert">
               {error}
             </p>
           ) : null}
@@ -536,22 +498,20 @@ function Chat() {
               scrollToLatest("smooth");
             }}
             aria-label="Jump to latest message"
-            className="emery-press emery-glass absolute bottom-[5.7rem] right-4 z-30 flex size-11 items-center justify-center rounded-full text-primary shadow-xl"
+            className="emery-press absolute bottom-[5.2rem] right-4 z-30 flex size-10 items-center justify-center rounded-full border border-border/45 bg-card/95 text-primary shadow-lg backdrop-blur-xl"
           >
             <ArrowDown className="size-4" />
           </button>
         ) : null}
 
-        <div className="z-20 shrink-0 bg-[linear-gradient(180deg,transparent,oklch(0.095_0.02_160/0.98)_18%)] px-2.5 pb-2 pt-5 sm:px-5 sm:pb-3">
+        <div className="z-20 shrink-0 bg-[linear-gradient(180deg,transparent,oklch(0.09_0.028_255/0.98)_18%)] px-2.5 pb-2.5 pt-5 sm:px-5 sm:pb-3 md:px-7">
           {selectedFiles.length ? (
-            <div className="emery-scrollbar mx-auto mb-2.5 flex max-w-2xl gap-2 overflow-x-auto pb-1">
+            <div className="emery-scrollbar mx-auto mb-2 flex max-w-2xl gap-2 overflow-x-auto pb-1">
               {selectedFiles.map((file, index) => (
                 <SelectedFileCard
                   key={`${file.name}-${file.lastModified}-${file.size}`}
                   file={file}
-                  onRemove={() =>
-                    setSelectedFiles((prev) => prev.filter((_, itemIndex) => itemIndex !== index))
-                  }
+                  onRemove={() => setSelectedFiles((prev) => prev.filter((_, itemIndex) => itemIndex !== index))}
                 />
               ))}
             </div>
@@ -559,7 +519,7 @@ function Chat() {
 
           <form
             onSubmit={send}
-            className="emery-glass-strong mx-auto flex max-w-2xl items-end gap-1 rounded-[1.55rem] p-1.5 shadow-[0_24px_60px_rgba(0,0,0,0.35)] sm:gap-1.5 sm:rounded-[1.7rem] sm:p-2"
+            className="mx-auto flex max-w-2xl items-end gap-1 rounded-[1.25rem] border border-border/55 bg-[oklch(0.135_0.036_255/0.97)] p-1.5 shadow-[0_14px_36px_rgba(0,0,0,0.3)] backdrop-blur-xl sm:gap-1.5"
           >
             <input
               ref={fileInputRef}
@@ -578,7 +538,7 @@ function Chat() {
               title="Attach photos or files"
               onClick={() => fileInputRef.current?.click()}
               disabled={pending}
-              className="emery-press flex size-11 shrink-0 items-center justify-center rounded-2xl text-muted-foreground hover:bg-primary/[0.06] hover:text-primary disabled:opacity-40"
+              className="emery-press flex size-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:bg-white/[0.035] hover:text-primary disabled:opacity-40"
             >
               <Paperclip className="size-[18px]" strokeWidth={1.9} />
             </button>
@@ -590,8 +550,7 @@ function Chat() {
               onKeyDown={(event) => {
                 if (event.nativeEvent.isComposing) return;
                 if (event.key === "Enter" && !event.shiftKey) {
-                  const finePointer =
-                    typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches;
+                  const finePointer = typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches;
                   if (finePointer) {
                     event.preventDefault();
                     void sendMessage(draft);
@@ -599,25 +558,23 @@ function Chat() {
                 }
               }}
               enterKeyHint="enter"
-              placeholder="Talk to Emery…"
-              className="max-h-32 min-h-11 min-w-0 flex-1 overflow-y-auto bg-transparent px-1.5 py-2.5 text-[16px] leading-6 text-foreground outline-none placeholder:text-muted-foreground/65 sm:px-2 sm:text-[15px]"
+              placeholder="Message Emery"
+              className="max-h-32 min-h-10 min-w-0 flex-1 overflow-y-auto bg-transparent px-1.5 py-2 text-[16px] leading-6 text-foreground outline-none placeholder:text-muted-foreground/60 sm:px-2 sm:text-[15px]"
             />
             <button
               type="button"
               disabled
               aria-label="Emery Voice — next feature"
               title="Emery Voice is next"
-              className="relative hidden size-11 shrink-0 items-center justify-center rounded-2xl border border-primary/14 bg-primary/[0.045] text-primary/85 min-[390px]:flex"
+              className="relative hidden size-10 shrink-0 items-center justify-center rounded-xl text-primary/80 min-[390px]:flex"
             >
               <Mic className="size-[18px]" strokeWidth={1.9} />
-              <span className="absolute -right-1 -top-1 rounded-full border border-background bg-card px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-wide text-primary">
-                Next
-              </span>
+              <span className="absolute -right-0.5 -top-0.5 rounded-full bg-primary/12 px-1 text-[6px] font-bold uppercase tracking-wide text-primary">Next</span>
             </button>
             <button
               type="submit"
               aria-label="Send"
-              className="emery-press flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-[0_0_22px_oklch(0.805_0.175_155/0.14)] disabled:opacity-30"
+              className="emery-press flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_6px_16px_rgba(31,124,255,0.18)] disabled:opacity-30"
               disabled={(!draft.trim() && selectedFiles.length === 0) || pending}
             >
               <ArrowUp className="size-[18px]" strokeWidth={2.2} />
