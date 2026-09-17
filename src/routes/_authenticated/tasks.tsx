@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Check, CheckCircle2, Circle, Plus, Sparkles, X } from "lucide-react";
+import { Calendar, Check, CheckCircle2, Circle, FolderKanban, Plus, X } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { setTaskCompleted } from "@/lib/emery.functions";
 import { createLinkedTask, listProjectOptions, listUnifiedTasks } from "@/lib/os.functions";
@@ -23,6 +23,7 @@ type Task = {
 };
 
 type ProjectOption = { id: string; name: string; priority: number; status: string };
+type Tab = "open" | "completed";
 
 function Tasks() {
   const loadTasks = useServerFn(listUnifiedTasks);
@@ -34,6 +35,7 @@ function Tasks() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [tab, setTab] = useState<Tab>("open");
   const [title, setTitle] = useState("");
   const [details, setDetails] = useState("");
   const [due, setDue] = useState("");
@@ -66,16 +68,34 @@ function Tasks() {
     };
   }, [loadProjects, loadTasks]);
 
-  const open = tasks.filter((task) => task.status !== "completed");
-  const completed = tasks.filter((task) => task.status === "completed");
-  const focusTask =
-    [...open].sort((a, b) => {
-      if (b.priority !== a.priority) return b.priority - a.priority;
-      if (a.due_at && b.due_at) return new Date(a.due_at).getTime() - new Date(b.due_at).getTime();
-      if (a.due_at) return -1;
-      if (b.due_at) return 1;
-      return 0;
-    })[0] ?? null;
+  const open = useMemo(
+    () =>
+      tasks
+        .filter((task) => task.status !== "completed")
+        .sort((a, b) => {
+          if (a.due_at && b.due_at) {
+            const dueDifference = new Date(a.due_at).getTime() - new Date(b.due_at).getTime();
+            if (dueDifference !== 0) return dueDifference;
+          }
+          if (a.due_at && !b.due_at) return -1;
+          if (!a.due_at && b.due_at) return 1;
+          return b.priority - a.priority;
+        }),
+    [tasks],
+  );
+  const completed = useMemo(
+    () =>
+      tasks
+        .filter((task) => task.status === "completed")
+        .sort(
+          (a, b) =>
+            new Date(b.completed_at ?? b.created_at).getTime() -
+            new Date(a.completed_at ?? a.created_at).getTime(),
+        ),
+    [tasks],
+  );
+  const visible = tab === "open" ? open : completed;
+  const focusTask = [...open].sort((a, b) => b.priority - a.priority)[0] ?? null;
 
   async function handleToggle(task: Task) {
     const completedNow = task.status !== "completed";
@@ -119,6 +139,7 @@ function Tasks() {
       setPriority(3);
       setProjectId("");
       setShowAdd(false);
+      setTab("open");
       await refresh();
     } catch {
       setError("Couldn't add that task.");
@@ -129,175 +150,162 @@ function Tasks() {
 
   return (
     <AppShell title="Tasks">
-      <div className="space-y-5">
-        <section className="emery-glass-strong rounded-[1.75rem] p-5 sm:p-6">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="emery-kicker">Action system</p>
-              <h2 className="mt-1.5 text-xl font-semibold tracking-[-0.03em] sm:text-[1.35rem]">
-                Your next moves, without the noise.
-              </h2>
-              <p className="mt-2 max-w-lg text-sm leading-6 text-muted-foreground">
-                Keep execution visible and simple. Emery can capture new work from conversation and
-                connect it to the right project.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowAdd(true)}
-              className="emery-press flex min-h-11 shrink-0 items-center gap-2 rounded-2xl bg-primary px-3.5 text-sm font-semibold text-primary-foreground"
-            >
-              <Plus className="size-4" /> Add
-            </button>
+      <div className="mx-auto max-w-3xl pb-3">
+        <div className="flex items-end justify-between gap-4 pb-4">
+          <div>
+            <h1 className="text-[1.55rem] font-semibold tracking-[-0.035em]">Tasks</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {open.length ? `${open.length} open${focusTask ? ` · focus: ${focusTask.title}` : ""}` : "You're clear."}
+            </p>
           </div>
+          <button
+            type="button"
+            onClick={() => setShowAdd(true)}
+            className="emery-press flex min-h-10 items-center gap-1.5 rounded-xl bg-primary px-3 text-sm font-semibold text-primary-foreground"
+          >
+            <Plus className="size-4" />
+            Add
+          </button>
+        </div>
 
-          {focusTask ? (
-            <div className="mt-4 rounded-2xl border border-primary/12 bg-primary/[0.035] p-3.5">
-              <div className="flex items-start gap-3">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-primary/12 bg-primary/[0.055] text-primary">
-                  <Sparkles className="size-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary/80">
-                    Highest-leverage open task
-                  </p>
-                  <p className="mt-1 text-sm font-semibold">{focusTask.title}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Priority {focusTask.priority}
-                    {focusTask.project_name ? ` · ${focusTask.project_name}` : ""}
-                    {focusTask.due_at ? ` · ${formatDue(focusTask)}` : ""}
-                  </p>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="mt-4 flex items-center gap-2.5 rounded-2xl border border-border/40 bg-card/25 px-3.5 py-3 text-xs text-muted-foreground">
-              <CheckCircle2 className="size-4 text-primary" /> Nothing is waiting on you right now.
-            </div>
-          )}
-        </section>
+        <div className="mb-4 inline-flex rounded-xl bg-card/45 p-1">
+          <TabButton active={tab === "open"} onClick={() => setTab("open")}>
+            Open {open.length}
+          </TabButton>
+          <TabButton active={tab === "completed"} onClick={() => setTab("completed")}>
+            Completed {completed.length}
+          </TabButton>
+        </div>
 
         {error ? (
-          <p
-            className="rounded-2xl border border-destructive/25 bg-destructive/10 px-3.5 py-3 text-sm text-destructive"
-            role="alert"
-          >
+          <p className="mb-4 rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2.5 text-sm text-destructive" role="alert">
             {error}
           </p>
         ) : null}
 
         {loading ? (
-          <div className="space-y-2">
-            {[0, 1, 2].map((i) => (
-              <div
-                key={i}
-                className="emery-glass h-20 animate-pulse rounded-[1.45rem] opacity-55"
+          <div className="overflow-hidden rounded-2xl border border-border/40 bg-card/30">
+            {[0, 1, 2, 3].map((item) => (
+              <div key={item} className="h-[68px] animate-pulse border-b border-border/30 last:border-b-0">
+                <div className="mx-4 mt-5 h-3 w-2/3 rounded bg-white/5" />
+              </div>
+            ))}
+          </div>
+        ) : visible.length ? (
+          <div className="overflow-hidden rounded-2xl border border-border/40 bg-card/28">
+            {visible.map((task, index) => (
+              <TaskRow
+                key={task.id}
+                task={task}
+                completed={task.status === "completed"}
+                onToggle={handleToggle}
+                divider={index < visible.length - 1}
               />
             ))}
           </div>
         ) : (
-          <>
-            <TaskSection title={`Open · ${open.length}`} tasks={open} onToggle={handleToggle} />
-            {completed.length ? (
-              <TaskSection
-                title={`Completed · ${completed.length}`}
-                tasks={completed}
-                onToggle={handleToggle}
-                completed
-              />
-            ) : null}
-          </>
+          <div className="py-14 text-center">
+            <CheckCircle2 className="mx-auto size-7 text-primary/75" strokeWidth={1.7} />
+            <p className="mt-3 text-sm font-medium">
+              {tab === "open" ? "Nothing waiting on you." : "No completed tasks yet."}
+            </p>
+            <p className="mx-auto mt-1 max-w-xs text-xs leading-5 text-muted-foreground">
+              {tab === "open"
+                ? "Tell Emery what needs to get done or add it here."
+                : "Completed work will collect here quietly."}
+            </p>
+          </div>
         )}
       </div>
 
       {showAdd ? (
         <div
-          className="fixed inset-0 z-50 flex items-end bg-black/65 p-2 backdrop-blur-md sm:items-center sm:justify-center sm:p-4"
+          className="fixed inset-0 z-[80] flex items-end bg-black/60 backdrop-blur-sm sm:items-center sm:justify-center sm:p-4"
           onClick={() => setShowAdd(false)}
         >
           <form
             onSubmit={handleAdd}
             onClick={(event) => event.stopPropagation()}
-            className="emery-glass-strong max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-[1.9rem] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-5"
+            className="emery-sheet-in w-full max-w-md rounded-t-[1.6rem] border border-border/50 bg-[oklch(0.125_0.034_255/0.985)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-24px_70px_rgba(0,0,0,0.45)] sm:rounded-2xl"
           >
-            <div className="flex items-start justify-between gap-3">
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/12 sm:hidden" />
+            <div className="flex items-center justify-between">
               <div>
-                <p className="emery-kicker">New action</p>
-                <h3 className="mt-1 text-xl font-semibold tracking-[-0.02em]">Add task</h3>
-                <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-                  You can also tell Emery in the main chat and she can capture it for you.
-                </p>
+                <p className="text-base font-semibold">New task</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">Capture it quickly. Refine only if needed.</p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowAdd(false)}
-                className="emery-press flex size-11 shrink-0 items-center justify-center rounded-2xl text-muted-foreground hover:bg-white/5"
+                className="emery-press flex size-10 items-center justify-center rounded-xl text-muted-foreground hover:bg-white/[0.04]"
                 aria-label="Close add task"
               >
                 <X className="size-4" />
               </button>
             </div>
 
-            <div className="mt-5 space-y-4">
-              <Field label="Task">
-                <input
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  placeholder="Send follow-up to attorney"
-                  className="min-h-12 w-full rounded-2xl border border-border/60 bg-card/55 px-3.5 text-[16px] outline-none transition focus:border-primary/40 sm:text-sm"
-                  autoFocus
-                />
-              </Field>
-              <Field label="Details" optional>
-                <textarea
-                  value={details}
-                  onChange={(event) => setDetails(event.target.value)}
-                  placeholder="Any context Emery should keep with the task"
-                  rows={3}
-                  className="w-full rounded-2xl border border-border/60 bg-card/55 px-3.5 py-3 text-[16px] leading-6 outline-none transition focus:border-primary/40 sm:text-sm"
-                />
-              </Field>
-              <Field label="Due" optional>
-                <input
-                  type="datetime-local"
-                  value={due}
-                  onChange={(event) => setDue(event.target.value)}
-                  className="min-h-12 w-full rounded-2xl border border-border/60 bg-card/55 px-3.5 text-[16px] outline-none transition focus:border-primary/40 sm:text-sm"
-                />
-              </Field>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Project" optional>
-                  <select
-                    value={projectId}
-                    onChange={(event) => setProjectId(event.target.value)}
-                    className="min-h-12 w-full rounded-2xl border border-border/60 bg-card/55 px-3.5 text-[16px] outline-none sm:text-sm"
-                  >
-                    <option value="">No linked project</option>
-                    {projects.map((project) => (
-                      <option key={project.id} value={project.id}>
-                        {project.name}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Priority">
+            <div className="mt-4 space-y-3">
+              <input
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="What needs to happen?"
+                className="min-h-12 w-full rounded-xl border border-border/55 bg-card/45 px-3.5 text-[16px] outline-none focus:border-primary/40"
+                autoFocus
+              />
+              <textarea
+                value={details}
+                onChange={(event) => setDetails(event.target.value)}
+                placeholder="Notes (optional)"
+                rows={2}
+                className="w-full rounded-xl border border-border/55 bg-card/45 px-3.5 py-3 text-[16px] leading-6 outline-none focus:border-primary/40"
+              />
+
+              <div className="grid grid-cols-2 gap-2">
+                <label className="space-y-1.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.11em] text-muted-foreground">Due</span>
+                  <input
+                    type="datetime-local"
+                    value={due}
+                    onChange={(event) => setDue(event.target.value)}
+                    className="min-h-11 w-full rounded-xl border border-border/55 bg-card/45 px-3 text-[14px] outline-none"
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.11em] text-muted-foreground">Priority</span>
                   <select
                     value={priority}
                     onChange={(event) => setPriority(Number(event.target.value))}
-                    className="min-h-12 w-full rounded-2xl border border-border/60 bg-card/55 px-3.5 text-[16px] outline-none sm:text-sm"
+                    className="min-h-11 w-full rounded-xl border border-border/55 bg-card/45 px-3 text-[14px] outline-none"
                   >
-                    <option value={5}>5 · Highest</option>
-                    <option value={4}>4 · High</option>
-                    <option value={3}>3 · Normal</option>
-                    <option value={2}>2 · Low</option>
-                    <option value={1}>1 · Someday</option>
+                    <option value={5}>Highest</option>
+                    <option value={4}>High</option>
+                    <option value={3}>Normal</option>
+                    <option value={2}>Low</option>
+                    <option value={1}>Someday</option>
                   </select>
-                </Field>
+                </label>
               </div>
+
+              <label className="space-y-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.11em] text-muted-foreground">Project</span>
+                <select
+                  value={projectId}
+                  onChange={(event) => setProjectId(event.target.value)}
+                  className="min-h-11 w-full rounded-xl border border-border/55 bg-card/45 px-3 text-[14px] outline-none"
+                >
+                  <option value="">No linked project</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               <button
                 type="submit"
                 disabled={!title.trim() || saving}
-                className="emery-press flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary font-semibold text-primary-foreground disabled:opacity-40"
+                className="emery-press flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary font-semibold text-primary-foreground disabled:opacity-40"
               >
                 <Check className="size-4" /> {saving ? "Adding…" : "Add task"}
               </button>
@@ -309,102 +317,89 @@ function Tasks() {
   );
 }
 
-function TaskSection({
-  title,
-  tasks,
-  onToggle,
-  completed = false,
+function TabButton({
+  active,
+  onClick,
+  children,
 }: {
-  title: string;
-  tasks: Task[];
-  onToggle: (task: Task) => void;
-  completed?: boolean;
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
 }) {
   return (
-    <section>
-      <p className="mb-2.5 px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-        {title}
-      </p>
-      {tasks.length === 0 ? (
-        <div className="emery-glass rounded-[1.55rem] p-6 text-center">
-          <CheckCircle2 className="mx-auto size-7 text-primary" />
-          <p className="mt-2 text-sm font-medium">Nothing waiting here.</p>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            Say “Emery, add a task…” whenever something comes up.
+    <button
+      type="button"
+      onClick={onClick}
+      className={`emery-press min-h-9 rounded-lg px-3 text-xs font-semibold ${active ? "bg-primary/[0.1] text-primary" : "text-muted-foreground hover:text-foreground"}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function TaskRow({
+  task,
+  completed,
+  onToggle,
+  divider,
+}: {
+  task: Task;
+  completed: boolean;
+  onToggle: (task: Task) => void;
+  divider: boolean;
+}) {
+  return (
+    <article className={`group flex min-h-[68px] items-start gap-3 px-3 py-3 ${divider ? "border-b border-border/30" : ""}`}>
+      <button
+        type="button"
+        onClick={() => void onToggle(task)}
+        aria-label={completed ? `Reopen ${task.title}` : `Complete ${task.title}`}
+        className={`emery-press mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full ${completed ? "text-primary" : "text-muted-foreground hover:text-primary"}`}
+      >
+        {completed ? <CheckCircle2 className="size-5" /> : <Circle className="size-5" />}
+      </button>
+
+      <div className="min-w-0 flex-1 pt-1">
+        <div className="flex items-start gap-2">
+          <p className={`min-w-0 flex-1 text-[14px] font-medium leading-5 ${completed ? "text-muted-foreground line-through" : "text-foreground"}`}>
+            {task.title}
           </p>
+          {!completed && task.priority >= 4 ? (
+            <span className="mt-1 size-1.5 shrink-0 rounded-full bg-primary" title={`Priority ${task.priority}`} />
+          ) : null}
         </div>
-      ) : (
-        <div className="space-y-2.5">
-          {tasks.map((task) => (
-            <article
-              key={task.id}
-              className={`flex items-start gap-3 rounded-[1.45rem] border p-3.5 ${completed ? "border-border/35 bg-card/24 opacity-58" : "border-border/45 bg-card/38"}`}
-            >
-              <button
-                type="button"
-                onClick={() => void onToggle(task)}
-                aria-label={completed ? `Reopen ${task.title}` : `Complete ${task.title}`}
-                className="emery-press mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-2xl border border-border/45 bg-card/35 text-muted-foreground hover:border-primary/20 hover:text-primary"
-              >
-                {completed ? <CheckCircle2 className="size-5" /> : <Circle className="size-5" />}
-              </button>
-              <div className="min-w-0 flex-1 py-1">
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <p
-                    className={`text-sm font-semibold leading-5 ${completed ? "line-through" : ""}`}
-                  >
-                    {task.title}
-                  </p>
-                  {!completed ? (
-                    <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-primary/75">
-                      P{task.priority}
-                    </span>
-                  ) : null}
-                </div>
-                {task.details ? (
-                  <p className="mt-1.5 text-xs leading-5 text-muted-foreground">{task.details}</p>
-                ) : null}
-                <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1.5 text-[11px] text-muted-foreground">
-                  {task.project_name ? (
-                    <span className="font-medium text-foreground/75">{task.project_name}</span>
-                  ) : null}
-                  {task.due_at ? <span>{formatDue(task)}</span> : null}
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
-    </section>
+        {(task.project_name || task.due_at || task.details) ? (
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+            {task.project_name ? (
+              <span className="inline-flex items-center gap-1">
+                <FolderKanban className="size-3" /> {task.project_name}
+              </span>
+            ) : null}
+            {task.due_at ? (
+              <span className="inline-flex items-center gap-1">
+                <Calendar className="size-3" /> {formatDue(task)}
+              </span>
+            ) : null}
+            {task.details ? <span className="line-clamp-1 max-w-full">{task.details}</span> : null}
+          </div>
+        ) : null}
+      </div>
+    </article>
   );
 }
 
 function formatDue(task: Task) {
   if (!task.due_at) return "";
+  const date = new Date(task.due_at);
+  if (Number.isNaN(date.getTime())) return "";
   const dateOnly = Boolean((task.metadata as Record<string, unknown> | null)?.["due_date_only"]);
-  return dateOnly
-    ? new Date(task.due_at).toLocaleDateString([], { dateStyle: "medium" })
-    : new Date(task.due_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
-}
-
-function Field({
-  label,
-  optional = false,
-  children,
-}: {
-  label: string;
-  optional?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block">
-      <span className="flex items-center gap-2 text-sm font-semibold">
-        {label}
-        {optional ? (
-          <span className="text-[10px] font-normal text-muted-foreground">Optional</span>
-        ) : null}
-      </span>
-      <span className="mt-2 block">{children}</span>
-    </label>
-  );
+  if (dateOnly) {
+    return date.toLocaleDateString([], { month: "short", day: "numeric" });
+  }
+  return date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
