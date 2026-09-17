@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { CalendarDays, CheckSquare, FolderKanban } from "lucide-react";
+import { CalendarDays, CheckSquare } from "lucide-react";
 import { getOperatingSystemSnapshot } from "@/lib/os.functions";
 
 type ProjectContext = {
@@ -31,49 +31,25 @@ export function ProjectExecutionOverview() {
   }, [load]);
 
   if (!projects.length) return null;
+
   const needingAction = projects.filter((project) => !project.next_action);
+  const openTasks = projects.reduce((sum, project) => sum + project.open_task_count, 0);
+  const upcomingMeetings = projects.filter((project) => project.next_meeting).length;
 
   return (
-    <section className="emery-glass rounded-[1.55rem] p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="emery-kicker">Connected execution</p>
-          <h3 className="mt-1 text-sm font-semibold">Projects are tied to the work now</h3>
-        </div>
-        {needingAction.length ? (
-          <span className="emery-chip text-primary">{needingAction.length} need next action</span>
-        ) : null}
-      </div>
-      <div className="mt-3 space-y-2">
-        {projects.slice(0, 4).map((project) => (
-          <div
-            key={project.id}
-            className="rounded-2xl border border-border/45 bg-card/45 px-3.5 py-3"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <FolderKanban className="size-3.5 shrink-0 text-primary" />
-                  <p className="truncate text-xs font-semibold">{project.name}</p>
-                </div>
-                <p className="mt-1.5 truncate text-[11px] text-muted-foreground">
-                  {project.next_action || "No next action set yet"}
-                </p>
-              </div>
-              <div className="flex shrink-0 gap-1.5">
-                <Link to="/tasks" className="emery-chip">
-                  <CheckSquare className="size-3" /> {project.open_task_count}
-                </Link>
-                {project.next_meeting ? (
-                  <Link to="/meetings" className="emery-chip text-muted-foreground">
-                    <CalendarDays className="size-3" /> 1
-                  </Link>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+    <section className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-border/35 bg-card/22 px-3.5 py-2.5 text-[11px] text-muted-foreground">
+      <span className="font-medium text-foreground/82">Execution</span>
+      <Link to="/tasks" className="emery-press inline-flex items-center gap-1.5 hover:text-foreground">
+        <CheckSquare className="size-3.5 text-primary/80" /> {openTasks} open tasks
+      </Link>
+      <Link to="/meetings" className="emery-press inline-flex items-center gap-1.5 hover:text-foreground">
+        <CalendarDays className="size-3.5 text-primary/80" /> {upcomingMeetings} upcoming
+      </Link>
+      {needingAction.length ? (
+        <span className="text-primary/85">{needingAction.length} need a next action</span>
+      ) : (
+        <span>All active projects have a next action</span>
+      )}
     </section>
   );
 }
