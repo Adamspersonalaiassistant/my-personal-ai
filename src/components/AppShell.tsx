@@ -28,13 +28,15 @@ export function AppShell({
   padded?: boolean;
 }) {
   return (
-    <div className="relative mx-auto flex min-h-[100dvh] w-full max-w-3xl flex-col overflow-x-hidden bg-background text-foreground md:border-x md:border-border/50 md:shadow-2xl">
-      <div aria-hidden className="emery-grid pointer-events-none absolute inset-x-0 top-0 h-80 opacity-70" />
-      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border/50 bg-background/80 px-4 pb-2.5 pt-[max(0.7rem,env(safe-area-inset-top))] backdrop-blur-2xl">
+    <div className="relative mx-auto flex min-h-[100dvh] w-full max-w-3xl flex-col overflow-x-hidden bg-background text-foreground md:border-x md:border-border/50 md:shadow-[0_0_80px_rgba(16,75,130,0.14)]">
+      <div aria-hidden className="emery-grid pointer-events-none absolute inset-x-0 top-0 h-80 opacity-80" />
+      <div aria-hidden className="pointer-events-none absolute left-1/2 top-0 h-48 w-[70%] -translate-x-1/2 rounded-full bg-primary/[0.06] blur-3xl" />
+
+      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border/50 bg-background/82 px-4 pb-2.5 pt-[max(0.7rem,env(safe-area-inset-top))] backdrop-blur-2xl">
         <div className="flex min-w-0 items-center gap-2.5">
-          <div className="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-primary/25 bg-primary/8 shadow-[0_0_24px_oklch(0.78_0.19_154/0.15)]">
-            <img src={brainImage} alt="" className="h-9 w-9 object-cover object-center opacity-95" />
-            <span className="absolute bottom-1 right-1 size-2 rounded-full border border-background bg-primary shadow-[0_0_8px_oklch(0.78_0.19_154)]" />
+          <div className="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-primary/25 bg-primary/[0.07] shadow-[0_0_24px_oklch(0.72_0.17_244/0.2)]">
+            <img src={brainImage} alt="" className="emery-orb h-9 w-9 object-cover object-center opacity-95" />
+            <span className="absolute bottom-1 right-1 size-2 rounded-full border border-background bg-primary shadow-[0_0_9px_oklch(0.72_0.17_244)]" />
           </div>
           <div className="min-w-0">
             <div className="flex items-baseline gap-2">
@@ -43,8 +45,8 @@ export function AppShell({
                 <span className="truncate text-xs text-muted-foreground">/ {title}</span>
               ) : null}
             </div>
-            <p className="truncate text-[11px] font-medium text-muted-foreground">
-              Personal AI <span className="mx-1 text-primary/70">•</span> Memory online
+            <p className="truncate text-[10px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
+              System online <span className="mx-1 text-primary/80">•</span> Memory linked
             </p>
           </div>
         </div>
@@ -52,7 +54,7 @@ export function AppShell({
         <Link
           to="/settings"
           aria-label="Emery settings"
-          className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-card/70 text-muted-foreground transition hover:border-primary/30 hover:bg-accent hover:text-foreground"
+          className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-card/70 text-muted-foreground transition hover:border-primary/35 hover:bg-accent hover:text-foreground"
         >
           <SettingsIcon className="size-[18px]" />
         </Link>
@@ -62,15 +64,15 @@ export function AppShell({
         {children}
       </main>
 
-      <nav className="sticky bottom-0 z-30 grid grid-cols-5 gap-0.5 border-t border-border/50 bg-background/88 px-1.5 pb-[max(0.45rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-2xl">
+      <nav className="sticky bottom-0 z-30 grid grid-cols-5 gap-0.5 border-t border-border/50 bg-background/90 px-1.5 pb-[max(0.45rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-2xl">
         {navItems.map(({ to, label, icon: Icon }) => (
           <Link
             key={to}
             to={to}
-            className="group flex min-h-[58px] flex-col items-center justify-center gap-1 rounded-2xl px-1 text-[10px] font-medium text-muted-foreground transition-colors"
+            className="group flex min-h-[58px] flex-col items-center justify-center gap-1 rounded-xl px-1 text-[10px] font-medium text-muted-foreground transition-colors"
             activeProps={{
               className:
-                "bg-primary/[0.09] text-primary shadow-[inset_0_0_0_1px_oklch(0.78_0.19_154/0.12)]",
+                "bg-primary/[0.10] text-primary shadow-[inset_0_0_0_1px_oklch(0.72_0.17_244/0.14),0_0_20px_oklch(0.72_0.17_244/0.08)]",
             }}
           >
             <Icon className="size-[19px] transition-transform group-active:scale-95" />
@@ -93,7 +95,7 @@ export function EmptyState({
 }) {
   return (
     <div className="mx-auto flex max-w-sm flex-col items-center gap-3 py-16 text-center">
-      <div className="emery-glass flex size-16 items-center justify-center rounded-[1.35rem] text-primary emery-glow">
+      <div className="emery-glass emery-glow flex size-16 items-center justify-center rounded-xl text-primary">
         <Icon className="size-6" />
       </div>
       <h2 className="mt-1 text-base font-semibold tracking-tight">{title}</h2>
