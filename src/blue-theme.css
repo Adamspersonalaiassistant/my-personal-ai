@@ -33,6 +33,8 @@
   --sidebar-border: oklch(0.72 0.115 248 / 0.18);
   --sidebar-ring: oklch(0.73 0.185 250 / 0.64);
 
+  /* Legacy semantic color utilities are intentionally remapped so older screens
+     inherit Emery's blue system without changing their behavior. */
   --color-emerald-50: oklch(0.97 0.02 240);
   --color-emerald-100: oklch(0.93 0.04 240);
   --color-emerald-200: oklch(0.87 0.08 242);
@@ -175,8 +177,26 @@ select:focus-visible {
   background: oklch(0.69 0.13 248 / 0.26);
 }
 
-.emery-blue-brain {
+.emery-blue-brain,
+.emery-icon-well img {
   filter: hue-rotate(95deg) saturate(1.45) brightness(1.05) contrast(1.06);
+}
+
+/* A few early Emery components used literal emerald OKLCH values inside
+   Tailwind arbitrary classes. Keep their layout/logic untouched and skin them
+   into the blue system here. */
+[class*="oklch(0.79_0.17_155)"] {
+  background: linear-gradient(145deg, oklch(0.72 0.19 244), oklch(0.56 0.18 255)) !important;
+  color: oklch(0.985 0.008 242) !important;
+  box-shadow: 0 12px 34px oklch(0.35 0.13 250 / 0.22) !important;
+}
+
+[class*="oklch(0.805_0.175_155"] {
+  box-shadow: 0 0 22px oklch(0.72 0.185 250 / 0.26) !important;
+}
+
+[class*="oklch(0.095_0.02_160"] {
+  background: linear-gradient(180deg, transparent, oklch(0.085 0.027 258 / 0.99) 18%) !important;
 }
 
 @keyframes emery-breathe-blue {
