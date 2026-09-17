@@ -48,13 +48,17 @@ function SignIn() {
       <div aria-hidden className="pointer-events-none absolute inset-0">
         <div className="emery-grid absolute inset-0 opacity-90" />
         <div className="absolute left-1/2 top-[-10%] h-[34rem] w-[34rem] -translate-x-1/2 rounded-full bg-primary/10 blur-[110px]" />
-        <div className="absolute -bottom-40 -right-32 size-96 rounded-full bg-[oklch(0.55_0.15_168/0.12)] blur-[100px]" />
+        <div className="absolute -bottom-40 -right-32 size-96 rounded-full bg-[oklch(0.52_0.17_242/0.14)] blur-[100px]" />
       </div>
 
       <div className="relative mx-auto w-full max-w-sm">
         <div className="emery-glass rounded-[2rem] p-6 sm:p-7">
           <div className="mx-auto flex size-28 items-center justify-center overflow-hidden rounded-[2rem] border border-primary/20 bg-primary/[0.05] emery-glow">
-            <img src={brainImage} alt="Emery neural brain" className="h-24 w-24 object-cover emery-breathe" />
+            <img
+              src={brainImage}
+              alt="Emery neural brain"
+              className="emery-blue-brain emery-breathe h-24 w-24 object-cover"
+            />
           </div>
 
           <div className="mt-5 text-center">
@@ -113,7 +117,7 @@ function SignIn() {
                   type="checkbox"
                   checked={keepSignedIn}
                   onChange={(e) => setKeepSignedIn(e.target.checked)}
-                  className="size-4 accent-[oklch(0.78_0.19_154)]"
+                  className="size-4 accent-[oklch(0.72_0.185_250)]"
                 />
                 Keep me signed in
               </label>
@@ -131,7 +135,7 @@ function SignIn() {
             <Button
               type="submit"
               disabled={loading || !isSupabaseConfigured}
-              className="mt-1 h-14 w-full rounded-2xl bg-primary text-base font-semibold text-primary-foreground shadow-[0_0_28px_oklch(0.78_0.19_154/0.18)] hover:bg-primary/90"
+              className="mt-1 h-14 w-full rounded-2xl bg-primary text-base font-semibold text-primary-foreground shadow-[0_0_30px_oklch(0.72_0.185_250/0.22)] hover:bg-primary/90"
             >
               {loading ? <Loader2 className="mr-2 size-5 animate-spin" /> : null}
               Enter Emery
