@@ -34,6 +34,7 @@ function Chat() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const endRef = useRef<HTMLDivElement | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const askAssistant = useServerFn(sendChatMessage);
   const loadConversation = useServerFn(getLatestConversation);
   const loadList = useServerFn(listConversations);
@@ -91,19 +92,24 @@ function Chat() {
     }
   }
 
+  function resetComposer() {
+    setDraft("");
+    if (composerRef.current) composerRef.current.style.height = "auto";
+  }
+
   function newChat() {
     setHistoryOpen(false);
     setConversationId(null);
     setMessages([]);
     setError(null);
-    setDraft("");
+    resetComposer();
   }
 
   async function sendMessage(text: string) {
     const clean = text.trim();
     if (!clean || pending) return;
     setMessages((prev) => [...prev, { id: Date.now(), role: "user", text: clean }]);
-    setDraft("");
+    resetComposer();
     setError(null);
     setPending(true);
     try {
@@ -136,14 +142,14 @@ function Chat() {
   return (
     <AppShell title="Chat" padded={false}>
       <div className="relative flex min-h-[calc(100dvh-132px)] flex-col">
-        <div className="flex items-center justify-between gap-2 border-b border-border/40 bg-background/40 px-3 py-2 backdrop-blur-xl sm:px-4">
+        <div className="flex items-center justify-between gap-2 border-b border-border/40 bg-background/45 px-3 py-2 backdrop-blur-xl sm:px-4">
           <button
             type="button"
             onClick={() => {
               setHistoryOpen(true);
               void refreshList();
             }}
-            className="flex min-h-11 items-center gap-2 rounded-2xl border border-border/60 bg-card/60 px-3.5 text-xs font-medium text-muted-foreground transition hover:border-primary/25 hover:text-foreground"
+            className="flex min-h-11 items-center gap-2 rounded-xl border border-border/60 bg-card/60 px-3.5 text-xs font-medium text-muted-foreground transition hover:border-primary/30 hover:text-foreground"
           >
             <History className="size-4" />
             History
@@ -151,7 +157,7 @@ function Chat() {
           <button
             type="button"
             onClick={newChat}
-            className="flex min-h-11 items-center gap-2 rounded-2xl border border-primary/25 bg-primary/[0.07] px-3.5 text-xs font-semibold text-primary transition hover:bg-primary/[0.12]"
+            className="flex min-h-11 items-center gap-2 rounded-xl border border-primary/30 bg-primary/[0.08] px-3.5 text-xs font-semibold text-primary transition hover:bg-primary/[0.14]"
           >
             <Plus className="size-4" />
             New chat
@@ -159,21 +165,21 @@ function Chat() {
         </div>
 
         {historyOpen ? (
-          <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm" onClick={() => setHistoryOpen(false)}>
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" onClick={() => setHistoryOpen(false)}>
             <aside
-              className="emery-glass absolute inset-y-0 left-0 w-[min(88vw,360px)] overflow-hidden rounded-r-[1.75rem] border-y-0 border-l-0 p-4 pt-[max(1rem,env(safe-area-inset-top))]"
+              className="emery-glass absolute inset-y-0 left-0 w-[min(88vw,360px)] overflow-hidden rounded-r-2xl border-y-0 border-l-0 p-4 pt-[max(1rem,env(safe-area-inset-top))]"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-semibold">Conversation history</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">Pick up where you left off.</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">Memory archive</p>
+                  <p className="mt-1 text-sm font-semibold">Conversation history</p>
                 </div>
                 <button
                   type="button"
                   aria-label="Close history"
                   onClick={() => setHistoryOpen(false)}
-                  className="flex size-11 items-center justify-center rounded-2xl border border-border/60 bg-card/70 text-muted-foreground"
+                  className="flex size-11 items-center justify-center rounded-xl border border-border/60 bg-card/70 text-muted-foreground"
                 >
                   <X className="size-4" />
                 </button>
@@ -188,10 +194,10 @@ function Chat() {
                       <button
                         type="button"
                         onClick={() => openConversation(c.id)}
-                        className={`w-full rounded-2xl border px-3.5 py-3 text-left transition ${
+                        className={`w-full rounded-xl border px-3.5 py-3 text-left transition ${
                           c.id === conversationId
-                            ? "border-primary/30 bg-primary/[0.09]"
-                            : "border-border/50 bg-card/55 hover:border-primary/20"
+                            ? "border-primary/35 bg-primary/[0.10] shadow-[0_0_18px_oklch(0.72_0.17_244/0.08)]"
+                            : "border-border/50 bg-card/55 hover:border-primary/25"
                         }`}
                       >
                         <span className="line-clamp-1 text-sm font-medium">{c.title || "Untitled chat"}</span>
@@ -210,19 +216,19 @@ function Chat() {
         <div className="emery-scrollbar flex-1 overflow-y-auto px-4 pb-5 pt-5 sm:px-6">
           {loading ? (
             <div className="flex min-h-[48vh] items-center justify-center">
-              <p className="text-sm text-muted-foreground">Loading your conversation…</p>
+              <p className="text-sm text-muted-foreground">Restoring Emery context…</p>
             </div>
           ) : messages.length === 0 ? (
             <div className="mx-auto flex min-h-[54vh] max-w-md flex-col items-center justify-center py-8 text-center">
               <div className="relative">
-                <div className="absolute inset-3 rounded-full bg-primary/20 blur-3xl" />
-                <div className="emery-breathe relative flex size-28 items-center justify-center overflow-hidden rounded-[2rem] border border-primary/20 bg-primary/[0.05]">
-                  <img src={brainImage} alt="Emery neural brain" className="h-24 w-24 object-cover" />
+                <div className="absolute inset-1 rounded-full bg-primary/18 blur-3xl" />
+                <div className="emery-breathe relative flex size-28 items-center justify-center overflow-hidden rounded-2xl border border-primary/25 bg-primary/[0.06] shadow-[inset_0_0_30px_oklch(0.72_0.17_244/0.06)]">
+                  <img src={brainImage} alt="Emery neural core" className="h-24 w-24 object-cover" />
                 </div>
               </div>
               <div className="mt-6 flex items-center gap-2 text-primary">
                 <Sparkles className="size-4" />
-                <span className="text-[11px] font-semibold uppercase tracking-[0.2em]">Emery online</span>
+                <span className="text-[10px] font-semibold uppercase tracking-[0.22em]">Core online</span>
               </div>
               <h2 className="emery-text-gradient mt-3 text-2xl font-semibold tracking-tight">I’m here, Adam.</h2>
               <p className="mt-2 max-w-xs text-sm leading-6 text-muted-foreground">
@@ -234,7 +240,7 @@ function Chat() {
                     key={prompt}
                     type="button"
                     onClick={() => void sendMessage(prompt)}
-                    className="min-h-11 rounded-2xl border border-border/60 bg-card/60 px-3.5 text-xs font-medium text-muted-foreground transition hover:border-primary/30 hover:bg-primary/[0.07] hover:text-foreground"
+                    className="min-h-11 rounded-xl border border-border/60 bg-card/60 px-3.5 text-xs font-medium text-muted-foreground transition hover:border-primary/35 hover:bg-primary/[0.08] hover:text-foreground"
                   >
                     {prompt}
                   </button>
@@ -246,16 +252,16 @@ function Chat() {
               {messages.map((m) =>
                 m.role === "user" ? (
                   <div key={m.id} className="flex justify-end pl-10">
-                    <div className="max-w-[86%] whitespace-pre-wrap rounded-[1.35rem] rounded-br-md bg-[linear-gradient(145deg,oklch(0.72_0.18_154),oklch(0.56_0.15_157))] px-4 py-3 text-[15px] leading-6 text-[oklch(0.11_0.025_158)] shadow-[0_10px_30px_oklch(0.3_0.1_158/0.18)]">
+                    <div className="max-w-[86%] whitespace-pre-wrap rounded-2xl rounded-br-md border border-primary/25 bg-[linear-gradient(145deg,oklch(0.69_0.18_244),oklch(0.54_0.16_252))] px-4 py-3 text-[15px] leading-6 text-white shadow-[0_12px_34px_oklch(0.38_0.13_250/0.22)]">
                       {m.text}
                     </div>
                   </div>
                 ) : (
                   <div key={m.id} className="flex items-start gap-2.5 pr-4">
-                    <div className="mt-1 flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-primary/20 bg-primary/[0.05]">
-                      <img src={brainImage} alt="" className="size-7 object-cover" />
+                    <div className="mt-1 flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-primary/25 bg-primary/[0.06]">
+                      <img src={brainImage} alt="" className="emery-orb size-7 object-cover" />
                     </div>
-                    <div className="emery-glass max-w-[88%] whitespace-pre-wrap rounded-[1.35rem] rounded-tl-md px-4 py-3 text-[15px] leading-6 text-foreground">
+                    <div className="emery-glass max-w-[88%] whitespace-pre-wrap rounded-2xl rounded-tl-md px-4 py-3 text-[15px] leading-6 text-foreground">
                       {m.text}
                     </div>
                   </div>
@@ -266,10 +272,10 @@ function Chat() {
 
           {pending ? (
             <div className="mt-5 flex items-center gap-2.5">
-              <div className="flex size-8 items-center justify-center overflow-hidden rounded-xl border border-primary/20 bg-primary/[0.05]">
-                <img src={brainImage} alt="" className="size-7 object-cover" />
+              <div className="flex size-8 items-center justify-center overflow-hidden rounded-lg border border-primary/25 bg-primary/[0.06]">
+                <img src={brainImage} alt="" className="emery-orb size-7 object-cover" />
               </div>
-              <div className="emery-glass flex min-h-11 items-center gap-2 rounded-2xl px-4 text-xs text-muted-foreground">
+              <div className="emery-glass flex min-h-11 items-center gap-2 rounded-xl px-4 text-xs text-muted-foreground">
                 <span>Emery is thinking</span>
                 <span className="flex items-center gap-1">
                   <span className="emery-dot size-1.5 rounded-full bg-primary" />
@@ -281,28 +287,33 @@ function Chat() {
           ) : null}
 
           {error ? (
-            <p className="mt-4 rounded-2xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-center text-sm text-destructive" role="alert">
+            <p className="mt-4 rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-center text-sm text-destructive" role="alert">
               {error}
             </p>
           ) : null}
           <div ref={endRef} />
         </div>
 
-        <div className="sticky bottom-0 z-20 bg-[linear-gradient(180deg,transparent,oklch(0.11_0.022_158/0.98)_18%)] px-3 pb-3 pt-5 sm:px-4">
-          <form onSubmit={send} className="emery-glass flex items-end gap-1.5 rounded-[1.6rem] p-2">
+        <div className="sticky bottom-0 z-20 bg-[linear-gradient(180deg,transparent,oklch(0.095_0.024_255/0.99)_18%)] px-3 pb-3 pt-5 sm:px-4">
+          <form onSubmit={send} className="emery-glass flex items-end gap-1.5 rounded-2xl p-2 shadow-[0_0_30px_oklch(0.45_0.13_244/0.08)]">
             <button
               type="button"
               disabled
               aria-label="Attach a file — planned"
               title="File uploads are planned"
-              className="flex size-11 shrink-0 items-center justify-center rounded-2xl text-muted-foreground opacity-45"
+              className="flex size-11 shrink-0 items-center justify-center rounded-xl text-muted-foreground opacity-45"
             >
               <Paperclip className="size-[19px]" />
             </button>
             <textarea
+              ref={composerRef}
               value={draft}
               rows={1}
               onChange={(e) => setDraft(e.target.value)}
+              onInput={(e) => {
+                e.currentTarget.style.height = "auto";
+                e.currentTarget.style.height = `${Math.min(e.currentTarget.scrollHeight, 128)}px`;
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
@@ -317,7 +328,7 @@ function Chat() {
               disabled
               aria-label="Emery Voice — next feature"
               title="Emery Voice is next"
-              className="relative flex size-11 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/[0.06] text-primary opacity-80"
+              className="relative flex size-11 shrink-0 items-center justify-center rounded-xl border border-primary/30 bg-primary/[0.09] text-primary opacity-90 shadow-[inset_0_0_18px_oklch(0.72_0.17_244/0.05)]"
             >
               <Mic className="size-[19px]" />
               <span className="absolute -right-1 -top-1 rounded-full border border-background bg-card px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-primary">
@@ -327,7 +338,7 @@ function Chat() {
             <button
               type="submit"
               aria-label="Send"
-              className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-[0_0_18px_oklch(0.78_0.19_154/0.18)] transition disabled:opacity-30"
+              className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_0_22px_oklch(0.72_0.17_244/0.24)] transition hover:brightness-110 disabled:opacity-30"
               disabled={!draft.trim() || pending}
             >
               <ArrowUp className="size-[19px]" />
