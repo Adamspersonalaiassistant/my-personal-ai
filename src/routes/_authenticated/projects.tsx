@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Edit3, FolderKanban, Plus, Sparkles, X } from "lucide-react";
+import { ChevronRight, Edit3, FolderKanban, Plus, X } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { ProjectExecutionOverview } from "@/components/ProjectExecutionOverview";
 import { listProjects, saveProject } from "@/lib/emery.functions";
@@ -20,6 +20,8 @@ type Project = {
   updated_at: string;
 };
 
+type Tab = "active" | "other";
+
 function Projects() {
   const loadProjects = useServerFn(listProjects);
   const save = useServerFn(saveProject);
@@ -28,6 +30,7 @@ function Projects() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Project | null>(null);
   const [showEditor, setShowEditor] = useState(false);
+  const [tab, setTab] = useState<Tab>("active");
 
   async function refresh() {
     const result = await loadProjects({});
@@ -51,98 +54,87 @@ function Projects() {
     };
   }, [loadProjects]);
 
-  const active = projects.filter((project) => project.status === "active");
-  const other = projects.filter((project) => project.status !== "active");
-  const focusProject = [...active].sort((a, b) => b.priority - a.priority)[0] ?? null;
-  const openEditor = (project: Project | null) => {
+  const active = useMemo(
+    () => projects.filter((project) => project.status === "active").sort((a, b) => b.priority - a.priority),
+    [projects],
+  );
+  const other = useMemo(
+    () => projects.filter((project) => project.status !== "active"),
+    [projects],
+  );
+  const visible = tab === "active" ? active : other;
+  const focusProject = active[0] ?? null;
+
+  function openEditor(project: Project | null) {
     setEditing(project);
     setShowEditor(true);
-  };
+  }
 
   return (
     <AppShell title="Projects">
-      <div className="space-y-5">
-        <section className="emery-glass-strong rounded-[1.75rem] p-5 sm:p-6">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="emery-kicker">Outcomes & direction</p>
-              <h2 className="mt-1.5 text-xl font-semibold tracking-[-0.03em] sm:text-[1.35rem]">
-                Keep the daily work connected to the bigger result.
-              </h2>
-              <p className="mt-2 max-w-lg text-sm leading-6 text-muted-foreground">
-                Projects give Emery the goal behind your tasks and meetings so she can help protect
-                the next move that matters most.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => openEditor(null)}
-              className="emery-press flex min-h-11 shrink-0 items-center gap-2 rounded-2xl bg-primary px-3.5 text-sm font-semibold text-primary-foreground"
-            >
-              <Plus className="size-4" /> Add
-            </button>
+      <div className="mx-auto max-w-3xl pb-3">
+        <div className="flex items-end justify-between gap-4 pb-4">
+          <div>
+            <h1 className="text-[1.55rem] font-semibold tracking-[-0.035em]">Projects</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {focusProject ? `Current focus: ${focusProject.name}` : "Keep outcomes connected to the next move."}
+            </p>
           </div>
+          <button
+            type="button"
+            onClick={() => openEditor(null)}
+            className="emery-press flex min-h-10 items-center gap-1.5 rounded-xl bg-primary px-3 text-sm font-semibold text-primary-foreground"
+          >
+            <Plus className="size-4" /> Add
+          </button>
+        </div>
 
-          {focusProject ? (
-            <div className="mt-4 rounded-2xl border border-primary/12 bg-primary/[0.035] p-3.5">
-              <div className="flex items-start gap-3">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-primary/12 bg-primary/[0.055] text-primary">
-                  <Sparkles className="size-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary/80">
-                    Current focus project
-                  </p>
-                  <p className="mt-1 truncate text-sm font-semibold">{focusProject.name}</p>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    {focusProject.next_action
-                      ? `Next: ${focusProject.next_action}`
-                      : "This project still needs a clear next action."}
-                  </p>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="mt-4 flex items-center gap-2.5 rounded-2xl border border-border/40 bg-card/25 px-3.5 py-3 text-xs text-muted-foreground">
-              <FolderKanban className="size-4 text-primary" /> No active projects are competing for
-              your attention.
-            </div>
-          )}
-        </section>
+        <div className="mb-4 inline-flex rounded-xl bg-card/45 p-1">
+          <TabButton active={tab === "active"} onClick={() => setTab("active")}>
+            Active {active.length}
+          </TabButton>
+          <TabButton active={tab === "other"} onClick={() => setTab("other")}>
+            Paused / done {other.length}
+          </TabButton>
+        </div>
 
-        <ProjectExecutionOverview />
+        {tab === "active" ? <ProjectExecutionOverview /> : null}
 
         {error ? (
-          <p
-            className="rounded-2xl border border-destructive/25 bg-destructive/10 px-3.5 py-3 text-sm text-destructive"
-            role="alert"
-          >
+          <p className="my-4 rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2.5 text-sm text-destructive" role="alert">
             {error}
           </p>
         ) : null}
 
         {loading ? (
-          <div className="space-y-3">
-            {[0, 1].map((i) => (
-              <div key={i} className="emery-glass h-36 animate-pulse rounded-[1.5rem] opacity-55" />
+          <div className="mt-4 overflow-hidden rounded-2xl border border-border/40 bg-card/30">
+            {[0, 1, 2].map((item) => (
+              <div key={item} className="h-[92px] animate-pulse border-b border-border/30 last:border-b-0">
+                <div className="mx-4 mt-6 h-3 w-2/3 rounded bg-white/5" />
+              </div>
             ))}
           </div>
-        ) : (
-          <>
-            <ProjectSection
-              title={`Active · ${active.length}`}
-              projects={active}
-              onEdit={openEditor}
-            />
-            {other.length ? (
-              <ProjectSection
-                title={`Paused / Completed · ${other.length}`}
-                projects={other}
+        ) : visible.length ? (
+          <section className="mt-4 overflow-hidden rounded-2xl border border-border/40 bg-card/28">
+            {visible.map((project, index) => (
+              <ProjectRow
+                key={project.id}
+                project={project}
                 onEdit={openEditor}
-                muted
+                divider={index < visible.length - 1}
               />
-            ) : null}
-          </>
+            ))}
+          </section>
+        ) : (
+          <div className="py-14 text-center">
+            <FolderKanban className="mx-auto size-7 text-primary/75" strokeWidth={1.7} />
+            <p className="mt-3 text-sm font-medium">
+              {tab === "active" ? "No active projects." : "Nothing paused or completed yet."}
+            </p>
+            <p className="mx-auto mt-1 max-w-xs text-xs leading-5 text-muted-foreground">
+              Tell Emery the outcome you want and she can help turn it into a project with a next action.
+            </p>
+          </div>
         )}
       </div>
 
@@ -153,6 +145,7 @@ function Projects() {
           onSave={async (values) => {
             await save({ data: values });
             setShowEditor(false);
+            setTab(values.status === "active" || !values.status ? "active" : "other");
             await refresh();
           }}
         />
@@ -161,93 +154,65 @@ function Projects() {
   );
 }
 
-function ProjectSection({
-  title,
-  projects,
+function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`emery-press min-h-9 rounded-lg px-3 text-xs font-semibold ${active ? "bg-primary/[0.1] text-primary" : "text-muted-foreground hover:text-foreground"}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ProjectRow({
+  project,
   onEdit,
-  muted = false,
+  divider,
 }: {
-  title: string;
-  projects: Project[];
+  project: Project;
   onEdit: (project: Project) => void;
-  muted?: boolean;
+  divider: boolean;
 }) {
   return (
-    <section>
-      <p className="mb-2.5 px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-        {title}
-      </p>
-      {projects.length === 0 ? (
-        <div className="emery-glass rounded-[1.55rem] p-6 text-center">
-          <FolderKanban className="mx-auto size-7 text-primary" />
-          <p className="mt-2 text-sm font-medium">No projects here yet.</p>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            Say “Emery, create a project for…” and she can add it for you.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {projects.map((project) => (
-            <article
-              key={project.id}
-              className={`rounded-[1.5rem] border p-4 ${muted ? "border-border/35 bg-card/24 opacity-62" : "border-border/45 bg-card/38"}`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <h3 className="text-sm font-semibold">{project.name}</h3>
-                    <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-primary/75">
-                      P{project.priority}
-                    </span>
-                    {project.status !== "active" ? (
-                      <span className="text-[10px] capitalize text-muted-foreground">
-                        {project.status}
-                      </span>
-                    ) : null}
-                  </div>
+    <article className={`group flex min-h-[90px] items-start gap-3 px-4 py-3.5 ${divider ? "border-b border-border/30" : ""}`}>
+      <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/[0.055] text-primary">
+        <FolderKanban className="size-4" strokeWidth={1.8} />
+      </div>
 
-                  {project.goal ? (
-                    <div className="mt-3">
-                      <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                        Goal
-                      </p>
-                      <p className="mt-1 text-sm leading-6 text-foreground/90">{project.goal}</p>
-                    </div>
-                  ) : project.description ? (
-                    <p className="mt-2.5 text-sm leading-6 text-muted-foreground">
-                      {project.description}
-                    </p>
-                  ) : null}
-
-                  {project.next_action ? (
-                    <div className="mt-3.5 rounded-2xl border border-primary/10 bg-primary/[0.025] px-3.5 py-3">
-                      <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-primary/75">
-                        Next action
-                      </p>
-                      <p className="mt-1.5 text-xs leading-5 text-foreground/90">
-                        {project.next_action}
-                      </p>
-                    </div>
-                  ) : !muted ? (
-                    <div className="mt-3 rounded-xl border border-dashed border-border/45 px-3 py-2 text-[11px] text-muted-foreground">
-                      No next action yet. Emery can help define one.
-                    </div>
-                  ) : null}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onEdit(project)}
-                  aria-label={`Edit ${project.name}`}
-                  className="emery-press flex size-11 shrink-0 items-center justify-center rounded-2xl border border-border/45 bg-card/35 text-muted-foreground hover:border-primary/20 hover:text-primary"
-                >
-                  <Edit3 className="size-4" />
-                </button>
-              </div>
-            </article>
-          ))}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <h3 className="truncate text-[14px] font-semibold">{project.name}</h3>
+              {project.priority >= 4 ? <span className="size-1.5 rounded-full bg-primary" title={`Priority ${project.priority}`} /> : null}
+              {project.status !== "active" ? (
+                <span className="text-[10px] capitalize text-muted-foreground">{project.status}</span>
+              ) : null}
+            </div>
+            <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">
+              {project.goal || project.description || "No project context yet."}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onEdit(project)}
+            aria-label={`Edit ${project.name}`}
+            className="emery-press flex size-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:bg-white/[0.035] hover:text-primary"
+          >
+            <Edit3 className="size-4" />
+          </button>
         </div>
-      )}
-    </section>
+
+        <div className="mt-2 flex items-center gap-2 text-[11px]">
+          <span className={project.next_action ? "text-foreground/82" : "text-muted-foreground"}>
+            {project.next_action ? `Next: ${project.next_action}` : "Needs a next action"}
+          </span>
+          <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/60" />
+        </div>
+      </div>
+    </article>
   );
 }
 
@@ -300,128 +265,98 @@ function ProjectEditor({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end bg-black/65 p-2 backdrop-blur-md sm:items-center sm:justify-center sm:p-4"
+      className="fixed inset-0 z-[80] flex items-end bg-black/60 backdrop-blur-sm sm:items-center sm:justify-center sm:p-4"
       onClick={onClose}
     >
       <form
         onSubmit={submit}
         onClick={(event) => event.stopPropagation()}
-        className="emery-glass-strong max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-[1.9rem] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-5"
+        className="emery-sheet-in max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-[1.6rem] border border-border/50 bg-[oklch(0.125_0.034_255/0.985)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-24px_70px_rgba(0,0,0,0.45)] sm:rounded-2xl"
       >
-        <div className="flex items-start justify-between gap-3">
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/12 sm:hidden" />
+        <div className="flex items-center justify-between">
           <div>
-            <p className="emery-kicker">Project context</p>
-            <h3 className="mt-1 text-xl font-semibold tracking-[-0.02em]">
-              {project ? "Edit project" : "New project"}
-            </h3>
-            <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-              Give Emery the outcome, why it matters, and the next concrete move.
-            </p>
+            <p className="text-base font-semibold">{project ? "Edit project" : "New project"}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">Outcome first. Next action second.</p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="emery-press flex size-11 shrink-0 items-center justify-center rounded-2xl text-muted-foreground hover:bg-white/5"
+            className="emery-press flex size-10 items-center justify-center rounded-xl text-muted-foreground hover:bg-white/[0.04]"
             aria-label="Close project editor"
           >
             <X className="size-4" />
           </button>
         </div>
 
-        <div className="mt-5 space-y-4">
-          <Field label="Project name">
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Build Emery Voice"
-              className="min-h-12 w-full rounded-2xl border border-border/60 bg-card/55 px-3.5 text-[16px] outline-none transition focus:border-primary/40 sm:text-sm"
-              autoFocus
-            />
-          </Field>
-          <Field label="Goal">
-            <textarea
-              value={goal}
-              onChange={(event) => setGoal(event.target.value)}
-              placeholder="What outcome should this project create?"
-              rows={2}
-              className="w-full rounded-2xl border border-border/60 bg-card/55 px-3.5 py-3 text-[16px] leading-6 outline-none transition focus:border-primary/40 sm:text-sm"
-            />
-          </Field>
-          <Field label="Context" optional>
-            <textarea
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              placeholder="Anything Emery should understand about this project"
-              rows={3}
-              className="w-full rounded-2xl border border-border/60 bg-card/55 px-3.5 py-3 text-[16px] leading-6 outline-none transition focus:border-primary/40 sm:text-sm"
-            />
-          </Field>
-          <Field label="Next action" optional>
-            <input
-              value={nextAction}
-              onChange={(event) => setNextAction(event.target.value)}
-              placeholder="The next concrete move"
-              className="min-h-12 w-full rounded-2xl border border-border/60 bg-card/55 px-3.5 text-[16px] outline-none transition focus:border-primary/40 sm:text-sm"
-            />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Priority">
+        <div className="mt-4 space-y-3">
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Project name"
+            className="min-h-12 w-full rounded-xl border border-border/55 bg-card/45 px-3.5 text-[16px] outline-none focus:border-primary/40"
+            autoFocus
+          />
+          <textarea
+            value={goal}
+            onChange={(event) => setGoal(event.target.value)}
+            placeholder="What outcome should this create?"
+            rows={2}
+            className="w-full rounded-xl border border-border/55 bg-card/45 px-3.5 py-3 text-[16px] leading-6 outline-none focus:border-primary/40"
+          />
+          <input
+            value={nextAction}
+            onChange={(event) => setNextAction(event.target.value)}
+            placeholder="Next action (optional)"
+            className="min-h-11 w-full rounded-xl border border-border/55 bg-card/45 px-3.5 text-[15px] outline-none focus:border-primary/40"
+          />
+          <textarea
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder="Context for Emery (optional)"
+            rows={2}
+            className="w-full rounded-xl border border-border/55 bg-card/45 px-3.5 py-3 text-[15px] leading-6 outline-none focus:border-primary/40"
+          />
+
+          <div className="grid grid-cols-2 gap-2">
+            <label className="space-y-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.11em] text-muted-foreground">Priority</span>
               <select
                 value={priority}
                 onChange={(event) => setPriority(Number(event.target.value))}
-                className="min-h-12 w-full rounded-2xl border border-border/60 bg-card/55 px-3 text-[16px] outline-none sm:text-sm"
+                className="min-h-11 w-full rounded-xl border border-border/55 bg-card/45 px-3 text-[14px] outline-none"
               >
-                <option value={5}>5 · Highest</option>
-                <option value={4}>4 · High</option>
-                <option value={3}>3 · Normal</option>
-                <option value={2}>2 · Low</option>
-                <option value={1}>1 · Someday</option>
+                <option value={5}>Highest</option>
+                <option value={4}>High</option>
+                <option value={3}>Normal</option>
+                <option value={2}>Low</option>
+                <option value={1}>Someday</option>
               </select>
-            </Field>
-            <Field label="Status">
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.11em] text-muted-foreground">Status</span>
               <select
                 value={status}
                 onChange={(event) => setStatus(event.target.value)}
-                className="min-h-12 w-full rounded-2xl border border-border/60 bg-card/55 px-3 text-[16px] outline-none sm:text-sm"
+                className="min-h-11 w-full rounded-xl border border-border/55 bg-card/45 px-3 text-[14px] outline-none"
               >
                 <option value="active">Active</option>
                 <option value="paused">Paused</option>
                 <option value="completed">Completed</option>
               </select>
-            </Field>
+            </label>
           </div>
+
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
           <button
             type="submit"
             disabled={!name.trim() || saving}
-            className="emery-press min-h-12 w-full rounded-2xl bg-primary font-semibold text-primary-foreground disabled:opacity-40"
+            className="emery-press min-h-12 w-full rounded-xl bg-primary font-semibold text-primary-foreground disabled:opacity-40"
           >
-            {saving ? "Saving…" : "Save project"}
+            {saving ? "Saving…" : project ? "Save changes" : "Create project"}
           </button>
         </div>
       </form>
     </div>
-  );
-}
-
-function Field({
-  label,
-  optional = false,
-  children,
-}: {
-  label: string;
-  optional?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block">
-      <span className="flex items-center gap-2 text-sm font-semibold">
-        {label}
-        {optional ? (
-          <span className="text-[10px] font-normal text-muted-foreground">Optional</span>
-        ) : null}
-      </span>
-      <span className="mt-2 block">{children}</span>
-    </label>
   );
 }
