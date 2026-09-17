@@ -32,6 +32,43 @@
   --sidebar-accent-foreground: oklch(0.955 0.012 245);
   --sidebar-border: oklch(0.72 0.115 248 / 0.18);
   --sidebar-ring: oklch(0.73 0.185 250 / 0.64);
+
+  /* Remap any legacy Tailwind green/emerald/teal utilities into Emery's blue family. */
+  --color-emerald-50: oklch(0.97 0.02 240);
+  --color-emerald-100: oklch(0.93 0.04 240);
+  --color-emerald-200: oklch(0.87 0.08 242);
+  --color-emerald-300: oklch(0.8 0.12 244);
+  --color-emerald-400: oklch(0.73 0.17 247);
+  --color-emerald-500: oklch(0.65 0.2 250);
+  --color-emerald-600: oklch(0.57 0.205 254);
+  --color-emerald-700: oklch(0.49 0.18 258);
+  --color-emerald-800: oklch(0.41 0.145 260);
+  --color-emerald-900: oklch(0.34 0.105 262);
+  --color-emerald-950: oklch(0.24 0.07 264);
+
+  --color-green-50: oklch(0.97 0.02 238);
+  --color-green-100: oklch(0.93 0.04 239);
+  --color-green-200: oklch(0.87 0.08 241);
+  --color-green-300: oklch(0.8 0.12 243);
+  --color-green-400: oklch(0.73 0.17 246);
+  --color-green-500: oklch(0.65 0.2 250);
+  --color-green-600: oklch(0.57 0.205 254);
+  --color-green-700: oklch(0.49 0.18 258);
+  --color-green-800: oklch(0.41 0.145 260);
+  --color-green-900: oklch(0.34 0.105 262);
+  --color-green-950: oklch(0.24 0.07 264);
+
+  --color-teal-50: oklch(0.97 0.02 228);
+  --color-teal-100: oklch(0.93 0.04 230);
+  --color-teal-200: oklch(0.87 0.08 232);
+  --color-teal-300: oklch(0.81 0.12 234);
+  --color-teal-400: oklch(0.74 0.16 236);
+  --color-teal-500: oklch(0.67 0.18 240);
+  --color-teal-600: oklch(0.59 0.18 244);
+  --color-teal-700: oklch(0.5 0.16 248);
+  --color-teal-800: oklch(0.42 0.13 252);
+  --color-teal-900: oklch(0.35 0.1 256);
+  --color-teal-950: oklch(0.25 0.07 260);
 }
 
 body {
@@ -139,24 +176,47 @@ select:focus-visible {
   background: oklch(0.69 0.13 248 / 0.26);
 }
 
+/* Recolor the existing neural-brain art itself, not just the surrounding UI. */
 .emery-blue-brain {
-  filter: hue-rotate(92deg) saturate(1.18) brightness(1.03) contrast(1.02);
+  filter: grayscale(0.15) sepia(0.75) saturate(4.8) hue-rotate(170deg) brightness(1.05)
+    contrast(1.08);
 }
 
 @keyframes emery-breathe-blue {
   0%,
   100% {
     transform: scale(1);
-    filter: drop-shadow(0 0 16px oklch(0.72 0.185 250 / 0.24));
+    filter: grayscale(0.15) sepia(0.75) saturate(4.8) hue-rotate(170deg) brightness(1.05)
+      contrast(1.08) drop-shadow(0 0 16px oklch(0.72 0.185 250 / 0.24));
   }
   50% {
     transform: scale(1.018);
-    filter: drop-shadow(0 0 30px oklch(0.72 0.185 250 / 0.38));
+    filter: grayscale(0.15) sepia(0.75) saturate(4.8) hue-rotate(170deg) brightness(1.08)
+      contrast(1.08) drop-shadow(0 0 30px oklch(0.72 0.185 250 / 0.38));
   }
 }
 
 .emery-breathe {
   animation-name: emery-breathe-blue;
+}
+
+/* Last-resort visual guard for legacy hard-coded emerald/green utilities. */
+[class*="text-emerald-"],
+[class*="text-green-"],
+[class*="text-teal-"] {
+  color: var(--color-primary) !important;
+}
+
+[class*="bg-emerald-"],
+[class*="bg-green-"],
+[class*="bg-teal-"] {
+  background-color: oklch(0.62 0.18 248 / 0.16) !important;
+}
+
+[class*="border-emerald-"],
+[class*="border-green-"],
+[class*="border-teal-"] {
+  border-color: oklch(0.72 0.16 248 / 0.28) !important;
 }
 
 @media (prefers-reduced-transparency: reduce) {
