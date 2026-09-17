@@ -22,7 +22,7 @@ function NotFoundComponent() {
         <div className="mt-6">
           <Link
             to="/chat"
-            className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-primary px-5 text-sm font-semibold text-primary-foreground"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground"
           >
             Back to Emery
           </Link>
@@ -41,7 +41,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="emery-glass max-w-md rounded-3xl p-6 text-center">
+      <div className="emery-glass max-w-md rounded-2xl p-6 text-center">
         <h1 className="text-xl font-semibold tracking-tight text-foreground">Emery hit a snag</h1>
         <p className="mt-2 text-sm text-muted-foreground">Try again or head back to your chat.</p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
@@ -50,13 +50,13 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
               router.invalidate();
               reset();
             }}
-            className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-primary px-4 text-sm font-semibold text-primary-foreground"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground"
           >
             Try again
           </button>
           <a
             href="/chat"
-            className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-border bg-card px-4 text-sm font-medium text-foreground"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border bg-card px-4 text-sm font-medium text-foreground"
           >
             Back to chat
           </a>
@@ -80,7 +80,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content: "Emery is Adam's private persistent personal AI companion.",
       },
       { name: "robots", content: "noindex, nofollow" },
-      { name: "theme-color", content: "#06271c" },
+      { name: "theme-color", content: "#06101f" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
       { name: "apple-mobile-web-app-title", content: "Emery" },
