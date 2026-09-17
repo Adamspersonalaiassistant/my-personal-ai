@@ -82,7 +82,7 @@ export function AppShell({
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -right-24 top-[42%] size-48 rounded-full bg-emerald-300/[0.022] blur-[96px]"
+        className="pointer-events-none absolute -right-24 top-[42%] size-48 rounded-full bg-blue-300/[0.028] blur-[96px]"
       />
 
       <header className="sticky top-0 z-40 flex shrink-0 items-center justify-between border-b border-border/40 bg-background/84 px-4 pb-2.5 pt-[max(0.7rem,env(safe-area-inset-top))] backdrop-blur-2xl supports-[backdrop-filter]:bg-background/76 sm:px-5">
@@ -94,14 +94,14 @@ export function AppShell({
             onClick={rememberEmeryHandoff}
             className="emery-press relative flex size-11 shrink-0 items-center justify-center rounded-[1.05rem]"
           >
-            <div className="relative flex size-10 items-center justify-center overflow-hidden rounded-2xl border border-primary/18 bg-primary/[0.045] shadow-[0_0_22px_oklch(0.805_0.175_155/0.08)]">
+            <div className="relative flex size-10 items-center justify-center overflow-hidden rounded-2xl border border-primary/18 bg-primary/[0.045] shadow-[0_0_24px_oklch(0.72_0.185_250/0.11)]">
               <img
                 src={brainImage}
                 alt=""
-                className="h-9 w-9 object-cover object-center opacity-95"
+                className="emery-blue-brain h-9 w-9 object-cover object-center opacity-95"
               />
             </div>
-            <span className="absolute bottom-0.5 right-0.5 size-2.5 rounded-full border-2 border-background bg-primary shadow-[0_0_8px_oklch(0.805_0.175_155/0.6)]" />
+            <span className="absolute bottom-0.5 right-0.5 size-2.5 rounded-full border-2 border-background bg-primary shadow-[0_0_9px_oklch(0.72_0.185_250/0.68)]" />
           </Link>
 
           <div className="min-w-0">
@@ -168,7 +168,7 @@ export function AppShell({
               className="emery-press group relative flex min-h-[54px] min-w-0 flex-col items-center justify-center gap-1 rounded-[1.05rem] px-0.5 text-[9px] font-semibold text-muted-foreground transition-colors min-[390px]:px-1.5 min-[390px]:text-[10px]"
               activeProps={{
                 className:
-                  "bg-primary/[0.085] text-primary shadow-[inset_0_0_0_1px_oklch(0.805_0.175_155/0.12)]",
+                  "bg-primary/[0.09] text-primary shadow-[inset_0_0_0_1px_oklch(0.72_0.185_250/0.16)]",
               }}
             >
               <Icon
