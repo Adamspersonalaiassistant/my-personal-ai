@@ -4,6 +4,7 @@
 
 export const EMERY_RETURNS = {
   "/hpo": "HPO",
+  "/personal": "Personal",
   "/tasks": "Tasks",
   "/projects": "Projects",
   "/meetings": "Meetings",
@@ -18,20 +19,11 @@ export function isEmeryReturnPath(value: unknown): value is EmeryReturnPath {
   return typeof value === "string" && Object.prototype.hasOwnProperty.call(EMERY_RETURNS, value);
 }
 
-export function emeryReturnLabel(path: EmeryReturnPath) {
-  return EMERY_RETURNS[path];
-}
-
-/** Resolve the nearest workspace surface for a pathname, if any. */
+export function emeryReturnLabel(path: EmeryReturnPath) { return EMERY_RETURNS[path]; }
 export function resolveEmeryReturn(pathname: string): EmeryReturnPath | undefined {
-  const match = (Object.keys(EMERY_RETURNS) as EmeryReturnPath[]).find(
-    (path) => pathname === path || pathname.startsWith(`${path}/`),
-  );
-  return match;
+  return (Object.keys(EMERY_RETURNS) as EmeryReturnPath[]).find((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
-
 export const MAX_PREFILL_LENGTH = 400;
-
 export function normalizePrefill(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const clean = value.replace(/\s+/g, " ").trim().slice(0, MAX_PREFILL_LENGTH);
