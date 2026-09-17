@@ -1,0 +1,167 @@
+:root,
+.dark {
+  --background: oklch(0.105 0.03 255);
+  --foreground: oklch(0.975 0.009 245);
+  --card: oklch(0.155 0.042 255 / 0.9);
+  --card-foreground: oklch(0.975 0.009 245);
+  --popover: oklch(0.14 0.036 255 / 0.985);
+  --popover-foreground: oklch(0.975 0.009 245);
+  --primary: oklch(0.72 0.185 250);
+  --primary-foreground: oklch(0.985 0.008 245);
+  --secondary: oklch(0.19 0.05 255);
+  --secondary-foreground: oklch(0.955 0.012 245);
+  --muted: oklch(0.176 0.036 255);
+  --muted-foreground: oklch(0.735 0.04 245);
+  --accent: oklch(0.225 0.075 250);
+  --accent-foreground: oklch(0.965 0.018 242);
+  --border: oklch(0.72 0.115 248 / 0.18);
+  --input: oklch(0.72 0.1 248 / 0.22);
+  --ring: oklch(0.73 0.185 250 / 0.72);
+
+  --chart-1: oklch(0.72 0.185 250);
+  --chart-2: oklch(0.69 0.16 235);
+  --chart-3: oklch(0.66 0.145 262);
+  --chart-4: oklch(0.78 0.12 225);
+  --chart-5: oklch(0.72 0.14 275);
+
+  --sidebar: oklch(0.13 0.034 255 / 0.985);
+  --sidebar-foreground: oklch(0.955 0.012 245);
+  --sidebar-primary: oklch(0.72 0.185 250);
+  --sidebar-primary-foreground: oklch(0.985 0.008 245);
+  --sidebar-accent: oklch(0.205 0.058 252);
+  --sidebar-accent-foreground: oklch(0.955 0.012 245);
+  --sidebar-border: oklch(0.72 0.115 248 / 0.18);
+  --sidebar-ring: oklch(0.73 0.185 250 / 0.64);
+}
+
+body {
+  background:
+    radial-gradient(circle at 12% -8%, oklch(0.54 0.18 248 / 0.18), transparent 31rem),
+    radial-gradient(circle at 98% 15%, oklch(0.46 0.145 232 / 0.11), transparent 28rem),
+    radial-gradient(circle at 50% 115%, oklch(0.34 0.12 268 / 0.09), transparent 32rem),
+    linear-gradient(180deg, oklch(0.118 0.036 255), oklch(0.082 0.026 258));
+}
+
+::selection {
+  background: oklch(0.72 0.185 250 / 0.28);
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline-color: oklch(0.74 0.18 248 / 0.88);
+}
+
+.emery-grid {
+  background-image:
+    linear-gradient(oklch(0.74 0.16 248 / 0.036) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(0.74 0.16 248 / 0.036) 1px, transparent 1px);
+}
+
+.emery-grid::after {
+  background: radial-gradient(circle at 50% 0%, oklch(0.76 0.19 246 / 0.105), transparent 38%);
+}
+
+.emery-glass {
+  background: linear-gradient(
+    180deg,
+    oklch(0.198 0.052 254 / 0.82),
+    oklch(0.138 0.036 257 / 0.92)
+  );
+  border-color: oklch(0.74 0.145 248 / 0.18);
+  box-shadow:
+    inset 0 1px 0 oklch(0.95 0.04 235 / 0.065),
+    inset 0 -1px 0 oklch(0.03 0.015 260 / 0.3),
+    0 18px 46px oklch(0.025 0.025 260 / 0.31);
+}
+
+.emery-glass-strong {
+  background: linear-gradient(
+    180deg,
+    oklch(0.182 0.048 254 / 0.96),
+    oklch(0.124 0.034 258 / 0.985)
+  );
+  border-color: oklch(0.77 0.15 247 / 0.2);
+  box-shadow:
+    inset 0 1px 0 oklch(0.96 0.04 235 / 0.075),
+    0 24px 60px oklch(0.02 0.02 262 / 0.38);
+}
+
+.emery-surface {
+  background: linear-gradient(
+    180deg,
+    oklch(0.17 0.044 255 / 0.8),
+    oklch(0.132 0.032 258 / 0.88)
+  );
+  border-color: oklch(0.72 0.12 248 / 0.14);
+  box-shadow: inset 0 1px 0 oklch(0.94 0.035 235 / 0.045);
+}
+
+.emery-glow {
+  box-shadow: 0 0 36px oklch(0.72 0.185 250 / 0.2);
+}
+
+.emery-text-gradient {
+  background: linear-gradient(
+    135deg,
+    oklch(0.99 0.007 245),
+    oklch(0.82 0.13 235) 44%,
+    oklch(0.72 0.19 255) 100%
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.emery-chip {
+  border-color: oklch(0.75 0.16 248 / 0.18);
+  background: oklch(0.7 0.17 250 / 0.07);
+  color: oklch(0.82 0.11 235);
+}
+
+.emery-icon-well {
+  border-color: oklch(0.75 0.16 248 / 0.19);
+  background: linear-gradient(
+    180deg,
+    oklch(0.72 0.18 250 / 0.11),
+    oklch(0.66 0.16 260 / 0.045)
+  );
+  box-shadow: inset 0 1px 0 oklch(0.95 0.04 235 / 0.06);
+}
+
+.emery-scrollbar {
+  scrollbar-color: oklch(0.69 0.13 248 / 0.28) transparent;
+}
+
+.emery-scrollbar::-webkit-scrollbar-thumb {
+  background: oklch(0.69 0.13 248 / 0.26);
+}
+
+.emery-blue-brain {
+  filter: hue-rotate(92deg) saturate(1.18) brightness(1.03) contrast(1.02);
+}
+
+@keyframes emery-breathe-blue {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 16px oklch(0.72 0.185 250 / 0.24));
+  }
+  50% {
+    transform: scale(1.018);
+    filter: drop-shadow(0 0 30px oklch(0.72 0.185 250 / 0.38));
+  }
+}
+
+.emery-breathe {
+  animation-name: emery-breathe-blue;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .emery-glass,
+  .emery-glass-strong {
+    background: oklch(0.142 0.038 255);
+  }
+}
