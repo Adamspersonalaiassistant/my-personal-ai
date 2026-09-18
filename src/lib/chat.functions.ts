@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { ASSISTANT_IDENTITY } from "@/lib/assistant-identity";
@@ -539,6 +540,173 @@ export const sendChatMessage = createServerFn({ method: "POST" })
 
     return { reply: text, conversationId, ...memoryResult } as const;
   });
+
+
+export async function persistDurableMemoryFromMessage({
+  supabase,
+  userId,
+  apiKey,
+  message,
+}: {
+  supabase: any;
+  userId: string;
+  apiKey: string;
+  message: string;
+}): Promise<MemoryResult & { savedMemory: string | null }> {
+  const memoryResult: MemoryResult & { savedMemory: string | null } = {
+    memorySaved: false,
+    memoryUpdated: false,
+    memoryError: null,
+    savedMemory: null,
+  };
+
+  const recordError = (messageText: string) => {
+    console.error("Main Emery memory persistence failed", messageText);
+    memoryResult.memoryError = "Your memory couldn't be saved or loaded right now.";
+  };
+
+  const statedName = extractName(message);
+  if (statedName) {
+    const { error } = await supabase
+      .from("profiles")
+      .upsert({ user_id: userId, display_name: statedName }, { onConflict: "user_id" });
+    if (error) memoryResult.memoryError = "Your profile couldn't be saved right now.";
+  }
+
+  const [{ data: profile, error: profileError }, { data: existingRows, error: existingError }] =
+    await Promise.all([
+      supabase
+        .from("profiles")
+        .select("display_name, assistant_name, timezone, profile_summary")
+        .eq("user_id", userId)
+        .maybeSingle(),
+      supabase
+        .from("memories")
+        .select("id, title, content, memory_type")
+        .eq("user_id", userId)
+        .order("updated_at", { ascending: false })
+        .limit(100),
+    ]);
+
+  if (profileError) memoryResult.memoryError ??= "Your profile couldn't be loaded right now.";
+  if (existingError) {
+    recordError(existingError.message);
+    return memoryResult;
+  }
+
+  const existingMemories: ExistingMemory[] = existingRows ?? [];
+  const fact = extractExplicitMemory(message);
+
+  if (fact && (statedName || extractName(fact)) && isAboutOwnName(fact)) {
+    const name = statedName ?? extractName(fact);
+    if (!name) return memoryResult;
+    const { error } = await supabase
+      .from("profiles")
+      .upsert({ user_id: userId, display_name: name }, { onConflict: "user_id" });
+    if (error) {
+      memoryResult.memoryError ??= "Your profile couldn't be saved right now.";
+      return memoryResult;
+    }
+    memoryResult.memorySaved = true;
+    memoryResult.memoryUpdated = true;
+    memoryResult.savedMemory = `Adam's name is ${name}`;
+    return memoryResult;
+  }
+
+  if (fact) {
+    const duplicate = existingMemories.some((item) => normalize(item.content) === normalize(fact));
+    if (duplicate) {
+      memoryResult.savedMemory = fact;
+      return memoryResult;
+    }
+    const { error } = await supabase.from("memories").insert({
+      user_id: userId,
+      memory_type: "core",
+      title: makeTitle(fact),
+      content: fact,
+      importance: 4,
+      confidence: 1.0,
+      source_type: "chat",
+    });
+    if (error) {
+      recordError(error.message);
+      return memoryResult;
+    }
+    memoryResult.memorySaved = true;
+    memoryResult.savedMemory = fact;
+    return memoryResult;
+  }
+
+  const candidates = await extractAutomaticMemories(apiKey, message, profile ?? null, existingMemories);
+  if (candidates === null) {
+    memoryResult.memoryError ??= "Automatic memory analysis wasn't available right now.";
+    return memoryResult;
+  }
+
+  for (const candidate of candidates.slice(0, 3)) {
+    if (!isSafeDurableCandidate(candidate)) continue;
+
+    if (candidate.action === "profile_update") {
+      const update = profileUpdateForCandidate(candidate);
+      if (!update) continue;
+      const { error } = await supabase
+        .from("profiles")
+        .upsert({ user_id: userId, ...update }, { onConflict: "user_id" });
+      if (error) memoryResult.memoryError ??= "Your profile couldn't be saved right now.";
+      else {
+        memoryResult.memorySaved = true;
+        memoryResult.memoryUpdated = true;
+      }
+      continue;
+    }
+
+    if (candidate.action === "update") {
+      if (!isClearCorrection(message) || !candidate.target_memory_id) continue;
+      const target = existingMemories.find((item) => item.id === candidate.target_memory_id);
+      if (!target) continue;
+      const { error } = await supabase
+        .from("memories")
+        .update({
+          memory_type: candidate.memory_type,
+          title: candidate.title,
+          content: candidate.content,
+          importance: candidate.importance,
+          confidence: candidate.confidence,
+          source_type: "chat_auto",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", target.id)
+        .eq("user_id", userId);
+      if (error) recordError(error.message);
+      else {
+        memoryResult.memorySaved = true;
+        memoryResult.memoryUpdated = true;
+      }
+      continue;
+    }
+
+    if (candidate.action === "create") {
+      if (isClearCorrection(message)) continue;
+      const duplicate = existingMemories.some(
+        (item) => normalize(item.content) === normalize(candidate.content),
+      );
+      if (duplicate) continue;
+      const { error } = await supabase.from("memories").insert({
+        user_id: userId,
+        memory_type: candidate.memory_type,
+        title: candidate.title,
+        content: candidate.content,
+        importance: candidate.importance,
+        confidence: candidate.confidence,
+        source_type: "chat_auto",
+      });
+      if (error) recordError(error.message);
+      else memoryResult.memorySaved = true;
+    }
+  }
+
+  return memoryResult;
+}
 
 function normalize(text: string) {
   return text
