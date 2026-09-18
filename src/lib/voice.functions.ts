@@ -155,6 +155,79 @@ function voiceSpeed(profile: any) {
   return Math.max(0.75, Math.min(1.25, pace));
 }
 
+function plainObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function voiceStyleInstructions(profile: any) {
+  const stable = plainObject(profile?.stable_identity);
+  const delivery = plainObject(profile?.delivery_preferences);
+  const contextual = plainObject(profile?.contextual_preferences);
+  const pronunciation = plainObject(profile?.pronunciation_preferences);
+
+  const description =
+    typeof stable["description"] === "string"
+      ? stable["description"]
+      : "Warm, intelligent, grounded, natural and conversational. Never robotic or customer-service-like.";
+
+  const pace = Number(delivery["pace"] ?? 1);
+  const warmth = Number(delivery["warmth"] ?? 0.6);
+  const expressiveness = Number(delivery["expressiveness"] ?? 0.55);
+  const energy = Number(delivery["energy"] ?? 0.55);
+
+  return [
+    "EMERY VOCAL DELIVERY:",
+    description,
+    `Pace target: ${Number.isFinite(pace) ? pace : 1}.0 means normal; below 1 means slower.`,
+    `Warmth target: ${Number.isFinite(warmth) ? warmth : 0.6} on a 0-1 preference scale.`,
+    `Expressiveness target: ${Number.isFinite(expressiveness) ? expressiveness : 0.55} on a 0-1 preference scale.`,
+    `Energy target: ${Number.isFinite(energy) ? energy : 0.55} on a 0-1 preference scale.`,
+    Object.keys(contextual).length ? `Contextual delivery preferences: ${JSON.stringify(contextual)}` : "",
+    Object.keys(pronunciation).length ? `Pronunciation preferences: ${JSON.stringify(pronunciation)}` : "",
+    "Keep the voice original. Do not imitate or claim to reproduce the voice of any real person.",
+    "Favor relaxed cadence, clean diction, emotional intelligence, and natural phrasing. Avoid exaggerated cheerfulness, sing-song delivery, breathiness, cartoonish affect, or a generic call-center tone.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+async function ensureVoiceProfile(db: any, userId: string) {
+  const { data: existing, error } = await db
+    .from("voice_profiles")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  if (existing) return existing;
+  const { data: created, error: createError } = await db
+    .from("voice_profiles")
+    .insert({ user_id: userId })
+    .select("*")
+    .single();
+  if (createError || !created) throw createError ?? new Error("Could not create voice profile");
+  return created;
+}
+
+async function versionVoiceProfile(
+  db: any,
+  userId: string,
+  profile: any,
+  changeRequest: string,
+  changeSource = "voice_studio",
+) {
+  const { error } = await db.from("voice_profile_versions").insert({
+    user_id: userId,
+    voice_profile_id: profile.id,
+    version: profile.version,
+    snapshot: profile,
+    change_request: changeRequest,
+    change_source: changeSource,
+  });
+  if (error) throw error;
+}
+
 function voiceStyleInstruction(profile: any) {
   const stable = profile?.stable_identity ?? {};
   const delivery = profile?.delivery_preferences ?? {};
@@ -312,6 +385,189 @@ export const getVoiceReadiness = createServerFn({ method: "GET" })
         freshAppContextTool: true,
       },
     };
+  });
+
+export const getVoiceStudioState = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const db = context.supabase as any;
+    const profile = await ensureVoiceProfile(db, context.userId);
+    return {
+      candidates: REALTIME_VOICE_IDS,
+      selectedVoice: profile.base_voice_id ?? null,
+      approvedAt: profile.approved_at ?? null,
+      stableIdentity: profile.stable_identity ?? {},
+      deliveryPreferences: profile.delivery_preferences ?? {},
+      contextualPreferences: profile.contextual_preferences ?? {},
+      pronunciationPreferences: profile.pronunciation_preferences ?? {},
+      version: profile.version ?? 1,
+      customVoiceEligibility:
+        plainObject(profile.provider_capabilities)["custom_voice_account_eligibility"] ?? "unknown",
+    };
+  });
+
+export const saveVoiceStudioDesign = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (input: {
+      stableIdentity?: Record<string, unknown>;
+      deliveryPreferences?: Record<string, unknown>;
+      contextualPreferences?: Record<string, unknown>;
+      pronunciationPreferences?: Record<string, unknown>;
+      changeRequest?: string;
+    }) => ({
+      stableIdentity: plainObject(input?.stableIdentity),
+      deliveryPreferences: plainObject(input?.deliveryPreferences),
+      contextualPreferences: plainObject(input?.contextualPreferences),
+      pronunciationPreferences: plainObject(input?.pronunciationPreferences),
+      changeRequest: String(input?.changeRequest ?? "Voice Studio design update").slice(0, 1000),
+    }),
+  )
+  .handler(async ({ data, context }) => {
+    const db = context.supabase as any;
+    const profile = await ensureVoiceProfile(db, context.userId);
+    await versionVoiceProfile(db, context.userId, profile, data.changeRequest);
+
+    const nextVersion = Number(profile.version ?? 1) + 1;
+    const { data: updated, error } = await db
+      .from("voice_profiles")
+      .update({
+        stable_identity: { ...plainObject(profile.stable_identity), ...data.stableIdentity },
+        delivery_preferences: {
+          ...plainObject(profile.delivery_preferences),
+          ...data.deliveryPreferences,
+        },
+        contextual_preferences: {
+          ...plainObject(profile.contextual_preferences),
+          ...data.contextualPreferences,
+        },
+        pronunciation_preferences: {
+          ...plainObject(profile.pronunciation_preferences),
+          ...data.pronunciationPreferences,
+        },
+        version: nextVersion,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", profile.id)
+      .eq("user_id", context.userId)
+      .select(
+        "base_voice_id,stable_identity,delivery_preferences,contextual_preferences,pronunciation_preferences,approved_at,version",
+      )
+      .single();
+    if (error || !updated) return { ok: false, error: "Could not save the voice design." } as const;
+    return { ok: true, profile: updated } as const;
+  });
+
+export const previewVoiceCandidate = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { voiceId: string; sampleText?: string }) => ({
+    voiceId: String(input?.voiceId ?? "").trim(),
+    sampleText: String(
+      input?.sampleText ??
+        "Hey Adam. I'm Emery. I'm here with you, and I'm ready to help you think clearly, move with purpose, and handle whatever today brings.",
+    )
+      .trim()
+      .slice(0, 900),
+  }))
+  .handler(async ({ data, context }) => {
+    if (!REALTIME_VOICE_IDS.includes(data.voiceId as any)) {
+      return { ok: false, error: "That is not a supported Realtime preview voice." } as const;
+    }
+    const apiKey = process.env["OPENAI_API_KEY"];
+    if (!apiKey) return { ok: false, error: "The AI audio service is not configured." } as const;
+
+    const db = context.supabase as any;
+    const profile = await ensureVoiceProfile(db, context.userId);
+    const response = await fetch("https://api.openai.com/v1/audio/speech", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini-tts-2025-12-15",
+        input: data.sampleText,
+        voice: data.voiceId,
+        instructions: voiceStyleInstructions(profile),
+        response_format: "mp3",
+        speed: voiceSpeed(profile),
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("Voice preview failed", response.status, await response.text());
+      return { ok: false, error: "That voice preview could not be generated." } as const;
+    }
+
+    const audio = Buffer.from(await response.arrayBuffer()).toString("base64");
+    return {
+      ok: true,
+      voiceId: data.voiceId,
+      mimeType: "audio/mpeg",
+      audioBase64: audio,
+    } as const;
+  });
+
+export const approveVoiceCandidate = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { voiceId: string; approvalText?: string }) => ({
+    voiceId: String(input?.voiceId ?? "").trim(),
+    approvalText: String(input?.approvalText ?? "").trim().slice(0, 1000),
+  }))
+  .handler(async ({ data, context }) => {
+    if (!isUsableVoiceId(data.voiceId)) {
+      return { ok: false, error: "That voice ID is not supported." } as const;
+    }
+    if (!data.approvalText || !/approve|activate|use this|make this/i.test(data.approvalText)) {
+      return {
+        ok: false,
+        error: "Explicit approval is required before Emery's base voice can be activated.",
+      } as const;
+    }
+
+    const db = context.supabase as any;
+    const profile = await ensureVoiceProfile(db, context.userId);
+    await versionVoiceProfile(db, context.userId, profile, data.approvalText);
+
+    const now = new Date().toISOString();
+    const capabilities = {
+      ...plainObject(profile.provider_capabilities),
+      status: "active",
+      realtime_model: REALTIME_MODEL,
+      built_in_voice: !data.voiceId.startsWith("voice_"),
+      custom_voice: data.voiceId.startsWith("voice_"),
+      speech_to_speech: true,
+      semantic_vad: true,
+      interruptions: true,
+      input_transcription: true,
+      web_search_tool: true,
+      context_refresh_tool: true,
+      same_conversation_persistence: true,
+      durable_memory_persistence: true,
+    };
+
+    const { data: updated, error } = await db
+      .from("voice_profiles")
+      .update({
+        base_voice_id: data.voiceId,
+        approved_at: now,
+        provider_capabilities: capabilities,
+        version: Number(profile.version ?? 1) + 1,
+        updated_at: now,
+      })
+      .eq("id", profile.id)
+      .eq("user_id", context.userId)
+      .select("base_voice_id,approved_at,version,provider_capabilities")
+      .single();
+
+    if (error || !updated) return { ok: false, error: "Voice approval could not be saved." } as const;
+    return {
+      ok: true,
+      activated: true,
+      voiceId: updated.base_voice_id,
+      approvedAt: updated.approved_at,
+      version: updated.version,
+    } as const;
   });
 
 export const createRealtimeClientSecret = createServerFn({ method: "POST" })
