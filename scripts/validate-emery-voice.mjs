@@ -24,6 +24,16 @@ const expectedVoices = [
 
 const checks = [
   [
+    "One Emery identity is preserved across chat and live Voice",
+    files.profile.includes("Emery has one identity") &&
+      files.realtime.includes("same Emery and the same lifelong conversation"),
+  ],
+  [
+    "Latina voice direction stays user-defined instead of forcing a nationality",
+    files.studio.includes("Adam should choose the regional flavor and intensity") &&
+      files.realtime.includes("Do not assume a nationality"),
+  ],
+  [
     "Realtime Voice allowlist is centralized",
     expectedVoices.every((voice) => files.profile.includes(`"${voice}"`)) &&
       files.profile.includes("REALTIME_VOICE_IDS"),
