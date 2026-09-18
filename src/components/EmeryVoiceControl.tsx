@@ -247,7 +247,7 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
 
       const audio = document.createElement("audio");
       audio.autoplay = true;
-      audio.playsInline = true;
+      audio.setAttribute("playsinline", "true");
       audio.setAttribute("aria-hidden", "true");
       audio.style.display = "none";
       document.body.appendChild(audio);
