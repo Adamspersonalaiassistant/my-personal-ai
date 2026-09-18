@@ -50,6 +50,7 @@ jobs:
           src/lib/memory.functions.ts
           src/lib/os.functions.ts
           src/lib/voice.functions.ts
+          src/lib/voice-studio.functions.ts
           src/routes/__root.tsx
           src/routes/_authenticated/chat.tsx
           src/routes/_authenticated/capture.tsx
