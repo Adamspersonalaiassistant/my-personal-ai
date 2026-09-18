@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Buffer } from "node:buffer";
+import { createHash } from "node:crypto";
 import {
   REALTIME_VOICE_IDS,
   isRealtimeVoiceId,
@@ -23,6 +24,10 @@ type SynthesizedProfile = {
   contextual_preferences: Record<string, unknown>;
   pronunciation_preferences: Record<string, unknown>;
 };
+
+function realtimeSafetyIdentifier(userId: string) {
+  return "emery_" + createHash("sha256").update(userId).digest("hex").slice(0, 32);
+}
 
 const safeObject = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value)
@@ -217,12 +222,13 @@ async function makePreview(apiKey: string, voiceId: RealtimeVoiceId, profile: an
   return "data:audio/mpeg;base64," + bytes.toString("base64");
 }
 
-async function verifyRealtimeCandidate(apiKey: string, voiceId: RealtimeVoiceId) {
+async function verifyRealtimeCandidate(apiKey: string, userId: string, voiceId: RealtimeVoiceId) {
   const response = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
     method: "POST",
     headers: {
       Authorization: "Bearer " + apiKey,
       "Content-Type": "application/json",
+      "OpenAI-Safety-Identifier": realtimeSafetyIdentifier(userId),
     },
     body: JSON.stringify({
       expires_after: { anchor: "created_at", seconds: 60 },
@@ -678,7 +684,7 @@ export async function processVoiceStudioTurn({
       };
     }
 
-    const realtimeSupported = await verifyRealtimeCandidate(apiKey, chosen);
+    const realtimeSupported = await verifyRealtimeCandidate(apiKey, userId, chosen);
     if (!realtimeSupported) {
       return {
         stage: "approval_realtime_unsupported" as const,
@@ -722,7 +728,7 @@ export async function processVoiceStudioTurn({
       /\bvoice(?: studio)?\b/i.test(text) ||
       ["designing", "previewed", "candidate_selected"].includes(currentStage))
   ) {
-    const realtimeSupported = await verifyRealtimeCandidate(apiKey, candidate);
+    const realtimeSupported = await verifyRealtimeCandidate(apiKey, userId, candidate);
     if (!realtimeSupported) {
       await markStudioState(db, userId, profile, {
         stage: "candidate_selected",
