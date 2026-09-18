@@ -212,6 +212,7 @@ LIVE VOICE OPERATING CONTRACT:
 - Tool results are private working context. Answer Adam naturally rather than narrating tool mechanics.
 - Do not claim Calendar, Reminders, WhatsApp, PLAUD, phone control, or any external action is connected unless a tool confirms it.
 - Voice delivery may follow approved voice profile preferences, but personality and judgment always come from Emery's central identity.
+- If Adam explicitly asks during the live conversation to slow down, speed up, be warmer, calmer, more or less expressive, more energetic, or briefer, use update_voice_delivery. Do not claim the preference was saved unless the tool confirms it.
 
 DOMAIN ROUTING:
 ${context.route.domain.toUpperCase()} (${context.route.reason}). ${domainPrompt(context.route)}
@@ -320,6 +321,25 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
               query: { type: "string", description: "A concise web search query." },
             },
             required: ["query"],
+          },
+        },
+        {
+          type: "function",
+          name: "update_voice_delivery",
+          description:
+            "Persist an explicit Adam-requested change to Emery's live delivery. Use only when Adam directly asks for a voice delivery change such as pace, warmth, energy, expressiveness, or brevity. This never changes Emery's identity or base voice.",
+          parameters: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              request: { type: "string", description: "Adam's explicit voice-delivery request." },
+              pace: { type: "number", description: "Playback pace, 0.75 to 1.25." },
+              warmth: { type: "number", description: "Desired warmth, 0 to 1." },
+              expressiveness: { type: "number", description: "Desired expressiveness, 0 to 1." },
+              energy: { type: "number", description: "Desired energy, 0 to 1." },
+              brevity: { type: "number", description: "Desired spoken brevity, 0 to 1." },
+            },
+            required: ["request"],
           },
         },
         {
@@ -504,6 +524,93 @@ export const searchWebForVoice = createServerFn({ method: "POST" })
             .join("")
             .trim();
     return { result: text || "No useful live web result was returned." } as const;
+  });
+
+export const updateVoiceDeliveryFromLive = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (input: {
+      request: string;
+      pace?: number;
+      warmth?: number;
+      expressiveness?: number;
+      energy?: number;
+      brevity?: number;
+    }) => {
+      const bounded = (value: unknown, min = 0, max = 1) => {
+        const number = Number(value);
+        return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : undefined;
+      };
+      return {
+        request: String(input?.request ?? "").trim().slice(0, 500),
+        pace: bounded(input?.pace, 0.75, 1.25),
+        warmth: bounded(input?.warmth),
+        expressiveness: bounded(input?.expressiveness),
+        energy: bounded(input?.energy),
+        brevity: bounded(input?.brevity),
+      };
+    },
+  )
+  .handler(async ({ data, context }) => {
+    const db = context.supabase as any;
+    const { data: profile, error } = await db
+      .from("voice_profiles")
+      .select("*")
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    if (error || !profile?.approved_at || !validVoiceId(profile.base_voice_id)) {
+      return { ok: false, error: "No approved Emery Voice is active." } as const;
+    }
+
+    const patch = Object.fromEntries(
+      Object.entries({
+        pace: data.pace,
+        warmth: data.warmth,
+        expressiveness: data.expressiveness,
+        energy: data.energy,
+        brevity: data.brevity,
+      }).filter(([, value]) => value !== undefined),
+    );
+    if (!Object.keys(patch).length) {
+      return { ok: false, error: "No supported voice-delivery change was supplied." } as const;
+    }
+
+    const { error: versionError } = await db.from("voice_profile_versions").insert({
+      user_id: context.userId,
+      voice_profile_id: profile.id,
+      version: profile.version,
+      snapshot: profile,
+      change_request: data.request,
+      change_source: "live_voice",
+    });
+    if (versionError) throw versionError;
+
+    const nextDelivery = { ...(profile.delivery_preferences ?? {}), ...patch };
+    const { data: updated, error: updateError } = await db
+      .from("voice_profiles")
+      .update({
+        delivery_preferences: nextDelivery,
+        version: Number(profile.version ?? 1) + 1,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", profile.id)
+      .eq("user_id", context.userId)
+      .select("delivery_preferences,version")
+      .single();
+    if (updateError || !updated) {
+      return { ok: false, error: "Could not save that Voice preference." } as const;
+    }
+
+    return {
+      ok: true,
+      deliveryPreferences: updated.delivery_preferences,
+      version: updated.version,
+      speed: typeof data.pace === "number" ? data.pace : null,
+      note:
+        typeof data.pace === "number"
+          ? "Preference saved; playback speed can update for the next turn."
+          : "Preference saved; Emery should adapt the requested delivery on following turns where supported.",
+    } as const;
   });
 
 export const refreshVoiceContext = createServerFn({ method: "POST" })
