@@ -20,6 +20,13 @@ type RealtimeEvent = {
   arguments?: string;
   transcript?: string;
   error?: { message?: string };
+  item?: {
+    type?: string;
+    id?: string;
+    call_id?: string;
+    name?: string;
+    arguments?: string;
+  };
   [key: string]: unknown;
 };
 
@@ -42,6 +49,7 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
   const streamRef = useRef<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const savedEventsRef = useRef(new Set<string>());
+  const processedToolCallsRef = useRef(new Set<string>());
   const activeRef = useRef(false);
 
   const refreshReadiness = useCallback(async () => {
@@ -84,6 +92,7 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
       audioRef.current = null;
     }
     savedEventsRef.current.clear();
+    processedToolCallsRef.current.clear();
     setStatus("idle");
   }, []);
 
@@ -122,20 +131,25 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
 
   const handleToolCall = useCallback(
     async (event: RealtimeEvent) => {
-      if (!event.call_id || !event.name) return;
+      const callId = event.call_id ?? event.item?.call_id;
+      const name = event.name ?? event.item?.name;
+      const rawArguments = event.arguments ?? event.item?.arguments ?? "{}";
+      if (!callId || !name || processedToolCallsRef.current.has(callId)) return;
+      processedToolCallsRef.current.add(callId);
+
       let args: { query?: string } = {};
       try {
-        args = JSON.parse(event.arguments || "{}") as { query?: string };
+        args = JSON.parse(rawArguments) as { query?: string };
       } catch {
-        sendToolOutput(event.call_id, "The tool arguments were invalid. Ask Adam briefly to retry.");
+        sendToolOutput(callId, "The tool arguments were invalid. Ask Adam briefly to retry.");
         return;
       }
 
       try {
-        if (event.name === "search_web") {
+        if (name === "search_web") {
           const result = await searchWeb({ data: { query: String(args.query ?? "") } });
           sendToolOutput(
-            event.call_id,
+            callId,
             "result" in result
               ? result.result
               : "error" in result
@@ -145,8 +159,8 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
           return;
         }
 
-        if (event.name === "update_voice_delivery") {
-          const raw = JSON.parse(event.arguments || "{}") as {
+        if (name === "update_voice_delivery") {
+          const raw = JSON.parse(rawArguments) as {
             request?: string;
             pace?: number;
             warmth?: number;
@@ -177,13 +191,13 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
               channel.send(
                 JSON.stringify({
                   type: "session.update",
-                  session: { audio: { output: { speed: result.speed } } },
+                  session: { type: "realtime", audio: { output: { speed: result.speed } } },
                 }),
               );
             }
           }
           sendToolOutput(
-            event.call_id,
+            callId,
             "ok" in result && result.ok
               ? result.note
               : "error" in result
@@ -193,18 +207,18 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
           return;
         }
 
-        if (event.name === "refresh_emery_context") {
+        if (name === "refresh_emery_context") {
           const result = await refreshContext({ data: { query: String(args.query ?? "") } });
           sendToolOutput(
-            event.call_id,
+            callId,
             "result" in result ? result.result : "Current Emery context could not be refreshed.",
           );
           return;
         }
 
-        sendToolOutput(event.call_id, `Unknown tool: ${event.name}`);
+        sendToolOutput(callId, `Unknown tool: ${name}`);
       } catch {
-        sendToolOutput(event.call_id, "That tool is temporarily unavailable. Answer without inventing its result.");
+        sendToolOutput(callId, "That tool is temporarily unavailable. Answer without inventing its result.");
       }
     },
     [refreshContext, searchWeb, sendToolOutput, updateVoiceDelivery],
@@ -244,6 +258,9 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
           break;
         case "response.function_call_arguments.done":
           void handleToolCall(event);
+          break;
+        case "response.output_item.done":
+          if (event.item?.type === "function_call") void handleToolCall(event);
           break;
         case "error":
           setError(event.error?.message || "Emery Voice hit a recoverable session error.");
