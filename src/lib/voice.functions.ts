@@ -150,10 +150,9 @@ function voiceOutput(profile: any) {
 }
 
 function voiceSpeed(profile: any) {
-  const pace = Number(profile?.delivery_preferences?.pace ?? 0.5);
+  const pace = Number(profile?.delivery_preferences?.pace ?? 1);
   if (!Number.isFinite(pace)) return 1;
-  const normalized = Math.max(0, Math.min(1, pace));
-  return 0.75 + normalized * 0.5;
+  return Math.max(0.75, Math.min(1.25, pace));
 }
 
 function voiceStyleInstruction(profile: any) {
