@@ -71,7 +71,7 @@ function pendingVoice(profile: any): RealtimeVoiceId | null {
 }
 
 async function ensureProfile(db: VoiceStudioDb, userId: string) {
-  let { data: profile, error } = await db
+  const { data: profile, error } = await db
     .from("voice_profiles")
     .select("*")
     .eq("user_id", userId)
