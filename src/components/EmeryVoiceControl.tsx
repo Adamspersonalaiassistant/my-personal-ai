@@ -146,16 +146,23 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
             energy?: number;
             brevity?: number;
           };
-          const result = await updateVoiceDelivery({
-            data: {
-              request: String(raw.request ?? "Live voice-delivery update"),
-              pace: raw.pace,
-              warmth: raw.warmth,
-              expressiveness: raw.expressiveness,
-              energy: raw.energy,
-              brevity: raw.brevity,
-            },
-          });
+          const deliveryData: {
+            request: string;
+            pace?: number;
+            warmth?: number;
+            expressiveness?: number;
+            energy?: number;
+            brevity?: number;
+          } = { request: String(raw.request ?? "Live voice-delivery update") };
+          if (typeof raw.pace === "number") deliveryData.pace = raw.pace;
+          if (typeof raw.warmth === "number") deliveryData.warmth = raw.warmth;
+          if (typeof raw.expressiveness === "number") {
+            deliveryData.expressiveness = raw.expressiveness;
+          }
+          if (typeof raw.energy === "number") deliveryData.energy = raw.energy;
+          if (typeof raw.brevity === "number") deliveryData.brevity = raw.brevity;
+
+          const result = await updateVoiceDelivery({ data: deliveryData });
           if ("ok" in result && result.ok && typeof result.speed === "number") {
             const channel = channelRef.current;
             if (channel?.readyState === "open") {
