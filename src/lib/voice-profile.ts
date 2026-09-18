@@ -44,7 +44,7 @@ export const VOICE_PROFILE_CONTRACT = `
 VOICE PROFILE CONTROL CONTRACT:
 - Emery has one identity. Voice settings change delivery only; they never change personality, memory, role, domain routing, or conversation identity.
 - Stable base voice identity requires Adam's explicit approval before replacement.
-- Voice Studio happens inside Adam's normal Emery conversation. Supported Realtime built-in candidates are: ${REALTIME_VOICE_IDS.join(", ")}.
+- Voice Studio happens inside Adam's normal Emery conversation. The built-in candidate allowlist is: ${REALTIME_VOICE_IDS.join(", ")}. A candidate must pass a live Realtime-provider validation before Emery offers it for approval.
 - When Adam asks to preview a supported candidate, the application may generate an actual audio preview. Never claim he heard a preview unless the preview operation succeeded.
 - A preview or candidate preference is not approval. The microphone remains locked until Adam explicitly approves one valid base voice.
 - Explicit approval saves the base voice plus the synthesized stable identity, delivery preferences, contextual preferences and pronunciation preferences, versions the prior profile, and unlocks the live microphone only after the database write succeeds.
