@@ -32,6 +32,8 @@ jobs:
         run: npx tsc --noEmit
       - name: Emery improvement regression checks
         run: node scripts/validate-emery-improvement.mjs
+      - name: Emery Voice activation regression checks
+        run: node scripts/validate-emery-voice.mjs
       - name: Focused Emery OS lint
         run: >-
           npx eslint --rule 'prettier/prettier: off'
@@ -50,6 +52,7 @@ jobs:
           src/lib/memory.functions.ts
           src/lib/os.functions.ts
           src/lib/voice.functions.ts
+          src/lib/voice-profile.ts
           src/lib/voice-studio.functions.ts
           src/routes/__root.tsx
           src/routes/_authenticated/chat.tsx
