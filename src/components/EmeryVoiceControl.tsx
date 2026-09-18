@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Loader2, Mic, MicOff, Radio, Search, X } from "lucide-react";
+import { claimExclusiveEmeryVoice, releaseExclusiveEmeryVoice } from "@/lib/voice-session-guard";
 import {
   createRealtimeClientSecret,
   getVoiceReadiness,
@@ -51,6 +52,9 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
   const savedEventsRef = useRef(new Set<string>());
   const processedToolCallsRef = useRef(new Set<string>());
   const activeRef = useRef(false);
+  const startingRef = useRef(false);
+  const attemptRef = useRef(0);
+  const sessionIdRef = useRef<string | null>(null);
 
   const refreshReadiness = useCallback(async () => {
     try {
@@ -77,26 +81,49 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
   }, [refreshReadiness]);
 
   const closeVoice = useCallback(() => {
+    attemptRef.current += 1;
+    startingRef.current = false;
     activeRef.current = false;
-    channelRef.current?.close();
+
+    const channel = channelRef.current;
     channelRef.current = null;
-    peerRef.current?.getSenders().forEach((sender) => sender.track?.stop());
-    peerRef.current?.close();
+    channel?.close();
+
+    const peer = peerRef.current;
     peerRef.current = null;
-    streamRef.current?.getTracks().forEach((track) => track.stop());
+    peer?.getSenders().forEach((sender) => sender.track?.stop());
+    peer?.close();
+
+    const stream = streamRef.current;
     streamRef.current = null;
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.srcObject = null;
-      audioRef.current.remove();
-      audioRef.current = null;
+    stream?.getTracks().forEach((track) => track.stop());
+
+    const audio = audioRef.current;
+    audioRef.current = null;
+    if (audio) {
+      audio.pause();
+      audio.srcObject = null;
+      audio.remove();
     }
+
+    sessionIdRef.current = null;
     savedEventsRef.current.clear();
     processedToolCallsRef.current.clear();
+    releaseExclusiveEmeryVoice(closeVoice);
     setStatus("idle");
   }, []);
 
   useEffect(() => closeVoice, [closeVoice]);
+
+  useEffect(() => {
+    const stopOnPageExit = () => closeVoice();
+    window.addEventListener("pagehide", stopOnPageExit);
+    window.addEventListener("beforeunload", stopOnPageExit);
+    return () => {
+      window.removeEventListener("pagehide", stopOnPageExit);
+      window.removeEventListener("beforeunload", stopOnPageExit);
+    };
+  }, [closeVoice]);
 
   const saveTranscript = useCallback(
     async (role: "user" | "assistant", text: string, eventKey: string) => {
@@ -104,7 +131,7 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
       if (!clean || savedEventsRef.current.has(eventKey)) return;
       savedEventsRef.current.add(eventKey);
       try {
-        await persistTranscript({ data: { role, text: clean, eventKey } });
+        await persistTranscript({ data: { role, text: clean, eventKey, sessionId: sessionIdRef.current } });
         onConversationChanged?.();
       } catch (caught) {
         console.error("Voice transcript persistence failed", caught);
@@ -287,11 +314,25 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
   );
 
   const startVoice = useCallback(async () => {
-    if (activeRef.current || status === "connecting") return;
+    if (activeRef.current || startingRef.current || status === "connecting") return;
+
+    startingRef.current = true;
+    const attemptId = ++attemptRef.current;
     setError(null);
+    setStatus("connecting");
+
+    const isCurrentAttempt = () => attemptRef.current === attemptId;
+    const abortIfSuperseded = () => {
+      if (isCurrentAttempt()) return false;
+      startingRef.current = false;
+      return true;
+    };
 
     const readiness = await refreshReadiness();
+    if (abortIfSuperseded()) return;
     if (!readiness?.canStart) {
+      startingRef.current = false;
+      setStatus("idle");
       setSetupOpen(true);
       return;
     }
@@ -301,17 +342,27 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
       !navigator.mediaDevices?.getUserMedia ||
       typeof RTCPeerConnection === "undefined"
     ) {
+      startingRef.current = false;
       setError("This browser does not support the realtime microphone connection Emery needs.");
       setStatus("error");
       return;
     }
 
-    setStatus("connecting");
+    claimExclusiveEmeryVoice(closeVoice);
+    if (abortIfSuperseded()) return;
+
+    sessionIdRef.current =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `voice-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
     try {
       const tokenResult = await mintSecret({});
+      if (abortIfSuperseded()) return;
       if (!("clientSecret" in tokenResult) || !tokenResult.clientSecret) {
         if ("needsVoiceApproval" in tokenResult && tokenResult.needsVoiceApproval) {
+          startingRef.current = false;
+          releaseExclusiveEmeryVoice(closeVoice);
           setReady(false);
           setSetupOpen(true);
           setStatus("idle");
@@ -329,6 +380,10 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
           autoGainControl: true,
         },
       });
+      if (abortIfSuperseded()) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       streamRef.current = stream;
 
       const peer = new RTCPeerConnection();
@@ -406,11 +461,26 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
       }
 
       const answerSdp = await sdpResponse.text();
+      if (abortIfSuperseded()) {
+        peer.getSenders().forEach((sender) => sender.track?.stop());
+        peer.close();
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       await peer.setRemoteDescription({ type: "answer", sdp: answerSdp });
+      if (abortIfSuperseded()) {
+        peer.getSenders().forEach((sender) => sender.track?.stop());
+        peer.close();
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      startingRef.current = false;
       activeRef.current = true;
       setStatus("listening");
     } catch (caught) {
+      const stillCurrent = isCurrentAttempt();
       closeVoice();
+      if (!stillCurrent) return;
       const message =
         caught instanceof DOMException && caught.name === "NotAllowedError"
           ? "Microphone permission is off. Allow microphone access for Emery, then try again."
@@ -440,7 +510,8 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
               ? "End Emery Voice"
               : "Start Emery Voice"
         }
-        className={`emery-press relative flex size-11 shrink-0 items-center justify-center rounded-xl transition ${
+        disabled={status === "connecting"}
+        className={`emery-press relative flex size-11 shrink-0 items-center justify-center rounded-xl transition disabled:cursor-wait disabled:opacity-70 ${
           active
             ? "bg-primary text-primary-foreground shadow-[0_0_22px_rgba(41,142,255,0.28)]"
             : "text-primary/85 hover:bg-primary/[0.07]"
