@@ -141,6 +141,16 @@ function previewInstructions(profile: any) {
   ];
 
   if (typeof stable["description"] === "string") parts.push(String(stable["description"]));
+  if (typeof stable["age_impression"] === "string" && stable["age_impression"]) {
+    parts.push(`Target the requested age impression naturally: ${String(stable["age_impression"])}.`);
+  }
+  if (typeof stable["tone"] === "string" && stable["tone"]) {
+    parts.push(`Overall vocal tone: ${String(stable["tone"])}.`);
+  }
+  const contextual = safeObject(profile?.contextual_preferences);
+  if (typeof contextual["general"] === "string") {
+    parts.push(`General delivery guidance: ${String(contextual["general"])}`);
+  }
   if (Number(delivery["warmth"]) >= 0.65) parts.push("Lean warmer and more personable.");
   if (Number(delivery["energy"]) <= 0.4) parts.push("Keep the energy calm and grounded.");
   if (Number(delivery["energy"]) >= 0.65) parts.push("Use slightly more energetic delivery.");
@@ -162,7 +172,7 @@ async function makePreview(apiKey: string, voiceId: RealtimeVoiceId, profile: an
         "Hey Adam. It's Emery. I want this to feel natural — like you can think out loud, change direction, and just talk to me. We'll figure things out together.",
       instructions: previewInstructions(profile),
       response_format: "mp3",
-      speed: 1,
+      speed: clamp(safeObject(profile?.delivery_preferences)["pace"], 0.75, 1.25, 1),
     }),
   });
 
