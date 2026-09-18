@@ -99,8 +99,10 @@
   body {
     min-width: 320px;
     min-height: 100dvh;
+    height: 100dvh;
     margin: 0;
     overflow-x: hidden;
+    overscroll-behavior: none;
     background:
       radial-gradient(circle at 12% -8%, oklch(0.48 0.16 244 / 0.16), transparent 31rem),
       radial-gradient(circle at 98% 15%, oklch(0.42 0.12 220 / 0.1), transparent 28rem),
@@ -347,7 +349,7 @@
 
 @media (min-width: 768px) {
   body {
-    padding: 18px 0;
+    padding: 0;
   }
 }
 
