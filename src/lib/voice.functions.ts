@@ -176,7 +176,9 @@ function voiceStyleInstruction(profile: any) {
       ? `- Accent target: ${accentDescription}. Keep it natural and never caricatured or theatrical.`
       : null,
     Number.isFinite(accentIntensity) && accentIntensity > 0
-      ? `- Accent intensity target: ${Math.round(Math.max(0, Math.min(1, accentIntensity)) * 100)}% — audible but controlled.`
+      ? accentIntensity <= 0.15
+        ? "- Accent intensity: extremely subtle. Do not consciously perform an accent; let only a faint natural Caribbean/Dominican musicality remain."
+        : `- Accent intensity target: ${Math.round(Math.max(0, Math.min(1, accentIntensity)) * 100)}% — controlled, never theatrical.`
       : null,
     stable?.english_fluency
       ? `- English delivery: ${stable.english_fluency}.`
@@ -184,6 +186,9 @@ function voiceStyleInstruction(profile: any) {
     stable?.presence ? `- Presence: ${stable.presence}.` : null,
     stable?.refinement_note ? `- Latest explicit voice refinement: ${stable.refinement_note}.` : null,
     stable?.avoid ? `- Avoid: ${Array.isArray(stable.avoid) ? stable.avoid.join(", ") : String(stable.avoid)}.` : null,
+    Number.isFinite(Number(delivery?.pace)) && Number(delivery.pace) <= 0.86
+      ? "- Pacing: relaxed and human. Speak slowly enough to feel present. Use brief natural pauses between clauses and a slightly longer beat between ideas. Never rush, compress words, or use rapid-fire cadence."
+      : null,
     Object.keys(delivery).length ? `- Delivery preferences: ${JSON.stringify(delivery)}.` : null,
     Object.keys(contextual).length ? `- Contextual delivery: ${JSON.stringify(contextual)}.` : null,
     Object.keys(pronunciation).length ? `- Pronunciation preferences: ${JSON.stringify(pronunciation)}.` : null,
