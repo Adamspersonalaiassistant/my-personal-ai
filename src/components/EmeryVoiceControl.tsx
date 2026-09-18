@@ -60,6 +60,14 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
     void refreshReadiness();
   }, [refreshReadiness]);
 
+  useEffect(() => {
+    const handleProfileUpdate = () => {
+      void refreshReadiness();
+    };
+    window.addEventListener("emery-voice-profile-updated", handleProfileUpdate);
+    return () => window.removeEventListener("emery-voice-profile-updated", handleProfileUpdate);
+  }, [refreshReadiness]);
+
   const closeVoice = useCallback(() => {
     activeRef.current = false;
     channelRef.current?.close();
