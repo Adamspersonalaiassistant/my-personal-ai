@@ -562,9 +562,7 @@ function Chat() {
               onFocus={() => requestAnimationFrame(() => scrollToLatest("smooth"))}
               className="max-h-32 min-h-11 min-w-0 flex-1 overflow-y-auto bg-transparent px-1.5 py-2 text-[16px] leading-6 text-foreground outline-none placeholder:text-muted-foreground/60 sm:px-2 sm:text-[15px]"
             />
-            <div className="hidden min-[390px]:block">
-              <EmeryVoiceControl onConversationChanged={() => void refreshLatest()} />
-            </div>
+            <EmeryVoiceControl onConversationChanged={() => void refreshLatest()} />
             <button
               type="submit"
               aria-label="Send"
