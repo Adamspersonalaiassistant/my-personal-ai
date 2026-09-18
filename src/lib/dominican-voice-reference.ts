@@ -5,7 +5,7 @@ export const EMERY_DOMINICAN_ENGLISH_REFERENCE = {
     accent:
       "Dominican Republic / Santo Domingo Spanish-influenced English, not a generic Spanish accent.",
     delivery:
-      "Lively, expressive, warm, intelligent, conversational, polished, and easy to understand.",
+      "Warm, confident, grounded, lively, and expressive, with a smooth low-to-mid feminine presence and a subtle husky/velvety edge; conversational, polished, and easy to understand.",
     avoid: [
       "male or masculine-presenting base voices",
       "generic American-only delivery",
@@ -40,7 +40,7 @@ export const EMERY_DOMINICAN_ENGLISH_REFERENCE = {
     ],
   },
   ttsInstruction:
-    "Use an early-30s feminine Dominican-American English voice. The speaker learned Dominican Spanish first in Santo Domingo and later became fully fluent in English. Every English word must be immediately clear and natural, but a light Dominican substrate should remain audible in selected words, vowel color, rhythm, and intonation. Use lively Caribbean musicality and slightly quicker conversational rhythm with expressive pitch movement. Keep consonant softening subtle and occasional; do not mechanically drop English plural S sounds, roll every R, or imitate broken English. The result should sound like a fluent Dominican bilingual woman speaking excellent English, not like a generic American voice and not like a generic 'Spanish accent'. Do not substitute Mexican, Castilian, or Puerto Rican accent patterns. Never caricature the accent. Keep her warm, intelligent, confident, lively, polished, and conversational.",
+    "Use an original early-30s feminine Dominican-American English voice. The speaker learned Dominican Spanish first in Santo Domingo and later became fully fluent in English. Every English word must be immediately clear and natural, but a light Dominican substrate should remain audible in selected words, vowel color, rhythm, and intonation. Use warm Caribbean musicality, a relaxed conversational rhythm, expressive pitch movement, a smooth low-to-mid feminine presence, and a subtle husky/velvety texture when the model can support it. Keep consonant softening subtle and occasional; do not mechanically drop English plural S sounds, roll every R, or imitate broken English. The result should sound like a fluent Dominican bilingual woman speaking excellent English, not like a generic American voice and not like a generic 'Spanish accent'. Do not substitute Mexican, Castilian, or Puerto Rican accent patterns. Never caricature the accent, and never imitate or replicate the recognizable voice of any real person. Keep her warm, intelligent, confident, grounded, lively, polished, and conversational.",
   audition: {
     feminineOnly: true,
     preferredVoiceIds: ["coral", "shimmer"] as const,
