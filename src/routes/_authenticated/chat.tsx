@@ -568,6 +568,7 @@ function Chat() {
                     </button>
                   </div>
                   <audio
+                    data-emery-voice-preview="true"
                     controls
                     playsInline
                     src={voiceStudioState.audioDataUri}
