@@ -7,7 +7,7 @@ import { persistDurableMemoryFromMessage } from "@/lib/chat.functions";
 import { inferEmeryDomain, domainPrompt } from "@/lib/emery-domain";
 import { selectRelevantMemories, buildExecutiveFocus } from "@/lib/emery-intelligence";
 import { loadHpoAgentContext } from "@/lib/hpo-agent-context";
-import { VOICE_PROFILE_CONTRACT, isUsableVoiceId } from "@/lib/voice-profile";
+import { VOICE_PROFILE_CONTRACT, REALTIME_VOICE_IDS, isUsableVoiceId } from "@/lib/voice-profile";
 
 const REALTIME_MODEL = "gpt-realtime-2.1";
 
