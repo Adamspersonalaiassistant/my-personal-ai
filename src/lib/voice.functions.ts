@@ -448,12 +448,13 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
 export const persistVoiceTranscript = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
-    (input: { role: "user" | "assistant"; text: string; eventKey: string }) => {
+    (input: { role: "user" | "assistant"; text: string; eventKey: string; sessionId?: string | null }) => {
       const role = input?.role === "assistant" ? ("assistant" as const) : ("user" as const);
       return {
         role,
         text: String(input?.text ?? "").trim().slice(0, 12000),
         eventKey: String(input?.eventKey ?? "").trim().slice(0, 200),
+        sessionId: input?.sessionId ? String(input.sessionId).trim().slice(0, 120) : null,
       };
     },
   )
@@ -472,6 +473,29 @@ export const persistVoiceTranscript = createServerFn({ method: "POST" })
       .maybeSingle();
     if (duplicate) return { ok: true, duplicate: true } as const;
 
+    // Defensive de-dupe for accidental overlapping Realtime sessions.
+    // Keep the window short so intentional repeated speech later still persists.
+    const duplicateWindowStart = new Date(Date.now() - 2000).toISOString();
+    const { data: nearDuplicate } = await db
+      .from("conversation_messages")
+      .select("id,created_at,source_metadata")
+      .eq("user_id", context.userId)
+      .eq("conversation_id", conversation.id)
+      .eq("role", data.role)
+      .eq("content", data.text)
+      .gte("created_at", duplicateWindowStart)
+      .contains("source_metadata", { entryPoint: "voice" })
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (nearDuplicate) {
+      return {
+        ok: true,
+        duplicate: true,
+        duplicateReason: "same_voice_transcript_within_2_seconds",
+      } as const;
+    }
+
     const route = data.role === "user" ? inferEmeryDomain(data.text) : null;
     const { data: saved, error } = await db
       .from("conversation_messages")
@@ -484,6 +508,7 @@ export const persistVoiceTranscript = createServerFn({ method: "POST" })
           entryPoint: "voice",
           inputMode: data.role === "user" ? "voice" : "realtime_audio",
           voice_event_key: data.eventKey,
+          voice_session_id: data.sessionId ?? undefined,
           domain: route?.domain ?? undefined,
           emery_identity: "central-v1",
         },
