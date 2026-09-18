@@ -53,6 +53,7 @@ jobs:
           src/lib/os.functions.ts
           src/lib/voice.functions.ts
           src/lib/voice-profile.ts
+          src/lib/voice-session-guard.ts
           src/lib/voice-studio.functions.ts
           src/routes/__root.tsx
           src/routes/_authenticated/chat.tsx
