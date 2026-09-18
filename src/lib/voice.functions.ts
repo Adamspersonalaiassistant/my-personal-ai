@@ -143,11 +143,6 @@ async function loadVoiceContext(db: any, userId: string, query = "current voice 
   };
 }
 
-function isUsableVoiceId(value: unknown) {
-  const id = typeof value === "string" ? value.trim() : "";
-  return isUsableVoiceId(id);
-}
-
 function voiceOutput(profile: any) {
   const id = typeof profile?.base_voice_id === "string" ? profile.base_voice_id.trim() : "";
   if (id.startsWith("voice_")) return { id };
@@ -258,8 +253,8 @@ LIVE VOICE OPERATING CONTRACT:
 - Do not claim Calendar, Reminders, WhatsApp, PLAUD, phone control, or any external action is connected unless a tool confirms it.
 - Voice delivery follows the approved Voice Profile, but personality and judgment always come from Emery's central identity.
 - Do not restart a Voice Studio questionnaire. Adam has already chosen the direction. Start talking naturally with the approved profile and let him refine it from actual conversation.
-- If Adam asks you to adjust how you sound while Voice is active, call update_voice_preferences with his requested changes. Tell him only what the tool confirms; stored delivery changes apply on the next Voice session unless the tool says otherwise.
-- If Adam explicitly asks during the live conversation to slow down, speed up, be warmer, calmer, more or less expressive, more energetic, or briefer, use update_voice_delivery. Do not claim the preference was saved unless the tool confirms it.
+- If Adam explicitly asks during the live conversation to adjust how you sound — including pace, warmth, energy, expressiveness, brevity, or making the Dominican accent lighter/stronger — use update_voice_delivery. Do not claim the preference was saved unless the tool confirms it.
+- Pace changes can be applied between turns in the current session. Accent/style refinements are saved to Emery's Voice Profile and are guaranteed to be picked up on the next Voice session; do not pretend an acoustic change already happened if the current session cannot reflect it.
 
 DOMAIN ROUTING:
 ${context.route.domain.toUpperCase()} (${context.route.reason}). ${domainPrompt(context.route)}
@@ -385,6 +380,8 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
               expressiveness: { type: "number", description: "Desired expressiveness, 0 to 1." },
               energy: { type: "number", description: "Desired energy, 0 to 1." },
               brevity: { type: "number", description: "Desired spoken brevity, 0 to 1." },
+              accent_intensity: { type: "number", description: "Desired subtle-accent strength, 0 to 1." },
+              accent_description: { type: "string", description: "Updated accent delivery description, if Adam explicitly requests one." },
             },
             required: ["request"],
           },
@@ -404,27 +401,6 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
               },
             },
             required: ["query"],
-          },
-        },
-        {
-          type: "function",
-          name: "update_voice_preferences",
-          description:
-            "Save Adam's requested refinement to Emery's approved voice delivery. Use this when he asks to make the voice warmer, calmer, faster/slower, more/less expressive, more/less energetic, shorter, or to make the Dominican accent lighter/stronger. Never use it to change the base voice without explicit approval.",
-          parameters: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              pace: { type: "number", minimum: 0.75, maximum: 1.25 },
-              warmth: { type: "number", minimum: 0, maximum: 1 },
-              expressiveness: { type: "number", minimum: 0, maximum: 1 },
-              energy: { type: "number", minimum: 0, maximum: 1 },
-              brevity: { type: "number", minimum: 0, maximum: 1 },
-              accent_intensity: { type: "number", minimum: 0, maximum: 1 },
-              accent_description: { type: "string", maxLength: 300 },
-              request_summary: { type: "string", maxLength: 500 }
-            },
-            required: ["request_summary"]
           },
         },
       ],
@@ -551,92 +527,6 @@ export const persistVoiceTranscript = createServerFn({ method: "POST" })
     } as const;
   });
 
-export const updateVoicePreferencesFromLive = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator(
-    (input: {
-      pace?: number;
-      warmth?: number;
-      expressiveness?: number;
-      energy?: number;
-      brevity?: number;
-      accentIntensity?: number;
-      accentDescription?: string;
-      requestSummary: string;
-    }) => ({
-      pace: input?.pace == null ? undefined : Math.max(0.75, Math.min(1.25, Number(input.pace))),
-      warmth: input?.warmth == null ? undefined : Math.max(0, Math.min(1, Number(input.warmth))),
-      expressiveness:
-        input?.expressiveness == null ? undefined : Math.max(0, Math.min(1, Number(input.expressiveness))),
-      energy: input?.energy == null ? undefined : Math.max(0, Math.min(1, Number(input.energy))),
-      brevity: input?.brevity == null ? undefined : Math.max(0, Math.min(1, Number(input.brevity))),
-      accentIntensity:
-        input?.accentIntensity == null ? undefined : Math.max(0, Math.min(1, Number(input.accentIntensity))),
-      accentDescription: String(input?.accentDescription ?? "").trim().slice(0, 300) || undefined,
-      requestSummary: String(input?.requestSummary ?? "Voice refinement").trim().slice(0, 500),
-    }),
-  )
-  .handler(async ({ data, context }) => {
-    const db = context.supabase as any;
-    let { data: profile, error } = await db
-      .from("voice_profiles")
-      .select("*")
-      .eq("user_id", context.userId)
-      .maybeSingle();
-    if (error) throw error;
-    if (!profile) {
-      const created = await db
-        .from("voice_profiles")
-        .insert({ user_id: context.userId })
-        .select("*")
-        .single();
-      if (created.error) throw created.error;
-      profile = created.data;
-    }
-    if (!profile?.approved_at || !isUsableVoiceId(profile?.base_voice_id)) {
-      return { ok: false, error: "Emery's base voice is not approved yet." } as const;
-    }
-
-    await snapshotVoiceProfile(
-      db,
-      context.userId,
-      profile,
-      data.requestSummary,
-      "realtime_voice",
-    );
-
-    const delivery = { ...(profile.delivery_preferences ?? {}) };
-    for (const key of ["pace", "warmth", "expressiveness", "energy", "brevity"] as const) {
-      if (data[key] != null && Number.isFinite(data[key])) delivery[key] = data[key];
-    }
-
-    const stable = { ...(profile.stable_identity ?? {}) };
-    if (data.accentIntensity != null && Number.isFinite(data.accentIntensity)) {
-      stable.accent_intensity = data.accentIntensity;
-    }
-    if (data.accentDescription) stable.accent_description = data.accentDescription;
-
-    const nextVersion = Number(profile.version ?? 1) + 1;
-    const { error: updateError } = await db
-      .from("voice_profiles")
-      .update({
-        delivery_preferences: delivery,
-        stable_identity: stable,
-        version: nextVersion,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", profile.id)
-      .eq("user_id", context.userId);
-    if (updateError) throw updateError;
-
-    return {
-      ok: true,
-      version: nextVersion,
-      note:
-        "Voice preference saved. The updated delivery will be used the next time Emery Voice starts; the current audio session keeps its existing voice configuration.",
-    } as const;
-  });
-
 export const searchWebForVoice = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { query: string }) => ({
@@ -691,6 +581,8 @@ export const updateVoiceDeliveryFromLive = createServerFn({ method: "POST" })
       expressiveness?: number;
       energy?: number;
       brevity?: number;
+      accentIntensity?: number;
+      accentDescription?: string;
     }) => {
       const bounded = (value: unknown, min = 0, max = 1) => {
         const number = Number(value);
@@ -703,6 +595,8 @@ export const updateVoiceDeliveryFromLive = createServerFn({ method: "POST" })
         expressiveness: bounded(input?.expressiveness),
         energy: bounded(input?.energy),
         brevity: bounded(input?.brevity),
+        accentIntensity: bounded(input?.accentIntensity),
+        accentDescription: String(input?.accentDescription ?? "").trim().slice(0, 300) || undefined,
       };
     },
   )
@@ -738,7 +632,19 @@ export const updateVoiceDeliveryFromLive = createServerFn({ method: "POST" })
       if (/less expressive/.test(request)) patch["expressiveness"] = 0.35;
       if (/briefer|shorter|more concise/.test(request)) patch["brevity"] = 0.75;
     }
-    if (!Object.keys(patch).length) {
+    const requestLower = data.request.toLowerCase();
+    let accentIntensity = data.accentIntensity;
+    if (accentIntensity == null) {
+      if (/accent.*(lighter|less|subtler|more subtle)|less.*accent/.test(requestLower)) accentIntensity = 0.18;
+      if (/accent.*(stronger|more|noticeable)|more.*accent/.test(requestLower)) accentIntensity = 0.38;
+    }
+    const accentDescription =
+      data.accentDescription ||
+      (/dominican/.test(requestLower)
+        ? "Fluent natural English with a subtle Dominican Latina accent; audible but light, never exaggerated or theatrical."
+        : undefined);
+
+    if (!Object.keys(patch).length && accentIntensity == null && !accentDescription) {
       return { ok: false, error: "No supported voice-delivery change was supplied." } as const;
     }
 
@@ -753,16 +659,24 @@ export const updateVoiceDeliveryFromLive = createServerFn({ method: "POST" })
     if (versionError) throw versionError;
 
     const nextDelivery = { ...(profile.delivery_preferences ?? {}), ...patch };
+    const nextStable = { ...(profile.stable_identity ?? {}) };
+    if (accentIntensity != null) nextStable.accent_intensity = accentIntensity;
+    if (accentDescription) {
+      nextStable.accent =
+        "Subtle Dominican Latina accent in otherwise fluent, polished English; native character is audible but light.";
+      nextStable.accent_description = accentDescription;
+    }
     const { data: updated, error: updateError } = await db
       .from("voice_profiles")
       .update({
         delivery_preferences: nextDelivery,
+        stable_identity: nextStable,
         version: Number(profile.version ?? 1) + 1,
         updated_at: new Date().toISOString(),
       })
       .eq("id", profile.id)
       .eq("user_id", context.userId)
-      .select("delivery_preferences,version")
+      .select("delivery_preferences,stable_identity,version")
       .single();
     if (updateError || !updated) {
       return { ok: false, error: "Could not save that Voice preference." } as const;
@@ -771,12 +685,13 @@ export const updateVoiceDeliveryFromLive = createServerFn({ method: "POST" })
     return {
       ok: true,
       deliveryPreferences: updated.delivery_preferences,
+      stableIdentity: updated.stable_identity,
       version: updated.version,
       speed: typeof data.pace === "number" ? data.pace : null,
       note:
         typeof data.pace === "number"
-          ? "Preference saved; playback speed can update for the next turn."
-          : "Preference saved; Emery should adapt the requested delivery on following turns where supported.",
+          ? "Preference saved; playback speed can update between turns in this session. Other saved style changes are guaranteed on the next Voice session."
+          : "Preference saved. Accent and style refinements are guaranteed to load on the next Voice session.",
     } as const;
   });
 
