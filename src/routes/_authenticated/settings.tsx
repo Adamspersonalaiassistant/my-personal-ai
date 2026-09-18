@@ -10,6 +10,7 @@ import {
   FileUp,
   Mic2,
   Radio,
+  Smartphone,
   Sparkles,
   UsersRound,
   Workflow,
@@ -29,7 +30,8 @@ const capabilities = [
   { label: "Action layer", value: "Connected", icon: CheckSquare, live: true },
   { label: "Agent team", value: "Connected", icon: UsersRound, live: true },
   { label: "File uploads", value: "Connected", icon: FileUp, live: true },
-  { label: "Meetings", value: "Internal", icon: Radio, live: true },
+  { label: "Shortcut bridge", value: "Ready", icon: Smartphone, live: true },
+  { label: "Meetings", value: "Internal only", icon: Radio, live: true },
   { label: "Emery Voice", value: "Next", icon: Mic2, live: false },
   { label: "Automations", value: "Planned", icon: Workflow, live: false },
 ] as const;
@@ -90,7 +92,9 @@ function Settings() {
       <div className="mx-auto max-w-3xl space-y-5 pb-4">
         <div>
           <h1 className="text-[1.55rem] font-semibold tracking-[-0.035em]">Settings</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Emery, your data, and connected capabilities.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Emery, your phone, your data, and connected capabilities.
+          </p>
         </div>
 
         <SettingsGroup title="Account">
@@ -103,6 +107,24 @@ function Settings() {
               <p className="mt-0.5 truncate text-xs text-muted-foreground">{user?.email}</p>
             </div>
           </div>
+        </SettingsGroup>
+
+        <SettingsGroup title="iPhone">
+          <Link
+            to="/iphone"
+            className="emery-press flex min-h-[68px] items-center gap-3 px-3.5 py-3 hover:bg-white/[0.025]"
+          >
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/[0.055] text-primary">
+              <Smartphone className="size-[17px]" strokeWidth={1.8} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">iPhone & Shortcuts</p>
+              <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+                One Emery Shortcut · dictated and typed capture ready
+              </p>
+            </div>
+            <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+          </Link>
         </SettingsGroup>
 
         <SettingsGroup title="Personal context">
@@ -134,11 +156,15 @@ function Settings() {
                 key={item.label}
                 className={`flex min-h-[58px] items-center gap-3 px-3.5 py-2.5 ${index ? "border-t border-border/30" : ""}`}
               >
-                <div className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${item.live ? "bg-primary/[0.055] text-primary" : "bg-white/[0.025] text-muted-foreground"}`}>
+                <div
+                  className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${item.live ? "bg-primary/[0.055] text-primary" : "bg-white/[0.025] text-muted-foreground"}`}
+                >
                   <Icon className="size-[15px]" strokeWidth={1.8} />
                 </div>
                 <p className="min-w-0 flex-1 text-sm font-medium">{item.label}</p>
-                <span className={`text-[11px] font-medium ${item.live ? "text-primary/85" : "text-muted-foreground"}`}>
+                <span
+                  className={`text-[11px] font-medium ${item.live ? "text-primary/85" : "text-muted-foreground"}`}
+                >
                   {item.value}
                 </span>
               </div>
@@ -151,7 +177,7 @@ function Settings() {
           <div>
             <p className="text-sm font-medium">Next: Emery Voice</p>
             <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
-              Voice will sit on top of the same memory, actions, agents and continuous Emery conversation already working now.
+              The app, memory, action system and one-Emery phone bridge are the foundation Voice will use.
             </p>
           </div>
         </section>
@@ -171,7 +197,9 @@ function Settings() {
 function SettingsGroup({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{title}</p>
+      <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        {title}
+      </p>
       <div className="overflow-hidden rounded-2xl border border-border/40 bg-card/28">{children}</div>
     </section>
   );
