@@ -76,6 +76,11 @@ function stableVoicePatchFromText(text: string) {
       "Subtle Dominican Latina accent in otherwise fluent, polished English; native character is audible but light.";
     patch["accent_description"] =
       "Fluent natural English with a subtle Dominican Latina accent. Keep the Dominican character lightly audible in rhythm and color without reducing clarity. Never caricature or overperform the accent.";
+  } else if (/\b(latina|latin american|latin-american|latino)\b/.test(request)) {
+    patch["accent"] =
+      "Natural Latina / Latin-American vocal character in fluent, polished English; warm rhythmic color with clear diction.";
+    patch["accent_description"] =
+      "Fluent natural English with a subtle Latina / Latin-American vocal character. Keep the rhythm and color audible but controlled, warm, modern, and clear. Do not assume a nationality or caricature an accent; Adam should choose the regional flavor and intensity.";
   }
   if (/accent.*(lighter|less|subtler|more subtle)|less.*accent/.test(request)) {
     patch["accent_intensity"] = 0.18;
@@ -202,6 +207,9 @@ function previewInstructions(profile: any) {
   }
   if (typeof stable["accent"] === "string" && stable["accent"]) {
     parts.push(`Use the requested accent or regional character naturally: ${String(stable["accent"])}.`);
+  }
+  if (typeof stable["accent_description"] === "string" && stable["accent_description"]) {
+    parts.push(`Accent detail: ${String(stable["accent_description"])}`);
   }
   if (typeof stable["tone"] === "string" && stable["tone"]) {
     parts.push(`Overall vocal tone: ${String(stable["tone"])}.`);
@@ -550,7 +558,7 @@ export async function processVoiceStudioTurn({
       ),
     );
   const designFeedback =
-    /\b(warm|warmer|friendly|friendlier|slow|slower|fast|faster|measured|calm|calmer|grounded|energetic|energy|expressive|restrained|brief|concise|detailed|natural|robotic|corporate|casual|formal|professional|confident|authoritative|playful|serious|accent|american|british|new york|new jersey|southern|female|feminine|mentor|friend|age|young|younger|mature|20s|30s|40s|50s|pitch|deeper|higher|lower)\b/i.test(
+    /\b(warm|warmer|friendly|friendlier|slow|slower|fast|faster|measured|calm|calmer|grounded|energetic|energy|expressive|restrained|brief|concise|detailed|natural|robotic|corporate|casual|formal|professional|confident|authoritative|playful|serious|accent|latina|latino|latin american|latin-american|bilingual|spanish|dominican|dominicana|american|british|new york|new jersey|southern|female|feminine|mentor|friend|age|young|younger|mature|20s|30s|40s|50s|pitch|deeper|higher|lower)\b/i.test(
       text,
     ) || /\b(?:2[0-9]|3[0-9]|4[0-9]|5[0-9])\b/.test(text);
   const maybeStudioTurn =
