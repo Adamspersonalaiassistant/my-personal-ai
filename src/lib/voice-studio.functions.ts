@@ -662,6 +662,55 @@ export async function processVoiceStudioTurn({
     };
   }
 
+  if (
+    profile.approved_at &&
+    isUsableVoiceId(profile.base_voice_id) &&
+    designFeedback &&
+    !approvalPhrase &&
+    !wantsPreview(text) &&
+    Object.keys(refinement).length === 0 &&
+    Object.keys(stableRefinement).length === 0
+  ) {
+    const synthesized = await synthesizeProfile(
+      apiKey,
+      recent,
+      profile.base_voice_id as RealtimeVoiceId,
+      profile,
+    );
+    await snapshotCurrentProfile(db, userId, profile, text, "chat_voice_natural_refinement");
+    const { data: updated, error: updateError } = await db
+      .from("voice_profiles")
+      .update({
+        stable_identity: synthesized.stable_identity,
+        delivery_preferences: synthesized.delivery_preferences,
+        contextual_preferences: synthesized.contextual_preferences,
+        pronunciation_preferences: synthesized.pronunciation_preferences,
+        version: Number(profile.version ?? 1) + 1,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", profile.id)
+      .eq("user_id", userId)
+      .select("base_voice_id,stable_identity,delivery_preferences,contextual_preferences,pronunciation_preferences,version,approved_at")
+      .single();
+    if (updateError || !updated) throw updateError ?? new Error("Could not refine approved Voice Profile");
+
+    return {
+      stage: "profile_refined" as const,
+      operationSucceeded: true,
+      voiceId: updated.base_voice_id,
+      micUnlocked: true,
+      profile: {
+        stableIdentity: updated.stable_identity,
+        deliveryPreferences: updated.delivery_preferences,
+        contextualPreferences: updated.contextual_preferences,
+        pronunciationPreferences: updated.pronunciation_preferences,
+      },
+      version: updated.version,
+      note:
+        "Emery updated the approved Voice Profile from Adam's natural-language refinement without restarting Voice Studio. The change is guaranteed on the next Voice session.",
+    };
+  }
+
   const recentVoiceContext = recentVoiceContextHint;
   const approvalAllowed =
     Boolean(candidate) ||
