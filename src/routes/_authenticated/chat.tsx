@@ -31,12 +31,18 @@ type Attachment = {
   url: string | null;
 };
 
+type VoiceStudioEvent =
+  | { type: "preview"; voiceId: string; label: string; styleInstructions: string; audioDataUrl: string }
+  | { type: "draft_saved"; candidateVoiceId: string | null }
+  | { type: "approved"; voiceId: string; approvedAt: string };
+
 type Message = {
   id: string;
   role: "user" | "assistant";
   text: string;
   createdAt: string;
   attachments: Attachment[];
+  voiceStudioEvents?: VoiceStudioEvent[];
 };
 
 type VoiceStudioState =
@@ -386,13 +392,14 @@ function Chat() {
         );
         additions.push(
           serverAssistant
-            ? (serverAssistant as Message)
+            ? ({ ...(serverAssistant as Message), voiceStudioEvents: (result.voiceStudioEvents ?? []) as VoiceStudioEvent[] } as Message)
             : {
                 id: `assistant-${Date.now()}`,
                 role: "assistant",
                 text: result.reply,
                 createdAt: new Date().toISOString(),
                 attachments: [],
+                voiceStudioEvents: (result.voiceStudioEvents ?? []) as VoiceStudioEvent[],
               },
         );
         return [...withoutTemp, ...additions];
@@ -496,8 +503,50 @@ function Chat() {
                     <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary/[0.045]">
                       <img src={brainImage} alt="" className="emery-blue-brain size-7 object-cover" />
                     </div>
-                    <div className="max-w-[calc(100%-2.6rem)] whitespace-pre-wrap pt-0.5 text-[15px] leading-7 text-foreground/96 sm:max-w-[88%]">
-                      {cleanAssistantText(message.text)}
+                    <div className="max-w-[calc(100%-2.6rem)] pt-0.5 text-[15px] leading-7 text-foreground/96 sm:max-w-[88%]">
+                      <div className="whitespace-pre-wrap">{cleanAssistantText(message.text)}</div>
+                      {message.voiceStudioEvents?.some((event) => event.type === "preview") ? (
+                        <div className="mt-3 space-y-2">
+                          {message.voiceStudioEvents
+                            .filter((event): event is Extract<VoiceStudioEvent, { type: "preview" }> => event.type === "preview")
+                            .map((event) => (
+                              <div
+                                key={`${message.id}-preview-${event.voiceId}`}
+                                className="rounded-xl border border-primary/15 bg-primary/[0.035] p-3"
+                              >
+                                <div className="mb-2 flex items-center justify-between gap-3">
+                                  <div>
+                                    <p className="text-xs font-semibold text-foreground">Emery Voice preview</p>
+                                    <p className="text-[10px] uppercase tracking-[0.12em] text-primary">{event.voiceId}</p>
+                                  </div>
+                                  <span className="rounded-full bg-primary/10 px-2 py-1 text-[9px] font-medium text-primary">
+                                    Not approved yet
+                                  </span>
+                                </div>
+                                <audio
+                                  controls
+                                  preload="metadata"
+                                  src={event.audioDataUrl}
+                                  className="h-10 w-full"
+                                  aria-label={`Play ${event.voiceId} Emery voice preview`}
+                                />
+                                {event.styleInstructions ? (
+                                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">
+                                    {event.styleInstructions}
+                                  </p>
+                                ) : null}
+                              </div>
+                            ))}
+                        </div>
+                      ) : null}
+                      {message.voiceStudioEvents?.some((event) => event.type === "approved") ? (
+                        <div className="mt-3 rounded-xl border border-primary/20 bg-primary/[0.05] px-3 py-2.5">
+                          <p className="text-xs font-semibold text-primary">Voice approved · microphone unlocked</p>
+                          <p className="mt-0.5 text-[10px] text-muted-foreground">
+                            Your next tap on the mic starts the same Emery in a live Realtime conversation.
+                          </p>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 ),
