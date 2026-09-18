@@ -7,12 +7,12 @@ import {
   ChevronUp,
   FileText,
   Loader2,
-  Mic,
   Paperclip,
   Sparkles,
   X,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { EmeryVoiceControl } from "@/components/EmeryVoiceControl";
 import { OperatingContextCard } from "@/components/OperatingContextCard";
 import brainImage from "@/assets/neural-brain.png";
 import { supabase } from "@/integrations/supabase/client";
@@ -562,16 +562,9 @@ function Chat() {
               onFocus={() => requestAnimationFrame(() => scrollToLatest("smooth"))}
               className="max-h-32 min-h-11 min-w-0 flex-1 overflow-y-auto bg-transparent px-1.5 py-2 text-[16px] leading-6 text-foreground outline-none placeholder:text-muted-foreground/60 sm:px-2 sm:text-[15px]"
             />
-            <button
-              type="button"
-              disabled
-              aria-label="Emery Voice — next feature"
-              title="Emery Voice is next"
-              className="relative hidden size-11 shrink-0 items-center justify-center rounded-xl text-primary/80 min-[390px]:flex"
-            >
-              <Mic className="size-[18px]" strokeWidth={1.9} />
-              <span className="absolute -right-0.5 -top-0.5 rounded-full bg-primary/12 px-1 text-[6px] font-bold uppercase tracking-wide text-primary">Next</span>
-            </button>
+            <div className="hidden min-[390px]:block">
+              <EmeryVoiceControl onConversationChanged={() => void refreshLatest()} />
+            </div>
             <button
               type="submit"
               aria-label="Send"
