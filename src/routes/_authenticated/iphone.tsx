@@ -137,6 +137,7 @@ function IPhoneSetup() {
 
         <Link
           to="/capture"
+          search={{ text: "", autosend: false, token: "", source: "capture", input: "typed" }}
           className="emery-press flex min-h-12 items-center justify-between rounded-2xl border border-primary/15 bg-primary/[0.04] px-4 text-sm font-semibold"
         >
           Test the Emery capture bridge
