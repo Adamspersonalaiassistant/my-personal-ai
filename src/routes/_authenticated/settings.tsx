@@ -10,6 +10,7 @@ import {
   FileUp,
   Mic2,
   Radio,
+  Search,
   Smartphone,
   Sparkles,
   UsersRound,
@@ -31,8 +32,10 @@ const capabilities = [
   { label: "Agent team", value: "Connected", icon: UsersRound, live: true },
   { label: "File uploads", value: "Connected", icon: FileUp, live: true },
   { label: "Shortcut bridge", value: "Ready", icon: Smartphone, live: true },
+  { label: "Live web search", value: "Connected", icon: Search, live: true },
   { label: "Meetings", value: "Internal only", icon: Radio, live: true },
-  { label: "Emery Voice", value: "Next", icon: Mic2, live: false },
+  { label: "Realtime Voice core", value: "Ready", icon: Mic2, live: true },
+  { label: "Final voice identity", value: "Next", icon: Sparkles, live: false },
   { label: "Automations", value: "Planned", icon: Workflow, live: false },
 ] as const;
 
@@ -175,9 +178,9 @@ function Settings() {
         <section className="flex items-start gap-3 rounded-xl border border-primary/12 bg-primary/[0.03] px-3.5 py-3">
           <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" />
           <div>
-            <p className="text-sm font-medium">Next: Emery Voice</p>
+            <p className="text-sm font-medium">Next: approve Emery’s voice</p>
             <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
-              The app, memory, action system and one-Emery phone bridge are the foundation Voice will use.
+              Realtime speech, interruption handling, transcript persistence, current-context refresh and live web search are wired. The remaining step is selecting and approving how Emery should sound.
             </p>
           </div>
         </section>
