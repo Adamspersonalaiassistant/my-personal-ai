@@ -130,6 +130,32 @@ async function markStudioState(
   return updated;
 }
 
+async function recordDesignNote(
+  db: VoiceStudioDb,
+  userId: string,
+  profile: any,
+  text: string,
+  patch: Record<string, unknown> = {},
+) {
+  const contextual = safeObject(profile.contextual_preferences);
+  const studio = safeObject(contextual["voice_studio"]);
+  const existingNotes = Array.isArray(studio["design_notes"])
+    ? (studio["design_notes"] as unknown[])
+        .filter((value): value is string => typeof value === "string")
+        .slice(-19)
+    : [];
+  const note = text.trim().slice(0, 2400);
+  const designNotes =
+    note && existingNotes[existingNotes.length - 1] !== note
+      ? [...existingNotes, note].slice(-20)
+      : existingNotes;
+
+  return markStudioState(db, userId, profile, {
+    ...patch,
+    design_notes: designNotes,
+  });
+}
+
 function previewInstructions(profile: any) {
   const delivery = safeObject(profile?.delivery_preferences);
   const stable = safeObject(profile?.stable_identity);
@@ -611,7 +637,7 @@ export async function processVoiceStudioTurn({
     !approvalPhrase &&
     !wantsPreview(text)
   ) {
-    await markStudioState(db, userId, profile, {
+    await recordDesignNote(db, userId, profile, text, {
       stage: "designing",
       pending_voice_id: currentPending,
       last_preview_succeeded: false,
@@ -757,7 +783,7 @@ export async function processVoiceStudioTurn({
   }
 
   if (startsStudio(text)) {
-    await markStudioState(db, userId, profile, {
+    await recordDesignNote(db, userId, profile, text, {
       stage: "designing",
       pending_voice_id: currentPending,
     });
@@ -767,7 +793,7 @@ export async function processVoiceStudioTurn({
       approvedVoiceId: profile.base_voice_id ?? null,
       candidates: REALTIME_VOICE_IDS,
       note:
-        "Voice Studio is active in the normal Emery conversation. Candidate previews require a supported Realtime voice name.",
+        "Voice Studio is active in the normal Emery conversation. Adam's starting design brief was saved. Candidate previews require a supported Realtime voice name.",
     };
   }
 
@@ -788,6 +814,22 @@ export async function processVoiceStudioTurn({
       voiceId: candidate,
       candidates: REALTIME_VOICE_IDS,
       note: "Candidate stored for Voice Studio, but not approved.",
+    };
+  }
+
+  if (recentVoiceContext && designFeedback && !approvalPhrase && !wantsPreview(text)) {
+    await recordDesignNote(db, userId, profile, text, {
+      stage: "designing",
+      pending_voice_id: currentPending,
+      last_preview_succeeded: false,
+    });
+    return {
+      stage: "designing" as const,
+      operationSucceeded: true,
+      voiceId: currentPending,
+      candidates: REALTIME_VOICE_IDS,
+      note:
+        "Voice design feedback was saved to the current Voice Studio draft. A fresh provider preview is required before approval.",
     };
   }
 
