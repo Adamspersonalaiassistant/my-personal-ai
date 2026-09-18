@@ -141,7 +141,7 @@ function SelectedFileCard({ file, onRemove }: { file: File; onRemove: () => void
         type="button"
         aria-label={`Remove ${file.name}`}
         onClick={onRemove}
-        className="emery-press flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-white/[0.04] hover:text-foreground"
+        className="emery-press flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-white/[0.04] hover:text-foreground"
       >
         <X className="size-3.5" />
       </button>
@@ -395,7 +395,7 @@ function Chat() {
                 type="button"
                 onClick={() => void loadOlder()}
                 disabled={loadingOlder}
-                className="emery-press flex min-h-10 items-center gap-2 rounded-full px-3 text-xs font-medium text-muted-foreground hover:bg-white/[0.03] hover:text-foreground disabled:opacity-50"
+                className="emery-press flex min-h-11 items-center gap-2 rounded-full px-3 text-xs font-medium text-muted-foreground hover:bg-white/[0.03] hover:text-foreground disabled:opacity-50"
               >
                 {loadingOlder ? <Loader2 className="size-3.5 animate-spin" /> : <ChevronUp className="size-3.5" />}
                 {loadingOlder ? "Loading earlier…" : "Earlier messages"}
@@ -427,7 +427,7 @@ function Chat() {
                     key={prompt}
                     type="button"
                     onClick={() => void sendMessage(prompt)}
-                    className="emery-press min-h-10 rounded-xl border border-border/40 bg-card/28 px-3 text-xs font-medium text-muted-foreground hover:border-primary/20 hover:bg-primary/[0.04] hover:text-foreground"
+                    className="emery-press min-h-11 rounded-xl border border-border/40 bg-card/28 px-3 text-xs font-medium text-muted-foreground hover:border-primary/20 hover:bg-primary/[0.04] hover:text-foreground"
                   >
                     {prompt}
                   </button>
@@ -498,7 +498,7 @@ function Chat() {
               scrollToLatest("smooth");
             }}
             aria-label="Jump to latest message"
-            className="emery-press absolute bottom-[5.2rem] right-4 z-30 flex size-10 items-center justify-center rounded-full border border-border/45 bg-card/95 text-primary shadow-lg backdrop-blur-xl"
+            className="emery-press absolute bottom-[5.4rem] right-4 z-30 flex size-11 items-center justify-center rounded-full border border-border/45 bg-card/95 text-primary shadow-lg backdrop-blur-xl"
           >
             <ArrowDown className="size-4" />
           </button>
@@ -538,7 +538,7 @@ function Chat() {
               title="Attach photos or files"
               onClick={() => fileInputRef.current?.click()}
               disabled={pending}
-              className="emery-press flex size-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:bg-white/[0.035] hover:text-primary disabled:opacity-40"
+              className="emery-press flex size-11 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:bg-white/[0.035] hover:text-primary disabled:opacity-40"
             >
               <Paperclip className="size-[18px]" strokeWidth={1.9} />
             </button>
@@ -560,14 +560,14 @@ function Chat() {
               enterKeyHint="enter"
               placeholder="Message Emery"
               onFocus={() => requestAnimationFrame(() => scrollToLatest("smooth"))}
-              className="max-h-32 min-h-10 min-w-0 flex-1 overflow-y-auto bg-transparent px-1.5 py-2 text-[16px] leading-6 text-foreground outline-none placeholder:text-muted-foreground/60 sm:px-2 sm:text-[15px]"
+              className="max-h-32 min-h-11 min-w-0 flex-1 overflow-y-auto bg-transparent px-1.5 py-2 text-[16px] leading-6 text-foreground outline-none placeholder:text-muted-foreground/60 sm:px-2 sm:text-[15px]"
             />
             <button
               type="button"
               disabled
               aria-label="Emery Voice — next feature"
               title="Emery Voice is next"
-              className="relative hidden size-10 shrink-0 items-center justify-center rounded-xl text-primary/80 min-[390px]:flex"
+              className="relative hidden size-11 shrink-0 items-center justify-center rounded-xl text-primary/80 min-[390px]:flex"
             >
               <Mic className="size-[18px]" strokeWidth={1.9} />
               <span className="absolute -right-0.5 -top-0.5 rounded-full bg-primary/12 px-1 text-[6px] font-bold uppercase tracking-wide text-primary">Next</span>
@@ -575,7 +575,7 @@ function Chat() {
             <button
               type="submit"
               aria-label="Send"
-              className="emery-press flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_6px_16px_rgba(31,124,255,0.18)] disabled:opacity-30"
+              className="emery-press flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_6px_16px_rgba(31,124,255,0.18)] disabled:opacity-30"
               disabled={(!draft.trim() && selectedFiles.length === 0) || pending}
             >
               <ArrowUp className="size-[18px]" strokeWidth={2.2} />
