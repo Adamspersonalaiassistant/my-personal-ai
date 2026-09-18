@@ -67,6 +67,31 @@ function deliveryPatchFromText(text: string) {
   return patch;
 }
 
+function stableVoicePatchFromText(text: string) {
+  const request = text.toLowerCase();
+  const patch: Record<string, unknown> = {};
+
+  if (/\b(dominican|dominicana|dominican latina)\b/.test(request)) {
+    patch["accent"] =
+      "Subtle Dominican Latina accent in otherwise fluent, polished English; native character is audible but light.";
+    patch["accent_description"] =
+      "Fluent natural English with a subtle Dominican Latina accent. Keep the Dominican character lightly audible in rhythm and color without reducing clarity. Never caricature or overperform the accent.";
+  }
+  if (/accent.*(lighter|less|subtler|more subtle)|less.*accent/.test(request)) {
+    patch["accent_intensity"] = 0.18;
+  }
+  if (/accent.*(stronger|more|noticeable)|more.*accent/.test(request)) {
+    patch["accent_intensity"] = 0.38;
+  }
+  if (/\b(early 30s|early thirties)\b/.test(request)) patch["age_impression"] = "early 30s";
+  if (/\b(woman|female|feminine)\b/.test(request)) patch["gender_presentation"] = "feminine";
+  if (/perfect english|fluent english|speaks? english perfectly/.test(request)) {
+    patch["english_fluency"] = "fully fluent, precise, natural English";
+  }
+
+  return patch;
+}
+
 function startsStudio(text: string) {
   return (
     /\b(voice studio|design (your|emery'?s)? voice|create (your|emery'?s)? voice|set ?up (your|emery'?s)? voice|start (your|emery'?s)? voice)\b/i.test(
@@ -543,6 +568,7 @@ export async function processVoiceStudioTurn({
   const studioState = safeObject(contextual["voice_studio"]);
   const currentStage = String(studioState["stage"] ?? "");
   const refinement = deliveryPatchFromText(text);
+  const stableRefinement = stableVoicePatchFromText(text);
   const resetDelivery = /\breset (?:your |emery'?s )?voice(?: delivery| settings)?\b/i.test(text);
   const rollbackVoice = /\b(previous voice|voice we chose yesterday|roll back .*voice|rollback .*voice)\b/i.test(text);
 
@@ -597,7 +623,7 @@ export async function processVoiceStudioTurn({
   }
 
   if (
-    (resetDelivery || Object.keys(refinement).length > 0) &&
+    (resetDelivery || Object.keys(refinement).length > 0 || Object.keys(stableRefinement).length > 0) &&
     profile.approved_at &&
     isUsableVoiceId(profile.base_voice_id)
   ) {
@@ -605,16 +631,18 @@ export async function processVoiceStudioTurn({
     const nextDelivery = resetDelivery
       ? {}
       : { ...safeObject(profile.delivery_preferences), ...refinement };
+    const nextStable = { ...safeObject(profile.stable_identity), ...stableRefinement };
     const { data: updated, error: updateError } = await db
       .from("voice_profiles")
       .update({
         delivery_preferences: nextDelivery,
+        stable_identity: nextStable,
         version: Number(profile.version ?? 1) + 1,
         updated_at: new Date().toISOString(),
       })
       .eq("id", profile.id)
       .eq("user_id", userId)
-      .select("base_voice_id,delivery_preferences,version,approved_at")
+      .select("base_voice_id,delivery_preferences,stable_identity,version,approved_at")
       .single();
     if (updateError || !updated) throw updateError ?? new Error("Could not refine Voice Profile");
 
@@ -624,10 +652,13 @@ export async function processVoiceStudioTurn({
       voiceId: updated.base_voice_id,
       micUnlocked: true,
       deliveryPreferences: updated.delivery_preferences,
+      stableIdentity: updated.stable_identity,
       version: updated.version,
       note: resetDelivery
         ? "Voice delivery overrides were reset without changing Emery's approved base identity."
-        : "Voice delivery preference saved for the approved Emery voice.",
+        : Object.keys(stableRefinement).length
+          ? "Voice Profile refinement saved for Emery's approved voice. Accent/style changes are guaranteed on the next Voice session."
+          : "Voice delivery preference saved for the approved Emery voice.",
     };
   }
 
