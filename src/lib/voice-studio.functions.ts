@@ -284,6 +284,41 @@ async function synthesizeProfile(
   };
 }
 
+async function saveDraftProfile(
+  db: VoiceStudioDb,
+  userId: string,
+  profile: any,
+  voiceId: RealtimeVoiceId,
+  synthesized: SynthesizedProfile,
+) {
+  const contextual = {
+    ...synthesized.contextual_preferences,
+    voice_studio: {
+      ...safeObject(safeObject(synthesized.contextual_preferences)["voice_studio"]),
+      stage: "previewed",
+      pending_voice_id: voiceId,
+      updated_at: new Date().toISOString(),
+    },
+  };
+
+  const { data: updated, error } = await db
+    .from("voice_profiles")
+    .update({
+      stable_identity: synthesized.stable_identity,
+      delivery_preferences: synthesized.delivery_preferences,
+      contextual_preferences: contextual,
+      pronunciation_preferences: synthesized.pronunciation_preferences,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", profile.id)
+    .eq("user_id", userId)
+    .select("*")
+    .single();
+
+  if (error || !updated) throw error ?? new Error("Could not save Voice Studio draft");
+  return updated;
+}
+
 async function saveApprovedProfile(
   db: VoiceStudioDb,
   userId: string,
@@ -419,19 +454,18 @@ export async function processVoiceStudioTurn({
   }
 
   if (candidate && wantsPreview(text)) {
-    const updated = await markStudioState(db, userId, profile, {
-      stage: "previewed",
-      pending_voice_id: candidate,
-    });
+    const synthesized = await synthesizeProfile(apiKey, recent, candidate, profile);
+    const updated = await saveDraftProfile(db, userId, profile, candidate, synthesized);
     const audioDataUri = await makePreview(apiKey, candidate, updated);
     return {
       stage: "previewed" as const,
       operationSucceeded: Boolean(audioDataUri),
       voiceId: candidate,
       previewAudioDataUri: audioDataUri,
+      draftProfileSaved: true,
       note: audioDataUri
-        ? "Actual provider audio preview generated. This is not approval."
-        : "The preview request was recorded, but audio generation failed.",
+        ? "Actual provider audio preview generated using the current Voice Studio draft. This is not approval."
+        : "The Voice Studio draft was saved, but audio generation failed.",
       candidates: REALTIME_VOICE_IDS,
     };
   }
