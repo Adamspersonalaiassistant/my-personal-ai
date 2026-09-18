@@ -6,21 +6,10 @@ import { persistDurableMemoryFromMessage } from "@/lib/chat.functions";
 import { inferEmeryDomain, domainPrompt } from "@/lib/emery-domain";
 import { selectRelevantMemories, buildExecutiveFocus } from "@/lib/emery-intelligence";
 import { loadHpoAgentContext } from "@/lib/hpo-agent-context";
-import { VOICE_PROFILE_CONTRACT } from "@/lib/voice-profile";
+import { VOICE_PROFILE_CONTRACT, isUsableVoiceId } from "@/lib/voice-profile";
 
 const REALTIME_MODEL = "gpt-realtime-2.1";
-const BUILT_IN_VOICES = new Set([
-  "alloy",
-  "ash",
-  "ballad",
-  "coral",
-  "echo",
-  "sage",
-  "shimmer",
-  "verse",
-  "marin",
-  "cedar",
-]);
+
 
 async function mainConversation(db: any, userId: string) {
   const { data: existing, error } = await db
@@ -151,7 +140,7 @@ async function loadVoiceContext(db: any, userId: string, query = "current voice 
 
 function validVoiceId(value: unknown) {
   const id = typeof value === "string" ? value.trim() : "";
-  return BUILT_IN_VOICES.has(id) || id.startsWith("voice_");
+  return isUsableVoiceId(id);
 }
 
 function voiceOutput(profile: any) {
