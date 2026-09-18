@@ -562,7 +562,7 @@ export const updateVoiceDeliveryFromLive = createServerFn({ method: "POST" })
       return { ok: false, error: "No approved Emery Voice is active." } as const;
     }
 
-    const patch = Object.fromEntries(
+    const patch: Record<string, number> = Object.fromEntries(
       Object.entries({
         pace: data.pace,
         warmth: data.warmth,
@@ -570,7 +570,19 @@ export const updateVoiceDeliveryFromLive = createServerFn({ method: "POST" })
         energy: data.energy,
         brevity: data.brevity,
       }).filter(([, value]) => value !== undefined),
-    );
+    ) as Record<string, number>;
+
+    if (!Object.keys(patch).length) {
+      const request = data.request.toLowerCase();
+      if (/slow down|slower/.test(request)) patch.pace = 0.85;
+      if (/speed up|faster/.test(request)) patch.pace = 1.15;
+      if (/warmer|more warm/.test(request)) patch.warmth = 0.72;
+      if (/calmer|more calm/.test(request)) patch.energy = 0.35;
+      if (/more energetic|higher energy/.test(request)) patch.energy = 0.72;
+      if (/more expressive/.test(request)) patch.expressiveness = 0.72;
+      if (/less expressive/.test(request)) patch.expressiveness = 0.35;
+      if (/briefer|shorter|more concise/.test(request)) patch.brevity = 0.75;
+    }
     if (!Object.keys(patch).length) {
       return { ok: false, error: "No supported voice-delivery change was supplied." } as const;
     }
