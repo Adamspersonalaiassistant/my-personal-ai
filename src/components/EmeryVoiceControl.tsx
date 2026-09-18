@@ -167,6 +167,8 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
             expressiveness?: number;
             energy?: number;
             brevity?: number;
+            accent_intensity?: number;
+            accent_description?: string;
           };
           const deliveryData: {
             request: string;
@@ -175,6 +177,8 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
             expressiveness?: number;
             energy?: number;
             brevity?: number;
+            accentIntensity?: number;
+            accentDescription?: string;
           } = { request: String(raw.request ?? "Live voice-delivery update") };
           if (typeof raw.pace === "number") deliveryData.pace = raw.pace;
           if (typeof raw.warmth === "number") deliveryData.warmth = raw.warmth;
@@ -183,6 +187,12 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
           }
           if (typeof raw.energy === "number") deliveryData.energy = raw.energy;
           if (typeof raw.brevity === "number") deliveryData.brevity = raw.brevity;
+          if (typeof raw.accent_intensity === "number") {
+            deliveryData.accentIntensity = raw.accent_intensity;
+          }
+          if (typeof raw.accent_description === "string" && raw.accent_description.trim()) {
+            deliveryData.accentDescription = raw.accent_description.trim();
+          }
 
           const result = await updateVoiceDelivery({ data: deliveryData });
           if ("ok" in result && result.ok && typeof result.speed === "number") {
