@@ -378,11 +378,11 @@ function Chat() {
 
   return (
     <AppShell title="Emery" padded={false}>
-      <div className="relative flex h-[calc(100dvh-7.45rem)] min-h-0 flex-col md:h-[calc(100dvh-5.85rem)]">
+      <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
         <div
           ref={scrollRef}
           onScroll={handleScroll}
-          className="emery-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-5 pt-3 sm:px-5 sm:pb-6 sm:pt-4 md:px-7"
+          className="emery-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-5 pt-3 [touch-action:pan-y] [-webkit-overflow-scrolling:touch] sm:px-5 sm:pb-6 sm:pt-4 md:px-7"
           aria-label="Emery conversation"
         >
           <div className="mx-auto mb-3 max-w-2xl">
@@ -559,6 +559,7 @@ function Chat() {
               }}
               enterKeyHint="enter"
               placeholder="Message Emery"
+              onFocus={() => requestAnimationFrame(() => scrollToLatest("smooth"))}
               className="max-h-32 min-h-10 min-w-0 flex-1 overflow-y-auto bg-transparent px-1.5 py-2 text-[16px] leading-6 text-foreground outline-none placeholder:text-muted-foreground/60 sm:px-2 sm:text-[15px]"
             />
             <button
