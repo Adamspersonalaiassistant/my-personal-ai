@@ -189,7 +189,7 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
           break;
         case "error":
           setError(event.error?.message || "Emery Voice hit a recoverable session error.");
-          setStatus("error");
+          if (!activeRef.current) setStatus("error");
           break;
       }
     },
@@ -285,6 +285,7 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
         }
       };
       channel.onerror = () => {
+        closeVoice();
         setError("The live voice data channel encountered an error.");
         setStatus("error");
       };
@@ -385,7 +386,7 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
         </div>
       ) : null}
 
-      {error && status === "error" ? (
+      {error ? (
         <div className="fixed inset-x-3 bottom-[calc(6rem+env(safe-area-inset-bottom))] z-[80] mx-auto max-w-md rounded-2xl border border-destructive/25 bg-background/96 p-3 shadow-xl backdrop-blur-2xl">
           <div className="flex items-start gap-2">
             <Radio className="mt-0.5 size-4 shrink-0 text-destructive" />
@@ -394,7 +395,7 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
               type="button"
               onClick={() => {
                 setError(null);
-                setStatus("idle");
+                if (status === "error") setStatus("idle");
               }}
               className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground"
               aria-label="Dismiss voice error"
