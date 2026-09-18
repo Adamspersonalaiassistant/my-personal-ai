@@ -673,7 +673,13 @@ export async function processVoiceStudioTurn({
     };
   }
 
-  if (candidate && wantsPreview(text)) {
+  if (
+    candidate &&
+    wantsPreview(text) &&
+    (recentVoiceContext ||
+      /\bvoice(?: studio)?\b/i.test(text) ||
+      ["designing", "previewed", "candidate_selected"].includes(currentStage))
+  ) {
     const realtimeSupported = await verifyRealtimeCandidate(apiKey, candidate);
     if (!realtimeSupported) {
       await markStudioState(db, userId, profile, {
