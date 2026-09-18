@@ -3,6 +3,7 @@ import { Buffer } from "node:buffer";
 import {
   REALTIME_VOICE_IDS,
   isRealtimeVoiceId,
+  isUsableVoiceId,
   type RealtimeVoiceId,
 } from "@/lib/voice-profile";
 
@@ -43,6 +44,22 @@ function namedVoice(text: string): RealtimeVoiceId | null {
 
 function wantsPreview(text: string) {
   return /\b(preview|hear|listen|sample|try|play)\b/i.test(text);
+}
+
+function deliveryPatchFromText(text: string) {
+  const request = text.toLowerCase();
+  const patch: Record<string, number> = {};
+  if (/slow down|slower|more measured/.test(request)) patch["pace"] = 0.85;
+  if (/speed up|faster|quicker/.test(request)) patch["pace"] = 1.15;
+  if (/warmer|more warm|friendlier/.test(request)) patch["warmth"] = 0.72;
+  if (/less warm|more neutral/.test(request)) patch["warmth"] = 0.45;
+  if (/calmer|more calm|more grounded/.test(request)) patch["energy"] = 0.35;
+  if (/more energetic|higher energy|more upbeat/.test(request)) patch["energy"] = 0.72;
+  if (/more expressive|more animated/.test(request)) patch["expressiveness"] = 0.72;
+  if (/less expressive|more restrained/.test(request)) patch["expressiveness"] = 0.35;
+  if (/briefer|shorter|more concise/.test(request)) patch["brevity"] = 0.75;
+  if (/more detailed|go deeper|less brief/.test(request)) patch["brevity"] = 0.35;
+  return patch;
 }
 
 function startsStudio(text: string) {
@@ -358,6 +375,24 @@ async function saveDraftProfile(
   return updated;
 }
 
+async function snapshotCurrentProfile(
+  db: VoiceStudioDb,
+  userId: string,
+  profile: any,
+  changeRequest: string,
+  changeSource: string,
+) {
+  const { error } = await db.from("voice_profile_versions").insert({
+    user_id: userId,
+    voice_profile_id: profile.id,
+    version: profile.version,
+    snapshot: profile,
+    change_request: changeRequest.slice(0, 4000),
+    change_source: changeSource,
+  });
+  if (error) throw error;
+}
+
 async function saveApprovedProfile(
   db: VoiceStudioDb,
   userId: string,
@@ -366,15 +401,13 @@ async function saveApprovedProfile(
   synthesized: SynthesizedProfile,
   changeRequest: string,
 ) {
-  const { error: versionError } = await db.from("voice_profile_versions").insert({
-    user_id: userId,
-    voice_profile_id: profile.id,
-    version: profile.version,
-    snapshot: profile,
-    change_request: changeRequest,
-    change_source: "voice_studio",
-  });
-  if (versionError) throw versionError;
+  await snapshotCurrentProfile(
+    db,
+    userId,
+    profile,
+    changeRequest,
+    "voice_studio",
+  );
 
   const currentCapabilities = safeObject(profile.provider_capabilities);
   const contextual = safeObject(synthesized.contextual_preferences);
@@ -448,6 +481,95 @@ export async function processVoiceStudioTurn({
   const contextual = safeObject(profile.contextual_preferences);
   const studioState = safeObject(contextual["voice_studio"]);
   const currentStage = String(studioState["stage"] ?? "");
+  const refinement = deliveryPatchFromText(text);
+  const resetDelivery = /\breset (?:your |emery'?s )?voice(?: delivery| settings)?\b/i.test(text);
+  const rollbackVoice = /\b(previous voice|voice we chose yesterday|roll back .*voice|rollback .*voice)\b/i.test(text);
+
+  if (rollbackVoice) {
+    const { data: prior, error: priorError } = await db
+      .from("voice_profile_versions")
+      .select("snapshot")
+      .eq("user_id", userId)
+      .eq("voice_profile_id", profile.id)
+      .lt("version", profile.version)
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (priorError) throw priorError;
+    if (!prior?.snapshot) {
+      return {
+        stage: "rollback_unavailable" as const,
+        operationSucceeded: false,
+        note: "There is no earlier Voice Profile version available to restore.",
+      };
+    }
+
+    const previous = prior.snapshot;
+    await snapshotCurrentProfile(db, userId, profile, text, "chat_voice_rollback");
+    const restoredAt = new Date().toISOString();
+    const { data: restored, error: restoreError } = await db
+      .from("voice_profiles")
+      .update({
+        base_voice_id: previous.base_voice_id ?? profile.base_voice_id ?? null,
+        stable_identity: previous.stable_identity ?? {},
+        delivery_preferences: previous.delivery_preferences ?? {},
+        contextual_preferences: previous.contextual_preferences ?? {},
+        pronunciation_preferences: previous.pronunciation_preferences ?? {},
+        provider_capabilities: previous.provider_capabilities ?? profile.provider_capabilities ?? {},
+        approved_at: previous.approved_at ?? profile.approved_at ?? null,
+        version: Number(profile.version ?? 1) + 1,
+        updated_at: restoredAt,
+      })
+      .eq("id", profile.id)
+      .eq("user_id", userId)
+      .select("*")
+      .single();
+    if (restoreError || !restored) throw restoreError ?? new Error("Could not restore Voice Profile");
+
+    return {
+      stage: "rolled_back" as const,
+      operationSucceeded: true,
+      voiceId: restored.base_voice_id ?? null,
+      micUnlocked: Boolean(restored.approved_at && isUsableVoiceId(restored.base_voice_id)),
+      note: "The previous versioned Voice Profile was restored.",
+    };
+  }
+
+  if (
+    (resetDelivery || Object.keys(refinement).length > 0) &&
+    profile.approved_at &&
+    isUsableVoiceId(profile.base_voice_id)
+  ) {
+    await snapshotCurrentProfile(db, userId, profile, text, "chat_voice_refinement");
+    const nextDelivery = resetDelivery
+      ? {}
+      : { ...safeObject(profile.delivery_preferences), ...refinement };
+    const { data: updated, error: updateError } = await db
+      .from("voice_profiles")
+      .update({
+        delivery_preferences: nextDelivery,
+        version: Number(profile.version ?? 1) + 1,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", profile.id)
+      .eq("user_id", userId)
+      .select("base_voice_id,delivery_preferences,version,approved_at")
+      .single();
+    if (updateError || !updated) throw updateError ?? new Error("Could not refine Voice Profile");
+
+    return {
+      stage: resetDelivery ? ("delivery_reset" as const) : ("delivery_refined" as const),
+      operationSucceeded: true,
+      voiceId: updated.base_voice_id,
+      micUnlocked: true,
+      deliveryPreferences: updated.delivery_preferences,
+      version: updated.version,
+      note: resetDelivery
+        ? "Voice delivery overrides were reset without changing Emery's approved base identity."
+        : "Voice delivery preference saved for the approved Emery voice.",
+    };
+  }
+
   const recentVoiceContext = recent
     .slice(-6)
     .some((turn) => /\b(voice|voice studio|marin|cedar|coral|alloy|ash|ballad|echo|sage|shimmer|verse)\b/i.test(turn.text));
