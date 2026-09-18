@@ -5,6 +5,7 @@ const files = {
   studio: readFileSync("src/lib/voice-studio.functions.ts", "utf8"),
   realtime: readFileSync("src/lib/voice.functions.ts", "utf8"),
   control: readFileSync("src/components/EmeryVoiceControl.tsx", "utf8"),
+  guard: readFileSync("src/lib/voice-session-guard.ts", "utf8"),
   chat: readFileSync("src/routes/_authenticated/chat.tsx", "utf8"),
 };
 
@@ -86,6 +87,19 @@ const checks = [
     files.realtime.includes("persistVoiceTranscript") &&
       files.realtime.includes('entryPoint: "voice"') &&
       files.realtime.includes('channel", "main"'),
+  ],
+  [
+    "Only one Emery Voice session can own audio at a time",
+    files.control.includes("startingRef") &&
+      files.control.includes("claimExclusiveEmeryVoice") &&
+      files.control.includes("releaseExclusiveEmeryVoice") &&
+      files.guard.includes("BroadcastChannel") &&
+      files.guard.includes("localStorage"),
+  ],
+  [
+    "Voice persistence has a defensive overlap de-dupe",
+    files.realtime.includes("same_voice_transcript_within_2_seconds") &&
+      files.realtime.includes("voice_session_id"),
   ],
 ];
 
