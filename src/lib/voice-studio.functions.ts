@@ -469,6 +469,7 @@ export async function processVoiceStudioTurn({
   const candidate = namedVoice(text);
   const approvalPhrase = explicitApproval(text);
   const recentVoiceContextHint = recent
+    .slice(0, -1)
     .slice(-8)
     .some((turn) =>
       /\b(voice|voice studio|marin|cedar|coral|alloy|ash|ballad|echo|sage|shimmer|verse|preview)\b/i.test(
@@ -748,7 +749,13 @@ export async function processVoiceStudioTurn({
     };
   }
 
-  if (candidate && /\b(select|choose|shortlist|candidate|like|prefer)\b/i.test(text)) {
+  if (
+    candidate &&
+    /\b(select|choose|shortlist|candidate|like|prefer)\b/i.test(text) &&
+    (recentVoiceContext ||
+      /\bvoice(?: studio)?\b/i.test(text) ||
+      ["designing", "previewed", "candidate_selected"].includes(currentStage))
+  ) {
     await markStudioState(db, userId, profile, {
       stage: "candidate_selected",
       pending_voice_id: candidate,
