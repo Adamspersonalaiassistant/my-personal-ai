@@ -5,10 +5,12 @@ import {
   ArrowDown,
   ArrowUp,
   ChevronUp,
+  CheckCircle2,
   FileText,
   Loader2,
   Paperclip,
   Sparkles,
+  Volume2,
   X,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
@@ -36,6 +38,10 @@ type Message = {
   createdAt: string;
   attachments: Attachment[];
 };
+
+type VoiceStudioState =
+  | { stage: "previewed"; voiceId: string; audioDataUri: string }
+  | { stage: "approved"; voiceId: string };
 
 const quickPrompts = [
   "What should I focus on?",
@@ -154,6 +160,7 @@ function Chat() {
   const [draft, setDraft] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [pending, setPending] = useState(false);
+  const [voiceStudioState, setVoiceStudioState] = useState<VoiceStudioState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -327,6 +334,28 @@ function Chat() {
       const result = await askEmery({ data: { message: clean, attachments: uploaded } });
       if (!("reply" in result) || !result.reply) {
         throw new Error(("error" in result && result.error) || "Something went wrong.");
+      }
+
+      const studio = "voiceStudio" in result ? result.voiceStudio : null;
+      if (
+        studio &&
+        studio.stage === "previewed" &&
+        studio.operationSucceeded &&
+        studio.voiceId &&
+        studio.previewAudioDataUri
+      ) {
+        setVoiceStudioState({
+          stage: "previewed",
+          voiceId: studio.voiceId,
+          audioDataUri: studio.previewAudioDataUri,
+        });
+      } else if (
+        studio &&
+        studio.stage === "approved" &&
+        studio.operationSucceeded &&
+        studio.voiceId
+      ) {
+        setVoiceStudioState({ stage: "approved", voiceId: studio.voiceId });
       }
 
       const serverUser = "userMessage" in result ? result.userMessage : null;
@@ -505,6 +534,73 @@ function Chat() {
         ) : null}
 
         <div className="z-20 shrink-0 bg-[linear-gradient(180deg,transparent,oklch(0.09_0.028_255/0.98)_18%)] px-2.5 pb-2.5 pt-5 sm:px-5 sm:pb-3 md:px-7">
+          {voiceStudioState ? (
+            <div className="mx-auto mb-2 max-w-2xl rounded-2xl border border-primary/18 bg-primary/[0.045] p-3 shadow-[0_10px_28px_rgba(0,0,0,0.16)]">
+              {voiceStudioState.stage === "previewed" ? (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-start gap-2.5">
+                    <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                      <Volume2 className="size-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold capitalize">{voiceStudioState.voiceId} preview</p>
+                      <p className="mt-0.5 text-[11px] leading-5 text-muted-foreground">
+                        This is a real provider preview, not an approved Emery voice yet.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setVoiceStudioState(null)}
+                      className="emery-press flex size-9 items-center justify-center rounded-lg text-muted-foreground"
+                      aria-label="Close voice preview"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  </div>
+                  <audio
+                    controls
+                    playsInline
+                    src={voiceStudioState.audioDataUri}
+                    className="h-10 w-full"
+                    aria-label={`Preview ${voiceStudioState.voiceId} voice`}
+                  />
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() =>
+                      void sendMessage(
+                        `I explicitly approve ${voiceStudioState.voiceId} as Emery's base voice.`,
+                      )
+                    }
+                    className="emery-press min-h-11 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                  >
+                    Approve as Emery
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2.5">
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <CheckCircle2 className="size-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold">Emery Voice is approved</p>
+                    <p className="mt-0.5 text-[11px] leading-5 text-muted-foreground">
+                      {voiceStudioState.voiceId} is saved as the base voice. The microphone is unlocked for the first live conversation.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setVoiceStudioState(null)}
+                    className="emery-press flex size-9 items-center justify-center rounded-lg text-muted-foreground"
+                    aria-label="Dismiss voice approval"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : null}
+
           {selectedFiles.length ? (
             <div className="emery-scrollbar mx-auto mb-2 flex max-w-2xl gap-2 overflow-x-auto pb-1">
               {selectedFiles.map((file, index) => (
