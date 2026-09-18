@@ -433,6 +433,18 @@ export async function processVoiceStudioTurn({
       };
     }
 
+    const previewConfirmed = currentStage === "previewed" && currentPending === chosen;
+    if (!previewConfirmed) {
+      return {
+        stage: "approval_needs_preview" as const,
+        operationSucceeded: false,
+        voiceId: chosen,
+        note:
+          "Adam must hear an actual in-app provider preview of this candidate before it can become Emery's approved base voice.",
+        candidates: REALTIME_VOICE_IDS,
+      };
+    }
+
     const synthesized = await synthesizeProfile(apiKey, recent, chosen, profile);
     const updated = await saveApprovedProfile(
       db,
