@@ -23,6 +23,12 @@ function readOwner(): { tabId?: string; claimedAt?: number } | null {
 
 function stopLocalVoiceForOtherOwner(tabId?: string) {
   if (!tabId || tabId === TAB_ID) return;
+  document
+    .querySelectorAll<HTMLAudioElement>('audio[data-emery-voice-preview="true"]')
+    .forEach((preview) => {
+      preview.pause();
+      preview.currentTime = 0;
+    });
   currentStop?.();
 }
 
