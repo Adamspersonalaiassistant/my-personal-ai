@@ -63,7 +63,7 @@ const checks = [
   [
     "Live mic remains gated by a valid approved profile",
     files.realtime.includes("voiceProfile?.approved_at") &&
-      files.realtime.includes("validVoiceId(voiceProfile?.base_voice_id)"),
+      files.realtime.includes("isUsableVoiceId(voiceProfile?.base_voice_id)"),
   ],
   [
     "Live Voice preserves web search and current context tools",
