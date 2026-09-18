@@ -144,8 +144,14 @@ function previewInstructions(profile: any) {
   if (typeof stable["age_impression"] === "string" && stable["age_impression"]) {
     parts.push(`Target the requested age impression naturally: ${String(stable["age_impression"])}.`);
   }
+  if (typeof stable["accent"] === "string" && stable["accent"]) {
+    parts.push(`Use the requested accent or regional character naturally: ${String(stable["accent"])}.`);
+  }
   if (typeof stable["tone"] === "string" && stable["tone"]) {
     parts.push(`Overall vocal tone: ${String(stable["tone"])}.`);
+  }
+  if (typeof stable["character"] === "string" && stable["character"]) {
+    parts.push(`Vocal character: ${String(stable["character"])}.`);
   }
   const contextual = safeObject(profile?.contextual_preferences);
   if (typeof contextual["general"] === "string") {
@@ -279,7 +285,7 @@ async function synthesizeProfile(
             JSON.stringify(currentProfile ?? {}) +
             "\n\nRecent Voice Studio conversation:\n" +
             transcript +
-            '\n\nReturn exactly this JSON shape:\n{"stable_identity":{"description":"short durable vocal identity description","age_impression":"only if Adam expressed one","tone":"short phrase"},"delivery_preferences":{"pace":1.0,"warmth":0.6,"expressiveness":0.55,"energy":0.5,"brevity":0.65},"contextual_preferences":{"general":"delivery guidance","hpo":"delivery guidance","personal":"delivery guidance","serious":"delivery guidance"},"pronunciation_preferences":{"Emery":"Em-er-rie"}}',
+            '\n\nReturn exactly this JSON shape:\n{"stable_identity":{"description":"short durable vocal identity description","age_impression":"only if Adam expressed one","accent":"only if Adam expressed one","tone":"short phrase","character":"confidence, authority, humor/playfulness, polish/casual balance only when expressed"},"delivery_preferences":{"pace":1.0,"warmth":0.6,"expressiveness":0.55,"energy":0.5,"brevity":0.65},"contextual_preferences":{"general":"delivery guidance","hpo":"delivery guidance","personal":"delivery guidance","serious":"delivery guidance"},"pronunciation_preferences":{"Emery":"Em-er-rie","OTHER_TERM":"include additional names/terms only when Adam explicitly specified a pronunciation"}}',
         },
       ],
     }),
