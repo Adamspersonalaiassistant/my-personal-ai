@@ -1,6 +1,6 @@
 # Emery Voice Activation Contract
 
-This file defines the boundary between the already-built Emery Voice infrastructure and the final voice-selection step.
+This file defines the production boundary for Emery Voice Studio, explicit voice approval, and live Realtime activation.
 
 ## One Emery
 
@@ -29,6 +29,7 @@ The live microphone must use:
 - durable memory extraction from user voice turns
 - live web-search tool
 - current Emery-context refresh tool
+- versioned live delivery-preference updates for supported requests
 - voice profile injection into every live session
 
 `src/components/EmeryVoiceControl.tsx` provides:
@@ -38,7 +39,8 @@ The live microphone must use:
 - Realtime event handling
 - interruption/session state UI
 - user and assistant transcript persistence
-- Realtime function-tool execution
+- Realtime function-tool execution for web search, context refresh, and supported delivery refinements
+- deduplication/fallback handling for completed Realtime function-call events
 - cleanup of microphone/audio resources on end/unmount
 
 ## Activation gate
@@ -50,9 +52,27 @@ The mic becomes a live Emery Voice session only when the current user's `voice_p
 
 Until then the mic opens the readiness sheet instead of silently choosing a permanent voice.
 
+## Voice Studio flow
+
+Voice design happens inside the normal Emery conversation through `src/lib/voice-studio.functions.ts`.
+
+The flow is:
+
+1. Adam starts Voice Studio naturally in the main Emery chat.
+2. Emery asks one useful design question at a time and records the design brief/preferences.
+3. Emery offers only built-in Realtime candidates from the central allowlist; provider docs currently recommend `marin` and `cedar` as quality starting points, without assigning invented personality/gender/accent traits.
+4. When Adam requests a candidate preview, the backend first validates that candidate against the Realtime provider.
+5. If validation succeeds, the backend generates an actual AI TTS preview using the current draft Voice Profile. The app clearly labels the preview as AI-generated.
+6. Previewing is not approval. Any design refinement after a preview invalidates that preview for approval and requires a fresh preview.
+7. Adam must explicitly approve the exact successfully previewed candidate. The UI can send the explicit approval sentence for him.
+8. Approval re-validates the candidate against Realtime, versions the existing profile, stores the full approved profile, writes `approved_at`, and only then unlocks the microphone.
+9. Adam taps the same mic in the main Emery chat for the first live Realtime conversation.
+
+Voice Studio never creates a second assistant, conversation, memory system, or HPO persona.
+
 ## Final voice-selection payload
 
-The final voice-design step should update the existing `voice_profiles` row, not create a new persona.
+Voice Studio updates the existing `voice_profiles` row, not a new persona.
 
 Use these fields:
 
