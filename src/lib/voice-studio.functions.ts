@@ -359,11 +359,30 @@ export async function processVoiceStudioTurn({
   text,
   recent,
 }: VoiceStudioContext) {
-  const profile = await ensureProfile(db, userId);
   const candidate = namedVoice(text);
-  const currentPending = pendingVoice(profile);
+  const approvalPhrase = explicitApproval(text);
+  const maybeStudioTurn =
+    startsStudio(text) ||
+    wantsPreview(text) ||
+    Boolean(candidate) ||
+    approvalPhrase ||
+    /\b(voice|voice studio)\b/i.test(text);
+  if (!maybeStudioTurn) return null;
 
-  if (explicitApproval(text)) {
+  const profile = await ensureProfile(db, userId);
+  const currentPending = pendingVoice(profile);
+  const contextual = safeObject(profile.contextual_preferences);
+  const studioState = safeObject(contextual["voice_studio"]);
+  const currentStage = String(studioState["stage"] ?? "");
+  const recentVoiceContext = recent
+    .slice(-6)
+    .some((turn) => /\b(voice|voice studio|marin|cedar|coral|alloy|ash|ballad|echo|sage|shimmer|verse)\b/i.test(turn.text));
+  const approvalAllowed =
+    Boolean(candidate) ||
+    /\bvoice\b/i.test(text) ||
+    (["designing", "previewed", "candidate_selected"].includes(currentStage) && recentVoiceContext);
+
+  if (approvalPhrase && approvalAllowed) {
     const chosen = candidate ?? currentPending;
     if (!chosen) {
       return {
