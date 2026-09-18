@@ -21,6 +21,7 @@ import { ImprovementHealthCard } from "@/components/ImprovementHealthCard";
 import { RecentFilesCard } from "@/components/RecentFilesCard";
 import { Button } from "@/components/ui/button";
 import { listMemories } from "@/lib/chat.functions";
+import { getVoiceReadiness } from "@/lib/voice.functions";
 import { supabase } from "@/lib/supabase";
 
 export const Route = createFileRoute("/_authenticated/settings")({ component: Settings });
@@ -57,7 +58,25 @@ function Settings() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const loadMemories = useServerFn(listMemories);
+  const readVoiceReadiness = useServerFn(getVoiceReadiness);
   const [memorySummary, setMemorySummary] = useState({ total: 0, areas: 0, important: 0 });
+  const [voiceReadiness, setVoiceReadiness] = useState<{ canStart: boolean; selectedVoice: string | null }>({ canStart: false, selectedVoice: null });
+
+  useEffect(() => {
+    let cancelled = false;
+    void readVoiceReadiness({})
+      .then((result) => {
+        if (cancelled) return;
+        setVoiceReadiness({
+          canStart: Boolean(result.canStart),
+          selectedVoice: result.selectedVoice ?? null,
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [readVoiceReadiness]);
 
   useEffect(() => {
     let cancelled = false;
@@ -152,7 +171,17 @@ function Settings() {
         </div>
 
         <SettingsGroup title="Capabilities">
-          {capabilities.map((item, index) => {
+          {capabilities.map((baseItem, index) => {
+            const item =
+              baseItem.label === "Final voice identity"
+                ? {
+                    ...baseItem,
+                    value: voiceReadiness.canStart
+                      ? `Approved · ${voiceReadiness.selectedVoice ?? "Voice"}`
+                      : "Next",
+                    live: voiceReadiness.canStart,
+                  }
+                : baseItem;
             const Icon = item.icon;
             return (
               <div
@@ -178,9 +207,13 @@ function Settings() {
         <section className="flex items-start gap-3 rounded-xl border border-primary/12 bg-primary/[0.03] px-3.5 py-3">
           <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" />
           <div>
-            <p className="text-sm font-medium">Next: approve Emery’s voice</p>
+            <p className="text-sm font-medium">
+              {voiceReadiness.canStart ? "Emery Voice is live-ready" : "Next: design and approve Emery’s voice"}
+            </p>
             <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
-              Realtime speech, interruption handling, transcript persistence, current-context refresh and live web search are wired. The remaining step is selecting and approving how Emery should sound.
+              {voiceReadiness.canStart
+                ? `Approved base voice: ${voiceReadiness.selectedVoice ?? "saved voice"}. Tap the mic in Emery to start the same persistent conversation by voice.`
+                : "Voice Studio, real candidate previews, explicit approval, Realtime speech, interruption handling, transcript persistence, current-context refresh and live web search are wired. Start Voice Studio in the main Emery chat."}
             </p>
           </div>
         </section>
