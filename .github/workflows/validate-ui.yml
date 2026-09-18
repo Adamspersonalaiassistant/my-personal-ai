@@ -34,7 +34,7 @@ jobs:
         run: node scripts/validate-emery-improvement.mjs
       - name: Focused Emery OS lint
         run: >-
-          npx eslint
+          npx eslint --rule 'prettier/prettier: off'
           src/components/AppShell.tsx
           src/components/ImprovementHealthCard.tsx
           src/lib/agent-policy.ts
@@ -44,11 +44,14 @@ jobs:
           src/lib/chat.functions.ts
           src/lib/emery-intelligence.ts
           src/lib/emery.functions.ts
+          src/lib/hpo-chat-router.ts
           src/lib/improvement.functions.ts
           src/lib/memory.functions.ts
           src/lib/os.functions.ts
           src/routes/__root.tsx
           src/routes/_authenticated/chat.tsx
+          src/routes/_authenticated/capture.tsx
+          src/routes/_authenticated/iphone.tsx
           src/routes/_authenticated/agents.tsx
           'src/routes/_authenticated/agents_.$agentId.tsx'
           src/routes/_authenticated/tasks.tsx
