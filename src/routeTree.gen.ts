@@ -15,6 +15,7 @@ import { Route as AuthenticatedAgentsRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedCaptureRouteImport } from './routes/_authenticated/capture'
 import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/chat'
 import { Route as AuthenticatedHpoRouteImport } from './routes/_authenticated/hpo'
+import { Route as AuthenticatedIphoneRouteImport } from './routes/_authenticated/iphone'
 import { Route as AuthenticatedMeetingsRouteImport } from './routes/_authenticated/meetings'
 import { Route as AuthenticatedMemoriesRouteImport } from './routes/_authenticated/memories'
 import { Route as AuthenticatedProjectsRouteImport } from './routes/_authenticated/projects'
@@ -49,6 +50,11 @@ const AuthenticatedChatRoute = AuthenticatedChatRouteImport.update({
 const AuthenticatedHpoRoute = AuthenticatedHpoRouteImport.update({
   id: '/hpo',
   path: '/hpo',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedIphoneRoute = AuthenticatedIphoneRouteImport.update({
+  id: '/iphone',
+  path: '/iphone',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedMeetingsRoute = AuthenticatedMeetingsRouteImport.update({
@@ -89,6 +95,8 @@ export interface FileRoutesByFullPath {
   '/capture': typeof AuthenticatedCaptureRoute
   '/chat': typeof AuthenticatedChatRoute
   '/hpo': typeof AuthenticatedHpoRoute
+  '/iphone': typeof AuthenticatedIphoneRoute
+  '/iphone': typeof AuthenticatedIphoneRoute
   '/meetings': typeof AuthenticatedMeetingsRoute
   '/memories': typeof AuthenticatedMemoriesRoute
   '/projects': typeof AuthenticatedProjectsRoute
@@ -117,6 +125,7 @@ export interface FileRoutesById {
   '/_authenticated/capture': typeof AuthenticatedCaptureRoute
   '/_authenticated/chat': typeof AuthenticatedChatRoute
   '/_authenticated/hpo': typeof AuthenticatedHpoRoute
+  '/_authenticated/iphone': typeof AuthenticatedIphoneRoute
   '/_authenticated/meetings': typeof AuthenticatedMeetingsRoute
   '/_authenticated/memories': typeof AuthenticatedMemoriesRoute
   '/_authenticated/projects': typeof AuthenticatedProjectsRoute
@@ -132,6 +141,8 @@ export interface FileRouteTypes {
     | '/capture'
     | '/chat'
     | '/hpo'
+    | '/iphone'
+    | '/iphone'
     | '/meetings'
     | '/memories'
     | '/projects'
@@ -159,6 +170,7 @@ export interface FileRouteTypes {
     | '/_authenticated/capture'
     | '/_authenticated/chat'
     | '/_authenticated/hpo'
+    | '/_authenticated/iphone'
     | '/_authenticated/meetings'
     | '/_authenticated/memories'
     | '/_authenticated/projects'
@@ -216,6 +228,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHpoRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/iphone': {
+      id: '/_authenticated/iphone'
+      path: '/iphone'
+      fullPath: '/iphone'
+      preLoaderRoute: typeof AuthenticatedIphoneRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/meetings': {
       id: '/_authenticated/meetings'
       path: '/meetings'
@@ -266,6 +285,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCaptureRoute: typeof AuthenticatedCaptureRoute
   AuthenticatedChatRoute: typeof AuthenticatedChatRoute
   AuthenticatedHpoRoute: typeof AuthenticatedHpoRoute
+  AuthenticatedIphoneRoute: typeof AuthenticatedIphoneRoute
   AuthenticatedMeetingsRoute: typeof AuthenticatedMeetingsRoute
   AuthenticatedMemoriesRoute: typeof AuthenticatedMemoriesRoute
   AuthenticatedProjectsRoute: typeof AuthenticatedProjectsRoute
@@ -279,6 +299,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCaptureRoute: AuthenticatedCaptureRoute,
   AuthenticatedChatRoute: AuthenticatedChatRoute,
   AuthenticatedHpoRoute: AuthenticatedHpoRoute,
+  AuthenticatedIphoneRoute: AuthenticatedIphoneRoute,
   AuthenticatedMeetingsRoute: AuthenticatedMeetingsRoute,
   AuthenticatedMemoriesRoute: AuthenticatedMemoriesRoute,
   AuthenticatedProjectsRoute: AuthenticatedProjectsRoute,
