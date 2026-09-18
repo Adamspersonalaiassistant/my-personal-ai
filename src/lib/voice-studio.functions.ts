@@ -226,26 +226,32 @@ async function synthesizeProfile(
     }),
   });
 
+  const currentDelivery = safeObject(currentProfile?.delivery_preferences);
   const fallback: SynthesizedProfile = {
     stable_identity: {
       description:
         "Highly intelligent, emotionally aware, warm, confident, natural female personal AI companion.",
       tone: "natural, conversational, grounded, polished",
+      ...safeObject(currentProfile?.stable_identity),
     },
     delivery_preferences: {
-      pace: 1,
-      warmth: 0.65,
-      expressiveness: 0.55,
-      energy: 0.5,
-      brevity: 0.65,
+      pace: clamp(currentDelivery["pace"], 0.75, 1.25, 1),
+      warmth: clamp(currentDelivery["warmth"], 0, 1, 0.65),
+      expressiveness: clamp(currentDelivery["expressiveness"], 0, 1, 0.55),
+      energy: clamp(currentDelivery["energy"], 0, 1, 0.5),
+      brevity: clamp(currentDelivery["brevity"], 0, 1, 0.65),
     },
     contextual_preferences: {
       general: "Natural and conversational.",
       hpo: "Confident, concise, strategic, and operational without becoming sterile.",
       personal: "Warm, relaxed, emotionally aware, and direct.",
       serious: "Calm, grounded, precise, and unhurried.",
+      ...safeObject(currentProfile?.contextual_preferences),
     },
-    pronunciation_preferences: { Emery: "Em-er-rie" },
+    pronunciation_preferences: {
+      Emery: "Em-er-rie",
+      ...safeObject(currentProfile?.pronunciation_preferences),
+    },
   };
 
   if (!response.ok) return fallback;
@@ -253,7 +259,6 @@ async function synthesizeProfile(
   if (!parsed) return fallback;
 
   const rawDelivery = safeObject(parsed["delivery_preferences"]);
-  const currentDelivery = safeObject(currentProfile?.delivery_preferences);
 
   return {
     stable_identity: {
