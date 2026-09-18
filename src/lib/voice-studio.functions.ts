@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { Buffer } from "node:buffer";
 import {
   REALTIME_VOICE_IDS,
   isRealtimeVoiceId,
@@ -138,7 +139,7 @@ async function makePreview(apiKey: string, voiceId: RealtimeVoiceId, profile: an
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "gpt-4o-mini-tts-2025-12-15",
+      model: "gpt-4o-mini-tts",
       voice: voiceId,
       input:
         "Hey Adam. It's Emery. I want this to feel natural — like you can think out loud, change direction, and just talk to me. We'll figure things out together.",
@@ -302,6 +303,8 @@ async function saveDraftProfile(
       ...safeObject(safeObject(synthesized.contextual_preferences)["voice_studio"]),
       stage: "previewed",
       pending_voice_id: voiceId,
+      last_preview_succeeded: true,
+      last_previewed_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     },
   };
@@ -369,7 +372,7 @@ async function saveApprovedProfile(
         status: "live_voice_approved",
         realtime_model: "gpt-realtime-2.1",
         realtime_builtin_voice: true,
-        preview_tts_model: "gpt-4o-mini-tts-2025-12-15",
+        preview_tts_model: "gpt-4o-mini-tts",
         speech_to_speech: true,
         semantic_vad: true,
         interruptions: true,
@@ -433,7 +436,10 @@ export async function processVoiceStudioTurn({
       };
     }
 
-    const previewConfirmed = currentStage === "previewed" && currentPending === chosen;
+    const previewConfirmed =
+      currentStage === "previewed" &&
+      currentPending === chosen &&
+      studioState["last_preview_succeeded"] === true;
     if (!previewConfirmed) {
       return {
         stage: "approval_needs_preview" as const,
@@ -472,17 +478,42 @@ export async function processVoiceStudioTurn({
 
   if (candidate && wantsPreview(text)) {
     const synthesized = await synthesizeProfile(apiKey, recent, candidate, profile);
-    const updated = await saveDraftProfile(db, userId, profile, candidate, synthesized);
-    const audioDataUri = await makePreview(apiKey, candidate, updated);
+    const previewProfile = {
+      ...profile,
+      stable_identity: synthesized.stable_identity,
+      delivery_preferences: synthesized.delivery_preferences,
+      contextual_preferences: synthesized.contextual_preferences,
+      pronunciation_preferences: synthesized.pronunciation_preferences,
+    };
+    const audioDataUri = await makePreview(apiKey, candidate, previewProfile);
+
+    if (!audioDataUri) {
+      await markStudioState(db, userId, profile, {
+        stage: "candidate_selected",
+        pending_voice_id: candidate,
+        last_preview_succeeded: false,
+      });
+      return {
+        stage: "preview_failed" as const,
+        operationSucceeded: false,
+        voiceId: candidate,
+        previewAudioDataUri: null,
+        draftProfileSaved: false,
+        note:
+          "The provider did not return a playable preview, so this candidate cannot be approved yet.",
+        candidates: REALTIME_VOICE_IDS,
+      };
+    }
+
+    await saveDraftProfile(db, userId, profile, candidate, synthesized);
     return {
       stage: "previewed" as const,
-      operationSucceeded: Boolean(audioDataUri),
+      operationSucceeded: true,
       voiceId: candidate,
       previewAudioDataUri: audioDataUri,
       draftProfileSaved: true,
-      note: audioDataUri
-        ? "Actual provider audio preview generated using the current Voice Studio draft. This is not approval."
-        : "The Voice Studio draft was saved, but audio generation failed.",
+      note:
+        "Actual provider audio preview generated using the current Voice Studio draft. This is not approval.",
       candidates: REALTIME_VOICE_IDS,
     };
   }
