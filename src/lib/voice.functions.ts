@@ -149,11 +149,15 @@ async function loadVoiceContext(db: any, userId: string, query = "current voice 
   };
 }
 
+function validVoiceId(value: unknown) {
+  const id = typeof value === "string" ? value.trim() : "";
+  return BUILT_IN_VOICES.has(id) || id.startsWith("voice_");
+}
+
 function voiceOutput(profile: any) {
   const id = typeof profile?.base_voice_id === "string" ? profile.base_voice_id.trim() : "";
   if (id.startsWith("voice_")) return { id };
-  if (BUILT_IN_VOICES.has(id)) return id;
-  return "marin";
+  return id;
 }
 
 function voiceSpeed(profile: any) {
@@ -240,7 +244,7 @@ export const getVoiceReadiness = createServerFn({ method: "GET" })
       .eq("user_id", context.userId)
       .maybeSingle();
 
-    const configured = Boolean(profile?.base_voice_id);
+    const configured = validVoiceId(profile?.base_voice_id);
     const approved = Boolean(profile?.approved_at);
     return {
       infrastructureReady: true,
@@ -270,7 +274,7 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
     const db = context.supabase as any;
     const voiceContext = await loadVoiceContext(db, context.userId, "start live Emery voice session");
     const voiceProfile = voiceContext.voiceProfile;
-    if (!voiceProfile?.base_voice_id || !voiceProfile?.approved_at) {
+    if (!validVoiceId(voiceProfile?.base_voice_id) || !voiceProfile?.approved_at) {
       return {
         error: "Emery Voice is wired, but Adam has not approved the final voice yet.",
         needsVoiceApproval: true,
