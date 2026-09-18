@@ -7,6 +7,7 @@ const files = {
   control: readFileSync("src/components/EmeryVoiceControl.tsx", "utf8"),
   guard: readFileSync("src/lib/voice-session-guard.ts", "utf8"),
   chat: readFileSync("src/routes/_authenticated/chat.tsx", "utf8"),
+  dominicanReference: readFileSync("src/lib/dominican-voice-reference.ts", "utf8"),
 };
 
 const expectedVoices = [
@@ -29,9 +30,17 @@ const checks = [
       files.realtime.includes("same Emery and the same lifelong conversation"),
   ],
   [
-    "Latina voice direction stays user-defined instead of forcing a nationality",
-    files.studio.includes("Adam should choose the regional flavor and intensity") &&
-      files.realtime.includes("Do not assume a nationality"),
+    "Dominican voice direction is explicit because Adam chose it",
+    files.dominicanReference.includes("Dominican Spanish first") &&
+      files.dominicanReference.includes("Santo Domingo") &&
+      files.studio.includes("EMERY_DOMINICAN_ENGLISH_REFERENCE"),
+  ],
+  [
+    "Emery auditions stay on the female-only user-selected path",
+    files.dominicanReference.includes('preferredVoiceIds: ["coral", "shimmer"]') &&
+      files.dominicanReference.includes('rejectedVoiceIds: ["marin", "cedar"]') &&
+      files.studio.includes("feminineAuditionCandidate") &&
+      files.studio.includes("auditionCandidates"),
   ],
   [
     "Realtime Voice allowlist is centralized",
