@@ -167,7 +167,6 @@ function Chat() {
   const [hasMore, setHasMore] = useState(false);
   const [historyCursor, setHistoryCursor] = useState<string | null>(null);
   const [nearBottom, setNearBottom] = useState(true);
-  const [voicePreview, setVoicePreview] = useState<{ voiceId: string; src: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -363,25 +362,9 @@ function Chat() {
       if (
         voiceStudio &&
         typeof voiceStudio === "object" &&
-        "previewAudioDataUri" in voiceStudio &&
-        typeof voiceStudio.previewAudioDataUri === "string" &&
-        voiceStudio.previewAudioDataUri
-      ) {
-        setVoicePreview({
-          voiceId:
-            "voiceId" in voiceStudio && typeof voiceStudio.voiceId === "string"
-              ? voiceStudio.voiceId
-              : "Emery",
-          src: voiceStudio.previewAudioDataUri,
-        });
-      }
-      if (
-        voiceStudio &&
-        typeof voiceStudio === "object" &&
         "micUnlocked" in voiceStudio &&
         voiceStudio.micUnlocked === true
       ) {
-        setVoicePreview(null);
         window.dispatchEvent(new Event("emery-voice-profile-updated"));
       }
 
@@ -572,7 +555,7 @@ function Chat() {
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold capitalize">{voiceStudioState.voiceId} preview</p>
                       <p className="mt-0.5 text-[11px] leading-5 text-muted-foreground">
-                        This is a real provider preview, not an approved Emery voice yet.
+                        AI-generated provider preview. Listen before approval; this is not Emery’s approved voice yet.
                       </p>
                     </div>
                     <button
@@ -637,36 +620,6 @@ function Chat() {
                   onRemove={() => setSelectedFiles((prev) => prev.filter((_, itemIndex) => itemIndex !== index))}
                 />
               ))}
-            </div>
-          ) : null}
-
-          {voicePreview ? (
-            <div className="mx-auto mb-2 flex max-w-2xl items-center gap-3 rounded-2xl border border-primary/18 bg-card/92 px-3 py-2.5 shadow-lg backdrop-blur-xl">
-              <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-primary">
-                  Voice Studio · {voicePreview.voiceId}
-                </p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  Real provider preview — listen before approving.
-                </p>
-              </div>
-              <audio
-                key={voicePreview.src}
-                controls
-                autoPlay
-                preload="auto"
-                src={voicePreview.src}
-                className="h-9 w-[170px] max-w-[48vw]"
-                aria-label={`Preview ${voicePreview.voiceId} voice`}
-              />
-              <button
-                type="button"
-                onClick={() => setVoicePreview(null)}
-                className="emery-press flex size-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:bg-white/[0.04]"
-                aria-label="Close voice preview"
-              >
-                <X className="size-4" />
-              </button>
             </div>
           ) : null}
 
