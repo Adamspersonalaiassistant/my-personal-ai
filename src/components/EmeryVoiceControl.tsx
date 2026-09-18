@@ -7,6 +7,7 @@ import {
   persistVoiceTranscript,
   refreshVoiceContext,
   searchWebForVoice,
+  updateVoiceDeliveryFromLive,
 } from "@/lib/voice.functions";
 
 type VoiceStatus = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "error";
@@ -28,6 +29,7 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
   const persistTranscript = useServerFn(persistVoiceTranscript);
   const searchWeb = useServerFn(searchWebForVoice);
   const refreshContext = useServerFn(refreshVoiceContext);
+  const updateVoiceDelivery = useServerFn(updateVoiceDeliveryFromLive);
 
   const [status, setStatus] = useState<VoiceStatus>("idle");
   const [ready, setReady] = useState<boolean | null>(null);
@@ -135,6 +137,47 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
           return;
         }
 
+        if (event.name === "update_voice_delivery") {
+          const raw = JSON.parse(event.arguments || "{}") as {
+            request?: string;
+            pace?: number;
+            warmth?: number;
+            expressiveness?: number;
+            energy?: number;
+            brevity?: number;
+          };
+          const result = await updateVoiceDelivery({
+            data: {
+              request: String(raw.request ?? "Live voice-delivery update"),
+              pace: raw.pace,
+              warmth: raw.warmth,
+              expressiveness: raw.expressiveness,
+              energy: raw.energy,
+              brevity: raw.brevity,
+            },
+          });
+          if ("ok" in result && result.ok && typeof result.speed === "number") {
+            const channel = channelRef.current;
+            if (channel?.readyState === "open") {
+              channel.send(
+                JSON.stringify({
+                  type: "session.update",
+                  session: { audio: { output: { speed: result.speed } } },
+                }),
+              );
+            }
+          }
+          sendToolOutput(
+            event.call_id,
+            "ok" in result && result.ok
+              ? result.note
+              : "error" in result
+                ? result.error
+                : "Voice delivery could not be updated.",
+          );
+          return;
+        }
+
         if (event.name === "refresh_emery_context") {
           const result = await refreshContext({ data: { query: String(args.query ?? "") } });
           sendToolOutput(
@@ -149,7 +192,7 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
         sendToolOutput(event.call_id, "That tool is temporarily unavailable. Answer without inventing its result.");
       }
     },
-    [refreshContext, searchWeb, sendToolOutput],
+    [refreshContext, searchWeb, sendToolOutput, updateVoiceDelivery],
   );
 
   const handleRealtimeEvent = useCallback(
