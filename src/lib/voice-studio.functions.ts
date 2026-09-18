@@ -158,6 +158,37 @@ async function makePreview(apiKey: string, voiceId: RealtimeVoiceId, profile: an
   return "data:audio/mpeg;base64," + bytes.toString("base64");
 }
 
+async function verifyRealtimeCandidate(apiKey: string, voiceId: RealtimeVoiceId) {
+  const response = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + apiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      expires_after: { anchor: "created_at", seconds: 60 },
+      session: {
+        type: "realtime",
+        model: "gpt-realtime-2.1",
+        output_modalities: ["audio"],
+        audio: {
+          output: {
+            voice: voiceId,
+          },
+        },
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    console.error("Realtime voice candidate validation failed", response.status, await response.text());
+    return false;
+  }
+  const payload = (await response.json()) as { value?: string };
+  return Boolean(payload.value);
+}
+
+
 function parseJsonObject(text: string) {
   const trimmed = text.trim().replace(/^~~~json\s*/i, "").replace(/~~~$/i, "").trim();
   try {
@@ -447,6 +478,18 @@ export async function processVoiceStudioTurn({
         voiceId: chosen,
         note:
           "Adam must hear an actual in-app provider preview of this candidate before it can become Emery's approved base voice.",
+        candidates: REALTIME_VOICE_IDS,
+      };
+    }
+
+    const realtimeSupported = await verifyRealtimeCandidate(apiKey, chosen);
+    if (!realtimeSupported) {
+      return {
+        stage: "approval_realtime_unsupported" as const,
+        operationSucceeded: false,
+        voiceId: chosen,
+        note:
+          "The candidate previewed successfully, but the Realtime provider did not accept it for a live Emery session, so it was not approved.",
         candidates: REALTIME_VOICE_IDS,
       };
     }
