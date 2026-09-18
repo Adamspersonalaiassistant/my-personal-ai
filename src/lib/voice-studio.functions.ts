@@ -468,12 +468,24 @@ export async function processVoiceStudioTurn({
 }: VoiceStudioContext) {
   const candidate = namedVoice(text);
   const approvalPhrase = explicitApproval(text);
+  const recentVoiceContextHint = recent
+    .slice(-8)
+    .some((turn) =>
+      /\b(voice|voice studio|marin|cedar|coral|alloy|ash|ballad|echo|sage|shimmer|verse|preview)\b/i.test(
+        turn.text,
+      ),
+    );
+  const designFeedback =
+    /\b(warm|warmer|friendly|friendlier|slow|slower|fast|faster|measured|calm|calmer|grounded|energetic|energy|expressive|restrained|brief|concise|detailed|natural|robotic|corporate|casual|formal|confident|playful|serious|accent|age|young|mature|20s|30s|40s|pitch|deeper|higher|lower)\b/i.test(
+      text,
+    );
   const maybeStudioTurn =
     startsStudio(text) ||
     wantsPreview(text) ||
     Boolean(candidate) ||
     approvalPhrase ||
-    /\b(voice|voice studio)\b/i.test(text);
+    /\b(voice|voice studio)\b/i.test(text) ||
+    (recentVoiceContextHint && designFeedback);
   if (!maybeStudioTurn) return null;
 
   const profile = await ensureProfile(db, userId);
@@ -570,13 +582,32 @@ export async function processVoiceStudioTurn({
     };
   }
 
-  const recentVoiceContext = recent
-    .slice(-6)
-    .some((turn) => /\b(voice|voice studio|marin|cedar|coral|alloy|ash|ballad|echo|sage|shimmer|verse)\b/i.test(turn.text));
+  const recentVoiceContext = recentVoiceContextHint;
   const approvalAllowed =
     Boolean(candidate) ||
     /\bvoice\b/i.test(text) ||
     (["designing", "previewed", "candidate_selected"].includes(currentStage) && recentVoiceContext);
+
+  if (
+    currentStage === "previewed" &&
+    designFeedback &&
+    !approvalPhrase &&
+    !wantsPreview(text)
+  ) {
+    await markStudioState(db, userId, profile, {
+      stage: "designing",
+      pending_voice_id: currentPending,
+      last_preview_succeeded: false,
+    });
+    return {
+      stage: "design_refined_needs_preview" as const,
+      operationSucceeded: true,
+      voiceId: currentPending,
+      note:
+        "Adam changed the Voice design after the last preview. The candidate must be previewed again before approval so he approves what he actually heard.",
+      candidates: REALTIME_VOICE_IDS,
+    };
+  }
 
   if (approvalPhrase && approvalAllowed) {
     const chosen = candidate ?? currentPending;
