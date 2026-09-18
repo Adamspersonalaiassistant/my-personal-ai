@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { createHash } from "node:crypto";
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { ASSISTANT_IDENTITY } from "@/lib/assistant-identity";
@@ -9,6 +10,10 @@ import { loadHpoAgentContext } from "@/lib/hpo-agent-context";
 import { VOICE_PROFILE_CONTRACT, isUsableVoiceId } from "@/lib/voice-profile";
 
 const REALTIME_MODEL = "gpt-realtime-2.1";
+
+function realtimeSafetyIdentifier(userId: string) {
+  return "emery_" + createHash("sha256").update(userId).digest("hex").slice(0, 32);
+}
 
 
 async function mainConversation(db: any, userId: string) {
@@ -359,6 +364,7 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
+        "OpenAI-Safety-Identifier": realtimeSafetyIdentifier(context.userId),
       },
       body: JSON.stringify({
         expires_after: { anchor: "created_at", seconds: 120 },
