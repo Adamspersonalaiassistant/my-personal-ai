@@ -574,14 +574,14 @@ export const updateVoiceDeliveryFromLive = createServerFn({ method: "POST" })
 
     if (!Object.keys(patch).length) {
       const request = data.request.toLowerCase();
-      if (/slow down|slower/.test(request)) patch.pace = 0.85;
-      if (/speed up|faster/.test(request)) patch.pace = 1.15;
-      if (/warmer|more warm/.test(request)) patch.warmth = 0.72;
-      if (/calmer|more calm/.test(request)) patch.energy = 0.35;
-      if (/more energetic|higher energy/.test(request)) patch.energy = 0.72;
-      if (/more expressive/.test(request)) patch.expressiveness = 0.72;
-      if (/less expressive/.test(request)) patch.expressiveness = 0.35;
-      if (/briefer|shorter|more concise/.test(request)) patch.brevity = 0.75;
+      if (/slow down|slower/.test(request)) patch["pace"] = 0.85;
+      if (/speed up|faster/.test(request)) patch["pace"] = 1.15;
+      if (/warmer|more warm/.test(request)) patch["warmth"] = 0.72;
+      if (/calmer|more calm/.test(request)) patch["energy"] = 0.35;
+      if (/more energetic|higher energy/.test(request)) patch["energy"] = 0.72;
+      if (/more expressive/.test(request)) patch["expressiveness"] = 0.72;
+      if (/less expressive/.test(request)) patch["expressiveness"] = 0.35;
+      if (/briefer|shorter|more concise/.test(request)) patch["brevity"] = 0.75;
     }
     if (!Object.keys(patch).length) {
       return { ok: false, error: "No supported voice-delivery change was supplied." } as const;
