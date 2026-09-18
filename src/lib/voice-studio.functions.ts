@@ -520,6 +520,25 @@ export async function processVoiceStudioTurn({
   }
 
   if (candidate && wantsPreview(text)) {
+    const realtimeSupported = await verifyRealtimeCandidate(apiKey, candidate);
+    if (!realtimeSupported) {
+      await markStudioState(db, userId, profile, {
+        stage: "candidate_selected",
+        pending_voice_id: candidate,
+        last_preview_succeeded: false,
+      });
+      return {
+        stage: "preview_failed" as const,
+        operationSucceeded: false,
+        voiceId: candidate,
+        previewAudioDataUri: null,
+        draftProfileSaved: false,
+        note:
+          "The Realtime provider did not accept this candidate for a live Emery session, so no preview was offered for approval.",
+        candidates: REALTIME_VOICE_IDS,
+      };
+    }
+
     const synthesized = await synthesizeProfile(apiKey, recent, candidate, profile);
     const previewProfile = {
       ...profile,
