@@ -182,6 +182,7 @@ function voiceStyleInstruction(profile: any) {
       ? `- English delivery: ${stable.english_fluency}.`
       : null,
     stable?.presence ? `- Presence: ${stable.presence}.` : null,
+    stable?.refinement_note ? `- Latest explicit voice refinement: ${stable.refinement_note}.` : null,
     stable?.avoid ? `- Avoid: ${Array.isArray(stable.avoid) ? stable.avoid.join(", ") : String(stable.avoid)}.` : null,
     Object.keys(delivery).length ? `- Delivery preferences: ${JSON.stringify(delivery)}.` : null,
     Object.keys(contextual).length ? `- Contextual delivery: ${JSON.stringify(contextual)}.` : null,
@@ -369,7 +370,7 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
           type: "function",
           name: "update_voice_delivery",
           description:
-            "Persist an explicit Adam-requested change to Emery's live delivery. Use only when Adam directly asks for a voice delivery change such as pace, warmth, energy, expressiveness, or brevity. This never changes Emery's identity or base voice.",
+            "Persist an explicit Adam-requested refinement to how Emery sounds. Use only when Adam directly asks for a voice change such as pace, warmth, energy, expressiveness, brevity, accent strength, age impression, or another delivery/style refinement. This never changes Emery's personality, memory, role, or approved base voice.",
           parameters: {
             type: "object",
             additionalProperties: false,
@@ -382,6 +383,7 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
               brevity: { type: "number", description: "Desired spoken brevity, 0 to 1." },
               accent_intensity: { type: "number", description: "Desired subtle-accent strength, 0 to 1." },
               accent_description: { type: "string", description: "Updated accent delivery description, if Adam explicitly requests one." },
+              style_note: { type: "string", description: "Any other explicit voice-style refinement Adam requested, stated concisely." },
             },
             required: ["request"],
           },
@@ -583,6 +585,7 @@ export const updateVoiceDeliveryFromLive = createServerFn({ method: "POST" })
       brevity?: number;
       accentIntensity?: number;
       accentDescription?: string;
+      styleNote?: string;
     }) => {
       const bounded = (value: unknown, min = 0, max = 1) => {
         const number = Number(value);
@@ -597,6 +600,7 @@ export const updateVoiceDeliveryFromLive = createServerFn({ method: "POST" })
         brevity: bounded(input?.brevity),
         accentIntensity: bounded(input?.accentIntensity),
         accentDescription: String(input?.accentDescription ?? "").trim().slice(0, 300) || undefined,
+        styleNote: String(input?.styleNote ?? "").trim().slice(0, 300) || undefined,
       };
     },
   )
@@ -644,7 +648,7 @@ export const updateVoiceDeliveryFromLive = createServerFn({ method: "POST" })
         ? "Fluent natural English with a subtle Dominican Latina accent; audible but light, never exaggerated or theatrical."
         : undefined);
 
-    if (!Object.keys(patch).length && accentIntensity == null && !accentDescription) {
+    if (!Object.keys(patch).length && accentIntensity == null && !accentDescription && !data.styleNote) {
       return { ok: false, error: "No supported voice-delivery change was supplied." } as const;
     }
 
@@ -666,6 +670,7 @@ export const updateVoiceDeliveryFromLive = createServerFn({ method: "POST" })
         "Subtle Dominican Latina accent in otherwise fluent, polished English; native character is audible but light.";
       nextStable.accent_description = accentDescription;
     }
+    if (data.styleNote) nextStable.refinement_note = data.styleNote;
     const { data: updated, error: updateError } = await db
       .from("voice_profiles")
       .update({
