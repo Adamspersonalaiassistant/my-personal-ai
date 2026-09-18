@@ -348,6 +348,13 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
       return;
     }
 
+    document
+      .querySelectorAll<HTMLAudioElement>('audio[data-emery-voice-preview="true"]')
+      .forEach((preview) => {
+        preview.pause();
+        preview.currentTime = 0;
+      });
+
     claimExclusiveEmeryVoice(closeVoice);
     if (abortIfSuperseded()) return;
 
