@@ -356,6 +356,13 @@ function Chat() {
         studio.voiceId
       ) {
         setVoiceStudioState({ stage: "approved", voiceId: studio.voiceId });
+      } else if (
+        studio &&
+        ["designing", "candidate_blocked", "candidate_selected", "design_refined_needs_preview", "preview_failed"].includes(
+          String(studio.stage),
+        )
+      ) {
+        setVoiceStudioState(null);
       }
 
       const voiceStudio = "voiceStudio" in result ? result.voiceStudio : null;
