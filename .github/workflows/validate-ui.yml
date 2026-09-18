@@ -45,6 +45,7 @@ jobs:
           src/lib/assistant-identity.ts
           src/lib/chat-history.functions.ts
           src/lib/chat.functions.ts
+          src/lib/dominican-voice-reference.ts
           src/lib/emery-intelligence.ts
           src/lib/emery.functions.ts
           src/lib/hpo-chat-router.ts
