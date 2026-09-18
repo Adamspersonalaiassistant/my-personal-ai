@@ -143,7 +143,7 @@ async function loadVoiceContext(db: any, userId: string, query = "current voice 
   };
 }
 
-function validVoiceId(value: unknown) {
+function isUsableVoiceId(value: unknown) {
   const id = typeof value === "string" ? value.trim() : "";
   return isUsableVoiceId(id);
 }
@@ -158,6 +158,55 @@ function voiceSpeed(profile: any) {
   const pace = Number(profile?.delivery_preferences?.pace ?? 1);
   if (!Number.isFinite(pace)) return 1;
   return Math.max(0.75, Math.min(1.25, pace));
+}
+
+function voiceStyleInstruction(profile: any) {
+  const stable = profile?.stable_identity ?? {};
+  const delivery = profile?.delivery_preferences ?? {};
+  const contextual = profile?.contextual_preferences ?? {};
+  const pronunciation = profile?.pronunciation_preferences ?? {};
+  const accentDescription =
+    typeof stable?.accent_description === "string"
+      ? stable.accent_description
+      : typeof stable?.accent === "string"
+        ? stable.accent
+        : "";
+  const accentIntensity = Number(stable?.accent_intensity ?? 0);
+
+  const lines = [
+    "VOICE DELIVERY TARGET:",
+    stable?.gender_presentation ? `- Vocal presentation: ${stable.gender_presentation}.` : null,
+    stable?.age_impression ? `- Age impression: ${stable.age_impression}.` : null,
+    accentDescription
+      ? `- Accent target: ${accentDescription}. Keep it natural and never caricatured or theatrical.`
+      : null,
+    Number.isFinite(accentIntensity) && accentIntensity > 0
+      ? `- Accent intensity target: ${Math.round(Math.max(0, Math.min(1, accentIntensity)) * 100)}% — audible but controlled.`
+      : null,
+    stable?.english_fluency
+      ? `- English delivery: ${stable.english_fluency}.`
+      : null,
+    stable?.presence ? `- Presence: ${stable.presence}.` : null,
+    stable?.avoid ? `- Avoid: ${Array.isArray(stable.avoid) ? stable.avoid.join(", ") : String(stable.avoid)}.` : null,
+    Object.keys(delivery).length ? `- Delivery preferences: ${JSON.stringify(delivery)}.` : null,
+    Object.keys(contextual).length ? `- Contextual delivery: ${JSON.stringify(contextual)}.` : null,
+    Object.keys(pronunciation).length ? `- Pronunciation preferences: ${JSON.stringify(pronunciation)}.` : null,
+  ].filter(Boolean);
+
+  return lines.join("\n");
+}
+
+async function snapshotVoiceProfile(db: any, userId: string, profile: any, request: string, source: string) {
+  if (!profile?.id) return;
+  const { error } = await db.from("voice_profile_versions").insert({
+    user_id: userId,
+    voice_profile_id: profile.id,
+    version: profile.version,
+    snapshot: profile,
+    change_request: request.slice(0, 1000),
+    change_source: source,
+  });
+  if (error) throw error;
 }
 
 function buildRealtimeInstructions(context: Awaited<ReturnType<typeof loadVoiceContext>>) {
@@ -192,7 +241,9 @@ ${VOICE_PROFILE_CONTRACT}
 
 APPROVED VOICE PROFILE:
 ${JSON.stringify(context.voiceProfile ?? {})}
-Apply stable_identity, delivery_preferences, contextual_preferences, and pronunciation_preferences naturally when the provider supports them. The base voice controls vocal identity; these preferences control delivery only.
+
+${voiceStyleInstruction(context.voiceProfile)}
+The base voice controls the underlying voice. The stored Voice Profile controls how Emery should deliver speech. Follow it as closely as the model supports, but never exaggerate an accent or claim exact acoustic control.
 
 LIVE VOICE OPERATING CONTRACT:
 - This is the same Emery and the same lifelong conversation as text chat. Never act like a new assistant or a separate voice persona.
@@ -205,7 +256,9 @@ LIVE VOICE OPERATING CONTRACT:
 - Use refresh_emery_context when Adam asks about a task, project, appointment, HPO item, memory, or other app state that may have changed since this voice session began.
 - Tool results are private working context. Answer Adam naturally rather than narrating tool mechanics.
 - Do not claim Calendar, Reminders, WhatsApp, PLAUD, phone control, or any external action is connected unless a tool confirms it.
-- Voice delivery may follow approved voice profile preferences, but personality and judgment always come from Emery's central identity.
+- Voice delivery follows the approved Voice Profile, but personality and judgment always come from Emery's central identity.
+- Do not restart a Voice Studio questionnaire. Adam has already chosen the direction. Start talking naturally with the approved profile and let him refine it from actual conversation.
+- If Adam asks you to adjust how you sound while Voice is active, call update_voice_preferences with his requested changes. Tell him only what the tool confirms; stored delivery changes apply on the next Voice session unless the tool says otherwise.
 - If Adam explicitly asks during the live conversation to slow down, speed up, be warmer, calmer, more or less expressive, more energetic, or briefer, use update_voice_delivery. Do not claim the preference was saved unless the tool confirms it.
 
 DOMAIN ROUTING:
@@ -239,7 +292,7 @@ export const getVoiceReadiness = createServerFn({ method: "GET" })
       .eq("user_id", context.userId)
       .maybeSingle();
 
-    const configured = validVoiceId(profile?.base_voice_id);
+    const configured = isUsableVoiceId(profile?.base_voice_id);
     const approved = Boolean(profile?.approved_at);
     return {
       infrastructureReady: true,
@@ -269,7 +322,7 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
     const db = context.supabase as any;
     const voiceContext = await loadVoiceContext(db, context.userId, "start live Emery voice session");
     const voiceProfile = voiceContext.voiceProfile;
-    if (!validVoiceId(voiceProfile?.base_voice_id) || !voiceProfile?.approved_at) {
+    if (!isUsableVoiceId(voiceProfile?.base_voice_id) || !voiceProfile?.approved_at) {
       return {
         error: "Emery Voice is wired, but Adam has not approved the final voice yet.",
         needsVoiceApproval: true,
@@ -351,6 +404,27 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
               },
             },
             required: ["query"],
+          },
+        },
+        {
+          type: "function",
+          name: "update_voice_preferences",
+          description:
+            "Save Adam's requested refinement to Emery's approved voice delivery. Use this when he asks to make the voice warmer, calmer, faster/slower, more/less expressive, more/less energetic, shorter, or to make the Dominican accent lighter/stronger. Never use it to change the base voice without explicit approval.",
+          parameters: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              pace: { type: "number", minimum: 0.75, maximum: 1.25 },
+              warmth: { type: "number", minimum: 0, maximum: 1 },
+              expressiveness: { type: "number", minimum: 0, maximum: 1 },
+              energy: { type: "number", minimum: 0, maximum: 1 },
+              brevity: { type: "number", minimum: 0, maximum: 1 },
+              accent_intensity: { type: "number", minimum: 0, maximum: 1 },
+              accent_description: { type: "string", maxLength: 300 },
+              request_summary: { type: "string", maxLength: 500 }
+            },
+            required: ["request_summary"]
           },
         },
       ],
@@ -477,6 +551,92 @@ export const persistVoiceTranscript = createServerFn({ method: "POST" })
     } as const;
   });
 
+export const updateVoicePreferencesFromLive = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (input: {
+      pace?: number;
+      warmth?: number;
+      expressiveness?: number;
+      energy?: number;
+      brevity?: number;
+      accentIntensity?: number;
+      accentDescription?: string;
+      requestSummary: string;
+    }) => ({
+      pace: input?.pace == null ? undefined : Math.max(0.75, Math.min(1.25, Number(input.pace))),
+      warmth: input?.warmth == null ? undefined : Math.max(0, Math.min(1, Number(input.warmth))),
+      expressiveness:
+        input?.expressiveness == null ? undefined : Math.max(0, Math.min(1, Number(input.expressiveness))),
+      energy: input?.energy == null ? undefined : Math.max(0, Math.min(1, Number(input.energy))),
+      brevity: input?.brevity == null ? undefined : Math.max(0, Math.min(1, Number(input.brevity))),
+      accentIntensity:
+        input?.accentIntensity == null ? undefined : Math.max(0, Math.min(1, Number(input.accentIntensity))),
+      accentDescription: String(input?.accentDescription ?? "").trim().slice(0, 300) || undefined,
+      requestSummary: String(input?.requestSummary ?? "Voice refinement").trim().slice(0, 500),
+    }),
+  )
+  .handler(async ({ data, context }) => {
+    const db = context.supabase as any;
+    let { data: profile, error } = await db
+      .from("voice_profiles")
+      .select("*")
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!profile) {
+      const created = await db
+        .from("voice_profiles")
+        .insert({ user_id: context.userId })
+        .select("*")
+        .single();
+      if (created.error) throw created.error;
+      profile = created.data;
+    }
+    if (!profile?.approved_at || !isUsableVoiceId(profile?.base_voice_id)) {
+      return { ok: false, error: "Emery's base voice is not approved yet." } as const;
+    }
+
+    await snapshotVoiceProfile(
+      db,
+      context.userId,
+      profile,
+      data.requestSummary,
+      "realtime_voice",
+    );
+
+    const delivery = { ...(profile.delivery_preferences ?? {}) };
+    for (const key of ["pace", "warmth", "expressiveness", "energy", "brevity"] as const) {
+      if (data[key] != null && Number.isFinite(data[key])) delivery[key] = data[key];
+    }
+
+    const stable = { ...(profile.stable_identity ?? {}) };
+    if (data.accentIntensity != null && Number.isFinite(data.accentIntensity)) {
+      stable.accent_intensity = data.accentIntensity;
+    }
+    if (data.accentDescription) stable.accent_description = data.accentDescription;
+
+    const nextVersion = Number(profile.version ?? 1) + 1;
+    const { error: updateError } = await db
+      .from("voice_profiles")
+      .update({
+        delivery_preferences: delivery,
+        stable_identity: stable,
+        version: nextVersion,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", profile.id)
+      .eq("user_id", context.userId);
+    if (updateError) throw updateError;
+
+    return {
+      ok: true,
+      version: nextVersion,
+      note:
+        "Voice preference saved. The updated delivery will be used the next time Emery Voice starts; the current audio session keeps its existing voice configuration.",
+    } as const;
+  });
+
 export const searchWebForVoice = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { query: string }) => ({
@@ -553,7 +713,7 @@ export const updateVoiceDeliveryFromLive = createServerFn({ method: "POST" })
       .select("*")
       .eq("user_id", context.userId)
       .maybeSingle();
-    if (error || !profile?.approved_at || !validVoiceId(profile.base_voice_id)) {
+    if (error || !profile?.approved_at || !isUsableVoiceId(profile.base_voice_id)) {
       return { ok: false, error: "No approved Emery Voice is active." } as const;
     }
 
