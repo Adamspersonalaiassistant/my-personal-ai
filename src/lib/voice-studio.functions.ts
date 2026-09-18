@@ -519,9 +519,9 @@ export async function processVoiceStudioTurn({
       ),
     );
   const designFeedback =
-    /\b(warm|warmer|friendly|friendlier|slow|slower|fast|faster|measured|calm|calmer|grounded|energetic|energy|expressive|restrained|brief|concise|detailed|natural|robotic|corporate|casual|formal|confident|playful|serious|accent|age|young|mature|20s|30s|40s|pitch|deeper|higher|lower)\b/i.test(
+    /\b(warm|warmer|friendly|friendlier|slow|slower|fast|faster|measured|calm|calmer|grounded|energetic|energy|expressive|restrained|brief|concise|detailed|natural|robotic|corporate|casual|formal|professional|confident|authoritative|playful|serious|accent|american|british|new york|new jersey|southern|female|feminine|mentor|friend|age|young|younger|mature|20s|30s|40s|50s|pitch|deeper|higher|lower)\b/i.test(
       text,
-    );
+    ) || /\b(?:2[0-9]|3[0-9]|4[0-9]|5[0-9])\b/.test(text);
   const maybeStudioTurn =
     startsStudio(text) ||
     wantsPreview(text) ||
