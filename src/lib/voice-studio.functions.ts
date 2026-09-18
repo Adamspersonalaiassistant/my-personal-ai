@@ -7,6 +7,10 @@ import {
   isUsableVoiceId,
   type RealtimeVoiceId,
 } from "@/lib/voice-profile";
+import {
+  EMERY_DOMINICAN_ENGLISH_REFERENCE,
+  EMERY_FEMININE_AUDITION_VOICE_IDS,
+} from "@/lib/dominican-voice-reference";
 
 type VoiceStudioDb = any;
 
@@ -45,6 +49,17 @@ function namedVoice(text: string): RealtimeVoiceId | null {
     if (new RegExp("\\b" + voice + "\\b", "i").test(lower)) return voice;
   }
   return null;
+}
+
+function feminineAuditionCandidate(value: unknown): value is RealtimeVoiceId {
+  return (
+    typeof value === "string" &&
+    (EMERY_FEMININE_AUDITION_VOICE_IDS as readonly string[]).includes(value)
+  );
+}
+
+function auditionCandidates() {
+  return [...EMERY_FEMININE_AUDITION_VOICE_IDS] as RealtimeVoiceId[];
 }
 
 function wantsPreview(text: string) {
@@ -196,8 +211,9 @@ function previewInstructions(profile: any) {
   const stable = safeObject(profile?.stable_identity);
   const parts = [
     "Speak as Emery, a highly intelligent, emotionally aware female personal AI companion.",
+    EMERY_DOMINICAN_ENGLISH_REFERENCE.ttsInstruction,
+    "The requested presentation is feminine. Do not masculinize the voice.",
     "Sound natural, warm, confident, relaxed, conversational, and polished without sounding corporate or theatrical.",
-    "Use natural pauses and restrained expressiveness.",
     "Pronounce Emery as Em-er-rie.",
   ];
 
@@ -238,8 +254,7 @@ async function makePreview(apiKey: string, voiceId: RealtimeVoiceId, profile: an
     body: JSON.stringify({
       model: "gpt-4o-mini-tts",
       voice: voiceId,
-      input:
-        "Hey Adam. It's Emery. I want this to feel natural — like you can think out loud, change direction, and just talk to me. We'll figure things out together.",
+      input: EMERY_DOMINICAN_ENGLISH_REFERENCE.previewScript,
       instructions: previewInstructions(profile),
       response_format: "mp3",
       speed: clamp(safeObject(profile?.delivery_preferences)["pace"], 0.75, 1.25, 1),
@@ -571,6 +586,22 @@ export async function processVoiceStudioTurn({
   if (!maybeStudioTurn) return null;
 
   const profile = await ensureProfile(db, userId);
+
+  if (candidate && !feminineAuditionCandidate(candidate)) {
+    return {
+      stage: "candidate_blocked" as const,
+      operationSucceeded: false,
+      voiceId: candidate,
+      note:
+        candidate === "marin"
+          ? "Marin was already rejected by Adam as too generic/American for Emery."
+          : candidate === "cedar"
+            ? "Cedar was rejected by Adam as masculine/off-target. Emery is now locked to the feminine audition path."
+            : "That provider voice is outside Emery's female-only audition allowlist.",
+      candidates: auditionCandidates(),
+    };
+  }
+
   const currentPending = pendingVoice(profile);
   const contextual = safeObject(profile.contextual_preferences);
   const studioState = safeObject(contextual["voice_studio"]);
@@ -742,7 +773,7 @@ export async function processVoiceStudioTurn({
       voiceId: currentPending,
       note:
         "Adam changed the Voice design after the last preview. The candidate must be previewed again before approval so he approves what he actually heard.",
-      candidates: REALTIME_VOICE_IDS,
+      candidates: auditionCandidates(),
     };
   }
 
@@ -753,7 +784,7 @@ export async function processVoiceStudioTurn({
         stage: "approval_needs_candidate" as const,
         operationSucceeded: false,
         note: "No previewed or named Realtime voice is available to approve yet.",
-        candidates: REALTIME_VOICE_IDS,
+        candidates: auditionCandidates(),
       };
     }
 
@@ -768,7 +799,7 @@ export async function processVoiceStudioTurn({
         voiceId: chosen,
         note:
           "Adam must hear an actual in-app provider preview of this candidate before it can become Emery's approved base voice.",
-        candidates: REALTIME_VOICE_IDS,
+        candidates: auditionCandidates(),
       };
     }
 
@@ -780,7 +811,7 @@ export async function processVoiceStudioTurn({
         voiceId: chosen,
         note:
           "The candidate previewed successfully, but the Realtime provider did not accept it for a live Emery session, so it was not approved.",
-        candidates: REALTIME_VOICE_IDS,
+        candidates: auditionCandidates(),
       };
     }
 
@@ -831,7 +862,7 @@ export async function processVoiceStudioTurn({
         draftProfileSaved: false,
         note:
           "The Realtime provider did not accept this candidate for a live Emery session, so no preview was offered for approval.",
-        candidates: REALTIME_VOICE_IDS,
+        candidates: auditionCandidates(),
       };
     }
 
@@ -859,7 +890,7 @@ export async function processVoiceStudioTurn({
         draftProfileSaved: false,
         note:
           "The provider did not return a playable preview, so this candidate cannot be approved yet.",
-        candidates: REALTIME_VOICE_IDS,
+        candidates: auditionCandidates(),
       };
     }
 
@@ -872,7 +903,7 @@ export async function processVoiceStudioTurn({
       draftProfileSaved: true,
       note:
         "Actual provider audio preview generated using the current Voice Studio draft. This is not approval.",
-      candidates: REALTIME_VOICE_IDS,
+      candidates: auditionCandidates(),
     };
   }
 
@@ -885,9 +916,9 @@ export async function processVoiceStudioTurn({
       stage: "designing" as const,
       operationSucceeded: true,
       approvedVoiceId: profile.base_voice_id ?? null,
-      candidates: REALTIME_VOICE_IDS,
+      candidates: auditionCandidates(),
       note:
-        "Voice Studio is active in the normal Emery conversation. Adam's starting design brief was saved. Candidate previews require a supported Realtime voice name.",
+        "Voice Studio is active in the normal Emery conversation. Adam's Dominican female-English design brief is saved. Only the feminine audition candidates returned here should be suggested or previewed.",
     };
   }
 
@@ -906,7 +937,7 @@ export async function processVoiceStudioTurn({
       stage: "candidate_selected" as const,
       operationSucceeded: true,
       voiceId: candidate,
-      candidates: REALTIME_VOICE_IDS,
+      candidates: auditionCandidates(),
       note: "Candidate stored for Voice Studio, but not approved.",
     };
   }
@@ -921,7 +952,7 @@ export async function processVoiceStudioTurn({
       stage: "designing" as const,
       operationSucceeded: true,
       voiceId: currentPending,
-      candidates: REALTIME_VOICE_IDS,
+      candidates: auditionCandidates(),
       note:
         "Voice design feedback was saved to the current Voice Studio draft. A fresh provider preview is required before approval.",
     };
