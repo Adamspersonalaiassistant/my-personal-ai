@@ -26,7 +26,7 @@ const primaryNav = [
   { to: "/chat", label: "Emery", icon: MessageCircle },
   { to: "/personal", label: "Personal", icon: Heart },
   { to: "/hpo", label: "HPO", icon: BriefcaseBusiness },
-  { to: "/tasks", label: "Calendar", icon: CalendarDays },
+  { to: "/calendar", label: "Calendar", icon: CalendarDays },
 ] as const;
 
 const desktopNav = [
