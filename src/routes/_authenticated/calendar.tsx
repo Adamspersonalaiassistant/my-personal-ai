@@ -26,6 +26,7 @@ import {
   listDueCalendarNotifications,
   markCalendarNotification,
   rescheduleMeeting,
+  savePushSubscription,
   scheduleTask,
 } from "@/lib/os.functions";
 
@@ -77,6 +78,14 @@ type CalendarItem =
 const DAY_START = 7;
 const DAY_END = 23;
 const HOUR_HEIGHT = 76;
+const EMERY_VAPID_PUBLIC_KEY = "BKj8K280WBgqFLAFvOJbJJlZJwZYlP0N2sc2VLZtcx5UAdixRk5AKwxS13FxX3KkWKUiQ1vQEE1iRsF-xW_wfvQ";
+
+function base64UrlToUint8Array(value: string) {
+  const padding = "=".repeat((4 - (value.length % 4)) % 4);
+  const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = window.atob(base64);
+  return Uint8Array.from([...raw].map((character) => character.charCodeAt(0)));
+}
 
 function dayStart(date: Date) {
   const copy = new Date(date);
@@ -126,6 +135,7 @@ function CalendarPage() {
   const moveMeeting = useServerFn(rescheduleMeeting);
   const loadNotifications = useServerFn(listDueCalendarNotifications);
   const updateNotification = useServerFn(markCalendarNotification);
+  const persistPushSubscription = useServerFn(savePushSubscription);
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
@@ -142,6 +152,9 @@ function CalendarPage() {
   const [editing, setEditing] = useState<CalendarItem | null>(null);
   const [rescheduleValue, setRescheduleValue] = useState("");
   const [saving, setSaving] = useState(false);
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [enablingPush, setEnablingPush] = useState(false);
+  const [pushMessage, setPushMessage] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
   const [details, setDetails] = useState("");
@@ -172,6 +185,66 @@ function CalendarPage() {
     }
   }
 
+  async function inspectPushStatus() {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+      setPushEnabled(false);
+      return;
+    }
+    try {
+      const registration = await navigator.serviceWorker.register("/emery-sw.js");
+      const subscription = await registration.pushManager.getSubscription();
+      setPushEnabled(Notification.permission === "granted" && Boolean(subscription));
+    } catch {
+      setPushEnabled(false);
+    }
+  }
+
+  async function enablePushNotifications() {
+    if (enablingPush) return;
+    setEnablingPush(true);
+    setPushMessage(null);
+    try {
+      if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+        throw new Error("This device does not support Emery notifications.");
+      }
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        setPushEnabled(false);
+        setPushMessage("Notifications are off. Allow them in iPhone Settings for Emery.");
+        return;
+      }
+      const registration = await navigator.serviceWorker.register("/emery-sw.js");
+      await navigator.serviceWorker.ready;
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: base64UrlToUint8Array(EMERY_VAPID_PUBLIC_KEY),
+        });
+      }
+      const json = subscription.toJSON();
+      const p256dh = json.keys?.p256dh;
+      const auth = json.keys?.auth;
+      if (!p256dh || !auth) throw new Error("The notification subscription is incomplete.");
+      await persistPushSubscription({
+        data: {
+          endpoint: subscription.endpoint,
+          p256dh,
+          auth,
+          userAgent: navigator.userAgent,
+        },
+      });
+      setPushEnabled(true);
+      setPushMessage("Emery notifications are enabled on this iPhone.");
+    } catch (pushError) {
+      console.error(pushError);
+      setPushEnabled(false);
+      setPushMessage("Open Emery from your Home Screen, then try enabling notifications again.");
+    } finally {
+      setEnablingPush(false);
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -197,6 +270,7 @@ function CalendarPage() {
   }, [loadMeetings, loadNotifications, loadProjects, loadTasks]);
 
   useEffect(() => {
+    void inspectPushStatus();
     const interval = window.setInterval(() => { void refreshNotifications(); }, 60_000);
     return () => window.clearInterval(interval);
   }, [loadNotifications]);
@@ -430,7 +504,32 @@ function CalendarPage() {
                 </div>
                 <button type="button" onClick={() => setShowNotifications(false)} className="flex size-10 items-center justify-center rounded-xl text-muted-foreground"><X className="size-4" /></button>
               </div>
-              <div className="mt-3 max-h-[55dvh] overflow-y-auto rounded-2xl border border-border/40 bg-card/25">
+              <div className="mt-3 rounded-2xl border border-border/40 bg-card/25 p-3">
+                <div className="flex items-center gap-3">
+                  <div className={`flex size-10 shrink-0 items-center justify-center rounded-full ${pushEnabled ? "bg-primary/[0.12] text-primary" : "bg-white/[0.04] text-muted-foreground"}`}>
+                    <Bell className="size-[18px]" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold">{pushEnabled ? "iPhone notifications enabled" : "Enable iPhone notifications"}</p>
+                    <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
+                      {pushEnabled ? "Emery can alert you even when the app is closed." : "Required for day-before lunch confirmations when Emery is closed."}
+                    </p>
+                  </div>
+                  {!pushEnabled ? (
+                    <button
+                      type="button"
+                      onClick={() => void enablePushNotifications()}
+                      disabled={enablingPush}
+                      className="emery-press min-h-10 rounded-xl bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+                    >
+                      {enablingPush ? "Enabling…" : "Enable"}
+                    </button>
+                  ) : <CheckCircle2 className="size-5 shrink-0 text-primary" />}
+                </div>
+                {pushMessage ? <p className="mt-2 text-[11px] leading-4 text-muted-foreground">{pushMessage}</p> : null}
+              </div>
+
+              <div className="mt-3 max-h-[48dvh] overflow-y-auto rounded-2xl border border-border/40 bg-card/25">
                 {notifications.length ? notifications.map((notification, index) => (
                   <button
                     type="button"
