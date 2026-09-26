@@ -223,8 +223,8 @@ function CalendarPage() {
         });
       }
       const json = subscription.toJSON();
-      const p256dh = json.keys?.p256dh;
-      const auth = json.keys?.auth;
+      const p256dh = json.keys?.["p256dh"];
+      const auth = json.keys?.["auth"];
       if (!p256dh || !auth) throw new Error("The notification subscription is incomplete.");
       await persistPushSubscription({
         data: {
