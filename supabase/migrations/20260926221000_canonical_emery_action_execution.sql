@@ -2,7 +2,7 @@ create or replace function public.emery_action_authorized(p_user_id uuid)
 returns boolean
 language sql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
   select auth.role() = 'service_role' or auth.uid() = p_user_id;
@@ -20,7 +20,7 @@ create or replace function public.emery_action_create_task(
 )
 returns public.tasks
 language plpgsql
-security definer
+security invoker
 set search_path = public
 as $$
 declare v public.tasks;
@@ -51,7 +51,7 @@ create or replace function public.emery_action_create_event(
 )
 returns public.meetings
 language plpgsql
-security definer
+security invoker
 set search_path = public
 as $$
 declare v public.meetings; v_end timestamptz; v_type text;
@@ -75,7 +75,7 @@ grant execute on function public.emery_action_create_event(uuid,text,timestamptz
 create or replace function public.emery_action_complete_task(p_user_id uuid,p_task_id uuid)
 returns public.tasks
 language plpgsql
-security definer
+security invoker
 set search_path = public
 as $$
 declare v public.tasks;
@@ -92,7 +92,7 @@ grant execute on function public.emery_action_complete_task(uuid,uuid) to authen
 create or replace function public.emery_action_schedule_task(p_user_id uuid,p_task_id uuid,p_due_at timestamptz)
 returns public.tasks
 language plpgsql
-security definer
+security invoker
 set search_path = public
 as $$
 declare v public.tasks;
@@ -116,7 +116,7 @@ create or replace function public.emery_action_reschedule_event(
 )
 returns public.meetings
 language plpgsql
-security definer
+security invoker
 set search_path = public
 as $$
 declare v_current public.meetings; v public.meetings; v_duration interval; v_end timestamptz;
