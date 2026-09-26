@@ -419,3 +419,55 @@ export const markCalendarNotification = createServerFn({ method: "POST" })
     if (error) throw error;
     return { ok: true };
   });
+
+
+export const savePushSubscription = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { endpoint: string; p256dh: string; auth: string; userAgent?: string | null }) => {
+    const endpoint = String(input?.endpoint ?? "").trim();
+    const p256dh = String(input?.p256dh ?? "").trim();
+    const auth = String(input?.auth ?? "").trim();
+    if (!endpoint || !p256dh || !auth) throw new Error("Invalid push subscription");
+    return {
+      endpoint: endpoint.slice(0, 4000),
+      p256dh: p256dh.slice(0, 1000),
+      auth: auth.slice(0, 1000),
+      userAgent: input?.userAgent ? String(input.userAgent).slice(0, 1000) : null,
+    };
+  })
+  .handler(async ({ data, context }) => {
+    const { data: subscription, error } = await (context.supabase as any)
+      .from("push_subscriptions")
+      .upsert(
+        {
+          user_id: context.userId,
+          endpoint: data.endpoint,
+          p256dh: data.p256dh,
+          auth: data.auth,
+          user_agent: data.userAgent,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id,endpoint" },
+      )
+      .select("id")
+      .single();
+    if (error) throw error;
+    return { id: subscription.id };
+  });
+
+export const deletePushSubscription = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { endpoint: string }) => {
+    const endpoint = String(input?.endpoint ?? "").trim();
+    if (!endpoint) throw new Error("Push endpoint is required");
+    return { endpoint };
+  })
+  .handler(async ({ data, context }) => {
+    const { error } = await (context.supabase as any)
+      .from("push_subscriptions")
+      .delete()
+      .eq("user_id", context.userId)
+      .eq("endpoint", data.endpoint);
+    if (error) throw error;
+    return { ok: true };
+  });
