@@ -231,6 +231,7 @@ export const createLinkedMeeting = createServerFn({ method: "POST" })
       meetingAt: string;
       participants?: string[];
       projectId?: string | null;
+      eventType?: "event" | "meeting" | "appointment" | "lunch";
     }) => {
       const title = String(input?.title ?? "").trim();
       if (!title) throw new Error("Meeting title is required");
@@ -241,6 +242,9 @@ export const createLinkedMeeting = createServerFn({ method: "POST" })
         title,
         meetingAt: input.meetingAt,
         projectId: input?.projectId ? String(input.projectId) : null,
+        eventType: ["event", "meeting", "appointment", "lunch"].includes(String(input?.eventType))
+          ? String(input.eventType)
+          : "event",
         participants: Array.isArray(input?.participants)
           ? input.participants
               .map(String)
@@ -255,8 +259,8 @@ export const createLinkedMeeting = createServerFn({ method: "POST" })
     const db = context.supabase as any;
     await verifyProject(db, context.userId, data.projectId);
     const metadata = data.projectId
-      ? { project_id: data.projectId, source_type: "manual" }
-      : { source_type: "manual" };
+      ? { project_id: data.projectId, source_type: "manual", event_type: data.eventType }
+      : { source_type: "manual", event_type: data.eventType };
     const { data: meeting, error } = await db
       .from("meetings")
       .insert({
