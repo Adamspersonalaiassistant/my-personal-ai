@@ -2,7 +2,9 @@
 
 ## Apple Shortcut setup
 
-Create one Shortcut named **Emery**:
+LEGACY NOTE: the browser `/capture` recipe below predates the current direct `emery-shortcut` Edge Function and should not be used for new setup. The Shortcut is only a channel into the same Emery identity, memory, main conversation, and Calendar/action rules. New Shortcut setup should POST dictated/typed text to the authenticated `emery-shortcut` endpoint, speak its `reply`, and continue listening only when its `continue` field is true.
+
+Legacy browser recipe (kept only for migration reference):
 1. Add **Dictate Text**. Stop listening: After Pause.
 2. Add **URL Encode** for Dictated Text.
 3. Add **Current Date**, format it as ISO 8601 (used only as a one-shot token).
@@ -16,7 +18,7 @@ For typed capture, replace Dictate Text with Ask for Input and use `input=typed`
 
 ## One-Emery invariant
 
-Every entry point (main chat, PWA/Home Screen, `/capture`, Apple Shortcut, future Voice) must call the same authenticated `sendEmeryMessage` backend and the same `channel=main` conversation. Entry source is metadata only. It must never select a different persona.
+Every entry point (main chat, PWA/Home Screen, Apple Shortcut, Voice) must preserve the same Emery identity, `channel=main` conversation, durable-memory policy, domain routing, and Calendar/task action semantics. Entry source is metadata only. It must never select a different persona. The direct Shortcut Edge Function is an adapter for iOS, not a second assistant. When channels differ, fix the shared/canonical action contract rather than teaching separate assistants divergent rules.
 
 Routing occurs after natural input enters Emery: HPO/work, Personal, General/Unfiled, or Mixed. Mixed input may safely inform both domains. Agents are behind Emery; an entry point must never speak directly as an agent.
 
