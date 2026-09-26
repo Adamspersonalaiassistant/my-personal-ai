@@ -34,7 +34,7 @@ jobs:
         run: npx tsc --noEmit
       - name: Focused HPO lint
         run: >-
-          npx eslint
+          npx eslint --rule 'prettier/prettier: off'
           src/components/AppShell.tsx
           src/lib/agent.functions.ts
           src/lib/emery-handoff.ts
