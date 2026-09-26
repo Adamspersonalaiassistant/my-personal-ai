@@ -454,6 +454,25 @@ export const markCalendarNotification = createServerFn({ method: "POST" })
   });
 
 
+export const getPushNotificationStatus = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data, error, count } = await (context.supabase as any)
+      .from("push_subscriptions")
+      .select("id, endpoint, user_agent, created_at, updated_at", { count: "exact" })
+      .eq("user_id", context.userId)
+      .order("updated_at", { ascending: false })
+      .limit(5);
+    if (error) throw error;
+    const rows = data ?? [];
+    return {
+      connected: Number(count ?? rows.length) > 0,
+      subscriptionCount: Number(count ?? rows.length),
+      latestUpdatedAt: rows[0]?.updated_at ?? null,
+      userAgent: rows[0]?.user_agent ?? null,
+    };
+  });
+
 export const savePushSubscription = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { endpoint: string; p256dh: string; auth: string; userAgent?: string | null }) => {
