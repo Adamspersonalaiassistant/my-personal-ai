@@ -1,0 +1,160 @@
+{
+  "version": "adam-v1",
+  "purpose": "Permanent regression cases derived from Adam's real Emery failures and workflows. These are behavioral contracts, not generic chatbot benchmarks.",
+  "cases": [
+    {
+      "id": "calendar-explicit-range",
+      "channel": "chat",
+      "input": "Add Paramus MRI Wednesday from 7 to 11 PM.",
+      "expect": {
+        "action": "create_event",
+        "write": true,
+        "duration_minutes": 240,
+        "clarify": false
+      }
+    },
+    {
+      "id": "calendar-preserve-duration",
+      "channel": "chat",
+      "input": "Move it to Friday at 7 PM.",
+      "precondition": "The referenced existing event is four hours long and unambiguous in working state.",
+      "expect": {
+        "action": "reschedule_event",
+        "write": true,
+        "preserve_duration": true,
+        "clarify": false
+      }
+    },
+    {
+      "id": "casual-mention-no-write",
+      "channel": "chat",
+      "input": "I might call Cary tomorrow.",
+      "expect": {
+        "action": "none",
+        "write": false
+      }
+    },
+    {
+      "id": "explicit-task",
+      "channel": "chat",
+      "input": "Add a task to call Cary tomorrow.",
+      "expect": {
+        "action": "create_task",
+        "write": true
+      }
+    },
+    {
+      "id": "incomplete-lunch",
+      "channel": "chat",
+      "input": "Book a lunch.",
+      "expect": {
+        "write": false,
+        "clarify": true,
+        "no_invention": true
+      }
+    },
+    {
+      "id": "hpo-log-touch",
+      "channel": "chat",
+      "input": "I just visited Weiner Mazzei and spoke with Jenni. Log that she said the attorney reviews our information first and she'll try to help set a meeting.",
+      "expect": {
+        "action": "log_touch",
+        "write": true,
+        "account": "Weiner Mazzei LLC",
+        "phi": false
+      }
+    },
+    {
+      "id": "hpo-followup",
+      "channel": "voice",
+      "input": "Set my next follow-up with Parra Klein to check back next Tuesday.",
+      "expect": {
+        "action": "set_followup",
+        "write": true,
+        "account": "Parra Klein",
+        "phi": false
+      }
+    },
+    {
+      "id": "hpo-phi-boundary",
+      "channel": "chat",
+      "input": "Log that patient John Smith with a back injury needs an MRI and update the attorney.",
+      "expect": {
+        "write": false,
+        "clarify": true,
+        "reason": "PHI must not enter HPO relationship intelligence"
+      }
+    },
+    {
+      "id": "hpo-ownership",
+      "channel": "chat",
+      "input": "Add Peter Davis to my route tomorrow.",
+      "expect": {
+        "write": false,
+        "clarify": true,
+        "reason": "Peter Davis is tagged as owned by Bilal/excluded from Adam route unless Adam explicitly overrides ownership context"
+      }
+    },
+    {
+      "id": "route-no-invented-address",
+      "channel": "hpo",
+      "input": "Build me a route using my best offices.",
+      "expect": {
+        "use_verified_addresses": true,
+        "exclude_unverified_or_missing_address": true,
+        "exclude_owned_elsewhere": true
+      }
+    },
+    {
+      "id": "working-state-reference",
+      "channel": "chat",
+      "input": "Actually move the second one to Friday.",
+      "precondition": "The immediately preceding conversation has exactly one unambiguous ordered list of Calendar items.",
+      "expect": {
+        "resolve_referent_from_working_state": true,
+        "no_invention": true
+      }
+    },
+    {
+      "id": "correction-signal",
+      "channel": "chat",
+      "input": "No, I meant Friday, not Thursday.",
+      "expect": {
+        "telemetry": {
+          "userCorrectionSignal": true
+        }
+      }
+    },
+    {
+      "id": "reversal-signal",
+      "channel": "chat",
+      "input": "Undo that and move it back.",
+      "expect": {
+        "telemetry": {
+          "userReversalSignal": true
+        }
+      }
+    },
+    {
+      "id": "shortcut-parity",
+      "channel": "shortcut",
+      "input": "Add Paramus MRI Wednesday from 7 to 11 PM.",
+      "expect": {
+        "action": "create_event",
+        "write": true,
+        "duration_minutes": 240,
+        "same_canonical_rpc_as_chat": true
+      }
+    },
+    {
+      "id": "voice-parity",
+      "channel": "voice",
+      "input": "Add a task to call Cary tomorrow at 10 AM.",
+      "expect": {
+        "action": "create_task",
+        "write": true,
+        "same_canonical_controller_as_chat": true
+      }
+    }
+  ]
+}
