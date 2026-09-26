@@ -91,6 +91,12 @@ const checks = [
       files.realtime.includes('name: "refresh_emery_context"'),
   ],
   [
+    "Live Voice uses canonical Emery Calendar actions",
+    files.realtime.includes('name: "execute_calendar_action"') &&
+      files.realtime.includes("executeVoiceCalendarAction") &&
+      files.control.includes('name === "execute_calendar_action"'),
+  ],
+  [
     "Realtime tool calls handle completed function output items",
     files.control.includes('case "response.output_item.done"') &&
       files.control.includes('event.item?.type === "function_call"') &&

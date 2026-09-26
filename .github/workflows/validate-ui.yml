@@ -11,6 +11,15 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/validate-ui.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'scripts/**'
+      - 'supabase/migrations/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/validate-ui.yml'
   workflow_dispatch:
 
 permissions:
@@ -34,6 +43,8 @@ jobs:
         run: node scripts/validate-emery-improvement.mjs
       - name: Emery Voice activation regression checks
         run: node scripts/validate-emery-voice.mjs
+      - name: Phase 0 zero-credit certification
+        run: npm run validate:phase0
       - name: Focused Emery OS lint
         run: >-
           npx eslint --rule 'prettier/prettier: off'
@@ -45,6 +56,9 @@ jobs:
           src/lib/assistant-identity.ts
           src/lib/chat-history.functions.ts
           src/lib/chat.functions.ts
+          src/lib/runtime-telemetry.ts
+          src/lib/model-policy.ts
+          src/lib/calendar-agent.ts
           src/lib/dominican-voice-reference.ts
           src/lib/emery-intelligence.ts
           src/lib/emery.functions.ts

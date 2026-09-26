@@ -1,3 +1,4 @@
+import { MODEL_POLICY } from "@/lib/model-policy";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 type CalendarActionInput = {
@@ -39,6 +40,11 @@ function responseText(payload: any) {
     .map((item: any) => item?.text ?? "")
     .join("")
     .trim();
+}
+
+function rpcRow(result: any) {
+  const data = result?.data;
+  return Array.isArray(data) ? data[0] ?? null : data ?? null;
 }
 
 function isoOrNull(value: unknown) {
@@ -86,7 +92,7 @@ export async function processCalendarAction(input: CalendarActionInput): Promise
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "gpt-5.6-luna",
+      model: MODEL_POLICY.action,
       input: [
         {
           role: "system",
@@ -240,215 +246,125 @@ CURRENT RECORDS:\n${context}`,
   try {
     if (action === "create_task") {
       if (!title) throw new Error("Task title missing");
-      const created = await db
-        .from("tasks")
-        .insert({
-          user_id: userId,
-          title,
-          details: details || null,
-          due_at: dueAt,
-          priority: Math.min(5, Math.max(1, Number(parsed.priority ?? 3))),
-          status: "inbox",
-          source_type: "emery",
-          metadata: {
-            source: "emery",
-            calendar: Boolean(dueAt),
-            event_type: "task",
-          },
-        })
-        .select("id, title, due_at")
-        .single();
+      const created = await db.rpc("emery_action_create_task", {
+        p_user_id: userId,
+        p_title: title,
+        p_details: details || null,
+        p_due_at: dueAt,
+        p_priority: Math.min(5, Math.max(1, Number(parsed.priority ?? 3))),
+        p_source: "emery",
+      });
       if (created.error) throw created.error;
+      const row = rpcRow(created);
+      if (!row?.id) throw new Error("Task creation returned no record");
       return {
-        recognized: true,
-        performed: true,
-        needsClarification: false,
-        question: null,
-        action,
-        recordId: created.data.id,
-        title: created.data.title,
-        scheduledFor: created.data.due_at,
-        endsAt: null,
-        eventType: "task",
+        recognized: true, performed: true, needsClarification: false, question: null, action,
+        recordId: row.id, title: row.title, scheduledFor: row.due_at, endsAt: null, eventType: "task",
       };
     }
 
     if (action === "create_event") {
       if (!title || !dueAt) {
         return {
-          recognized: true,
-          performed: false,
-          needsClarification: true,
+          recognized: true, performed: false, needsClarification: true,
           question: !title ? "What should I call the event?" : "What date and time should I put it on your calendar?",
-          action,
-          recordId: null,
-          title: title || null,
-          scheduledFor: dueAt,
-          endsAt: endAt,
-          eventType,
+          action, recordId: null, title: title || null, scheduledFor: dueAt, endsAt: endAt, eventType,
         };
       }
       const resolvedEndAt = endAt && Date.parse(endAt) > Date.parse(dueAt)
         ? endAt
         : new Date(Date.parse(dueAt) + 60 * 60 * 1000).toISOString();
-      const created = await db
-        .from("meetings")
-        .insert({
-          user_id: userId,
-          title,
-          meeting_at: dueAt,
-          end_at: resolvedEndAt,
-          participants: Array.isArray(parsed.participants) ? parsed.participants.map(String).slice(0, 20) : [],
-          metadata: {
-            source_type: "emery",
-            source: "emery",
-            event_type: eventType || "event",
-            calendar: true,
-          },
-        })
-        .select("id, title, meeting_at, end_at")
-        .single();
+      const created = await db.rpc("emery_action_create_event", {
+        p_user_id: userId,
+        p_title: title,
+        p_start_at: dueAt,
+        p_end_at: resolvedEndAt,
+        p_participants: Array.isArray(parsed.participants) ? parsed.participants.map(String).slice(0, 20) : [],
+        p_event_type: eventType || "event",
+        p_source: "emery",
+      });
       if (created.error) throw created.error;
+      const row = rpcRow(created);
+      if (!row?.id) throw new Error("Event creation returned no record");
       return {
-        recognized: true,
-        performed: true,
-        needsClarification: false,
-        question: null,
-        action,
-        recordId: created.data.id,
-        title: created.data.title,
-        scheduledFor: created.data.meeting_at,
-        endsAt: created.data.end_at,
-        eventType: eventType || "event",
+        recognized: true, performed: true, needsClarification: false, question: null, action,
+        recordId: row.id, title: row.title, scheduledFor: row.meeting_at, endsAt: row.end_at,
+        eventType: (row.metadata ?? {}).event_type ?? eventType ?? "event",
       };
     }
 
     const targetId = typeof parsed.target_id === "string" ? parsed.target_id : "";
     if (!targetId) {
       return {
-        recognized: true,
-        performed: false,
-        needsClarification: true,
+        recognized: true, performed: false, needsClarification: true,
         question: String(parsed.clarification_question ?? "Which item do you mean?"),
-        action,
-        recordId: null,
-        title: title || null,
-        scheduledFor: dueAt,
-        endsAt: endAt,
-        eventType,
+        action, recordId: null, title: title || null, scheduledFor: dueAt, endsAt: endAt, eventType,
       };
     }
 
     if (action === "complete_task") {
       const target = openTasks.find((task: any) => task.id === targetId);
       if (!target) throw new Error("Task not found");
-      const updated = await db
-        .from("tasks")
-        .update({ status: "completed", completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-        .eq("id", targetId)
-        .eq("user_id", userId)
-        .select("id, title")
-        .single();
+      const updated = await db.rpc("emery_action_complete_task", {
+        p_user_id: userId,
+        p_task_id: targetId,
+      });
       if (updated.error) throw updated.error;
+      const row = rpcRow(updated);
+      if (!row?.id) throw new Error("Task completion returned no record");
       return {
-        recognized: true,
-        performed: true,
-        needsClarification: false,
-        question: null,
-        action,
-        recordId: updated.data.id,
-        title: updated.data.title,
-        scheduledFor: null,
-        endsAt: null,
-        eventType: "task",
+        recognized: true, performed: true, needsClarification: false, question: null, action,
+        recordId: row.id, title: row.title, scheduledFor: null, endsAt: null, eventType: "task",
       };
     }
 
     if (action === "schedule_task") {
       if (!dueAt) {
         return {
-          recognized: true,
-          performed: false,
-          needsClarification: true,
-          question: "What day and time should I schedule it?",
-          action,
-          recordId: targetId,
-          title: title || null,
-          scheduledFor: null,
-          endsAt: null,
-          eventType: "task",
+          recognized: true, performed: false, needsClarification: true,
+          question: "What day and time should I schedule it?", action, recordId: targetId,
+          title: title || null, scheduledFor: null, endsAt: null, eventType: "task",
         };
       }
       const target = openTasks.find((task: any) => task.id === targetId);
       if (!target) throw new Error("Task not found");
-      const updated = await db
-        .from("tasks")
-        .update({
-          due_at: dueAt,
-          metadata: { ...(target.metadata ?? {}), calendar: true, source: "emery" },
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", targetId)
-        .eq("user_id", userId)
-        .select("id, title, due_at")
-        .single();
+      const updated = await db.rpc("emery_action_schedule_task", {
+        p_user_id: userId,
+        p_task_id: targetId,
+        p_due_at: dueAt,
+      });
       if (updated.error) throw updated.error;
+      const row = rpcRow(updated);
+      if (!row?.id) throw new Error("Task scheduling returned no record");
       return {
-        recognized: true,
-        performed: true,
-        needsClarification: false,
-        question: null,
-        action,
-        recordId: updated.data.id,
-        title: updated.data.title,
-        scheduledFor: updated.data.due_at,
-        endsAt: null,
-        eventType: "task",
+        recognized: true, performed: true, needsClarification: false, question: null, action,
+        recordId: row.id, title: row.title, scheduledFor: row.due_at, endsAt: null, eventType: "task",
       };
     }
 
     if (action === "reschedule_event") {
       if (!dueAt) {
         return {
-          recognized: true,
-          performed: false,
-          needsClarification: true,
-          question: "What new date and time should I use?",
-          action,
-          recordId: targetId,
-          title: title || null,
-          scheduledFor: null,
-          endsAt: null,
-          eventType,
+          recognized: true, performed: false, needsClarification: true,
+          question: "What new date and time should I use?", action, recordId: targetId,
+          title: title || null, scheduledFor: null, endsAt: null, eventType,
         };
       }
       const target = upcomingMeetings.find((meeting: any) => meeting.id === targetId);
       if (!target) throw new Error("Event not found");
-      const previousStart = Date.parse(target.meeting_at);
-      const previousEnd = target.end_at ? Date.parse(target.end_at) : previousStart + 60 * 60 * 1000;
-      const durationMs = Math.max(15 * 60 * 1000, previousEnd - previousStart);
-      const resolvedEndAt = endAt && Date.parse(endAt) > Date.parse(dueAt)
-        ? endAt
-        : new Date(Date.parse(dueAt) + durationMs).toISOString();
-      const updated = await db
-        .from("meetings")
-        .update({ meeting_at: dueAt, end_at: resolvedEndAt, updated_at: new Date().toISOString() })
-        .eq("id", targetId)
-        .eq("user_id", userId)
-        .select("id, title, meeting_at, end_at, metadata")
-        .single();
+      const updated = await db.rpc("emery_action_reschedule_event", {
+        p_user_id: userId,
+        p_event_id: targetId,
+        p_start_at: dueAt,
+        p_end_at: endAt,
+      });
       if (updated.error) throw updated.error;
+      const row = rpcRow(updated);
+      if (!row?.id) throw new Error("Event reschedule returned no record");
       return {
-        recognized: true,
-        performed: true,
-        needsClarification: false,
-        question: null,
-        action,
-        recordId: updated.data.id,
-        title: updated.data.title,
-        scheduledFor: updated.data.meeting_at,
-        endsAt: updated.data.end_at,
-        eventType: (updated.data.metadata ?? {}).event_type ?? eventType,
+        recognized: true, performed: true, needsClarification: false, question: null, action,
+        recordId: row.id, title: row.title, scheduledFor: row.meeting_at, endsAt: row.end_at,
+        eventType: (row.metadata ?? {}).event_type ?? eventType,
       };
     }
   } catch (error) {

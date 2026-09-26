@@ -5,11 +5,14 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { ASSISTANT_IDENTITY } from "@/lib/assistant-identity";
 import { persistDurableMemoryFromMessage } from "@/lib/chat.functions";
 import { inferEmeryDomain, domainPrompt } from "@/lib/emery-domain";
-import { selectRelevantMemories, buildExecutiveFocus } from "@/lib/emery-intelligence";
+import { selectRelevantMemories, buildExecutiveFocus, readConversationState } from "@/lib/emery-intelligence";
+import { processCalendarAction } from "@/lib/calendar-agent";
+import { MODEL_POLICY } from "@/lib/model-policy";
+import { recordRuntimeEvent } from "@/lib/runtime-telemetry";
 import { loadHpoAgentContext } from "@/lib/hpo-agent-context";
 import { VOICE_PROFILE_CONTRACT, isUsableVoiceId } from "@/lib/voice-profile";
 
-const REALTIME_MODEL = "gpt-realtime-2.1";
+const REALTIME_MODEL = MODEL_POLICY.realtime;
 
 function realtimeSafetyIdentifier(userId: string) {
   return "emery_" + createHash("sha256").update(userId).digest("hex").slice(0, 32);
@@ -91,7 +94,7 @@ async function loadVoiceContext(db: any, userId: string, query = "current voice 
       .limit(8),
     db
       .from("meetings")
-      .select("id,title,meeting_at,participants,metadata")
+      .select("id,title,meeting_at,end_at,participants,metadata")
       .eq("user_id", userId)
       .gte("meeting_at", now)
       .order("meeting_at", { ascending: true })
@@ -140,6 +143,7 @@ async function loadVoiceContext(db: any, userId: string, query = "current voice 
     focus: buildExecutiveFocus(actions),
     recent,
     hpoContext: routeContext,
+    workingState: readConversationState(conversation.metadata),
   };
 }
 
@@ -255,6 +259,8 @@ LIVE VOICE OPERATING CONTRACT:
 - Use the supplied profile, memories, recent conversation, and current operating context to resolve names and references. If a proper noun remains materially ambiguous, ask one short clarification rather than inventing it.
 - Use the search_web tool for current, changing, recent, online, or fact-checking questions. Never pretend current knowledge came from live search if the tool was not used.
 - Use refresh_emery_context when Adam asks about a task, project, appointment, HPO item, memory, or other app state that may have changed since this voice session began.
+- Use execute_calendar_action whenever Adam explicitly asks to add/create/schedule/complete/move a task or internal Calendar event. Never claim a write unless the tool reports performed=true.
+- Casual planning is not write permission. If the calendar tool asks a clarification question, ask exactly that concise question and do not invent missing details.
 - Tool results are private working context. Answer Adam naturally rather than narrating tool mechanics.
 - Do not claim Calendar, Reminders, WhatsApp, PLAUD, phone control, or any external action is connected unless a tool confirms it.
 - Voice delivery follows the approved Voice Profile, but personality and judgment always come from Emery's central identity.
@@ -270,6 +276,9 @@ ${profile || "No additional profile details available."}
 
 SELECTED LONG-TERM MEMORY:
 ${memories || "No relevant durable memory selected."}
+
+WORKING STATE (active threads, commitments, referents; not long-term memory):
+${context.workingState.summary || "No rolling working-state summary yet."}
 
 CURRENT ACTIVE OS CONTEXT:
 ${actions}
@@ -338,7 +347,7 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
       audio: {
         input: {
           transcription: {
-            model: "gpt-4o-transcribe",
+            model: MODEL_POLICY.transcription,
             language: "en",
             prompt:
               "Natural conversational speech from Adam. He may speak quickly, restart, stutter, self-correct, pause mid-thought, or dictate fragments. Preserve intended wording and proper nouns. Common terms include Emery, Adam, Hudson Pro, HPO, PIP, PCC, Supabase, Lovable, and OpenAI.",
@@ -389,6 +398,23 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
               accent_intensity: { type: "number", description: "Desired subtle-accent strength, 0 to 1." },
               accent_description: { type: "string", description: "Updated accent delivery description, if Adam explicitly requests one." },
               style_note: { type: "string", description: "Any other explicit voice-style refinement Adam requested, stated concisely." },
+            },
+            required: ["request"],
+          },
+        },
+        {
+          type: "function",
+          name: "execute_calendar_action",
+          description:
+            "Use the same canonical Emery Calendar/Tasks controller as text chat when Adam explicitly asks to create/add/schedule/complete/move a task, event, meeting, appointment, or lunch. The server enforces permission, ambiguity checks, exact record IDs, and event durations.",
+          parameters: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              request: {
+                type: "string",
+                description: "Adam's exact action request from the active voice turn.",
+              },
             },
             required: ["request"],
           },
@@ -559,6 +585,54 @@ export const persistVoiceTranscript = createServerFn({ method: "POST" })
     } as const;
   });
 
+export const executeVoiceCalendarAction = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { request: string }) => ({
+    request: String(input?.request ?? "").trim().slice(0, 2000),
+  }))
+  .handler(async ({ data, context }) => {
+    if (!data.request) {
+      return {
+        recognized: false,
+        performed: false,
+        needsClarification: true,
+        question: "What would you like me to change on your Calendar?",
+        action: "none",
+      } as const;
+    }
+    const apiKey = process.env["OPENAI_API_KEY"];
+    if (!apiKey) return { error: "Calendar actions are not configured." } as const;
+    const startedAt = Date.now();
+    const db = context.supabase as any;
+    const fresh = await loadVoiceContext(db, context.userId, data.request);
+    const result = await processCalendarAction({
+      db,
+      userId: context.userId,
+      apiKey,
+      message: data.request,
+      recent: fresh.recent,
+      timezone: fresh.profile?.timezone ?? "America/New_York",
+      openTasks: fresh.actions.tasks,
+      upcomingMeetings: fresh.actions.meetings,
+    });
+    await recordRuntimeEvent(db, context.userId, {
+      channel: "voice",
+      eventType: "calendar_action",
+      domain: fresh.route.domain,
+      action: result.action,
+      status: result.needsClarification ? "clarification" : result.performed ? "ok" : result.error ? "error" : "skipped",
+      durationMs: Date.now() - startedAt,
+      model: MODEL_POLICY.action,
+      metadata: {
+        performed: result.performed,
+        needsClarification: result.needsClarification,
+        recordId: result.recordId,
+        eventType: result.eventType,
+      },
+    });
+    return result;
+  });
+
 export const searchWebForVoice = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { query: string }) => ({
@@ -576,7 +650,7 @@ export const searchWebForVoice = createServerFn({ method: "POST" })
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-5.6-luna",
+        model: MODEL_POLICY.primary,
         tools: [{ type: "web_search" }],
         tool_choice: "auto",
         input: [
