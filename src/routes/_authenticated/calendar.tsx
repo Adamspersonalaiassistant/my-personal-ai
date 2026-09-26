@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
+  Bell,
   CalendarDays,
   Check,
   CheckCircle2,
@@ -22,6 +23,8 @@ import {
   listProjectOptions,
   listUnifiedMeetings,
   listUnifiedTasks,
+  listDueCalendarNotifications,
+  markCalendarNotification,
   rescheduleMeeting,
   scheduleTask,
 } from "@/lib/os.functions";
@@ -57,6 +60,16 @@ type Meeting = {
 };
 
 type ProjectOption = { id: string; name: string; priority: number; status: string };
+type AppNotification = {
+  id: string;
+  title: string;
+  body: string | null;
+  scheduled_for: string;
+  status: string;
+  source_type: string | null;
+  source_ref: string | null;
+  metadata: unknown;
+};
 type CalendarItem =
   | { kind: "task"; id: string; title: string; at: string; task: Task }
   | { kind: "event"; id: string; title: string; at: string; meeting: Meeting };
@@ -111,15 +124,19 @@ function CalendarPage() {
   const toggleTask = useServerFn(setTaskCompleted);
   const moveTask = useServerFn(scheduleTask);
   const moveMeeting = useServerFn(rescheduleMeeting);
+  const loadNotifications = useServerFn(listDueCalendarNotifications);
+  const updateNotification = useServerFn(markCalendarNotification);
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [view, setView] = useState<CalendarView>("day");
   const [selectedDate, setSelectedDate] = useState(() => dayStart(new Date()));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showViewMenu, setShowViewMenu] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [addKind, setAddKind] = useState<AddKind>("task");
   const [editing, setEditing] = useState<CalendarItem | null>(null);
@@ -136,24 +153,40 @@ function CalendarPage() {
   const gridRef = useRef<HTMLDivElement | null>(null);
 
   async function refresh() {
-    const [taskResult, meetingResult] = await Promise.all([loadTasks({}), loadMeetings({})]);
+    const [taskResult, meetingResult, notificationResult] = await Promise.all([
+      loadTasks({}),
+      loadMeetings({}),
+      loadNotifications({}),
+    ]);
     setTasks((taskResult?.tasks ?? []) as Task[]);
     setMeetings((meetingResult?.meetings ?? []) as Meeting[]);
+    setNotifications((notificationResult?.notifications ?? []) as AppNotification[]);
+  }
+
+  async function refreshNotifications() {
+    try {
+      const result = await loadNotifications({});
+      setNotifications((result?.notifications ?? []) as AppNotification[]);
+    } catch {
+      // Calendar remains usable even if notification refresh fails.
+    }
   }
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [taskResult, meetingResult, projectResult] = await Promise.all([
+        const [taskResult, meetingResult, projectResult, notificationResult] = await Promise.all([
           loadTasks({}),
           loadMeetings({}),
           loadProjects({}),
+          loadNotifications({}),
         ]);
         if (cancelled) return;
         setTasks((taskResult?.tasks ?? []) as Task[]);
         setMeetings((meetingResult?.meetings ?? []) as Meeting[]);
         setProjects((projectResult?.projects ?? []) as ProjectOption[]);
+        setNotifications((notificationResult?.notifications ?? []) as AppNotification[]);
       } catch {
         if (!cancelled) setError("Couldn't load your calendar.");
       } finally {
@@ -161,7 +194,12 @@ function CalendarPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [loadMeetings, loadProjects, loadTasks]);
+  }, [loadMeetings, loadNotifications, loadProjects, loadTasks]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => { void refreshNotifications(); }, 60_000);
+    return () => window.clearInterval(interval);
+  }, [loadNotifications]);
 
   useEffect(() => {
     if (view !== "day" || !gridRef.current || !sameDay(selectedDate, new Date())) return;
@@ -308,6 +346,19 @@ function CalendarPage() {
               <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
             </button>
             <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setShowNotifications(true)}
+                className="emery-press relative flex size-10 items-center justify-center rounded-xl text-muted-foreground"
+                aria-label="Open Emery notifications"
+              >
+                <Bell className="size-[18px]" />
+                {notifications.length ? (
+                  <span className="absolute right-1 top-1 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
+                    {Math.min(9, notifications.length)}
+                  </span>
+                ) : null}
+              </button>
               <button type="button" onClick={() => setSelectedDate(dayStart(new Date()))} className="emery-press min-h-10 rounded-xl px-3 text-xs font-semibold text-primary">Today</button>
               <button type="button" onClick={() => openAddFor()} className="emery-press flex size-11 items-center justify-center rounded-full bg-primary text-primary-foreground" aria-label="Add calendar item">
                 <Plus className="size-5" />
@@ -367,6 +418,48 @@ function CalendarPage() {
             <MonthView selectedDate={selectedDate} items={items} onSelect={(date) => { setSelectedDate(date); setView("day"); }} onPrev={() => moveSelection(-1)} onNext={() => moveSelection(1)} />
           ) : null}
         </div>
+
+        {showNotifications ? (
+          <div className="fixed inset-0 z-[92] flex items-end bg-black/60 backdrop-blur-sm" onClick={() => setShowNotifications(false)}>
+            <div className="emery-sheet-in w-full rounded-t-[1.6rem] border-t border-border/50 bg-[oklch(0.125_0.034_255/0.99)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))]" onClick={(event) => event.stopPropagation()}>
+              <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/12" />
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-base font-semibold">Emery notifications</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">Lunch confirmations and schedule reminders.</p>
+                </div>
+                <button type="button" onClick={() => setShowNotifications(false)} className="flex size-10 items-center justify-center rounded-xl text-muted-foreground"><X className="size-4" /></button>
+              </div>
+              <div className="mt-3 max-h-[55dvh] overflow-y-auto rounded-2xl border border-border/40 bg-card/25">
+                {notifications.length ? notifications.map((notification, index) => (
+                  <button
+                    type="button"
+                    key={notification.id}
+                    onClick={async () => {
+                      await updateNotification({ data: { id: notification.id, state: "read" } });
+                      await refreshNotifications();
+                    }}
+                    className={`flex min-h-[74px] w-full items-start gap-3 px-3 py-3 text-left ${index ? "border-t border-border/30" : ""}`}
+                  >
+                    <div className="mt-1 flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/[0.1] text-primary"><Bell className="size-4" /></div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold">{notification.title}</p>
+                      {notification.body ? <p className="mt-1 text-xs leading-5 text-muted-foreground">{notification.body}</p> : null}
+                      <p className="mt-1 text-[10px] text-muted-foreground">{new Date(notification.scheduled_for).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</p>
+                    </div>
+                    <Check className="mt-2 size-4 shrink-0 text-muted-foreground" />
+                  </button>
+                )) : (
+                  <div className="px-4 py-10 text-center">
+                    <CheckCircle2 className="mx-auto size-6 text-primary/70" />
+                    <p className="mt-2 text-sm font-medium">You're caught up.</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Emery will create a confirmation reminder one day before every lunch.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {showViewMenu ? (
           <div className="fixed inset-0 z-[90] flex items-end bg-black/55 backdrop-blur-sm" onClick={() => setShowViewMenu(false)}>
