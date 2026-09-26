@@ -54,7 +54,7 @@ export const getOperatingSystemSnapshot = createServerFn({ method: "GET" })
         .limit(12),
       db
         .from("meetings")
-        .select("id, title, meeting_at, participants, summary, metadata, created_at")
+        .select("id, title, meeting_at, end_at, participants, summary, metadata, created_at")
         .eq("user_id", userId)
         .gte("meeting_at", now)
         .order("meeting_at", { ascending: true })
@@ -229,6 +229,7 @@ export const createLinkedMeeting = createServerFn({ method: "POST" })
     (input: {
       title: string;
       meetingAt: string;
+      endAt?: string | null;
       participants?: string[];
       projectId?: string | null;
       eventType?: "event" | "meeting" | "appointment" | "lunch";
@@ -238,9 +239,15 @@ export const createLinkedMeeting = createServerFn({ method: "POST" })
       if (!input?.meetingAt || Number.isNaN(Date.parse(input.meetingAt))) {
         throw new Error("Meeting date and time are required");
       }
+      const endAt = input?.endAt ? String(input.endAt) : null;
+      if (endAt && Number.isNaN(Date.parse(endAt))) throw new Error("Invalid event end time");
+      if (endAt && Date.parse(endAt) <= Date.parse(input.meetingAt)) {
+        throw new Error("Event end time must be after the start time");
+      }
       return {
         title,
         meetingAt: input.meetingAt,
+        endAt: endAt || new Date(Date.parse(input.meetingAt) + 60 * 60 * 1000).toISOString(),
         projectId: input?.projectId ? String(input.projectId) : null,
         eventType: ["event", "meeting", "appointment", "lunch"].includes(String(input?.eventType))
           ? String(input.eventType)
@@ -267,6 +274,7 @@ export const createLinkedMeeting = createServerFn({ method: "POST" })
         user_id: context.userId,
         title: data.title,
         meeting_at: data.meetingAt,
+        end_at: data.endAt,
         participants: data.participants,
         metadata,
       })
@@ -284,7 +292,7 @@ export const listUnifiedMeetings = createServerFn({ method: "GET" })
       await Promise.all([
         db
           .from("meetings")
-          .select("id, title, meeting_at, participants, summary, metadata, created_at")
+          .select("id, title, meeting_at, end_at, participants, summary, metadata, created_at")
           .eq("user_id", context.userId)
           .order("meeting_at", { ascending: true, nullsFirst: false }),
         db.from("projects").select("id, name").eq("user_id", context.userId).limit(100),
@@ -361,23 +369,44 @@ export const scheduleTask = createServerFn({ method: "POST" })
 
 export const rescheduleMeeting = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { id: string; meetingAt: string }) => {
+  .inputValidator((input: { id: string; meetingAt: string; endAt?: string | null }) => {
     const id = String(input?.id ?? "").trim();
     const meetingAt = String(input?.meetingAt ?? "");
+    const endAt = input?.endAt ? String(input.endAt) : null;
     if (!id) throw new Error("Meeting id is required");
     if (!meetingAt || Number.isNaN(Date.parse(meetingAt))) throw new Error("Invalid meeting time");
-    return { id, meetingAt };
+    if (endAt && Number.isNaN(Date.parse(endAt))) throw new Error("Invalid event end time");
+    if (endAt && Date.parse(endAt) <= Date.parse(meetingAt)) throw new Error("Event end time must be after the start time");
+    return { id, meetingAt, endAt };
   })
   .handler(async ({ data, context }) => {
-    const { data: meeting, error } = await (context.supabase as any)
+    const db = context.supabase as any;
+    const { data: current, error: currentError } = await db
+      .from("meetings")
+      .select("meeting_at, end_at")
+      .eq("id", data.id)
+      .eq("user_id", context.userId)
+      .single();
+    if (currentError) throw currentError;
+
+    const previousStart = Date.parse(current.meeting_at);
+    const previousEnd = current.end_at ? Date.parse(current.end_at) : previousStart + 60 * 60 * 1000;
+    const durationMs = Math.max(15 * 60 * 1000, previousEnd - previousStart);
+    const nextStart = Date.parse(data.meetingAt);
+    const nextEnd = data.endAt
+      ? new Date(data.endAt).toISOString()
+      : new Date(nextStart + durationMs).toISOString();
+
+    const { data: meeting, error } = await db
       .from("meetings")
       .update({
         meeting_at: data.meetingAt,
+        end_at: nextEnd,
         updated_at: new Date().toISOString(),
       })
       .eq("id", data.id)
       .eq("user_id", context.userId)
-      .select("id, title, meeting_at")
+      .select("id, title, meeting_at, end_at")
       .single();
     if (error) throw error;
     return { meeting };
