@@ -5,7 +5,8 @@
 export const EMERY_RETURNS = {
   "/hpo": "HPO",
   "/personal": "Personal",
-  "/tasks": "Tasks",
+  "/calendar": "Calendar",
+  "/tasks": "Calendar",
   "/projects": "Projects",
   "/meetings": "Meetings",
   "/memories": "Memories",
