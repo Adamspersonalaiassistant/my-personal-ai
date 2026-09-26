@@ -7,6 +7,7 @@ import { persistDurableMemoryFromMessage } from "@/lib/chat.functions";
 import { inferEmeryDomain, domainPrompt } from "@/lib/emery-domain";
 import { selectRelevantMemories, buildExecutiveFocus, readConversationState } from "@/lib/emery-intelligence";
 import { processCalendarAction } from "@/lib/calendar-agent";
+import { processHpoAction } from "@/lib/hpo-action-controller";
 import { MODEL_POLICY } from "@/lib/model-policy";
 import { recordRuntimeEvent } from "@/lib/runtime-telemetry";
 import { loadHpoAgentContext } from "@/lib/hpo-agent-context";
@@ -54,6 +55,7 @@ async function loadVoiceContext(db: any, userId: string, query = "current voice 
     profileResult,
     memoryResult,
     voiceResult,
+    configResult,
     taskResult,
     projectResult,
     meetingResult,
@@ -76,6 +78,11 @@ async function loadVoiceContext(db: any, userId: string, query = "current voice 
       .select(
         "base_voice_id,stable_identity,delivery_preferences,contextual_preferences,pronunciation_preferences,provider_capabilities,approved_at,version",
       )
+      .eq("user_id", userId)
+      .maybeSingle(),
+    db
+      .from("emery_config")
+      .select("response_verbosity,memory_max_items,memory_max_characters,proactive_focus_enabled")
       .eq("user_id", userId)
       .maybeSingle(),
     db
@@ -117,9 +124,11 @@ async function loadVoiceContext(db: any, userId: string, query = "current voice 
       createdAt: row.created_at as string,
     }));
 
+  const memoryMaxItems = Math.min(30, Math.max(6, Number(configResult.data?.memory_max_items ?? 16)));
+  const memoryMaxCharacters = Math.min(12000, Math.max(2000, Number(configResult.data?.memory_max_characters ?? 6500)));
   const selected = selectRelevantMemories(memoryResult.data ?? [], query, recent, {
-    maxItems: 14,
-    maxCharacters: 5000,
+    maxItems: memoryMaxItems,
+    maxCharacters: memoryMaxCharacters,
   });
 
   const actions = {
@@ -138,6 +147,7 @@ async function loadVoiceContext(db: any, userId: string, query = "current voice 
     route,
     profile: profileResult.data ?? null,
     voiceProfile: voiceResult.data ?? null,
+    config: configResult.data ?? null,
     memories: selected,
     actions,
     focus: buildExecutiveFocus(actions),
@@ -260,6 +270,7 @@ LIVE VOICE OPERATING CONTRACT:
 - Use the search_web tool for current, changing, recent, online, or fact-checking questions. Never pretend current knowledge came from live search if the tool was not used.
 - Use refresh_emery_context when Adam asks about a task, project, appointment, HPO item, memory, or other app state that may have changed since this voice session began.
 - Use execute_calendar_action whenever Adam explicitly asks to add/create/schedule/complete/move a task or internal Calendar event. Never claim a write unless the tool reports performed=true.
+- Use execute_hpo_action whenever Adam explicitly asks to log a non-PHI HPO relationship touch or set an HPO account follow-up. Never put patient names, medical/case details, or other PHI into HPO relationship records.
 - Casual planning is not write permission. If the calendar tool asks a clarification question, ask exactly that concise question and do not invent missing details.
 - Tool results are private working context. Answer Adam naturally rather than narrating tool mechanics.
 - Do not claim Calendar, Reminders, WhatsApp, PLAUD, phone control, or any external action is connected unless a tool confirms it.
@@ -279,6 +290,9 @@ ${memories || "No relevant durable memory selected."}
 
 WORKING STATE (active threads, commitments, referents; not long-term memory):
 ${context.workingState.summary || "No rolling working-state summary yet."}
+
+LEARNED OPERATING CONFIG:
+${JSON.stringify(context.config ?? {})}
 
 CURRENT ACTIVE OS CONTEXT:
 ${actions}
@@ -319,6 +333,7 @@ export const getVoiceReadiness = createServerFn({ method: "GET" })
         durableMemoryPersistence: true,
         webSearch: true,
         freshAppContextTool: true,
+        hpoRelationshipActions: true,
       },
     };
   });
@@ -414,6 +429,23 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
               request: {
                 type: "string",
                 description: "Adam's exact action request from the active voice turn.",
+              },
+            },
+            required: ["request"],
+          },
+        },
+        {
+          type: "function",
+          name: "execute_hpo_action",
+          description:
+            "Use Emery's canonical HPO relationship controller when Adam explicitly asks to log a non-PHI account interaction or set an account follow-up. The server enforces exact account matching, ownership context, PHI boundaries, and clarification rules.",
+          parameters: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              request: {
+                type: "string",
+                description: "Adam's exact HPO relationship-action request from the active voice turn.",
               },
             },
             required: ["request"],
@@ -628,6 +660,53 @@ export const executeVoiceCalendarAction = createServerFn({ method: "POST" })
         needsClarification: result.needsClarification,
         recordId: result.recordId,
         eventType: result.eventType,
+      },
+    });
+    return result;
+  });
+
+export const executeVoiceHpoAction = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { request: string }) => ({
+    request: String(input?.request ?? "").trim().slice(0, 3000),
+  }))
+  .handler(async ({ data, context }) => {
+    if (!data.request) {
+      return {
+        recognized: false,
+        performed: false,
+        needsClarification: true,
+        question: "What HPO relationship update should I handle?",
+        action: "none",
+      } as const;
+    }
+    const apiKey = process.env["OPENAI_API_KEY"];
+    if (!apiKey) return { error: "HPO actions are not configured." } as const;
+    const startedAt = Date.now();
+    const db = context.supabase as any;
+    const fresh = await loadVoiceContext(db, context.userId, data.request);
+    const result = await processHpoAction({
+      db,
+      userId: context.userId,
+      apiKey,
+      message: data.request,
+      recent: fresh.recent,
+      timezone: fresh.profile?.timezone ?? "America/New_York",
+    });
+    await recordRuntimeEvent(db, context.userId, {
+      channel: "voice",
+      eventType: "hpo_action",
+      domain: "hpo",
+      action: result.action,
+      status: result.needsClarification ? "clarification" : result.performed ? "ok" : result.error ? "error" : "skipped",
+      durationMs: Date.now() - startedAt,
+      model: MODEL_POLICY.action,
+      metadata: {
+        performed: result.performed,
+        needsClarification: result.needsClarification,
+        recordId: result.recordId,
+        accountId: result.accountId,
+        nonPhiController: true,
       },
     });
     return result;
