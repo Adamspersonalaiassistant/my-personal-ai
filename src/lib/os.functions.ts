@@ -329,3 +329,52 @@ export const listUnifiedTasks = createServerFn({ method: "GET" })
       })),
     };
   });
+
+
+export const scheduleTask = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { id: string; dueAt: string | null }) => {
+    const id = String(input?.id ?? "").trim();
+    if (!id) throw new Error("Task id is required");
+    const dueAt = input?.dueAt ? String(input.dueAt) : null;
+    if (dueAt && Number.isNaN(Date.parse(dueAt))) throw new Error("Invalid task time");
+    return { id, dueAt };
+  })
+  .handler(async ({ data, context }) => {
+    const { data: task, error } = await (context.supabase as any)
+      .from("tasks")
+      .update({
+        due_at: data.dueAt,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", data.id)
+      .eq("user_id", context.userId)
+      .select("id, title, due_at")
+      .single();
+    if (error) throw error;
+    return { task };
+  });
+
+export const rescheduleMeeting = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { id: string; meetingAt: string }) => {
+    const id = String(input?.id ?? "").trim();
+    const meetingAt = String(input?.meetingAt ?? "");
+    if (!id) throw new Error("Meeting id is required");
+    if (!meetingAt || Number.isNaN(Date.parse(meetingAt))) throw new Error("Invalid meeting time");
+    return { id, meetingAt };
+  })
+  .handler(async ({ data, context }) => {
+    const { data: meeting, error } = await (context.supabase as any)
+      .from("meetings")
+      .update({
+        meeting_at: data.meetingAt,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", data.id)
+      .eq("user_id", context.userId)
+      .select("id, title, meeting_at")
+      .single();
+    if (error) throw error;
+    return { meeting };
+  });
