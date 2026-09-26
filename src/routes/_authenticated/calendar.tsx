@@ -24,6 +24,7 @@ import {
   listUnifiedMeetings,
   listUnifiedTasks,
   listDueCalendarNotifications,
+  getPushNotificationStatus,
   markCalendarNotification,
   rescheduleMeeting,
   savePushSubscription,
@@ -135,6 +136,7 @@ function CalendarPage() {
   const moveTask = useServerFn(scheduleTask);
   const moveMeeting = useServerFn(rescheduleMeeting);
   const loadNotifications = useServerFn(listDueCalendarNotifications);
+  const loadPushStatus = useServerFn(getPushNotificationStatus);
   const updateNotification = useServerFn(markCalendarNotification);
   const persistPushSubscription = useServerFn(savePushSubscription);
 
@@ -192,14 +194,41 @@ function CalendarPage() {
   async function inspectPushStatus() {
     if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
       setPushEnabled(false);
+      setPushMessage("This browser cannot register Emery push notifications.");
       return;
     }
     try {
       const registration = await navigator.serviceWorker.register("/emery-sw.js");
       const subscription = await registration.pushManager.getSubscription();
-      setPushEnabled(Notification.permission === "granted" && Boolean(subscription));
+      const browserReady = Notification.permission === "granted" && Boolean(subscription);
+
+      if (browserReady && subscription) {
+        const json = subscription.toJSON();
+        const p256dh = json.keys?.["p256dh"];
+        const auth = json.keys?.["auth"];
+        if (p256dh && auth) {
+          await persistPushSubscription({
+            data: {
+              endpoint: subscription.endpoint,
+              p256dh,
+              auth,
+              userAgent: navigator.userAgent,
+            },
+          });
+        }
+      }
+
+      const backend = await loadPushStatus({});
+      const connected = browserReady && Boolean(backend?.connected);
+      setPushEnabled(connected);
+      if (Notification.permission === "granted" && browserReady && !connected) {
+        setPushMessage("Your iPhone allowed notifications, but Emery has not finished registering this device yet. Tap Enable to repair it.");
+      } else if (connected) {
+        setPushMessage("Connected: Emery can send background notifications to this iPhone.");
+      }
     } catch {
       setPushEnabled(false);
+      setPushMessage("Emery could not verify this iPhone's notification connection.");
     }
   }
 
@@ -238,8 +267,13 @@ function CalendarPage() {
           userAgent: navigator.userAgent,
         },
       });
-      setPushEnabled(true);
-      setPushMessage("Emery notifications are enabled on this iPhone.");
+      const backend = await loadPushStatus({});
+      setPushEnabled(Boolean(backend?.connected));
+      setPushMessage(
+        backend?.connected
+          ? "Connected: Emery can send background notifications to this iPhone."
+          : "The iPhone subscription was created, but Emery could not verify the server registration yet.",
+      );
     } catch (pushError) {
       console.error(pushError);
       setPushEnabled(false);
@@ -277,7 +311,7 @@ function CalendarPage() {
     void inspectPushStatus();
     const interval = window.setInterval(() => { void refreshNotifications(); }, 60_000);
     return () => window.clearInterval(interval);
-  }, [loadNotifications]);
+  }, [loadNotifications, loadPushStatus, persistPushSubscription]);
 
   useEffect(() => {
     if (view !== "day" || !gridRef.current || !sameDay(selectedDate, new Date())) return;
