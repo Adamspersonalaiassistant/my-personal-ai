@@ -9,8 +9,8 @@ self.addEventListener("push", (event) => {
   const title = data.title || "Emery";
   const options = {
     body: data.body || "You have a reminder from Emery.",
-    icon: "/favicon.ico",
-    badge: "/favicon.ico",
+    icon: "/icon-192.png",
+    badge: "/icon-192.png",
     tag: data.notificationId ? `emery-${data.notificationId}` : "emery-reminder",
     renotify: false,
     data: {
