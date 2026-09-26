@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "validate:phase0": "node scripts/validate-phase0.mjs"
+    "validate:phase0": "node scripts/validate-phase0.mjs",
+    "validate:behavior": "node scripts/validate-emery-behavior.mjs"
   },
   "overrides": {
     "rolldown": "1.2.1"
