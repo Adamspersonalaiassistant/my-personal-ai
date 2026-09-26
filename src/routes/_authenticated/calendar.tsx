@@ -9,7 +9,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Circle,
-  Clock3,
   List,
   Plus,
   Rows3,
@@ -359,10 +358,10 @@ function CalendarPage() {
             <AgendaView items={items} unscheduled={unscheduled} completed={completedTasks} onToggle={handleToggle} onOpen={openEditor} />
           ) : null}
           {!loading && view === "day" ? (
-            <DayGrid scrollRef={gridRef} dates={[selectedDate]} items={items} onOpen={openEditor} onToggle={handleToggle} />
+            <DayGrid scrollRef={gridRef} dates={[selectedDate]} items={items} onOpen={openEditor} />
           ) : null}
           {!loading && view === "3day" ? (
-            <DayGrid dates={[selectedDate, addDays(selectedDate, 1), addDays(selectedDate, 2)]} items={items} onOpen={openEditor} onToggle={handleToggle} />
+            <DayGrid dates={[selectedDate, addDays(selectedDate, 1), addDays(selectedDate, 2)]} items={items} onOpen={openEditor} />
           ) : null}
           {!loading && view === "month" ? (
             <MonthView selectedDate={selectedDate} items={items} onSelect={(date) => { setSelectedDate(date); setView("day"); }} onPrev={() => moveSelection(-1)} onNext={() => moveSelection(1)} />
@@ -529,13 +528,11 @@ function DayGrid({
   dates,
   items,
   onOpen,
-  onToggle,
   scrollRef,
 }: {
   dates: Date[];
   items: CalendarItem[];
   onOpen: (item: CalendarItem) => void;
-  onToggle: (task: Task) => void;
   scrollRef?: React.RefObject<HTMLDivElement | null>;
 }) {
   const hours = Array.from({ length: DAY_END - DAY_START + 1 }, (_, index) => DAY_START + index);
@@ -589,8 +586,8 @@ function DayGrid({
         </div>
       </div>
       {dates.length === 1 ? (
-        <div className="shrink-0 border-t border-border/30 bg-background/96 px-3 py-2">
-          <button type="button" onClick={() => { const firstTask = itemsForDate(items, dates[0]).find((item) => item.kind === "task"); if (firstTask?.kind === "task") void onToggle(firstTask.task); }} className="text-[10px] font-medium text-muted-foreground">Tap any block to move it. Tasks can also be completed from their detail sheet.</button>
+        <div className="shrink-0 border-t border-border/30 bg-background/96 px-3 py-2 text-[10px] font-medium text-muted-foreground">
+          Tap any block to move it. Tasks can also be completed from their detail sheet.
         </div>
       ) : null}
     </div>
