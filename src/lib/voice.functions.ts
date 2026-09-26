@@ -275,6 +275,7 @@ LIVE VOICE OPERATING CONTRACT:
 - Tool results are private working context. Answer Adam naturally rather than narrating tool mechanics.
 - Do not claim Calendar, Reminders, WhatsApp, PLAUD, phone control, or any external action is connected unless a tool confirms it.
 - Voice delivery follows the approved Voice Profile, but personality and judgment always come from Emery's central identity.
+- Honor LEARNED OPERATING CONFIG, especially response verbosity and memory budgets, unless Adam's current explicit request requires something different.
 - Do not restart a Voice Studio questionnaire. Adam has already chosen the direction. Start talking naturally with the approved profile and let him refine it from actual conversation.
 - If Adam explicitly asks during the live conversation to adjust how you sound — including pace, warmth, energy, expressiveness, brevity, or making the approved Latina / Latin-American accent character lighter, stronger, or more region-specific — use update_voice_delivery. Do not assume a nationality and do not claim the preference was saved unless the tool confirms it.
 - Pace changes can be applied between turns in the current session. Accent/style refinements are saved to Emery's Voice Profile and are guaranteed to be picked up on the next Voice session; do not pretend an acoustic change already happened if the current session cannot reflect it.
@@ -608,6 +609,25 @@ export const persistVoiceTranscript = createServerFn({ method: "POST" })
       })
       .eq("id", conversation.id)
       .eq("user_id", context.userId);
+
+    if (data.role === "user") {
+      const lower = data.text.toLowerCase();
+      await recordRuntimeEvent(db, context.userId, {
+        channel: "voice",
+        eventType: "voice_transcript",
+        domain: route?.domain ?? "general",
+        action: "conversation",
+        status: "ok",
+        model: MODEL_POLICY.realtime,
+        metadata: {
+          memorySaved: Boolean((memoryWrite as any)?.memorySaved),
+          memoryUpdated: Boolean((memoryWrite as any)?.memoryUpdated),
+          userCorrectionSignal: /\b(actually|correction|no[, ]+i meant|i meant|not that|i said|that's wrong|that is wrong|instead)\b/.test(lower),
+          userReversalSignal: /\b(undo|revert|cancel that|move it back|put it back|change it back|never mind|nevermind)\b/.test(lower),
+          transcriptCharacters: data.text.length,
+        },
+      });
+    }
 
     return {
       ok: true,
