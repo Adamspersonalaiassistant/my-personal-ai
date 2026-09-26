@@ -18,17 +18,19 @@ const safe=(v:unknown):Record<string,unknown>=>v&&typeof v==="object"&&!Array.is
 async function mainConversation(db:any,userId:string){const {data}=await db.from("conversations").select("id, metadata").eq("user_id",userId).eq("channel","main").order("started_at",{ascending:false}).limit(1).maybeSingle();if(data)return data;const {data:created,error}=await db.from("conversations").insert({user_id:userId,channel:"main",title:"Emery",metadata:{primary:true,identity:"central-v1"}}).select("id, metadata").single();if(error)throw error;return created;}
 async function history(db:any,userId:string,conversationId:string){const {data}=await db.from("conversation_messages").select("id,role,content,created_at").eq("user_id",userId).eq("conversation_id",conversationId).order("created_at",{ascending:false}).limit(24);return(data??[]).reverse().map((x:any)=>({id:x.id,role:x.role,text:x.content,createdAt:x.created_at}));}
 async function sign(db:any,rows:any[]):Promise<ChatAttachment[]>{return Promise.all(rows.map(async r=>{const {data}=await db.storage.from("emery-attachments").createSignedUrl(r.storage_path,600);return{id:r.id,fileName:r.file_name,mimeType:r.mime_type,sizeBytes:Number(r.size_bytes??0),url:data?.signedUrl??null}}));}
-async function actionContext(db:any,userId:string){const now=new Date().toISOString();const[t,p,m]=await Promise.all([db.from("tasks").select("id,title,details,status,priority,due_at,metadata,project_id").eq("user_id",userId).neq("status","completed").order("priority",{ascending:false}).limit(15),db.from("projects").select("id,name,description,status,priority,goal,next_action").eq("user_id",userId).eq("status","active").order("priority",{ascending:false}).limit(10),db.from("meetings").select("id,title,meeting_at,participants,metadata").eq("user_id",userId).gte("meeting_at",now).order("meeting_at",{ascending:true}).limit(10)]);return{tasks:t.data??[],projects:p.data??[],meetings:m.data??[]};}
+async function actionContext(db:any,userId:string){const now=new Date().toISOString();const[t,p,m]=await Promise.all([db.from("tasks").select("id,title,details,status,priority,due_at,metadata,project_id").eq("user_id",userId).neq("status","completed").order("priority",{ascending:false}).limit(15),db.from("projects").select("id,name,description,status,priority,goal,next_action").eq("user_id",userId).eq("status","active").order("priority",{ascending:false}).limit(10),db.from("meetings").select("id,title,meeting_at,end_at,participants,metadata").eq("user_id",userId).gte("meeting_at",now).order("meeting_at",{ascending:true}).limit(10)]);return{tasks:t.data??[],projects:p.data??[],meetings:m.data??[]};}
 function responseText(p:any){return typeof p.output_text==="string"?p.output_text.trim():(p.output??[]).flatMap((x:any)=>x.content??[]).filter((x:any)=>x.type==="output_text").map((x:any)=>x.text??"").join("").trim();}
 function calendarConfirmation(result:any,timezone:string){
   if(result?.needsClarification&&result?.question)return String(result.question);
   if(!result?.performed)return null;
   const when=result.scheduledFor?new Intl.DateTimeFormat("en-US",{timeZone:timezone,dateStyle:"medium",timeStyle:"short"}).format(new Date(result.scheduledFor)):null;
+  const endTime=result.endsAt?new Intl.DateTimeFormat("en-US",{timeZone:timezone,timeStyle:"short"}).format(new Date(result.endsAt)):null;
+  const range=when&&endTime?`${when}–${endTime}`:when;
   if(result.action==="create_task")return when?`Added “${result.title}” to your Calendar for ${when}.`:`Added “${result.title}” to your tasks.`;
-  if(result.action==="create_event")return result.eventType==="lunch"?`Added “${result.title}” to your Calendar for ${when}. I also set the day-before lunch confirmation reminder.`:`Added “${result.title}” to your Calendar for ${when}.`;
+  if(result.action==="create_event")return result.eventType==="lunch"?`Added “${result.title}” to your Calendar for ${range}. I also set the day-before lunch confirmation reminder.`:`Added “${result.title}” to your Calendar for ${range}.`;
   if(result.action==="complete_task")return `Marked “${result.title}” complete.`;
   if(result.action==="schedule_task")return `Scheduled “${result.title}” for ${when}.`;
-  if(result.action==="reschedule_event")return `Moved “${result.title}” to ${when}.`;
+  if(result.action==="reschedule_event")return `Moved “${result.title}” to ${range}.`;
   return "Done.";
 }
 
