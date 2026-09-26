@@ -1,3 +1,4 @@
+import { MODEL_POLICY } from "@/lib/model-policy";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 type CalendarActionInput = {
@@ -86,7 +87,7 @@ export async function processCalendarAction(input: CalendarActionInput): Promise
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "gpt-5.6-luna",
+      model: MODEL_POLICY.action,
       input: [
         {
           role: "system",
