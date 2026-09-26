@@ -36,8 +36,8 @@ const requiredCaseIds = [
 
 const checks = [
   ["all required Adam cases exist", requiredCaseIds.every((id) => caseIds.has(id))],
-  ["Calendar controller preserves explicit durations", files.calendar.includes("Never shorten an explicit range") && files.canonicalCalendar.includes("v_duration")],
-  ["Calendar controller distinguishes discussion from write permission", files.calendar.includes("Casual planning") || files.calendar.includes("not permission")],
+  ["Calendar controller preserves explicit durations", files.calendar.includes("Do not shorten an explicitly stated range") && files.canonicalCalendar.includes("v_duration")],
+  ["Calendar controller distinguishes discussion from write permission", files.calendar.includes("Casual discussion") || files.calendar.includes("not permission")],
   ["Main Emery records correction/reversal telemetry", files.emery.includes("userCorrectionSignal") && files.emery.includes("userReversalSignal")],
   ["Main Emery consumes learned memory budgets", files.emery.includes("memory_max_items") && files.emery.includes("memory_max_characters") && files.emery.includes("CURRENT LEARNED CONFIG")],
   ["Main Emery has a stable cacheable policy prefix", files.emery.includes("STABLE_RUNTIME_POLICY") && files.emery.includes("cachedInputTokens")],
