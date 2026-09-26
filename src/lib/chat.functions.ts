@@ -2,6 +2,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { ASSISTANT_IDENTITY } from "@/lib/assistant-identity";
+import { MODEL_POLICY } from "@/lib/model-policy";
 
 type ChatInput = { message: string; conversationId?: string | null };
 type StoredMessage = { role: "user" | "assistant"; text: string };
@@ -454,7 +455,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gpt-5.6-luna",
+          model: MODEL_POLICY.memory,
           input: [
             {
               role: "system",
@@ -637,6 +638,8 @@ export async function persistDurableMemoryFromMessage({
     return memoryResult;
   }
 
+  if (!shouldAnalyzeAutomaticMemory(message)) return memoryResult;
+
   const candidates = await extractAutomaticMemories(apiKey, message, profile ?? null, existingMemories);
   if (candidates === null) {
     memoryResult.memoryError ??= "Automatic memory analysis wasn't available right now.";
@@ -788,6 +791,14 @@ function profileUpdateForCandidate(candidate: MemoryCandidate): Partial<Profile>
   return null;
 }
 
+function shouldAnalyzeAutomaticMemory(message: string) {
+  const text = message.trim();
+  if (text.length < 24 || looksSensitive(text)) return false;
+  if (/^(thanks|thank you|ok|okay|yes|no|got it|sounds good|cool|lol|haha|what\?|why\?|how\?)\b[.!? ]*$/i.test(text)) return false;
+  if (/\b(remember|from now on|my goal|i prefer|i like|i dislike|i decided|i will|i'm going to|we are going to|my wife|my husband|my son|my daughter|my job|my role|my schedule|my routine|my priority|my budget|my constraint|actually|correction|no longer|not anymore)\b/i.test(text)) return true;
+  return text.length >= 120;
+}
+
 function isClearCorrection(message: string) {
   return /\b(actually|correction|correct that|no longer|not anymore|changed|instead|from now on|now (?:i|my|we))\b/i.test(
     message,
@@ -843,7 +854,7 @@ async function extractAutomaticMemories(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-5.6-luna",
+        model: MODEL_POLICY.memory,
         input: [
           {
             role: "system",
