@@ -162,6 +162,7 @@ function CalendarPage() {
   const [priority, setPriority] = useState(3);
   const [projectId, setProjectId] = useState("");
   const [participants, setParticipants] = useState("");
+  const [eventType, setEventType] = useState<"event" | "meeting" | "appointment" | "lunch">("event");
 
   const gridRef = useRef<HTMLDivElement | null>(null);
 
@@ -347,7 +348,7 @@ function CalendarPage() {
   }
 
   function resetForm() {
-    setTitle(""); setDetails(""); setWhen(""); setPriority(3); setProjectId(""); setParticipants("");
+    setTitle(""); setDetails(""); setWhen(""); setPriority(3); setProjectId(""); setParticipants(""); setEventType("event");
   }
 
   function openAddFor(date = selectedDate) {
@@ -383,6 +384,7 @@ function CalendarPage() {
           meetingAt: new Date(when).toISOString(),
           participants: participants.split(",").map((value) => value.trim()).filter(Boolean),
           projectId: projectId || null,
+          eventType,
         }});
       }
       resetForm();
@@ -608,7 +610,19 @@ function CalendarPage() {
                 {addKind === "task" ? (
                   <textarea value={details} onChange={(event) => setDetails(event.target.value)} rows={2} placeholder="Notes (optional)" className="w-full rounded-xl border border-border/55 bg-card/45 px-3.5 py-3 text-[16px] outline-none" />
                 ) : (
-                  <input value={participants} onChange={(event) => setParticipants(event.target.value)} placeholder="People, separated by commas" className="min-h-11 w-full rounded-xl border border-border/55 bg-card/45 px-3.5 text-[16px] outline-none" />
+                  <>
+                    <select
+                      value={eventType}
+                      onChange={(event) => setEventType(event.target.value as "event" | "meeting" | "appointment" | "lunch")}
+                      className="min-h-11 w-full rounded-xl border border-border/55 bg-card/45 px-3 text-[14px] outline-none"
+                    >
+                      <option value="event">Event</option>
+                      <option value="meeting">Meeting</option>
+                      <option value="appointment">Appointment</option>
+                      <option value="lunch">Lunch</option>
+                    </select>
+                    <input value={participants} onChange={(event) => setParticipants(event.target.value)} placeholder="People, separated by commas" className="min-h-11 w-full rounded-xl border border-border/55 bg-card/45 px-3.5 text-[16px] outline-none" />
+                  </>
                 )}
                 <input type="datetime-local" value={when} onChange={(event) => setWhen(event.target.value)} className="min-h-11 w-full rounded-xl border border-border/55 bg-card/45 px-3 text-[14px] outline-none" />
                 {addKind === "task" ? (
