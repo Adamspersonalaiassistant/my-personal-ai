@@ -100,7 +100,7 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
       throw new Error('Unauthorized: No user ID found in token');
     }
 
-    const { data: isOwner, error: ownerError } = await supabase.rpc('is_emery_owner');
+    const { data: isOwner, error: ownerError } = await (supabase as any).rpc('is_emery_owner');
     if (ownerError || isOwner !== true) {
       console.warn('[Emery Security] Rejected authenticated non-owner session');
       throw new Error('Unauthorized: This private Emery instance only accepts its owner account');
