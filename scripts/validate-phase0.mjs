@@ -13,6 +13,9 @@ const files = {
   os: read("src/lib/os.functions.ts"),
   hpo: read("src/lib/hpo.functions.ts"),
   migration: read("supabase/migrations/20260926220000_phase0_zero_credit_foundation.sql"),
+  canonicalMigration: read("supabase/migrations/20260926221000_canonical_emery_action_execution.sql"),
+  proactiveMigration: read("supabase/migrations/20260926222000_emery_proactive_zero_credit_routines.sql"),
+  shortcut: read("supabase/functions/emery-shortcut/index.ts"),
 };
 
 const checks = [
@@ -26,6 +29,13 @@ const checks = [
   ["HPO import staging remains available", files.hpo.includes("stageHpoImport")],
   ["security definer RPC execution is revoked", files.migration.includes("revoke execute on function public.sync_lunch_confirmation_workflow") && files.migration.includes("validate_internal_cron_token")],
   ["runtime telemetry table uses RLS", files.migration.includes("alter table public.emery_runtime_events enable row level security")],
+  ["main Calendar writes use canonical action RPCs", files.calendar.includes('db.rpc("emery_action_create_task"') && files.calendar.includes('db.rpc("emery_action_reschedule_event"')],
+  ["canonical action RPCs run as invoker", files.canonicalMigration.includes("security invoker") && !files.canonicalMigration.includes("security definer")],
+  ["Shortcut uses canonical action RPCs", files.shortcut.includes('db.rpc("emery_action_create_task"') && files.shortcut.includes('db.rpc("emery_action_reschedule_event"')],
+  ["Shortcut loads rolling working state", files.shortcut.includes("rollingState") && files.shortcut.includes("WORKING STATE")],
+  ["server-side proactive routines are scheduled", files.proactiveMigration.includes("run_emery_proactive_checks") && files.proactiveMigration.includes("emery-proactive-checks")],
+  ["nightly self-review writes evaluations", files.proactiveMigration.includes("emery_self_evaluations") && files.proactiveMigration.includes("nightly_self_review")],
+  ["proactivity is idempotent", files.proactiveMigration.includes("emery_routine_runs") && files.proactiveMigration.includes("on conflict(user_id,routine_key,run_key) do nothing")],
 ];
 
 let failures = 0;
