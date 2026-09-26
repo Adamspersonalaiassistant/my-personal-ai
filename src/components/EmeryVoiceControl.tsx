@@ -4,6 +4,7 @@ import { Loader2, Mic, MicOff, Radio, Search, X } from "lucide-react";
 import { claimExclusiveEmeryVoice, releaseExclusiveEmeryVoice } from "@/lib/voice-session-guard";
 import {
   createRealtimeClientSecret,
+  executeVoiceCalendarAction,
   getVoiceReadiness,
   persistVoiceTranscript,
   refreshVoiceContext,
@@ -35,6 +36,7 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
   const readReadiness = useServerFn(getVoiceReadiness);
   const mintSecret = useServerFn(createRealtimeClientSecret);
   const persistTranscript = useServerFn(persistVoiceTranscript);
+  const executeCalendarAction = useServerFn(executeVoiceCalendarAction);
   const searchWeb = useServerFn(searchWebForVoice);
   const refreshContext = useServerFn(refreshVoiceContext);
   const updateVoiceDelivery = useServerFn(updateVoiceDeliveryFromLive);
@@ -164,15 +166,24 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
       if (!callId || !name || processedToolCallsRef.current.has(callId)) return;
       processedToolCallsRef.current.add(callId);
 
-      let args: { query?: string } = {};
+      let args: { query?: string; request?: string } = {};
       try {
-        args = JSON.parse(rawArguments) as { query?: string };
+        args = JSON.parse(rawArguments) as { query?: string; request?: string };
       } catch {
         sendToolOutput(callId, "The tool arguments were invalid. Ask Adam briefly to retry.");
         return;
       }
 
       try {
+        if (name === "execute_calendar_action") {
+          const result = await executeCalendarAction({
+            data: { request: String(args.request ?? "") },
+          });
+          sendToolOutput(callId, JSON.stringify(result));
+          onConversationChanged?.();
+          return;
+        }
+
         if (name === "search_web") {
           const result = await searchWeb({ data: { query: String(args.query ?? "") } });
           sendToolOutput(
@@ -263,7 +274,7 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
         sendToolOutput(callId, "That tool is temporarily unavailable. Answer without inventing its result.");
       }
     },
-    [refreshContext, searchWeb, sendToolOutput, updateVoiceDelivery],
+    [executeCalendarAction, onConversationChanged, refreshContext, searchWeb, sendToolOutput, updateVoiceDelivery],
   );
 
   const handleRealtimeEvent = useCallback(
