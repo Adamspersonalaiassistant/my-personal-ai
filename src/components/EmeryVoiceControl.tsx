@@ -5,6 +5,7 @@ import { claimExclusiveEmeryVoice, releaseExclusiveEmeryVoice } from "@/lib/voic
 import {
   createRealtimeClientSecret,
   executeVoiceCalendarAction,
+  executeVoiceHpoAction,
   getVoiceReadiness,
   persistVoiceTranscript,
   refreshVoiceContext,
@@ -37,6 +38,7 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
   const mintSecret = useServerFn(createRealtimeClientSecret);
   const persistTranscript = useServerFn(persistVoiceTranscript);
   const executeCalendarAction = useServerFn(executeVoiceCalendarAction);
+  const executeHpoAction = useServerFn(executeVoiceHpoAction);
   const searchWeb = useServerFn(searchWebForVoice);
   const refreshContext = useServerFn(refreshVoiceContext);
   const updateVoiceDelivery = useServerFn(updateVoiceDeliveryFromLive);
@@ -184,6 +186,15 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
           return;
         }
 
+        if (name === "execute_hpo_action") {
+          const result = await executeHpoAction({
+            data: { request: String(args.request ?? "") },
+          });
+          sendToolOutput(callId, JSON.stringify(result));
+          onConversationChanged?.();
+          return;
+        }
+
         if (name === "search_web") {
           const result = await searchWeb({ data: { query: String(args.query ?? "") } });
           sendToolOutput(
@@ -274,7 +285,7 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
         sendToolOutput(callId, "That tool is temporarily unavailable. Answer without inventing its result.");
       }
     },
-    [executeCalendarAction, onConversationChanged, refreshContext, searchWeb, sendToolOutput, updateVoiceDelivery],
+    [executeCalendarAction, executeHpoAction, onConversationChanged, refreshContext, searchWeb, sendToolOutput, updateVoiceDelivery],
   );
 
   const handleRealtimeEvent = useCallback(
