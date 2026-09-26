@@ -359,7 +359,7 @@ function CalendarPage() {
             <AgendaView items={items} unscheduled={unscheduled} completed={completedTasks} onToggle={handleToggle} onOpen={openEditor} />
           ) : null}
           {!loading && view === "day" ? (
-            <DayGrid ref={gridRef} dates={[selectedDate]} items={items} onOpen={openEditor} onToggle={handleToggle} />
+            <DayGrid scrollRef={gridRef} dates={[selectedDate]} items={items} onOpen={openEditor} onToggle={handleToggle} />
           ) : null}
           {!loading && view === "3day" ? (
             <DayGrid dates={[selectedDate, addDays(selectedDate, 1), addDays(selectedDate, 2)]} items={items} onOpen={openEditor} onToggle={handleToggle} />
@@ -525,17 +525,19 @@ function AgendaView({
   );
 }
 
-const DayGrid = ({
+function DayGrid({
   dates,
   items,
   onOpen,
   onToggle,
+  scrollRef,
 }: {
   dates: Date[];
   items: CalendarItem[];
   onOpen: (item: CalendarItem) => void;
   onToggle: (task: Task) => void;
-}, ref: React.ForwardedRef<HTMLDivElement>) => {
+  scrollRef?: React.RefObject<HTMLDivElement | null>;
+}) {
   const hours = Array.from({ length: DAY_END - DAY_START + 1 }, (_, index) => DAY_START + index);
   const dateOnlyTasks = items.filter((item) => item.kind === "task" && isDateOnlyTask(item.task) && dates.some((date) => sameDay(date, item.at)));
   return (
@@ -552,7 +554,7 @@ const DayGrid = ({
           ))}
         </div>
       </div>
-      <div ref={ref} className="emery-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <div ref={scrollRef} className="emery-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <div className="relative" style={{ height: `${(DAY_END - DAY_START + 1) * HOUR_HEIGHT}px` }}>
           <div className="absolute inset-0 grid" style={{ gridTemplateColumns: `64px repeat(${dates.length}, minmax(0, 1fr))` }}>
             <div>
@@ -593,18 +595,7 @@ const DayGrid = ({
       ) : null}
     </div>
   );
-};
-
-const ForwardDayGrid = ReactForward(DayGrid);
-
-function ReactForward<T, P>(render: (props: P, ref: React.ForwardedRef<T>) => React.ReactNode) {
-  return (requireForwardRef(render) as unknown) as React.ForwardRefExoticComponent<P & React.RefAttributes<T>>;
 }
-function requireForwardRef<T, P>(render: (props: P, ref: React.ForwardedRef<T>) => React.ReactNode) {
-  // isolated helper so the component stays readable while using React's forwardRef
-  return (awaitForwardRef as any)(render);
-}
-const awaitForwardRef = (globalThis as any).__REACT_FORWARD_REF__;
 
 function CurrentTimeLine() {
   const now = new Date();
@@ -663,5 +654,3 @@ function MonthView({
     </div>
   );
 }
-
-export { ForwardDayGrid as __unusedForwardDayGrid };
