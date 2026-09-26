@@ -4,7 +4,6 @@ import {
   Brain,
   BriefcaseBusiness,
   CalendarDays,
-  CheckSquare,
   FolderKanban,
   Heart,
   MessageCircle,
@@ -27,7 +26,7 @@ const primaryNav = [
   { to: "/chat", label: "Emery", icon: MessageCircle },
   { to: "/personal", label: "Personal", icon: Heart },
   { to: "/hpo", label: "HPO", icon: BriefcaseBusiness },
-  { to: "/tasks", label: "Tasks", icon: CheckSquare },
+  { to: "/tasks", label: "Calendar", icon: CalendarDays },
 ] as const;
 
 const desktopNav = [
