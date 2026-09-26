@@ -53,6 +53,7 @@ type Meeting = {
   id: string;
   title: string | null;
   meeting_at: string | null;
+  end_at: string | null;
   participants: unknown;
   summary: string | null;
   project_id: string | null;
@@ -151,6 +152,7 @@ function CalendarPage() {
   const [addKind, setAddKind] = useState<AddKind>("task");
   const [editing, setEditing] = useState<CalendarItem | null>(null);
   const [rescheduleValue, setRescheduleValue] = useState("");
+  const [rescheduleEndValue, setRescheduleEndValue] = useState("");
   const [saving, setSaving] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [enablingPush, setEnablingPush] = useState(false);
@@ -159,6 +161,7 @@ function CalendarPage() {
   const [title, setTitle] = useState("");
   const [details, setDetails] = useState("");
   const [when, setWhen] = useState("");
+  const [endWhen, setEndWhen] = useState("");
   const [priority, setPriority] = useState(3);
   const [projectId, setProjectId] = useState("");
   const [participants, setParticipants] = useState("");
@@ -328,6 +331,12 @@ function CalendarPage() {
   function openEditor(item: CalendarItem) {
     setEditing(item);
     setRescheduleValue(inputLocal(new Date(item.at)));
+    if (item.kind === "event") {
+      const fallbackEnd = new Date(new Date(item.at).getTime() + 60 * 60 * 1000);
+      setRescheduleEndValue(inputLocal(new Date(item.meeting.end_at ?? fallbackEnd.toISOString())));
+    } else {
+      setRescheduleEndValue("");
+    }
   }
 
   async function saveReschedule() {
@@ -336,8 +345,14 @@ function CalendarPage() {
     setError(null);
     try {
       const iso = new Date(rescheduleValue).toISOString();
-      if (editing.kind === "task") await moveTask({ data: { id: editing.id, dueAt: iso } });
-      else await moveMeeting({ data: { id: editing.id, meetingAt: iso } });
+      if (editing.kind === "task") {
+        await moveTask({ data: { id: editing.id, dueAt: iso } });
+      } else {
+        if (!rescheduleEndValue) throw new Error("End time is required");
+        const endIso = new Date(rescheduleEndValue).toISOString();
+        if (Date.parse(endIso) <= Date.parse(iso)) throw new Error("End time must be after start time");
+        await moveMeeting({ data: { id: editing.id, meetingAt: iso, endAt: endIso } });
+      }
       setEditing(null);
       await refresh();
     } catch {
@@ -348,7 +363,7 @@ function CalendarPage() {
   }
 
   function resetForm() {
-    setTitle(""); setDetails(""); setWhen(""); setPriority(3); setProjectId(""); setParticipants(""); setEventType("event");
+    setTitle(""); setDetails(""); setWhen(""); setEndWhen(""); setPriority(3); setProjectId(""); setParticipants(""); setEventType("event");
   }
 
   function openAddFor(date = selectedDate) {
@@ -360,13 +375,14 @@ function CalendarPage() {
       defaultTime.setHours(9, 0, 0, 0);
     }
     setWhen(inputLocal(defaultTime));
+    setEndWhen(inputLocal(new Date(defaultTime.getTime() + 60 * 60 * 1000)));
     setShowAdd(true);
   }
 
   async function handleAdd(event: React.FormEvent) {
     event.preventDefault();
     if (!title.trim() || saving) return;
-    if (addKind === "event" && !when) return;
+    if (addKind === "event" && (!when || !endWhen)) return;
     setSaving(true);
     setError(null);
     try {
@@ -379,9 +395,13 @@ function CalendarPage() {
           projectId: projectId || null,
         }});
       } else {
+        const startIso = new Date(when).toISOString();
+        const endIso = new Date(endWhen).toISOString();
+        if (Date.parse(endIso) <= Date.parse(startIso)) throw new Error("End time must be after start time");
         await addMeeting({ data: {
           title,
-          meetingAt: new Date(when).toISOString(),
+          meetingAt: startIso,
+          endAt: endIso,
           participants: participants.split(",").map((value) => value.trim()).filter(Boolean),
           projectId: projectId || null,
           eventType,
@@ -624,7 +644,36 @@ function CalendarPage() {
                     <input value={participants} onChange={(event) => setParticipants(event.target.value)} placeholder="People, separated by commas" className="min-h-11 w-full rounded-xl border border-border/55 bg-card/45 px-3.5 text-[16px] outline-none" />
                   </>
                 )}
-                <input type="datetime-local" value={when} onChange={(event) => setWhen(event.target.value)} className="min-h-11 w-full rounded-xl border border-border/55 bg-card/45 px-3 text-[14px] outline-none" />
+                {addKind === "event" ? (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label className="space-y-1.5">
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Start</span>
+                      <input
+                        type="datetime-local"
+                        value={when}
+                        onChange={(event) => {
+                          const nextStart = event.target.value;
+                          setWhen(nextStart);
+                          if (nextStart && (!endWhen || Date.parse(endWhen) <= Date.parse(nextStart))) {
+                            setEndWhen(inputLocal(new Date(new Date(nextStart).getTime() + 60 * 60 * 1000)));
+                          }
+                        }}
+                        className="min-h-11 w-full rounded-xl border border-border/55 bg-card/45 px-3 text-[14px] outline-none"
+                      />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">End</span>
+                      <input
+                        type="datetime-local"
+                        value={endWhen}
+                        onChange={(event) => setEndWhen(event.target.value)}
+                        className="min-h-11 w-full rounded-xl border border-border/55 bg-card/45 px-3 text-[14px] outline-none"
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <input type="datetime-local" value={when} onChange={(event) => setWhen(event.target.value)} className="min-h-11 w-full rounded-xl border border-border/55 bg-card/45 px-3 text-[14px] outline-none" />
+                )}
                 {addKind === "task" ? (
                   <select value={priority} onChange={(event) => setPriority(Number(event.target.value))} className="min-h-11 w-full rounded-xl border border-border/55 bg-card/45 px-3 text-[14px] outline-none">
                     <option value={5}>Highest priority</option><option value={4}>High priority</option><option value={3}>Normal priority</option><option value={2}>Low priority</option><option value={1}>Someday</option>
@@ -634,7 +683,7 @@ function CalendarPage() {
                   <option value="">No linked project</option>
                   {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
                 </select>
-                <button type="submit" disabled={!title.trim() || saving || (addKind === "event" && !when)} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary font-semibold text-primary-foreground disabled:opacity-40">
+                <button type="submit" disabled={!title.trim() || saving || (addKind === "event" && (!when || !endWhen))} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary font-semibold text-primary-foreground disabled:opacity-40">
                   <Check className="size-4" /> {saving ? "Saving…" : "Add to Calendar"}
                 </button>
               </div>
@@ -649,15 +698,27 @@ function CalendarPage() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-base font-semibold">{editing.title}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{editing.kind === "task" ? "Task" : "Event"} · {new Date(editing.at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {editing.kind === "task"
+                      ? `Task · ${new Date(editing.at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}`
+                      : `Event · ${new Date(editing.at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}–${formatClock(editing.meeting.end_at ?? new Date(new Date(editing.at).getTime() + 60 * 60 * 1000).toISOString())}`}
+                  </p>
                 </div>
                 <button type="button" onClick={() => setEditing(null)} className="flex size-10 items-center justify-center rounded-xl text-muted-foreground"><X className="size-4" /></button>
               </div>
-              <label className="mt-4 block">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Move to</span>
-                <input type="datetime-local" value={rescheduleValue} onChange={(event) => setRescheduleValue(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-border/55 bg-card/45 px-3 text-[15px] outline-none" />
-              </label>
-              <button type="button" onClick={() => void saveReschedule()} disabled={saving || !rescheduleValue} className="mt-3 flex min-h-12 w-full items-center justify-center rounded-xl bg-primary font-semibold text-primary-foreground disabled:opacity-40">{saving ? "Moving…" : "Move item"}</button>
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">{editing.kind === "task" ? "Move to" : "Start"}</span>
+                  <input type="datetime-local" value={rescheduleValue} onChange={(event) => setRescheduleValue(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-border/55 bg-card/45 px-3 text-[15px] outline-none" />
+                </label>
+                {editing.kind === "event" ? (
+                  <label className="block">
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">End</span>
+                    <input type="datetime-local" value={rescheduleEndValue} onChange={(event) => setRescheduleEndValue(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-border/55 bg-card/45 px-3 text-[15px] outline-none" />
+                  </label>
+                ) : null}
+              </div>
+              <button type="button" onClick={() => void saveReschedule()} disabled={saving || !rescheduleValue || (editing.kind === "event" && !rescheduleEndValue)} className="mt-3 flex min-h-12 w-full items-center justify-center rounded-xl bg-primary font-semibold text-primary-foreground disabled:opacity-40">{saving ? "Moving…" : editing.kind === "event" ? "Save time & duration" : "Move item"}</button>
               {editing.kind === "task" ? (
                 <button type="button" onClick={() => { void handleToggle(editing.task); setEditing(null); }} className="mt-2 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-border/50 text-sm font-semibold">
                   <CheckCircle2 className="size-4" /> Mark complete
@@ -717,7 +778,11 @@ function AgendaView({
             <div className="overflow-hidden rounded-2xl border border-border/40 bg-card/25">
               {dayItems.map((item, index) => (
                 <button type="button" key={item.kind + item.id} onClick={() => onOpen(item)} className={`flex min-h-16 w-full items-center gap-3 px-3 text-left ${index ? "border-t border-border/30" : ""}`}>
-                  <span className="w-14 shrink-0 text-xs font-semibold text-primary">{formatClock(item.at)}</span>
+                  <span className="w-20 shrink-0 text-xs font-semibold text-primary">
+                    {item.kind === "event"
+                      ? `${formatClock(item.at)}–${formatClock(item.meeting.end_at ?? new Date(new Date(item.at).getTime() + 60 * 60 * 1000).toISOString())}`
+                      : formatClock(item.at)}
+                  </span>
                   <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{item.title}</span><span className="text-[10px] text-muted-foreground">{item.kind === "task" ? "Task" : "Event"}</span></span>
                 </button>
               ))}
@@ -771,7 +836,13 @@ function DayGrid({
                   const hour = time.getHours() + time.getMinutes() / 60;
                   if (hour < DAY_START || hour > DAY_END) return null;
                   const top = (hour - DAY_START) * HOUR_HEIGHT + 2;
-                  const height = item.kind === "event" ? 54 : 42;
+                  const end = item.kind === "event"
+                    ? new Date(item.meeting.end_at ?? new Date(time.getTime() + 60 * 60 * 1000).toISOString())
+                    : null;
+                  const durationMinutes = end ? Math.max(15, (end.getTime() - time.getTime()) / 60000) : 0;
+                  const height = item.kind === "event"
+                    ? Math.max(42, (durationMinutes / 60) * HOUR_HEIGHT - 4)
+                    : 42;
                   return (
                     <button
                       type="button"
@@ -781,7 +852,11 @@ function DayGrid({
                       style={{ top, minHeight: height }}
                     >
                       <span className="block truncate text-[11px] font-semibold">{item.title}</span>
-                      <span className="mt-0.5 block text-[9px] text-muted-foreground">{formatClock(item.at)} · {item.kind === "task" ? "Task" : "Event"}</span>
+                      <span className="mt-0.5 block text-[9px] text-muted-foreground">
+                        {item.kind === "event"
+                          ? `${formatClock(item.at)}–${formatClock(item.meeting.end_at ?? new Date(new Date(item.at).getTime() + 60 * 60 * 1000).toISOString())}`
+                          : `${formatClock(item.at)} · Task`}
+                      </span>
                     </button>
                   );
                 })}
