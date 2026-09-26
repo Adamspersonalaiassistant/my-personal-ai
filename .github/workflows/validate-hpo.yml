@@ -40,6 +40,7 @@ jobs:
           src/lib/emery-handoff.ts
           src/lib/emery.functions.ts
           src/lib/hpo-agent-context.ts
+          src/lib/hpo-action-controller.ts
           src/lib/hpo-chat-router.ts
           src/lib/hpo.functions.ts
           src/routes/_authenticated/hpo.tsx

@@ -16,6 +16,11 @@ const files = {
   canonicalMigration: read("supabase/migrations/20260926221000_canonical_emery_action_execution.sql"),
   proactiveMigration: read("supabase/migrations/20260926222000_emery_proactive_zero_credit_routines.sql"),
   shortcut: read("supabase/functions/emery-shortcut/index.ts"),
+  hpoAction: read("src/lib/hpo-action-controller.ts"),
+  hpoContext: read("src/lib/hpo-agent-context.ts"),
+  completionCore: read("supabase/migrations/20260926230000_zero_credit_research_completion_core.sql"),
+  canonicalHpo: read("supabase/migrations/20260926231000_canonical_emery_hpo_actions.sql"),
+  authMiddleware: read("src/integrations/supabase/auth-middleware.ts"),
 };
 
 const checks = [
@@ -36,6 +41,14 @@ const checks = [
   ["server-side proactive routines are scheduled", files.proactiveMigration.includes("run_emery_proactive_checks") && files.proactiveMigration.includes("emery-proactive-checks")],
   ["nightly self-review writes evaluations", files.proactiveMigration.includes("emery_self_evaluations") && files.proactiveMigration.includes("nightly_self_review")],
   ["proactivity is idempotent", files.proactiveMigration.includes("emery_routine_runs") && files.proactiveMigration.includes("on conflict(user_id,routine_key,run_key) do nothing")],
+  ["learned config is consumed at runtime", files.emery.includes("memory_max_items") && files.emery.includes("CURRENT LEARNED CONFIG")],
+  ["prompt cache usage is measured", files.emery.includes("cachedInputTokens") && files.shortcut.includes("cachedInputTokens")],
+  ["HPO actions are canonical across Main Emery and Shortcut", files.emery.includes("processHpoAction") && files.shortcut.includes('db.rpc("emery_hpo_log_touch"') && files.canonicalHpo.includes("security invoker")],
+  ["HPO context includes real route intelligence", files.hpoContext.includes("route_candidates") && files.hpoContext.includes("recent_route_history") && files.completionCore.includes("get_hpo_route_candidates")],
+  ["bounded self-adaptation is active", files.completionCore.includes("run_emery_safe_autotune") && files.completionCore.includes("event_count >= 20") && files.completionCore.includes("rollback_state")],
+  ["runtime events populate agent metrics", files.completionCore.includes("emery_runtime_event_to_agent_metric")],
+  ["private instance enforces owner gate", files.authMiddleware.includes("is_emery_owner") && files.completionCore.includes("emery_owner_registry")],
+  ["security event ledger exists", files.completionCore.includes("emery_security_events")],
 ];
 
 let failures = 0;

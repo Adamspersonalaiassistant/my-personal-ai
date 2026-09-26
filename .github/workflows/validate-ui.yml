@@ -45,6 +45,8 @@ jobs:
         run: node scripts/validate-emery-voice.mjs
       - name: Phase 0 zero-credit certification
         run: npm run validate:phase0
+      - name: Adam-specific behavior certification
+        run: npm run validate:behavior
       - name: Focused Emery OS lint
         run: >-
           npx eslint --rule 'prettier/prettier: off'
@@ -63,6 +65,8 @@ jobs:
           src/lib/emery-intelligence.ts
           src/lib/emery.functions.ts
           src/lib/hpo-chat-router.ts
+          src/lib/hpo-action-controller.ts
+          src/lib/hpo-agent-context.ts
           src/lib/improvement.functions.ts
           src/lib/memory.functions.ts
           src/lib/os.functions.ts

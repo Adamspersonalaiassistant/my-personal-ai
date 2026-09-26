@@ -27,7 +27,16 @@ CALENDAR/TASK RULES:
 - After a successful action, confirm briefly.
 - continue_conversation=true only when you are asking Adam an immediate follow-up question and the Shortcut should listen again.
 - continue_conversation=false when the turn is complete.
-- Do not claim Apple Calendar sync. This endpoint manages Emery's internal Calendar/Tasks only.`;
+- Do not claim Apple Calendar sync. This endpoint manages Emery's internal Calendar/Tasks only.
+
+HPO RELATIONSHIP RULES:
+- HPO writes are referral-source/account/relationship intelligence only. Never store patient names, DOBs, diagnoses, claim/case identifiers, treatment details, records, or other PHI here.
+- Use log_hpo_touch only when Adam clearly asks to log/save a relationship interaction and target exactly one CURRENT HPO ACCOUNT id.
+- Use set_hpo_followup only when Adam clearly asks to save a next relationship action for one CURRENT HPO ACCOUNT id.
+- If a request includes PHI, do not write it. Ask Adam to restate only the non-PHI relationship update.
+- Respect owner/exclusion context in CURRENT HPO ACCOUNTS. If an account is marked for another owner/excluded from Adam's route, ask before changing it unless Adam explicitly overrides that context.
+- Discussion such as "I might follow up" is not permission to write.
+- Never invent HPO account ids, addresses, contacts, outcomes, or dates.`;
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -114,7 +123,7 @@ Deno.serve(async (req: Request) => {
       timeStyle: "long",
     }).format(new Date());
 
-    const [profileR, memoriesR, recentR, tasksR, projectsR, meetingsR, hpoR] = await Promise.all([
+    const [profileR, memoriesR, recentR, tasksR, projectsR, meetingsR, hpoR, hpoContactsR, configR] = await Promise.all([
       db.from("profiles").select("display_name, timezone, profile_summary").eq("user_id", USER_ID).maybeSingle(),
       db.from("memories").select("title, content, memory_type, importance, updated_at")
         .eq("user_id", USER_ID).order("importance", { ascending: false }).order("updated_at", { ascending: false }).limit(16),
@@ -126,12 +135,18 @@ Deno.serve(async (req: Request) => {
         .eq("user_id", USER_ID).eq("status", "active").order("priority", { ascending: false }).limit(15),
       db.from("meetings").select("id, title, meeting_at, end_at, participants, metadata")
         .eq("user_id", USER_ID).gte("meeting_at", nowIso).order("meeting_at", { ascending: true }).limit(20),
-      db.from("hpo_accounts").select("id,name,account_type,city,priority,relationship_stage,relationship_health,next_action,next_action_due_at")
-        .eq("user_id", USER_ID).eq("status", "active").order("priority", { ascending: false }).limit(12),
+      db.from("hpo_accounts").select("id,name,account_type,city,address,priority,owner_name,relationship_stage,relationship_health,next_action,next_action_due_at,tags,metadata")
+        .eq("user_id", USER_ID).eq("status", "active").order("priority", { ascending: false }).limit(40),
+      db.from("hpo_contacts").select("id,account_id,name,role_title,relationship_notes")
+        .eq("user_id", USER_ID).limit(80),
+      db.from("emery_config").select("response_verbosity,memory_max_items,memory_max_characters")
+        .eq("user_id", USER_ID).maybeSingle(),
     ]);
 
     const recent = (recentR.data ?? []).reverse().filter((turn: any) => turn.id !== userInsert.data?.id).slice(-18);
-    const memories = (memoriesR.data ?? []).map((m: any) => `- [${m.memory_type}] ${m.title ? m.title + ": " : ""}${m.content}`).join("\n").slice(0, 4800);
+    const memoryMaxItems = Math.min(30, Math.max(6, Number(configR.data?.memory_max_items ?? 16)));
+    const memoryMaxCharacters = Math.min(12000, Math.max(2000, Number(configR.data?.memory_max_characters ?? 6500)));
+    const memories = (memoriesR.data ?? []).slice(0, memoryMaxItems).map((m: any) => `- [${m.memory_type}] ${m.title ? m.title + ": " : ""}${m.content}`).join("\n").slice(0, memoryMaxCharacters);
     const tasks = tasksR.data ?? [];
     const rollingState = typeof conversation?.metadata?.rolling_state?.summary === "string"
       ? conversation.metadata.rolling_state.summary.slice(0, 5000)
@@ -141,7 +156,9 @@ Deno.serve(async (req: Request) => {
       active_projects: projectsR.data ?? [],
       upcoming_calendar_events: meetingsR.data ?? [],
       hpo_accounts: hpoR.data ?? [],
-    }).slice(0, 16000);
+      hpo_contacts: hpoContactsR.data ?? [],
+      learned_config: configR.data ?? {},
+    }).slice(0, 22000);
 
     const input = [
       { role: "system", content: IDENTITY },
@@ -178,7 +195,7 @@ Deno.serve(async (req: Request) => {
                   type: "object",
                   additionalProperties: false,
                   properties: {
-                    type: { type: "string", enum: ["none", "create_task", "create_event", "complete_task", "schedule_task", "reschedule_event"] },
+                    type: { type: "string", enum: ["none", "create_task", "create_event", "complete_task", "schedule_task", "reschedule_event", "log_hpo_touch", "set_hpo_followup"] },
                     title: { type: "string" },
                     details: { type: "string" },
                     due_at: { type: ["string", "null"] },
@@ -186,8 +203,14 @@ Deno.serve(async (req: Request) => {
                     priority: { type: "integer", minimum: 1, maximum: 5 },
                     participants: { type: "array", items: { type: "string" }, maxItems: 20 },
                     target_task_id: { type: ["string", "null"] },
+                    target_hpo_account_id: { type: ["string", "null"] },
+                    interaction_type: { type: "string" },
+                    outcome: { type: "string" },
+                    relationship_signal: { type: "string" },
+                    next_action: { type: "string" },
+                    contains_phi: { type: "boolean" },
                   },
-                  required: ["type", "title", "details", "due_at", "end_at", "priority", "participants", "target_task_id"],
+                  required: ["type", "title", "details", "due_at", "end_at", "priority", "participants", "target_task_id", "target_hpo_account_id", "interaction_type", "outcome", "relationship_signal", "next_action", "contains_phi"],
                 },
               },
               required: ["reply", "continue_conversation", "action"],
@@ -202,8 +225,12 @@ Deno.serve(async (req: Request) => {
       return json({ error: "Emery could not answer right now" }, 502);
     }
 
-    const raw = responseText(await ai.json());
+    const aiPayload = await ai.json();
+    const raw = responseText(aiPayload);
     if (!raw) return json({ error: "Emery returned an empty reply" }, 502);
+    const inputTokens = Number(aiPayload?.usage?.input_tokens ?? 0) || 0;
+    const outputTokens = Number(aiPayload?.usage?.output_tokens ?? 0) || 0;
+    const cachedInputTokens = Number(aiPayload?.usage?.input_tokens_details?.cached_tokens ?? 0) || 0;
 
     let parsed: any;
     try { parsed = JSON.parse(raw); } catch { return json({ error: "Emery returned an unreadable reply" }, 502); }
@@ -330,6 +357,67 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    if (action.type === "log_hpo_touch" || action.type === "set_hpo_followup") {
+      const targetId = typeof action.target_hpo_account_id === "string" ? action.target_hpo_account_id : "";
+      const target = (hpoR.data ?? []).find((account: any) => account.id === targetId);
+      if (action.contains_phi === true) {
+        reply = "I can save the HPO relationship update, but leave out patient-identifying or medical/case details. What non-PHI account update should I save?";
+        continueConversation = true;
+      } else if (!target) {
+        reply = reply || "Which HPO account do you mean?";
+        continueConversation = true;
+      } else if (Array.isArray(target.tags) && target.tags.includes("exclude_from_adam_route") && !/\b(despite|even though|ownership|i am handling|i'm handling)\b/i.test(message)) {
+        reply = `${target.name} is marked as owned by someone else. Do you want me to update that account anyway?`;
+        continueConversation = true;
+      } else if (action.type === "log_hpo_touch") {
+        const summary = String(action.details ?? "").trim();
+        if (!summary) {
+          reply = `What relationship update should I log for ${target.name}?`;
+          continueConversation = true;
+        } else {
+          const dueAt = action.due_at && !Number.isNaN(Date.parse(action.due_at)) ? new Date(action.due_at).toISOString() : null;
+          const logged = await db.rpc("emery_hpo_log_touch", {
+            p_user_id: USER_ID,
+            p_account_id: target.id,
+            p_interaction_type: String(action.interaction_type || "visit"),
+            p_summary: summary,
+            p_outcome: String(action.outcome || "").trim() || null,
+            p_relationship_signal: String(action.relationship_signal || "").trim() || null,
+            p_next_action: String(action.next_action || "").trim() || null,
+            p_next_action_due_at: dueAt,
+            p_source: "emery-shortcut",
+          });
+          if (logged.error) throw logged.error;
+          const row = rpcRow(logged);
+          actionTaken = { type: "log_hpo_touch", id: row?.id, title: target.name };
+          reply = action.next_action
+            ? `Logged the ${target.name} relationship update. Next: ${String(action.next_action).trim()}.`
+            : `Logged the ${target.name} relationship update.`;
+          continueConversation = false;
+        }
+      } else {
+        const nextAction = String(action.next_action ?? "").trim();
+        if (!nextAction) {
+          reply = `What should the next action be for ${target.name}?`;
+          continueConversation = true;
+        } else {
+          const dueAt = action.due_at && !Number.isNaN(Date.parse(action.due_at)) ? new Date(action.due_at).toISOString() : null;
+          const updated = await db.rpc("emery_hpo_set_followup", {
+            p_user_id: USER_ID,
+            p_account_id: target.id,
+            p_next_action: nextAction,
+            p_due_at: dueAt,
+            p_source: "emery-shortcut",
+          });
+          if (updated.error) throw updated.error;
+          const row = rpcRow(updated);
+          actionTaken = { type: "set_hpo_followup", id: row?.id ?? target.id, title: target.name };
+          reply = `Set the next action for ${target.name}: ${nextAction}.`;
+          continueConversation = false;
+        }
+      }
+    }
+
     if (!reply) reply = actionTaken ? "Done." : "Got it.";
 
     const assistantInsert = await db.from("conversation_messages").insert({
@@ -365,6 +453,16 @@ Deno.serve(async (req: Request) => {
         rolling_state_used: Boolean(rollingState),
         open_task_count: tasks.length,
         hpo_account_count: (hpoR.data ?? []).length,
+        hpo_contact_count: (hpoContactsR.data ?? []).length,
+        response_verbosity: configR.data?.response_verbosity ?? "concise",
+        memory_max_items: memoryMaxItems,
+        memory_max_characters: memoryMaxCharacters,
+        inputTokens,
+        outputTokens,
+        cachedInputTokens,
+        cacheHitRate: inputTokens > 0 ? cachedInputTokens / inputTokens : 0,
+        userCorrectionSignal: /\b(actually|correction|no[, ]+i meant|i meant|not that|i said|that's wrong|that is wrong|instead)\b/i.test(message),
+        userReversalSignal: /\b(undo|revert|cancel that|move it back|put it back|change it back|never mind|nevermind)\b/i.test(message),
       },
     });
 
