@@ -418,6 +418,7 @@ CURRENT RECORDS:\n${context}`,
           recordId: targetId,
           title: title || null,
           scheduledFor: null,
+          endsAt: null,
           eventType,
         };
       }
