@@ -378,3 +378,44 @@ export const rescheduleMeeting = createServerFn({ method: "POST" })
     if (error) throw error;
     return { meeting };
   });
+
+
+export const listDueCalendarNotifications = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const now = new Date().toISOString();
+    const { data, error } = await (context.supabase as any)
+      .from("app_notifications")
+      .select("id, title, body, scheduled_for, status, source_type, source_ref, metadata, delivered_at, read_at, created_at")
+      .eq("user_id", context.userId)
+      .lte("scheduled_for", now)
+      .in("status", ["pending", "delivered"])
+      .order("scheduled_for", { ascending: false })
+      .limit(50);
+    if (error) throw error;
+    return { notifications: data ?? [] };
+  });
+
+export const markCalendarNotification = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { id: string; state: "delivered" | "read" | "dismissed" }) => ({
+    id: String(input?.id ?? "").trim(),
+    state: input.state,
+  }))
+  .handler(async ({ data, context }) => {
+    if (!data.id) throw new Error("Notification id is required");
+    const now = new Date().toISOString();
+    const patch =
+      data.state === "delivered"
+        ? { status: "delivered", delivered_at: now, updated_at: now }
+        : data.state === "read"
+          ? { status: "read", read_at: now, updated_at: now }
+          : { status: "dismissed", read_at: now, updated_at: now };
+    const { error } = await (context.supabase as any)
+      .from("app_notifications")
+      .update(patch)
+      .eq("id", data.id)
+      .eq("user_id", context.userId);
+    if (error) throw error;
+    return { ok: true };
+  });
