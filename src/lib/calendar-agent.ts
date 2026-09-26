@@ -98,7 +98,7 @@ Rules:
 - Casual discussion or asking what he should do is action=none.
 - create_task may be unscheduled if Adam asks to add a task but gives no time.
 - create_event requires a clear event/lunch/meeting identity plus a date and time. If one is missing, needs_clarification=true and ask ONE short question.
-- If Adam says he "has lunch with X Tuesday at noon", and the conversational context shows he is trying to add/capture it, treat it as create_event.
+- Standing instruction from Adam: whenever he clearly says he HAS a lunch and supplies enough details to identify who/purpose plus date and time, that statement itself authorizes create_event. Do not ask for separate permission. If a required detail is missing, ask one short clarification question.
 - If a lunch is created, event_type MUST be "lunch".
 - schedule_task and complete_task must reference an exact id from OPEN TASKS. If ambiguous, ask one short question.
 - reschedule_event must reference an exact id from UPCOMING EVENTS and have a new time. If ambiguous or missing time, ask one short question.
