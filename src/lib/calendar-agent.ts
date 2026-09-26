@@ -26,6 +26,7 @@ export type CalendarActionResult = {
   recordId: string | null;
   title: string | null;
   scheduledFor: string | null;
+  endsAt: string | null;
   eventType: string | null;
   error?: string | null;
 };
@@ -67,6 +68,7 @@ export async function processCalendarAction(input: CalendarActionInput): Promise
       id: meeting.id,
       title: meeting.title,
       meeting_at: meeting.meeting_at,
+      end_at: meeting.end_at,
       participants: meeting.participants,
       metadata: meeting.metadata,
     })),
@@ -97,17 +99,20 @@ Rules:
 - Only choose a write action when Adam clearly authorizes it with words such as add, create, put on my calendar, schedule, move, mark complete, finished, done, remind me, or equivalent.
 - Casual discussion or asking what he should do is action=none.
 - create_task may be unscheduled if Adam asks to add a task but gives no time.
-- create_event requires a clear event/lunch/meeting identity plus a date and time. If one is missing, needs_clarification=true and ask ONE short question.
+- create_event requires a clear event/lunch/meeting identity plus a date and start time. If one is missing, needs_clarification=true and ask ONE short question.
+- Event duration matters. If Adam gives an explicit time range such as "7-11pm", "7 PM to 11 PM", or a duration such as "for 4 hours", preserve it exactly by setting due_at=start and end_at=end.
+- If Adam gives only a start time and no duration/end time, default end_at to 60 minutes after due_at. Do not shorten an explicitly stated range to one hour.
 - Standing instruction from Adam: whenever he clearly says he HAS a lunch and supplies enough details to identify who/purpose plus date and time, that statement itself authorizes create_event. Do not ask for separate permission. If a required detail is missing, ask one short clarification question.
 - If a lunch is created, event_type MUST be "lunch".
 - schedule_task and complete_task must reference an exact id from OPEN TASKS. If ambiguous, ask one short question.
-- reschedule_event must reference an exact id from UPCOMING EVENTS and have a new time. If ambiguous or missing time, ask one short question.
+- reschedule_event must reference an exact id from UPCOMING EVENTS and have a new start time. If Adam gives a new end time or duration, set end_at accordingly. If he only changes the start, preserve the event's existing duration.
 - Resolve today/tomorrow/weekdays using the current local time and timezone.
 - Never invent people, dates, times, or ids.
 - Keep clarification_question concise and natural.
 - title should be human-readable, e.g. "Lunch with Jason Morrin" or "Call Cary".
 - For new lunch events, put people names in participants when known.
-- due_at should be an ISO-8601 timestamp including an offset when a time is required.
+- due_at is the event/task start time and should be an ISO-8601 timestamp including an offset when required.
+- end_at is the event end time. For create_event it should always be supplied: explicit user end/duration when provided, otherwise 60 minutes after due_at. For tasks it should be null.
 
 CURRENT RECORDS:\n${context}`,
         },
@@ -133,6 +138,7 @@ CURRENT RECORDS:\n${context}`,
               title: { type: ["string", "null"] },
               details: { type: ["string", "null"] },
               due_at: { type: ["string", "null"] },
+              end_at: { type: ["string", "null"] },
               priority: { type: "integer", minimum: 1, maximum: 5 },
               participants: { type: "array", items: { type: "string" }, maxItems: 20 },
               target_id: { type: ["string", "null"] },
@@ -146,6 +152,7 @@ CURRENT RECORDS:\n${context}`,
               "title",
               "details",
               "due_at",
+              "end_at",
               "priority",
               "participants",
               "target_id",
@@ -168,6 +175,7 @@ CURRENT RECORDS:\n${context}`,
       recordId: null,
       title: null,
       scheduledFor: null,
+      endsAt: null,
       eventType: null,
       error: "calendar_controller_failed",
     };
@@ -186,6 +194,7 @@ CURRENT RECORDS:\n${context}`,
       recordId: null,
       title: null,
       scheduledFor: null,
+      endsAt: null,
       eventType: null,
       error: "calendar_controller_unreadable",
     };
@@ -202,6 +211,7 @@ CURRENT RECORDS:\n${context}`,
       recordId: null,
       title: parsed.title ?? null,
       scheduledFor: null,
+      endsAt: isoOrNull(parsed.end_at),
       eventType: parsed.event_type ?? null,
     };
   }
@@ -216,11 +226,13 @@ CURRENT RECORDS:\n${context}`,
       recordId: null,
       title: parsed.title ?? null,
       scheduledFor: isoOrNull(parsed.due_at),
+      endsAt: isoOrNull(parsed.end_at),
       eventType: parsed.event_type ?? null,
     };
   }
 
   const dueAt = isoOrNull(parsed.due_at);
+  const endAt = isoOrNull(parsed.end_at);
   const title = typeof parsed.title === "string" ? parsed.title.trim() : "";
   const details = typeof parsed.details === "string" ? parsed.details.trim() : "";
   const eventType = parsed.event_type ?? null;
@@ -256,6 +268,7 @@ CURRENT RECORDS:\n${context}`,
         recordId: created.data.id,
         title: created.data.title,
         scheduledFor: created.data.due_at,
+        endsAt: null,
         eventType: "task",
       };
     }
@@ -271,15 +284,20 @@ CURRENT RECORDS:\n${context}`,
           recordId: null,
           title: title || null,
           scheduledFor: dueAt,
+          endsAt: endAt,
           eventType,
         };
       }
+      const resolvedEndAt = endAt && Date.parse(endAt) > Date.parse(dueAt)
+        ? endAt
+        : new Date(Date.parse(dueAt) + 60 * 60 * 1000).toISOString();
       const created = await db
         .from("meetings")
         .insert({
           user_id: userId,
           title,
           meeting_at: dueAt,
+          end_at: resolvedEndAt,
           participants: Array.isArray(parsed.participants) ? parsed.participants.map(String).slice(0, 20) : [],
           metadata: {
             source_type: "emery",
@@ -288,7 +306,7 @@ CURRENT RECORDS:\n${context}`,
             calendar: true,
           },
         })
-        .select("id, title, meeting_at")
+        .select("id, title, meeting_at, end_at")
         .single();
       if (created.error) throw created.error;
       return {
@@ -300,6 +318,7 @@ CURRENT RECORDS:\n${context}`,
         recordId: created.data.id,
         title: created.data.title,
         scheduledFor: created.data.meeting_at,
+        endsAt: created.data.end_at,
         eventType: eventType || "event",
       };
     }
@@ -315,6 +334,7 @@ CURRENT RECORDS:\n${context}`,
         recordId: null,
         title: title || null,
         scheduledFor: dueAt,
+        endsAt: endAt,
         eventType,
       };
     }
@@ -339,6 +359,7 @@ CURRENT RECORDS:\n${context}`,
         recordId: updated.data.id,
         title: updated.data.title,
         scheduledFor: null,
+        endsAt: null,
         eventType: "task",
       };
     }
@@ -354,6 +375,7 @@ CURRENT RECORDS:\n${context}`,
           recordId: targetId,
           title: title || null,
           scheduledFor: null,
+          endsAt: null,
           eventType: "task",
         };
       }
@@ -380,6 +402,7 @@ CURRENT RECORDS:\n${context}`,
         recordId: updated.data.id,
         title: updated.data.title,
         scheduledFor: updated.data.due_at,
+        endsAt: null,
         eventType: "task",
       };
     }
@@ -400,12 +423,18 @@ CURRENT RECORDS:\n${context}`,
       }
       const target = upcomingMeetings.find((meeting: any) => meeting.id === targetId);
       if (!target) throw new Error("Event not found");
+      const previousStart = Date.parse(target.meeting_at);
+      const previousEnd = target.end_at ? Date.parse(target.end_at) : previousStart + 60 * 60 * 1000;
+      const durationMs = Math.max(15 * 60 * 1000, previousEnd - previousStart);
+      const resolvedEndAt = endAt && Date.parse(endAt) > Date.parse(dueAt)
+        ? endAt
+        : new Date(Date.parse(dueAt) + durationMs).toISOString();
       const updated = await db
         .from("meetings")
-        .update({ meeting_at: dueAt, updated_at: new Date().toISOString() })
+        .update({ meeting_at: dueAt, end_at: resolvedEndAt, updated_at: new Date().toISOString() })
         .eq("id", targetId)
         .eq("user_id", userId)
-        .select("id, title, meeting_at, metadata")
+        .select("id, title, meeting_at, end_at, metadata")
         .single();
       if (updated.error) throw updated.error;
       return {
@@ -417,6 +446,7 @@ CURRENT RECORDS:\n${context}`,
         recordId: updated.data.id,
         title: updated.data.title,
         scheduledFor: updated.data.meeting_at,
+        endsAt: updated.data.end_at,
         eventType: (updated.data.metadata ?? {}).event_type ?? eventType,
       };
     }
@@ -431,6 +461,7 @@ CURRENT RECORDS:\n${context}`,
       recordId: null,
       title: title || null,
       scheduledFor: dueAt,
+      endsAt: endAt,
       eventType,
       error: "calendar_write_failed",
     };
@@ -445,6 +476,7 @@ CURRENT RECORDS:\n${context}`,
     recordId: null,
     title: null,
     scheduledFor: null,
+    endsAt: null,
     eventType: null,
   };
 }
