@@ -34,7 +34,7 @@ const checks = [
   ["HPO import staging remains available", files.hpo.includes("stageHpoImport")],
   ["security definer RPC execution is revoked", files.migration.includes("revoke execute on function public.sync_lunch_confirmation_workflow") && files.migration.includes("validate_internal_cron_token")],
   ["runtime telemetry table uses RLS", files.migration.includes("alter table public.emery_runtime_events enable row level security")],
-  ["main Calendar writes use canonical action RPCs", files.calendar.includes('db.rpc("emery_action_create_task"') && files.calendar.includes('db.rpc("emery_action_reschedule_event"')],
+  ["main Calendar writes use canonical action RPCs", (files.calendar.includes('db.rpc("emery_action_create_task_v2"') || files.calendar.includes('db.rpc("emery_action_create_task"')) && files.calendar.includes('db.rpc("emery_action_reschedule_event"')],
   ["canonical action RPCs run as invoker", files.canonicalMigration.includes("security invoker") && !files.canonicalMigration.includes("security definer")],
   ["Shortcut uses canonical action RPCs", files.shortcut.includes('db.rpc("emery_action_create_task"') && files.shortcut.includes('db.rpc("emery_action_reschedule_event"')],
   ["Shortcut loads rolling working state", files.shortcut.includes("rollingState") && files.shortcut.includes("WORKING STATE")],
