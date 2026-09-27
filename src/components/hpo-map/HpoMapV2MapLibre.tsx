@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import maplibregl, {
-  type GeoJSONSource,
-  type Map as MapLibreMap,
-  type MapMouseEvent,
-  type MapGeoJSONFeature,
-  type StyleSpecification,
+import * as maplibregl from "maplibre-gl";
+import type {
+  GeoJSONSource,
+  Map as MapLibreMap,
+  MapMouseEvent,
+  MapGeoJSONFeature,
+  StyleSpecification,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Check, LocateFixed, MapPinned, Maximize2, RefreshCw, Search } from "lucide-react";
@@ -18,6 +19,7 @@ const BLUE_LIGHT = "#dbeafe";
 
 const LIGHT_EMERY_STYLE: StyleSpecification = {
   version: 8,
+  glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
   sources: {
     osm: {
       type: "raster",
