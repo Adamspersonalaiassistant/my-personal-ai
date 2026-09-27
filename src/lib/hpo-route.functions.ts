@@ -277,8 +277,26 @@ export const getHpoRoutePlanner = createServerFn({ method: "GET" })
     const db = context.supabase as any;
     const userId = context.userId;
     const today = new Date();
-    const past = new Date(today.getTime() - 75 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const future = new Date(today.getTime() + 45 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const { data: profile } = await db
+      .from("profiles")
+      .select("timezone")
+      .eq("user_id", userId)
+      .maybeSingle();
+    const timezone = profile?.timezone || "America/New_York";
+    const localDate = (date: Date) => {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: timezone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).formatToParts(date);
+      const year = parts.find((part) => part.type === "year")?.value ?? "1970";
+      const month = parts.find((part) => part.type === "month")?.value ?? "01";
+      const day = parts.find((part) => part.type === "day")?.value ?? "01";
+      return `${year}-${month}-${day}`;
+    };
+    const past = localDate(new Date(today.getTime() - 75 * 24 * 60 * 60 * 1000));
+    const future = localDate(new Date(today.getTime() + 45 * 24 * 60 * 60 * 1000));
 
     const [routesResult, accountsResult, prospectsResult] = await Promise.all([
       db
@@ -342,7 +360,7 @@ export const getHpoRoutePlanner = createServerFn({ method: "GET" })
       })),
       accounts: accountsResult.data ?? [],
       prospects: prospectsResult.data ?? [],
-      today: today.toISOString().slice(0, 10),
+      today: localDate(today),
     };
   });
 
@@ -475,12 +493,21 @@ export const optimizeHpoRoute = createServerFn({ method: "POST" })
 
     let startPoint: { lat: number; lon: number } | null = null;
     let endPoint: { lat: number; lon: number } | null = null;
+    if (route.start_address && unresolved.length) {
+      await new Promise((resolve) => setTimeout(resolve, 1050));
+    }
     if (route.start_address) {
       if (Number.isFinite(route.start_latitude) && Number.isFinite(route.start_longitude)) {
         startPoint = { lat: route.start_latitude, lon: route.start_longitude };
       } else {
         startPoint = await geocode(route.start_address);
       }
+    }
+    if (
+      route.end_address &&
+      !(route.start_address && route.end_address === route.start_address && startPoint)
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 1050));
     }
     if (route.end_address) {
       if (Number.isFinite(route.end_latitude) && Number.isFinite(route.end_longitude)) {
@@ -709,10 +736,44 @@ export const captureHpoRouteNote = createServerFn({ method: "POST" })
     if (!rows.length) throw new Error("This route has no stops");
 
     const numberMatch = data.message.match(/\bstop\s*#?\s*(\d{1,2})\b/i);
-    let target =
-      numberMatch && Number(numberMatch[1]) > 0
-        ? rows.find((row: any) => Number(row.stop_order) === Number(numberMatch[1]))
+    const ordinalWords: Record<string, number> = {
+      first: 1,
+      second: 2,
+      third: 3,
+      fourth: 4,
+      fifth: 5,
+      sixth: 6,
+      seventh: 7,
+      eighth: 8,
+      ninth: 9,
+      tenth: 10,
+      eleventh: 11,
+      twelfth: 12,
+      thirteenth: 13,
+      fourteenth: 14,
+      fifteenth: 15,
+      sixteenth: 16,
+      seventeenth: 17,
+      eighteenth: 18,
+      nineteenth: 19,
+      twentieth: 20,
+    };
+    const ordinalMatch = data.message.toLowerCase().match(
+      /\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth)\s+(?:stop|office)\b/,
+    );
+    const explicitOrder = numberMatch
+      ? Number(numberMatch[1])
+      : ordinalMatch
+        ? ordinalWords[ordinalMatch[1] ?? ""]
         : null;
+    let target =
+      explicitOrder && explicitOrder > 0
+        ? rows.find((row: any) => Number(row.stop_order) === explicitOrder)
+        : null;
+
+    if (!target && /\b(next stop|next office)\b/i.test(data.message)) {
+      target = rows.find((row: any) => !TERMINAL.has(row.status)) ?? null;
+    }
 
     if (!target) {
       const messageNorm = normalize(data.message);
