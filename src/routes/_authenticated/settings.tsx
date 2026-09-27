@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { ImprovementHealthCard } from "@/components/ImprovementHealthCard";
+import { ExecutionHealthCard } from "@/components/ExecutionHealthCard";
 import { RecentFilesCard } from "@/components/RecentFilesCard";
 import { Button } from "@/components/ui/button";
 import { listMemories } from "@/lib/chat.functions";
@@ -29,7 +30,7 @@ export const Route = createFileRoute("/_authenticated/settings")({ component: Se
 const capabilities = [
   { label: "AI brain", value: "Connected", icon: Brain, live: true },
   { label: "Memory", value: "Online", icon: Database, live: true },
-  { label: "Action layer", value: "Connected", icon: CheckSquare, live: true },
+  { label: "Execution layer", value: "Verified", icon: CheckSquare, live: true },
   { label: "Agent team", value: "Connected", icon: UsersRound, live: true },
   { label: "File uploads", value: "Connected", icon: FileUp, live: true },
   { label: "Shortcut bridge", value: "Ready", icon: Smartphone, live: true },
@@ -166,6 +167,7 @@ function Settings() {
         </SettingsGroup>
 
         <div className="space-y-3">
+          <ExecutionHealthCard />
           <RecentFilesCard />
           <ImprovementHealthCard />
         </div>
