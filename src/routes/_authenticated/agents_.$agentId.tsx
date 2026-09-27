@@ -121,19 +121,19 @@ function AgentChat() {
 
   return (
     <AppShell title={agent?.name ?? "Agent"} padded={false}>
-      <div className="flex h-[calc(100dvh-8.4rem)] min-h-0 flex-col md:h-[calc(100dvh-11rem)]">
-        <section className="shrink-0 border-b border-border/35 bg-background/62 px-3 py-3 backdrop-blur-2xl sm:px-5">
+      <div className="flex h-full min-h-0 flex-col">
+        <section className="shrink-0 border-b border-border/35 bg-background/62 px-3 py-2 backdrop-blur-2xl sm:px-5">
           <div className="mx-auto flex max-w-2xl items-center gap-3">
             <Link
               to="/agents"
               aria-label="Back to agents"
-              className="emery-press emery-surface flex size-11 shrink-0 items-center justify-center rounded-2xl text-muted-foreground hover:text-foreground"
+              className="emery-press emery-surface flex size-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground"
             >
               <ArrowLeft className="size-4" />
             </Link>
 
             <div className="relative hidden shrink-0 min-[390px]:block">
-              <div className="emery-icon-well flex size-11 items-center justify-center rounded-2xl">
+              <div className="emery-icon-well flex size-10 items-center justify-center rounded-xl">
                 <BrainCircuit className="size-[18px]" strokeWidth={1.8} />
               </div>
               <span className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background bg-primary" />
@@ -160,9 +160,9 @@ function AgentChat() {
           </div>
 
           {agent ? (
-            <div className="mx-auto mt-3 flex max-w-2xl items-start gap-2.5 rounded-2xl border border-border/40 bg-card/28 px-3.5 py-2.5">
+            <div className="mx-auto mt-2 flex max-w-2xl items-start gap-2 rounded-xl border border-border/40 bg-card/28 px-3 py-2">
               <Sparkles className="mt-0.5 size-3.5 shrink-0 text-primary" />
-              <p className="line-clamp-2 text-[11px] leading-5 text-muted-foreground">
+              <p className="line-clamp-1 text-[11px] leading-5 text-muted-foreground">
                 <span className="font-semibold text-foreground/90">{agent.name}'s mission:</span>{" "}
                 {agent.mission}
               </p>
@@ -187,22 +187,22 @@ function AgentChat() {
           ) : null}
 
           {!loading && agent && messages.length === 0 ? (
-            <div className="emery-fade-up mx-auto flex min-h-[50vh] max-w-lg flex-col items-center justify-center py-8 text-center">
+            <div className="emery-fade-up mx-auto flex min-h-[36vh] max-w-lg flex-col items-center justify-center py-5 text-center">
               <div className="relative">
                 <div className="absolute inset-1 rounded-full bg-primary/10 blur-2xl" />
                 <div className="emery-glass-strong relative flex size-16 items-center justify-center rounded-[1.4rem] text-primary">
                   <Users className="size-6" />
                 </div>
               </div>
-              <p className="emery-kicker mt-5">Persistent group chat</p>
-              <h2 className="mt-2 text-xl font-semibold tracking-[-0.025em]">
+              <p className="emery-kicker mt-3">Persistent group chat</p>
+              <h2 className="mt-1.5 text-lg font-semibold tracking-[-0.02em]">
                 The right people are already in the room.
               </h2>
-              <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
+              <p className="mt-1.5 max-w-sm text-sm leading-5 text-muted-foreground">
                 Talk normally. {agent.name} brings the specialty. Emery keeps your priorities,
                 context, and final decision connected.
               </p>
-              <div className="mt-5 grid w-full gap-2 sm:grid-cols-3">
+              <div className="mt-3 grid w-full gap-2 sm:grid-cols-3">
                 <Participant label="You" detail="Goal & context" />
                 <Participant label="Emery" detail="Leader & synthesis" primary />
                 <Participant
@@ -244,7 +244,7 @@ function AgentChat() {
 
         <form
           onSubmit={handleSubmit}
-          className="z-20 shrink-0 bg-[linear-gradient(180deg,transparent,oklch(0.095_0.02_160/0.98)_22%)] px-2.5 pb-2 pt-5 sm:px-5 sm:pb-3"
+          className="z-20 shrink-0 bg-[linear-gradient(180deg,transparent,oklch(0.095_0.02_160/0.98)_22%)] px-2.5 pb-2 pt-3 sm:px-5 sm:pb-3"
         >
           <div className="emery-glass-strong mx-auto flex max-w-2xl items-end gap-2 rounded-[1.6rem] p-2 shadow-[0_20px_50px_rgba(0,0,0,0.3)]">
             <textarea
