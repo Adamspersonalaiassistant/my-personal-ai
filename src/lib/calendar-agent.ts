@@ -1,5 +1,5 @@
-import { MODEL_POLICY } from "@/lib/model-policy";
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { MODEL_POLICY } from "@/lib/model-policy";
 
 type CalendarActionInput = {
   db: any;
@@ -12,30 +12,54 @@ type CalendarActionInput = {
   upcomingMeetings: any[];
 };
 
-export type CalendarActionResult = {
-  recognized: boolean;
+export type CalendarActionName =
+  | "none"
+  | "batch"
+  | "create_task"
+  | "create_event"
+  | "complete_task"
+  | "schedule_task"
+  | "unschedule_task"
+  | "set_task_deadline"
+  | "reschedule_event"
+  | "create_reminder";
+
+export type CalendarActionItemResult = {
+  action: Exclude<CalendarActionName, "none" | "batch">;
   performed: boolean;
-  needsClarification: boolean;
-  question: string | null;
-  action:
-    | "none"
-    | "create_task"
-    | "create_event"
-    | "complete_task"
-    | "schedule_task"
-    | "reschedule_event";
   recordId: string | null;
   title: string | null;
   scheduledFor: string | null;
   endsAt: string | null;
+  dueAt: string | null;
+  reminderAt: string | null;
   eventType: string | null;
+  error?: string | null;
+};
+
+export type CalendarActionResult = {
+  recognized: boolean;
+  performed: boolean;
+  partialSuccess: boolean;
+  needsClarification: boolean;
+  question: string | null;
+  action: CalendarActionName;
+  recordId: string | null;
+  title: string | null;
+  scheduledFor: string | null;
+  endsAt: string | null;
+  dueAt: string | null;
+  eventType: string | null;
+  items: CalendarActionItemResult[];
+  notificationScheduled: boolean;
+  pushConnected: boolean | null;
   error?: string | null;
 };
 
 function responseText(payload: any) {
   if (typeof payload?.output_text === "string") return payload.output_text.trim();
   return (payload?.output ?? [])
-    .flatMap((item: any) => Array.isArray(item?.content) ? item.content : [])
+    .flatMap((item: any) => (Array.isArray(item?.content) ? item.content : []))
     .filter((item: any) => item?.type === "output_text")
     .map((item: any) => item?.text ?? "")
     .join("")
@@ -53,6 +77,320 @@ function isoOrNull(value: unknown) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+function emptyResult(error?: string | null): CalendarActionResult {
+  return {
+    recognized: false,
+    performed: false,
+    partialSuccess: false,
+    needsClarification: false,
+    question: null,
+    action: "none",
+    recordId: null,
+    title: null,
+    scheduledFor: null,
+    endsAt: null,
+    dueAt: null,
+    eventType: null,
+    items: [],
+    notificationScheduled: false,
+    pushConnected: null,
+    error: error ?? null,
+  };
+}
+
+async function upsertEventReminder(input: {
+  db: any;
+  userId: string;
+  eventId: string;
+  title: string;
+  reminderAt: string;
+}) {
+  const { error } = await input.db.from("app_notifications").upsert(
+    {
+      user_id: input.userId,
+      title: input.title,
+      body: "Calendar reminder from Emery.",
+      scheduled_for: input.reminderAt,
+      status: "pending",
+      source_type: "calendar_event_reminder",
+      source_ref: input.eventId,
+      metadata: { event_id: input.eventId, workflow: "calendar_event_reminder" },
+      delivered_at: null,
+      read_at: null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id,source_type,source_ref" },
+  );
+  if (error) throw error;
+}
+
+async function performOperation(input: CalendarActionInput, operation: any): Promise<CalendarActionItemResult> {
+  const { db, userId, openTasks, upcomingMeetings } = input;
+  const action = String(operation.action ?? "") as CalendarActionItemResult["action"];
+  const title = typeof operation.title === "string" ? operation.title.trim() : "";
+  const details = typeof operation.details === "string" ? operation.details.trim() : "";
+  const dueAt = isoOrNull(operation.due_at);
+  const scheduledStart = isoOrNull(operation.scheduled_start_at);
+  const scheduledEnd = isoOrNull(operation.scheduled_end_at);
+  const reminderAt = isoOrNull(operation.reminder_at);
+  const eventType = operation.event_type ?? null;
+  const targetId = typeof operation.target_id === "string" ? operation.target_id.trim() : "";
+
+  try {
+    if (action === "create_task") {
+      if (!title) throw new Error("Task title missing");
+      if (scheduledEnd && !scheduledStart) throw new Error("Scheduled task start missing");
+      if (scheduledStart && scheduledEnd && Date.parse(scheduledEnd) <= Date.parse(scheduledStart)) {
+        throw new Error("Task schedule end must be after start");
+      }
+      const created = await db.rpc("emery_action_create_task_v2", {
+        p_user_id: userId,
+        p_title: title,
+        p_details: details || null,
+        p_due_at: dueAt,
+        p_scheduled_start_at: scheduledStart,
+        p_scheduled_end_at: scheduledEnd,
+        p_reminder_at: reminderAt,
+        p_priority: Math.min(5, Math.max(1, Number(operation.priority ?? 3))),
+        p_source: "emery",
+      });
+      if (created.error) throw created.error;
+      const row = rpcRow(created);
+      if (!row?.id) throw new Error("Task creation returned no record");
+      return {
+        action,
+        performed: true,
+        recordId: row.id,
+        title: row.title,
+        scheduledFor: row.scheduled_start_at ?? null,
+        endsAt: row.scheduled_end_at ?? null,
+        dueAt: row.due_at ?? null,
+        reminderAt: row.reminder_at ?? null,
+        eventType: "task",
+      };
+    }
+
+    if (action === "create_event") {
+      const startAt = scheduledStart ?? dueAt;
+      if (!title || !startAt) throw new Error("Event title and start required");
+      const resolvedEnd =
+        scheduledEnd && Date.parse(scheduledEnd) > Date.parse(startAt)
+          ? scheduledEnd
+          : new Date(Date.parse(startAt) + 60 * 60 * 1000).toISOString();
+      const created = await db.rpc("emery_action_create_event", {
+        p_user_id: userId,
+        p_title: title,
+        p_start_at: startAt,
+        p_end_at: resolvedEnd,
+        p_participants: Array.isArray(operation.participants)
+          ? operation.participants.map(String).slice(0, 20)
+          : [],
+        p_event_type: eventType || "event",
+        p_source: "emery",
+      });
+      if (created.error) throw created.error;
+      const row = rpcRow(created);
+      if (!row?.id) throw new Error("Event creation returned no record");
+      if (reminderAt) {
+        await upsertEventReminder({
+          db,
+          userId,
+          eventId: row.id,
+          title: row.title || title,
+          reminderAt,
+        });
+      }
+      return {
+        action,
+        performed: true,
+        recordId: row.id,
+        title: row.title,
+        scheduledFor: row.meeting_at,
+        endsAt: row.end_at,
+        dueAt: null,
+        reminderAt,
+        eventType: (row.metadata ?? {}).event_type ?? eventType ?? "event",
+      };
+    }
+
+    if (action === "create_reminder") {
+      if (!title || !reminderAt) throw new Error("Reminder title and time required");
+      const { data: row, error } = await db
+        .from("app_notifications")
+        .insert({
+          user_id: userId,
+          title,
+          body: details || "Reminder from Emery.",
+          scheduled_for: reminderAt,
+          status: "pending",
+          source_type: "emery_reminder",
+          metadata: { workflow: "emery_reminder" },
+        })
+        .select("id,title,scheduled_for")
+        .single();
+      if (error) throw error;
+      return {
+        action,
+        performed: true,
+        recordId: row.id,
+        title: row.title,
+        scheduledFor: null,
+        endsAt: null,
+        dueAt: null,
+        reminderAt: row.scheduled_for,
+        eventType: null,
+      };
+    }
+
+    if (!targetId) throw new Error("Target id missing");
+
+    if (action === "complete_task") {
+      const target = openTasks.find((task: any) => task.id === targetId);
+      if (!target) throw new Error("Task not found");
+      const updated = await db.rpc("emery_action_complete_task", {
+        p_user_id: userId,
+        p_task_id: targetId,
+      });
+      if (updated.error) throw updated.error;
+      const row = rpcRow(updated);
+      return {
+        action,
+        performed: Boolean(row?.id),
+        recordId: row?.id ?? null,
+        title: row?.title ?? target.title,
+        scheduledFor: null,
+        endsAt: null,
+        dueAt: row?.due_at ?? target.due_at ?? null,
+        reminderAt: null,
+        eventType: "task",
+      };
+    }
+
+    if (action === "schedule_task") {
+      const target = openTasks.find((task: any) => task.id === targetId);
+      if (!target) throw new Error("Task not found");
+      if (!scheduledStart) throw new Error("Task schedule time missing");
+      const updated = await db.rpc("emery_action_schedule_task_v2", {
+        p_user_id: userId,
+        p_task_id: targetId,
+        p_start_at: scheduledStart,
+        p_end_at: scheduledEnd,
+        p_reminder_at: reminderAt,
+      });
+      if (updated.error) throw updated.error;
+      const row = rpcRow(updated);
+      return {
+        action,
+        performed: Boolean(row?.id),
+        recordId: row?.id ?? null,
+        title: row?.title ?? target.title,
+        scheduledFor: row?.scheduled_start_at ?? scheduledStart,
+        endsAt: row?.scheduled_end_at ?? scheduledEnd,
+        dueAt: row?.due_at ?? target.due_at ?? null,
+        reminderAt: row?.reminder_at ?? reminderAt,
+        eventType: "task",
+      };
+    }
+
+    if (action === "unschedule_task") {
+      const target = openTasks.find((task: any) => task.id === targetId);
+      if (!target) throw new Error("Task not found");
+      const updated = await db.rpc("emery_action_unschedule_task", {
+        p_user_id: userId,
+        p_task_id: targetId,
+      });
+      if (updated.error) throw updated.error;
+      const row = rpcRow(updated);
+      return {
+        action,
+        performed: Boolean(row?.id),
+        recordId: row?.id ?? null,
+        title: row?.title ?? target.title,
+        scheduledFor: null,
+        endsAt: null,
+        dueAt: row?.due_at ?? target.due_at ?? null,
+        reminderAt: null,
+        eventType: "task",
+      };
+    }
+
+    if (action === "set_task_deadline") {
+      const target = openTasks.find((task: any) => task.id === targetId);
+      if (!target) throw new Error("Task not found");
+      const updated = await db.rpc("emery_action_set_task_deadline", {
+        p_user_id: userId,
+        p_task_id: targetId,
+        p_due_at: dueAt,
+      });
+      if (updated.error) throw updated.error;
+      const row = rpcRow(updated);
+      return {
+        action,
+        performed: Boolean(row?.id),
+        recordId: row?.id ?? null,
+        title: row?.title ?? target.title,
+        scheduledFor: row?.scheduled_start_at ?? target.scheduled_start_at ?? null,
+        endsAt: row?.scheduled_end_at ?? target.scheduled_end_at ?? null,
+        dueAt: row?.due_at ?? null,
+        reminderAt: row?.reminder_at ?? target.reminder_at ?? null,
+        eventType: "task",
+      };
+    }
+
+    if (action === "reschedule_event") {
+      const target = upcomingMeetings.find((meeting: any) => meeting.id === targetId);
+      if (!target) throw new Error("Event not found");
+      const startAt = scheduledStart ?? dueAt;
+      if (!startAt) throw new Error("Event start missing");
+      const updated = await db.rpc("emery_action_reschedule_event", {
+        p_user_id: userId,
+        p_event_id: targetId,
+        p_start_at: startAt,
+        p_end_at: scheduledEnd,
+      });
+      if (updated.error) throw updated.error;
+      const row = rpcRow(updated);
+      if (!row?.id) throw new Error("Event reschedule returned no record");
+      if (reminderAt) {
+        await upsertEventReminder({
+          db,
+          userId,
+          eventId: row.id,
+          title: row.title || target.title || "Calendar event",
+          reminderAt,
+        });
+      }
+      return {
+        action,
+        performed: true,
+        recordId: row.id,
+        title: row.title,
+        scheduledFor: row.meeting_at,
+        endsAt: row.end_at,
+        dueAt: null,
+        reminderAt,
+        eventType: (row.metadata ?? {}).event_type ?? eventType,
+      };
+    }
+
+    throw new Error("Unsupported calendar action");
+  } catch (error) {
+    console.error("Calendar operation failed", action, error);
+    return {
+      action,
+      performed: false,
+      recordId: null,
+      title: title || null,
+      scheduledFor: scheduledStart,
+      endsAt: scheduledEnd,
+      dueAt,
+      reminderAt,
+      eventType,
+      error: "calendar_write_failed",
+    };
+  }
+}
+
 export async function processCalendarAction(input: CalendarActionInput): Promise<CalendarActionResult> {
   const { db, userId, apiKey, message, recent, timezone, openTasks, upcomingMeetings } = input;
   const now = new Date();
@@ -63,14 +401,22 @@ export async function processCalendarAction(input: CalendarActionInput): Promise
   }).format(now);
 
   const context = JSON.stringify({
-    open_tasks: openTasks.slice(0, 30).map((task: any) => ({
+    task_model: {
+      rule: "A task can exist without a Calendar time block. due_at is a deadline; scheduled_start_at/scheduled_end_at are the Calendar block.",
+    },
+    open_tasks: openTasks.slice(0, 60).map((task: any) => ({
       id: task.id,
       title: task.title,
+      details: task.details,
       due_at: task.due_at,
+      scheduled_start_at: task.scheduled_start_at,
+      scheduled_end_at: task.scheduled_end_at,
+      reminder_at: task.reminder_at,
       status: task.status,
       priority: task.priority,
+      estimated_minutes: task.estimated_minutes,
     })),
-    upcoming_events: upcomingMeetings.slice(0, 30).map((meeting: any) => ({
+    upcoming_events: upcomingMeetings.slice(0, 40).map((meeting: any) => ({
       id: meeting.id,
       title: meeting.title,
       meeting_at: meeting.meeting_at,
@@ -78,9 +424,9 @@ export async function processCalendarAction(input: CalendarActionInput): Promise
       participants: meeting.participants,
       metadata: meeting.metadata,
     })),
-  }).slice(0, 12000);
+  }).slice(0, 18000);
 
-  const previous = recent.slice(-10).map((turn) => ({
+  const previous = recent.slice(-12).map((turn) => ({
     role: turn.role,
     content: [{ type: turn.role === "assistant" ? "output_text" : "input_text", text: turn.text }],
   }));
@@ -96,31 +442,52 @@ export async function processCalendarAction(input: CalendarActionInput): Promise
       input: [
         {
           role: "system",
-          content: `You are Emery's calendar action controller. Determine whether Adam is explicitly asking Emery to create, schedule, move, or complete something in Emery's internal Calendar/Tasks.
+          content: `You are Emery's canonical Calendar + Task action controller.
 
 Current local time: ${localNow}
 Timezone: ${timezone || "America/New_York"}
 
-Rules:
-- Only choose a write action when Adam clearly authorizes it with words such as add, create, put on my calendar, schedule, move, mark complete, finished, done, remind me, or equivalent.
-- Casual discussion or asking what he should do is action=none.
-- create_task may be unscheduled if Adam asks to add a task but gives no time.
-- create_event requires a clear event/lunch/meeting identity plus a date and start time. If one is missing, needs_clarification=true and ask ONE short question.
-- Event duration matters. If Adam gives an explicit time range such as "7-11pm", "7 PM to 11 PM", or a duration such as "for 4 hours", preserve it exactly by setting due_at=start and end_at=end.
-- If Adam gives only a start time and no duration/end time, default end_at to 60 minutes after due_at. Do not shorten an explicitly stated range to one hour.
-- Standing instruction from Adam: whenever he clearly says he HAS a lunch and supplies enough details to identify who/purpose plus date and time, that statement itself authorizes create_event. Do not ask for separate permission. If a required detail is missing, ask one short clarification question.
-- If a lunch is created, event_type MUST be "lunch".
-- schedule_task and complete_task must reference an exact id from OPEN TASKS. If ambiguous, ask one short question.
-- reschedule_event must reference an exact id from UPCOMING EVENTS and have a new start time. If Adam gives a new end time or duration, set end_at accordingly. If he only changes the start, preserve the event's existing duration.
-- Resolve today/tomorrow/weekdays using the current local time and timezone.
-- Never invent people, dates, times, or ids.
-- Keep clarification_question concise and natural.
-- title should be human-readable, e.g. "Lunch with Jason Morrin" or "Call Cary".
-- For new lunch events, put people names in participants when known.
-- due_at is the event/task start time and should be an ISO-8601 timestamp including an offset when required.
-- end_at is the event end time. For create_event it should always be supplied: explicit user end/duration when provided, otherwise 60 minutes after due_at. For tasks it should be null.
+CORE MODEL
+- Task List and Calendar are intentionally different.
+- A task does NOT need to be scheduled. Unscheduled tasks remain available in Adam's Task List for free-time work.
+- due_at is an optional DEADLINE. It means when the task must be finished by. It is not automatically a Calendar block.
+- scheduled_start_at and scheduled_end_at are an optional TIME BLOCK on Emery Calendar.
+- reminder_at is an optional notification time.
+- Events/meetings/lunches are Calendar commitments and need a start time.
+- If Adam says he has free time, asks what tasks he can do, asks what is overdue, or asks for planning advice without authorizing a write, recognized=false. The main Emery model will answer using current task context.
 
-CURRENT RECORDS:\n${context}`,
+WRITE PERMISSION
+- Only write when Adam clearly authorizes it: add, create, schedule, put this on my calendar, move, complete, unschedule, set a deadline, remind me, send me a notification, or equivalent.
+- "Add this", "schedule these", "put that into my schedule", and similar references MAY resolve against the recent conversation. If the recent assistant message contains a concrete list/times and Adam explicitly approves it, carry out the whole approved set.
+- Never treat an assistant suggestion as authorization by itself.
+- Never invent a task, date, time, duration, person, or id.
+
+BATCH ACTIONS
+- One user turn may authorize MANY operations. Return every requested operation in operations[].
+- Do not stop after the first task.
+- If Adam approves a schedule containing four tasks, create/schedule all four.
+- Existing tasks MUST use their exact target_id from CURRENT RECORDS.
+- If a task discussed in the conversation does not exist in CURRENT RECORDS and Adam explicitly asks to add it, use create_task.
+- If the user says a task should be 15 minutes and the others 30 minutes, preserve those exact durations in scheduled_start_at/scheduled_end_at.
+- If Adam asks for a notification 30 minutes before the first block, put reminder_at on that first task or event. For a standalone reminder, use create_reminder.
+
+ACTION RULES
+- create_task: title required. due_at may be null. scheduled_start_at/end may both be null. If scheduled_start exists and end is omitted, default to 30 minutes.
+- schedule_task: target_id from CURRENT RECORDS + scheduled_start_at. Preserve an explicitly stated duration/end.
+- unschedule_task: removes the Calendar block but keeps the task in the Task List.
+- set_task_deadline: target_id + due_at. The task need not be scheduled.
+- complete_task: exact target_id.
+- create_event: title + scheduled_start_at required; default to 60 minutes only when Adam gives no end/duration.
+- reschedule_event: exact target_id + new scheduled_start_at. Preserve existing duration if no new end is supplied.
+- create_reminder: use only for a standalone notification not naturally attached to a task/event.
+- For lunch events, event_type=lunch.
+- Resolve relative dates using the supplied current local time.
+- All timestamps must be ISO-8601 with an explicit UTC offset.
+- If an essential detail is genuinely missing or multiple existing records could match, needs_clarification=true and ask ONE concise question. In that case operations must be empty.
+- Do not claim success. Your output is only an execution plan; the server will verify each write.
+
+CURRENT RECORDS:
+${context}`,
         },
         ...previous,
         { role: "user", content: [{ type: "input_text", text: message }] },
@@ -128,41 +495,70 @@ CURRENT RECORDS:\n${context}`,
       text: {
         format: {
           type: "json_schema",
-          name: "calendar_action",
+          name: "calendar_actions",
           strict: true,
           schema: {
             type: "object",
             additionalProperties: false,
             properties: {
               recognized: { type: "boolean" },
-              action: {
-                type: "string",
-                enum: ["none", "create_task", "create_event", "complete_task", "schedule_task", "reschedule_event"],
-              },
               needs_clarification: { type: "boolean" },
               clarification_question: { type: ["string", "null"] },
-              title: { type: ["string", "null"] },
-              details: { type: ["string", "null"] },
-              due_at: { type: ["string", "null"] },
-              end_at: { type: ["string", "null"] },
-              priority: { type: "integer", minimum: 1, maximum: 5 },
-              participants: { type: "array", items: { type: "string" }, maxItems: 20 },
-              target_id: { type: ["string", "null"] },
-              event_type: { type: ["string", "null"], enum: ["lunch", "meeting", "appointment", "event", "task", null] },
+              operations: {
+                type: "array",
+                maxItems: 20,
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    action: {
+                      type: "string",
+                      enum: [
+                        "create_task",
+                        "create_event",
+                        "complete_task",
+                        "schedule_task",
+                        "unschedule_task",
+                        "set_task_deadline",
+                        "reschedule_event",
+                        "create_reminder"
+                      ],
+                    },
+                    title: { type: ["string", "null"] },
+                    details: { type: ["string", "null"] },
+                    due_at: { type: ["string", "null"] },
+                    scheduled_start_at: { type: ["string", "null"] },
+                    scheduled_end_at: { type: ["string", "null"] },
+                    reminder_at: { type: ["string", "null"] },
+                    priority: { type: "integer", minimum: 1, maximum: 5 },
+                    participants: { type: "array", items: { type: "string" }, maxItems: 20 },
+                    target_id: { type: ["string", "null"] },
+                    event_type: {
+                      type: ["string", "null"],
+                      enum: ["lunch", "meeting", "appointment", "event", "task", null],
+                    },
+                  },
+                  required: [
+                    "action",
+                    "title",
+                    "details",
+                    "due_at",
+                    "scheduled_start_at",
+                    "scheduled_end_at",
+                    "reminder_at",
+                    "priority",
+                    "participants",
+                    "target_id",
+                    "event_type"
+                  ],
+                },
+              },
             },
             required: [
               "recognized",
-              "action",
               "needs_clarification",
               "clarification_question",
-              "title",
-              "details",
-              "due_at",
-              "end_at",
-              "priority",
-              "participants",
-              "target_id",
-              "event_type",
+              "operations"
             ],
           },
         },
@@ -172,228 +568,77 @@ CURRENT RECORDS:\n${context}`,
 
   if (!response.ok) {
     console.error("Calendar controller failed", response.status, await response.text());
-    return {
-      recognized: false,
-      performed: false,
-      needsClarification: false,
-      question: null,
-      action: "none",
-      recordId: null,
-      title: null,
-      scheduledFor: null,
-      endsAt: null,
-      eventType: null,
-      error: "calendar_controller_failed",
-    };
+    return emptyResult("calendar_controller_failed");
   }
 
   let parsed: any;
   try {
     parsed = JSON.parse(responseText(await response.json()));
   } catch {
-    return {
-      recognized: false,
-      performed: false,
-      needsClarification: false,
-      question: null,
-      action: "none",
-      recordId: null,
-      title: null,
-      scheduledFor: null,
-      endsAt: null,
-      eventType: null,
-      error: "calendar_controller_unreadable",
-    };
+    return emptyResult("calendar_controller_unreadable");
   }
 
-  const action = parsed.action as CalendarActionResult["action"];
-  if (!parsed.recognized || action === "none") {
-    return {
-      recognized: Boolean(parsed.recognized),
-      performed: false,
-      needsClarification: false,
-      question: null,
-      action: "none",
-      recordId: null,
-      title: parsed.title ?? null,
-      scheduledFor: null,
-      endsAt: isoOrNull(parsed.end_at),
-      eventType: parsed.event_type ?? null,
-    };
-  }
+  if (!parsed.recognized) return emptyResult();
 
   if (parsed.needs_clarification) {
     return {
+      ...emptyResult(),
       recognized: true,
-      performed: false,
       needsClarification: true,
       question: String(parsed.clarification_question ?? "What detail should I use?"),
-      action,
-      recordId: null,
-      title: parsed.title ?? null,
-      scheduledFor: isoOrNull(parsed.due_at),
-      endsAt: isoOrNull(parsed.end_at),
-      eventType: parsed.event_type ?? null,
     };
   }
 
-  const dueAt = isoOrNull(parsed.due_at);
-  const endAt = isoOrNull(parsed.end_at);
-  const title = typeof parsed.title === "string" ? parsed.title.trim() : "";
-  const details = typeof parsed.details === "string" ? parsed.details.trim() : "";
-  const eventType = parsed.event_type ?? null;
-
-  try {
-    if (action === "create_task") {
-      if (!title) throw new Error("Task title missing");
-      const created = await db.rpc("emery_action_create_task", {
-        p_user_id: userId,
-        p_title: title,
-        p_details: details || null,
-        p_due_at: dueAt,
-        p_priority: Math.min(5, Math.max(1, Number(parsed.priority ?? 3))),
-        p_source: "emery",
-      });
-      if (created.error) throw created.error;
-      const row = rpcRow(created);
-      if (!row?.id) throw new Error("Task creation returned no record");
-      return {
-        recognized: true, performed: true, needsClarification: false, question: null, action,
-        recordId: row.id, title: row.title, scheduledFor: row.due_at, endsAt: null, eventType: "task",
-      };
-    }
-
-    if (action === "create_event") {
-      if (!title || !dueAt) {
-        return {
-          recognized: true, performed: false, needsClarification: true,
-          question: !title ? "What should I call the event?" : "What date and time should I put it on your calendar?",
-          action, recordId: null, title: title || null, scheduledFor: dueAt, endsAt: endAt, eventType,
-        };
-      }
-      const resolvedEndAt = endAt && Date.parse(endAt) > Date.parse(dueAt)
-        ? endAt
-        : new Date(Date.parse(dueAt) + 60 * 60 * 1000).toISOString();
-      const created = await db.rpc("emery_action_create_event", {
-        p_user_id: userId,
-        p_title: title,
-        p_start_at: dueAt,
-        p_end_at: resolvedEndAt,
-        p_participants: Array.isArray(parsed.participants) ? parsed.participants.map(String).slice(0, 20) : [],
-        p_event_type: eventType || "event",
-        p_source: "emery",
-      });
-      if (created.error) throw created.error;
-      const row = rpcRow(created);
-      if (!row?.id) throw new Error("Event creation returned no record");
-      return {
-        recognized: true, performed: true, needsClarification: false, question: null, action,
-        recordId: row.id, title: row.title, scheduledFor: row.meeting_at, endsAt: row.end_at,
-        eventType: (row.metadata ?? {}).event_type ?? eventType ?? "event",
-      };
-    }
-
-    const targetId = typeof parsed.target_id === "string" ? parsed.target_id : "";
-    if (!targetId) {
-      return {
-        recognized: true, performed: false, needsClarification: true,
-        question: String(parsed.clarification_question ?? "Which item do you mean?"),
-        action, recordId: null, title: title || null, scheduledFor: dueAt, endsAt: endAt, eventType,
-      };
-    }
-
-    if (action === "complete_task") {
-      const target = openTasks.find((task: any) => task.id === targetId);
-      if (!target) throw new Error("Task not found");
-      const updated = await db.rpc("emery_action_complete_task", {
-        p_user_id: userId,
-        p_task_id: targetId,
-      });
-      if (updated.error) throw updated.error;
-      const row = rpcRow(updated);
-      if (!row?.id) throw new Error("Task completion returned no record");
-      return {
-        recognized: true, performed: true, needsClarification: false, question: null, action,
-        recordId: row.id, title: row.title, scheduledFor: null, endsAt: null, eventType: "task",
-      };
-    }
-
-    if (action === "schedule_task") {
-      if (!dueAt) {
-        return {
-          recognized: true, performed: false, needsClarification: true,
-          question: "What day and time should I schedule it?", action, recordId: targetId,
-          title: title || null, scheduledFor: null, endsAt: null, eventType: "task",
-        };
-      }
-      const target = openTasks.find((task: any) => task.id === targetId);
-      if (!target) throw new Error("Task not found");
-      const updated = await db.rpc("emery_action_schedule_task", {
-        p_user_id: userId,
-        p_task_id: targetId,
-        p_due_at: dueAt,
-      });
-      if (updated.error) throw updated.error;
-      const row = rpcRow(updated);
-      if (!row?.id) throw new Error("Task scheduling returned no record");
-      return {
-        recognized: true, performed: true, needsClarification: false, question: null, action,
-        recordId: row.id, title: row.title, scheduledFor: row.due_at, endsAt: null, eventType: "task",
-      };
-    }
-
-    if (action === "reschedule_event") {
-      if (!dueAt) {
-        return {
-          recognized: true, performed: false, needsClarification: true,
-          question: "What new date and time should I use?", action, recordId: targetId,
-          title: title || null, scheduledFor: null, endsAt: null, eventType,
-        };
-      }
-      const target = upcomingMeetings.find((meeting: any) => meeting.id === targetId);
-      if (!target) throw new Error("Event not found");
-      const updated = await db.rpc("emery_action_reschedule_event", {
-        p_user_id: userId,
-        p_event_id: targetId,
-        p_start_at: dueAt,
-        p_end_at: endAt,
-      });
-      if (updated.error) throw updated.error;
-      const row = rpcRow(updated);
-      if (!row?.id) throw new Error("Event reschedule returned no record");
-      return {
-        recognized: true, performed: true, needsClarification: false, question: null, action,
-        recordId: row.id, title: row.title, scheduledFor: row.meeting_at, endsAt: row.end_at,
-        eventType: (row.metadata ?? {}).event_type ?? eventType,
-      };
-    }
-  } catch (error) {
-    console.error("Calendar action write failed", error);
+  const operations = Array.isArray(parsed.operations) ? parsed.operations.slice(0, 20) : [];
+  if (!operations.length) {
     return {
+      ...emptyResult(),
       recognized: true,
-      performed: false,
-      needsClarification: false,
-      question: null,
-      action,
-      recordId: null,
-      title: title || null,
-      scheduledFor: dueAt,
-      endsAt: endAt,
-      eventType,
-      error: "calendar_write_failed",
+      error: "calendar_action_empty",
     };
   }
 
+  const items: CalendarActionItemResult[] = [];
+  for (const operation of operations) {
+    items.push(await performOperation(input, operation));
+  }
+
+  const successful = items.filter((item) => item.performed);
+  const notificationScheduled = successful.some(
+    (item) => Boolean(item.reminderAt) || item.action === "create_reminder",
+  );
+
+  let pushConnected: boolean | null = null;
+  if (notificationScheduled) {
+    const { count } = await db
+      .from("push_subscriptions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId);
+    pushConnected = Number(count ?? 0) > 0;
+  }
+
+  const first = successful[0] ?? items[0] ?? null;
   return {
-    recognized: false,
-    performed: false,
+    recognized: true,
+    performed: successful.length > 0,
+    partialSuccess: successful.length > 0 && successful.length < items.length,
     needsClarification: false,
     question: null,
-    action: "none",
-    recordId: null,
-    title: null,
-    scheduledFor: null,
-    endsAt: null,
-    eventType: null,
+    action: items.length > 1 ? "batch" : (first?.action ?? "none"),
+    recordId: first?.recordId ?? null,
+    title: first?.title ?? null,
+    scheduledFor: first?.scheduledFor ?? null,
+    endsAt: first?.endsAt ?? null,
+    dueAt: first?.dueAt ?? null,
+    eventType: first?.eventType ?? null,
+    items,
+    notificationScheduled,
+    pushConnected,
+    error:
+      successful.length === 0
+        ? "calendar_write_failed"
+        : successful.length < items.length
+          ? "calendar_partial_write"
+          : null,
   };
 }
