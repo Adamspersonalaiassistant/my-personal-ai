@@ -6,6 +6,7 @@ import {
   createRealtimeClientSecret,
   executeVoiceCalendarAction,
   executeVoiceHpoAction,
+  executeVoiceHpoRouteNote,
   getVoiceReadiness,
   persistVoiceTranscript,
   refreshVoiceContext,
@@ -33,12 +34,19 @@ type RealtimeEvent = {
   [key: string]: unknown;
 };
 
-export function EmeryVoiceControl({ onConversationChanged }: { onConversationChanged?: () => void }) {
+export function EmeryVoiceControl({
+  onConversationChanged,
+  hpoRouteId,
+}: {
+  onConversationChanged?: () => void;
+  hpoRouteId?: string | null;
+}) {
   const readReadiness = useServerFn(getVoiceReadiness);
   const mintSecret = useServerFn(createRealtimeClientSecret);
   const persistTranscript = useServerFn(persistVoiceTranscript);
   const executeCalendarAction = useServerFn(executeVoiceCalendarAction);
   const executeHpoAction = useServerFn(executeVoiceHpoAction);
+  const executeHpoRouteNote = useServerFn(executeVoiceHpoRouteNote);
   const searchWeb = useServerFn(searchWebForVoice);
   const refreshContext = useServerFn(refreshVoiceContext);
   const updateVoiceDelivery = useServerFn(updateVoiceDeliveryFromLive);
@@ -195,6 +203,18 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
           return;
         }
 
+        if (name === "execute_hpo_route_note") {
+          const result = await executeHpoRouteNote({
+            data: {
+              request: String(args.request ?? ""),
+              routeId: hpoRouteId ?? null,
+            },
+          });
+          sendToolOutput(callId, JSON.stringify(result));
+          onConversationChanged?.();
+          return;
+        }
+
         if (name === "search_web") {
           const result = await searchWeb({ data: { query: String(args.query ?? "") } });
           sendToolOutput(
@@ -285,7 +305,7 @@ export function EmeryVoiceControl({ onConversationChanged }: { onConversationCha
         sendToolOutput(callId, "That tool is temporarily unavailable. Answer without inventing its result.");
       }
     },
-    [executeCalendarAction, executeHpoAction, onConversationChanged, refreshContext, searchWeb, sendToolOutput, updateVoiceDelivery],
+    [executeCalendarAction, executeHpoAction, executeHpoRouteNote, hpoRouteId, onConversationChanged, refreshContext, searchWeb, sendToolOutput, updateVoiceDelivery],
   );
 
   const handleRealtimeEvent = useCallback(
