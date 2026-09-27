@@ -409,6 +409,7 @@ export const prepareHpoOfficeMap = createServerFn({ method: "POST" })
           .neq("fit_status", "rejected")
           .not("address", "is", null)
           .is("latitude", null)
+          .is("geocoded_at", null)
           .limit(data.limit),
       ]);
     if (accountError) throw accountError;
