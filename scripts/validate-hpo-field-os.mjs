@@ -45,6 +45,8 @@ check("route-stop outcome uses execution ledger and verification", routeFns.incl
 check("visit logging is a canonical vertical action", routeFns.includes("executeHpoRouteStopVisitCore") && routeFns.includes('"hpo.route_stop.log_visit"'));
 check("visit logging preserves interaction linkage", routeFns.includes("Visit interaction verification failed") && routeFns.includes("route_interaction_id"));
 check("route-note voice/text capture uses canonical visit action", routeFns.includes("hpo.route_stop.log_visit") && routeFns.includes("visitExecution"));
+check("route-stop follow-up is a canonical action", routeFns.includes("executeHpoRouteStopFollowupCore") && routeFns.includes('"hpo.route_stop.set_followup"'));
+check("visit action composes canonical follow-up when present", routeFns.includes("${key}:followup") && routeFns.includes("executeHpoRouteStopFollowupCore"));
 
 if (process.exitCode) process.exit(process.exitCode);
 console.log("HPO Field OS Map V2 foundation certification passed.");
