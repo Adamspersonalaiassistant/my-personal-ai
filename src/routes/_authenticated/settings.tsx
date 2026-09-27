@@ -30,7 +30,7 @@ export const Route = createFileRoute("/_authenticated/settings")({ component: Se
 const capabilities = [
   { label: "AI brain", value: "Connected", icon: Brain, live: true },
   { label: "Memory", value: "Online", icon: Database, live: true },
-  { label: "Execution layer", value: "Verified", icon: CheckSquare, live: true },
+  { label: "Execution layer", value: "Built · proving", icon: CheckSquare, live: true },
   { label: "Agent team", value: "Connected", icon: UsersRound, live: true },
   { label: "File uploads", value: "Connected", icon: FileUp, live: true },
   { label: "Shortcut bridge", value: "Ready", icon: Smartphone, live: true },
