@@ -36,7 +36,7 @@ const checks = [
   ["runtime telemetry table uses RLS", files.migration.includes("alter table public.emery_runtime_events enable row level security")],
   ["main Calendar writes use canonical action RPCs", (files.calendar.includes('db.rpc("emery_action_create_task_v2"') || files.calendar.includes('db.rpc("emery_action_create_task"')) && files.calendar.includes('db.rpc("emery_action_reschedule_event"')],
   ["canonical action RPCs run as invoker", files.canonicalMigration.includes("security invoker") && !files.canonicalMigration.includes("security definer")],
-  ["Shortcut uses canonical action RPCs", files.shortcut.includes('db.rpc("emery_action_create_task"') && files.shortcut.includes('db.rpc("emery_action_reschedule_event"')],
+  ["Shortcut uses canonical action RPCs", (files.shortcut.includes('db.rpc("emery_action_create_task_v2"') || files.shortcut.includes('db.rpc("emery_action_create_task"')) && files.shortcut.includes('db.rpc("emery_action_reschedule_event"')],
   ["Shortcut loads rolling working state", files.shortcut.includes("rollingState") && files.shortcut.includes("WORKING STATE")],
   ["server-side proactive routines are scheduled", files.proactiveMigration.includes("run_emery_proactive_checks") && files.proactiveMigration.includes("emery-proactive-checks")],
   ["nightly self-review writes evaluations", files.proactiveMigration.includes("emery_self_evaluations") && files.proactiveMigration.includes("nightly_self_review")],
