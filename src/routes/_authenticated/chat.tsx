@@ -15,6 +15,7 @@ import {
 import { AppShell } from "@/components/AppShell";
 import { EmeryVoiceControl } from "@/components/EmeryVoiceControl";
 import { OperatingContextCard } from "@/components/OperatingContextCard";
+import { Button } from "@/components/ui/button";
 import brainImage from "@/assets/neural-brain.png";
 import { supabase } from "@/integrations/supabase/client";
 import { getMainConversationPage } from "@/lib/chat-history.functions";
@@ -154,14 +155,15 @@ function SelectedFileCard({ file, onRemove }: { file: File; onRemove: () => void
         <p className="truncate text-[11px] font-medium">{file.name}</p>
         <p className="text-[9px] text-muted-foreground">{formatBytes(file.size)}</p>
       </div>
-      <button
+      <Button
+        variant="ghost"
         type="button"
         aria-label={`Remove ${file.name}`}
         onClick={onRemove}
-        className="emery-press flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-white/[0.04] hover:text-foreground"
+        className="emery-press size-11 shrink-0 rounded-lg text-muted-foreground hover:bg-accent/50 hover:text-foreground"
       >
         <X className="size-3.5" />
-      </button>
+      </Button>
     </div>
   );
 }
@@ -456,11 +458,12 @@ function Chat() {
 
           {!loading && messages.length > 0 && hasMore ? (
             <div className="mx-auto mb-5 flex max-w-2xl justify-center">
-              <button
+               <Button
+                 variant="ghost"
                 type="button"
                 onClick={() => void loadOlder()}
                 disabled={loadingOlder}
-                className="emery-press flex min-h-11 items-center gap-2 rounded-full px-3 text-xs font-medium text-muted-foreground hover:bg-white/[0.03] hover:text-foreground disabled:opacity-50"
+                 className="emery-press min-h-11 gap-2 rounded-lg px-3 text-xs font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-50"
               >
                 {loadingOlder ? (
                   <Loader2 className="size-3.5 animate-spin" />
@@ -468,7 +471,7 @@ function Chat() {
                   <ChevronUp className="size-3.5" />
                 )}
                 {loadingOlder ? "Loading earlier…" : "Earlier messages"}
-              </button>
+               </Button>
             </div>
           ) : null}
 
@@ -501,7 +504,8 @@ function Chat() {
               </p>
               <div className="mt-6 flex w-full flex-wrap justify-center gap-2">
                 {quickPrompts.map((prompt) => (
-                  <button
+           <Button
+             variant="outline"
                     key={prompt}
                     type="button"
                     onClick={() => void sendMessage(prompt)}
@@ -597,10 +601,10 @@ function Chat() {
               scrollToLatest("smooth");
             }}
             aria-label="Jump to latest message"
-            className="emery-press absolute bottom-[5.4rem] right-4 z-30 flex size-11 items-center justify-center rounded-full border border-border/60 bg-card text-primary shadow-sm"
+             className="emery-press absolute bottom-[5.4rem] right-4 z-30 size-11 rounded-full border-border/60 bg-card text-primary shadow-sm"
           >
             <ArrowDown className="size-4" />
-          </button>
+           </Button>
         ) : null}
 
         <div className="z-20 shrink-0 border-t border-border/40 bg-background/95 px-3 pb-3 pt-3 backdrop-blur-lg sm:px-5 sm:pb-4 md:px-7">
@@ -621,7 +625,8 @@ function Chat() {
                         approved voice yet.
                       </p>
                     </div>
-                    <button
+             <Button
+               variant="ghost"
                       type="button"
                       onClick={() => setVoiceStudioState(null)}
                       className="emery-press flex size-9 items-center justify-center rounded-lg text-muted-foreground"
@@ -711,10 +716,10 @@ function Chat() {
               title="Attach photos or files"
               onClick={() => fileInputRef.current?.click()}
               disabled={pending}
-              className="emery-press flex size-11 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:bg-white/[0.035] hover:text-primary disabled:opacity-40"
+               className="emery-press size-11 shrink-0 rounded-lg text-muted-foreground hover:bg-accent/50 hover:text-primary disabled:opacity-40"
             >
               <Paperclip className="size-[18px]" strokeWidth={1.9} />
-            </button>
+             </Button>
             <textarea
               ref={textareaRef}
               value={draft}
@@ -733,18 +738,17 @@ function Chat() {
               }}
               enterKeyHint="enter"
               placeholder="Message Emery"
-              onFocus={() => requestAnimationFrame(() => scrollToLatest("smooth"))}
               className="max-h-32 min-h-11 min-w-0 flex-1 overflow-y-auto bg-transparent px-1.5 py-2 text-[16px] leading-6 text-foreground outline-none placeholder:text-muted-foreground/60 sm:px-2 sm:text-[15px]"
             />
             <EmeryVoiceControl onConversationChanged={() => void refreshLatest()} />
-            <button
+             <Button
               type="submit"
               aria-label="Send"
-              className="emery-press flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground disabled:opacity-30"
+               className="emery-press size-11 shrink-0 rounded-lg shadow-none disabled:opacity-30"
               disabled={(!draft.trim() && selectedFiles.length === 0) || pending}
             >
               <ArrowUp className="size-[18px]" strokeWidth={2.2} />
-            </button>
+             </Button>
           </form>
         </div>
       </div>

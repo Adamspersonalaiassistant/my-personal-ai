@@ -240,8 +240,8 @@ export function AppShell({
               onClick={() => {
                 if (to === "/chat") rememberEmeryHandoff();
               }}
-              className="emery-press flex min-h-[58px] flex-col items-center justify-center gap-1 rounded-md px-1 text-[10px] font-medium text-muted-foreground"
-              activeProps={{ className: "text-primary font-semibold [&_svg]:stroke-[2.3]" }}
+              className="emery-press flex min-h-[58px] flex-col items-center justify-center gap-1 rounded-md px-1 text-[10px] font-medium text-muted-foreground transition-colors"
+              activeProps={{ className: "bg-primary/[0.08] text-primary font-semibold [&_svg]:stroke-[2.3]" }}
             >
               <Icon className="size-[19px]" />
               <span>{label}</span>
@@ -253,7 +253,7 @@ export function AppShell({
             onClick={() => setMoreOpen(true)}
             aria-label="Open more navigation"
             aria-expanded={moreOpen}
-            className={`flex h-auto min-h-[58px] w-full flex-col items-center justify-center gap-1 rounded-md p-0 text-[10px] font-medium ${moreActive ? "text-primary" : "text-muted-foreground"}`}
+            className={`flex h-auto min-h-[58px] w-full flex-col items-center justify-center gap-1 rounded-md p-0 text-[10px] font-medium ${moreActive ? "bg-primary/[0.08] text-primary" : "text-muted-foreground"}`}
           >
             <MoreHorizontal className="size-[20px]" />
             <span>More</span>
@@ -263,12 +263,12 @@ export function AppShell({
 
       {moreOpen ? (
         <div
-          className="fixed inset-0 z-[70] flex items-end bg-black/60 backdrop-blur-sm md:hidden"
+          className="fixed inset-0 z-[70] flex items-end bg-background/70 backdrop-blur-sm md:hidden"
           onClick={() => setMoreOpen(false)}
           role="presentation"
         >
           <section
-            className="emery-sheet-in max-h-[78dvh] w-full overflow-hidden rounded-t-[1.6rem] border-t border-border/55 bg-[oklch(0.125_0.034_255/0.99)] px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2"
+            className="emery-sheet-in max-h-[78dvh] w-full overflow-hidden rounded-t-xl border-t border-border/55 bg-popover px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2"
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"
@@ -288,7 +288,7 @@ export function AppShell({
                 <X className="size-4" />
               </button>
             </div>
-            <div className="emery-scrollbar max-h-[calc(78dvh-4.5rem)] overflow-y-auto overscroll-contain rounded-2xl border border-border/45 bg-card/38 [-webkit-overflow-scrolling:touch]">
+            <div className="emery-scrollbar max-h-[calc(78dvh-4.5rem)] overflow-y-auto overscroll-contain rounded-lg bg-card/38 [-webkit-overflow-scrolling:touch]">
               {moreItems.map(({ to, label, description, icon: Icon }, index) => (
                 <Link
                   key={to}
