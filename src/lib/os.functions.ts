@@ -38,7 +38,7 @@ export const getOperatingSystemSnapshot = createServerFn({ method: "GET" })
     ] = await Promise.all([
       db
         .from("tasks")
-        .select("id, title, details, status, priority, due_at, project_id, metadata, created_at")
+        .select("id, title, details, status, priority, due_at, scheduled_start_at, scheduled_end_at, reminder_at, estimated_minutes, project_id, metadata, created_at")
         .eq("user_id", userId)
         .neq("status", "completed")
         .order("priority", { ascending: false })
