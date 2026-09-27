@@ -43,6 +43,8 @@ jobs:
         run: node scripts/validate-emery-improvement.mjs
       - name: Emery Voice activation regression checks
         run: node scripts/validate-emery-voice.mjs
+      - name: HPO Field OS regression checks
+        run: npm run validate:hpo-field-os
       - name: Phase 0 zero-credit certification
         run: npm run validate:phase0
       - name: Adam-specific behavior certification
