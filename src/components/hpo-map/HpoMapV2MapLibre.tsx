@@ -424,7 +424,7 @@ export function HpoMapV2MapLibre({
         zoom: 8,
         minZoom: 5,
         maxZoom: 18,
-        attributionControl: true,
+        attributionControl: {},
         cooperativeGestures: false,
       });
       mapRef.current = map;
