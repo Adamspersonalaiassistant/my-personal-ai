@@ -8,6 +8,7 @@ import { inferEmeryDomain, domainPrompt } from "@/lib/emery-domain";
 import { selectRelevantMemories, buildExecutiveFocus, readConversationState } from "@/lib/emery-intelligence";
 import { processCalendarAction } from "@/lib/calendar-agent";
 import { processHpoAction } from "@/lib/hpo-action-controller";
+import { captureHpoRouteNoteCore } from "@/lib/hpo-route.functions";
 import { MODEL_POLICY } from "@/lib/model-policy";
 import { recordRuntimeEvent } from "@/lib/runtime-telemetry";
 import { loadHpoAgentContext } from "@/lib/hpo-agent-context";
@@ -271,6 +272,7 @@ LIVE VOICE OPERATING CONTRACT:
 - Use refresh_emery_context when Adam asks about a task, project, appointment, HPO item, memory, or other app state that may have changed since this voice session began.
 - Use execute_calendar_action whenever Adam explicitly asks to add/create/schedule/complete/move a task or internal Calendar event. Never claim a write unless the tool reports performed=true.
 - Use execute_hpo_action whenever Adam explicitly asks to log a non-PHI HPO relationship touch or set an HPO account follow-up. Never put patient names, medical/case details, or other PHI into HPO relationship records.
+- Use execute_hpo_route_note whenever Adam is on a field route and explicitly tells you what happened at a numbered stop or office, or asks you to save a route/marketing note. Preserve his wording and let the server identify the route stop. If the tool asks which stop, ask exactly that question.
 - Casual planning is not write permission. If the calendar tool asks a clarification question, ask exactly that concise question and do not invent missing details.
 - Tool results are private working context. Answer Adam naturally rather than narrating tool mechanics.
 - Do not claim Calendar, Reminders, WhatsApp, PLAUD, phone control, or any external action is connected unless a tool confirms it.
@@ -447,6 +449,23 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
               request: {
                 type: "string",
                 description: "Adam's exact HPO relationship-action request from the active voice turn.",
+              },
+            },
+            required: ["request"],
+          },
+        },
+        {
+          type: "function",
+          name: "execute_hpo_route_note",
+          description:
+            "Use Emery's HPO Route Planner note capture when Adam explicitly reports what happened at a field stop or asks to save a marketing-route note. Examples: 'Stop 3, spoke with Amanda and follow up next week' or 'I just left Weiner Mazzei; Jenni will pass the information to the attorney.' The active route from the app is preferred when available. This is non-PHI field marketing only.",
+          parameters: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              request: {
+                type: "string",
+                description: "Adam's exact field-route note or visit update from the active voice turn.",
               },
             },
             required: ["request"],
@@ -729,6 +748,102 @@ export const executeVoiceHpoAction = createServerFn({ method: "POST" })
         nonPhiController: true,
       },
     });
+    return result;
+  });
+
+export const executeVoiceHpoRouteNote = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { request: string; routeId?: string | null }) => ({
+    request: String(input?.request ?? "").trim().slice(0, 5000),
+    routeId: input?.routeId ? String(input.routeId).trim() : null,
+  }))
+  .handler(async ({ data, context }) => {
+    if (!data.request) {
+      return {
+        ok: false,
+        needsClarification: true,
+        question: "What happened at the route stop?",
+      } as const;
+    }
+
+    const db = context.supabase as any;
+    let routeId = data.routeId;
+
+    if (routeId) {
+      const { data: ownedRoute } = await db
+        .from("hpo_route_plans")
+        .select("id")
+        .eq("id", routeId)
+        .eq("user_id", context.userId)
+        .maybeSingle();
+      if (!ownedRoute) routeId = null;
+    }
+
+    if (!routeId) {
+      const timezone = await (async () => {
+        const { data: profile } = await db
+          .from("profiles")
+          .select("timezone")
+          .eq("user_id", context.userId)
+          .maybeSingle();
+        return profile?.timezone || "America/New_York";
+      })();
+      const todayParts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: timezone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).formatToParts(new Date());
+      const map = Object.fromEntries(todayParts.map((part) => [part.type, part.value]));
+      const today = `${map["year"]}-${map["month"]}-${map["day"]}`;
+
+      const { data: routes, error } = await db
+        .from("hpo_route_plans")
+        .select("id,route_date,status")
+        .eq("user_id", context.userId)
+        .gte("route_date", today)
+        .in("status", ["draft", "planned", "in_progress"])
+        .order("route_date", { ascending: true })
+        .limit(3);
+      if (error) throw error;
+      if ((routes ?? []).length === 1) routeId = routes[0].id;
+      else {
+        const todayRoute = (routes ?? []).find((route: any) => route.route_date === today);
+        if (todayRoute) routeId = todayRoute.id;
+      }
+    }
+
+    if (!routeId) {
+      return {
+        ok: false,
+        needsClarification: true,
+        question: "Which route are you updating? Open that Route Planner day, then tell me the stop note again.",
+      } as const;
+    }
+
+    const startedAt = Date.now();
+    const result = await captureHpoRouteNoteCore({
+      db,
+      userId: context.userId,
+      routeId,
+      message: data.request,
+    });
+
+    await recordRuntimeEvent(db, context.userId, {
+      channel: "voice",
+      eventType: "hpo_route_note",
+      domain: "hpo",
+      action: "capture_route_note",
+      status: result.ok ? "ok" : "clarification",
+      model: MODEL_POLICY.realtime,
+      durationMs: Date.now() - startedAt,
+      metadata: {
+        routeId,
+        stopId: "stopId" in result ? result.stopId : null,
+        stopOrder: "stopOrder" in result ? result.stopOrder : null,
+      },
+    });
+
     return result;
   });
 
