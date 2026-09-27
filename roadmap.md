@@ -4,4 +4,4 @@
 - [x] Calm main conversation visuals while preserving its controls and behavior.
 - [x] Improve Calendar readability and touch targets without changing scheduling logic.
 - [x] Tone down shared glow and surface treatment.
-- [ ] Verify automated build, focused lint, and visible preview; report device-only checks and credit visibility.
+- [x] Verify automated build, focused lint, and signed-out preview; private-screen review needs an authenticated session and iPhone checks need a device.
