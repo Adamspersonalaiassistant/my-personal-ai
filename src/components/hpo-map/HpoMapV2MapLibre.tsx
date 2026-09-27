@@ -439,7 +439,7 @@ export function HpoMapV2MapLibre({
         setupSourcesAndLayers(map);
         setReady(true);
       });
-      map.on("error", (event) => {
+      map.on("error", (event: any) => {
         const message = String(event?.error?.message ?? "");
         if (/webgl|context|initial/i.test(message)) onFatalError?.(message || "MapLibre could not initialize.");
       });
@@ -453,6 +453,7 @@ export function HpoMapV2MapLibre({
       };
     } catch (error) {
       onFatalError?.(error instanceof Error ? error.message : "MapLibre could not initialize.");
+      return undefined;
     }
   }, [onFatalError]);
 
