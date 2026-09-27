@@ -900,9 +900,6 @@ function DayGrid({
           </div>
         </div>
       </div>
-      {dates.length === 1 ? (
-         null
-      ) : null}
     </div>
   );
 }
