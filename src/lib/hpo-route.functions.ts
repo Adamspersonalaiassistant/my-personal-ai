@@ -301,6 +301,9 @@ async function upsertInteractionForStop(
     nextAction?: string | null;
     nextActionDueAt?: string | null;
     status?: string | null;
+    executionRunId?: string | null;
+    sourceChannel?: string | null;
+    traceId?: string | null;
   },
 ) {
   if (!stop.account_id || !patch.notes?.trim()) return;
@@ -324,7 +327,14 @@ async function upsertInteractionForStop(
     interaction_type: "visit",
     source_type: "route",
     source_ref: stop.id,
-    metadata: { route_id: stop.route_id, route_stop_id: stop.id, non_phi: true },
+    metadata: {
+      route_id: stop.route_id,
+      route_stop_id: stop.id,
+      execution_run_id: patch.executionRunId ?? null,
+      source_channel: patch.sourceChannel ?? null,
+      trace_id: patch.traceId ?? null,
+      non_phi: true,
+    },
   };
 
   let id = interactionId;
@@ -995,6 +1005,159 @@ export const reorderHpoRouteStops = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export async function executeHpoRouteStopOutcomeCore(input: {
+  db: any;
+  userId: string;
+  stopId: string;
+  status: "completed" | "visited" | "closed" | "bad_address" | "skipped";
+  notes?: string | null;
+  visitOutcome?: string | null;
+  nextAction?: string | null;
+  nextActionDueAt?: string | null;
+  idempotencyKey: string;
+  sourceChannel: string;
+  sourceMessageId?: string | null;
+  parentRunId?: string | null;
+  traceId?: string | null;
+}) {
+  const action = "hpo.route_stop.set_outcome";
+  const idempotencyKey = clean(input.idempotencyKey);
+  if (!idempotencyKey) throw new Error("Route-stop outcome requires an idempotency key");
+
+  const execution = await beginExecution({
+    db: input.db,
+    userId: input.userId,
+    domain: "hpo_route",
+    action,
+    sourceMessageId: input.sourceMessageId ?? null,
+    parentRunId: input.parentRunId ?? null,
+    idempotencyKey,
+    targetType: "hpo_route_stop",
+    targetId: input.stopId,
+    requestPayload: {
+      capability: action,
+      stopId: input.stopId,
+      status: input.status,
+      notes: input.notes ?? null,
+      visitOutcome: input.visitOutcome ?? null,
+      nextAction: input.nextAction ?? null,
+      nextActionDueAt: input.nextActionDueAt ?? null,
+      sourceChannel: input.sourceChannel,
+      traceId: input.traceId ?? null,
+    },
+  });
+
+  if (
+    execution.reused &&
+    execution.status === "completed" &&
+    execution.resultPayload["routeStopOutcomeResult"]
+  ) {
+    return execution.resultPayload["routeStopOutcomeResult"] as {
+      ok: true;
+      action: string;
+      executionRunId: string;
+      stop: any;
+      routeStatus: string;
+      reused: boolean;
+    };
+  }
+
+  try {
+    const { data: stop, error: fetchError } = await input.db
+      .from("hpo_route_stops")
+      .select("*")
+      .eq("id", input.stopId)
+      .eq("user_id", input.userId)
+      .single();
+    if (fetchError || !stop) throw fetchError ?? new Error("Route stop not found");
+
+    const patch: Record<string, unknown> = {
+      status: input.status,
+      updated_at: new Date().toISOString(),
+    };
+    if (TERMINAL.has(input.status) && !stop.visited_at) {
+      patch["visited_at"] = new Date().toISOString();
+    }
+    if (input.notes !== undefined) {
+      patch["notes"] = input.notes?.trim() || null;
+      patch["visit_summary"] = input.notes?.trim() || null;
+    }
+    if (input.visitOutcome !== undefined) {
+      patch["visit_outcome"] = input.visitOutcome?.trim() || null;
+    }
+    if (input.nextAction !== undefined) {
+      patch["next_action"] = input.nextAction?.trim() || null;
+    }
+    if (input.nextActionDueAt !== undefined) {
+      patch["next_action_due_at"] = input.nextActionDueAt;
+    }
+
+    const { data: updated, error: updateError } = await input.db
+      .from("hpo_route_stops")
+      .update(patch)
+      .eq("id", stop.id)
+      .eq("user_id", input.userId)
+      .select("*")
+      .single();
+    if (updateError || !updated) throw updateError ?? new Error("Route stop update returned no record");
+
+    const { data: verified, error: verifyError } = await input.db
+      .from("hpo_route_stops")
+      .select("*")
+      .eq("id", stop.id)
+      .eq("user_id", input.userId)
+      .single();
+    if (verifyError || !verified) throw verifyError ?? new Error("Route stop verification failed");
+    if (verified.status !== input.status) throw new Error("Route stop outcome verification failed");
+
+    await upsertInteractionForStop(input.db, input.userId, verified, {
+      notes: input.notes ?? verified.notes,
+      visitOutcome: input.visitOutcome ?? verified.visit_outcome,
+      nextAction: input.nextAction ?? verified.next_action,
+      nextActionDueAt: input.nextActionDueAt ?? verified.next_action_due_at,
+      status: input.status,
+      executionRunId: execution.id,
+      sourceChannel: input.sourceChannel,
+      traceId: input.traceId ?? null,
+    });
+
+    const routeStatus = await syncRouteStatus(input.db, input.userId, verified.route_id);
+    const result = {
+      ok: true as const,
+      action,
+      executionRunId: execution.id,
+      stop: verified,
+      routeStatus,
+      reused: execution.reused,
+    };
+
+    await completeExecution({
+      db: input.db,
+      userId: input.userId,
+      runId: execution.id,
+      resultPayload: { routeStopOutcomeResult: result as unknown as Record<string, unknown> },
+      targetType: "hpo_route_stop",
+      targetId: verified.id,
+    });
+    return result;
+  } catch (error) {
+    await failExecution({
+      db: input.db,
+      userId: input.userId,
+      runId: execution.id,
+      errorCode: "hpo_route_stop_outcome_failed",
+      errorMessage: error instanceof Error ? error.message : String(error),
+      retryable: true,
+      resultPayload: {
+        action,
+        stopId: input.stopId,
+        requestedStatus: input.status,
+      },
+    }).catch(() => undefined);
+    throw error;
+  }
+}
+
 export const updateHpoRouteStop = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
@@ -1005,6 +1168,8 @@ export const updateHpoRouteStop = createServerFn({ method: "POST" })
       visitOutcome?: string | null;
       nextAction?: string | null;
       nextActionDueAt?: string | null;
+      idempotencyKey?: string | null;
+      sourceChannel?: string | null;
     }) => {
       const status = clean(input.status) || null;
       const allowed = new Set(["planned", "arrived", "completed", "visited", "skipped", "closed", "bad_address"]);
@@ -1021,11 +1186,27 @@ export const updateHpoRouteStop = createServerFn({ method: "POST" })
             : input.nextActionDueAt === null
               ? null
               : undefined,
+        idempotencyKey: clean(input.idempotencyKey) || null,
+        sourceChannel: clean(input.sourceChannel) || "ui",
       };
     },
   )
   .handler(async ({ data, context }) => {
     const db = context.supabase as any;
+    if (data.status && TERMINAL.has(data.status)) {
+      return executeHpoRouteStopOutcomeCore({
+        db,
+        userId: context.userId,
+        stopId: data.stopId,
+        status: data.status as "completed" | "visited" | "closed" | "bad_address" | "skipped",
+        notes: data.notes,
+        visitOutcome: data.visitOutcome,
+        nextAction: data.nextAction,
+        nextActionDueAt: data.nextActionDueAt,
+        idempotencyKey: data.idempotencyKey || `ui:${crypto.randomUUID()}:hpo.route_stop.set_outcome`,
+        sourceChannel: data.sourceChannel,
+      });
+    }
     const { data: stop, error: fetchError } = await db
       .from("hpo_route_stops")
       .select("*")
@@ -1177,43 +1358,22 @@ export async function captureHpoRouteNoteCore(input: {
   const status = inferStatus(message);
   const visitOutcome = inferOutcome(message);
   const nextAction = extractNextAction(message);
-  const patch: Record<string, unknown> = {
-    status,
-    notes: message,
-    visit_summary: message,
-    visit_outcome: visitOutcome,
-    next_action: nextAction,
-    visited_at: target.visited_at ?? new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-
-  const { data: updated, error: updateError } = await input.db
-    .from("hpo_route_stops")
-    .update(patch)
-    .eq("id", target.id)
-    .eq("user_id", input.userId)
-    .select("*")
-    .single();
-  if (updateError) {
-    await failExecution({
-      db: input.db,
-      userId: input.userId,
-      runId: execution.id,
-      errorCode: "route_note_write_failed",
-      errorMessage: String(updateError.message ?? updateError),
-      retryable: true,
-    });
-    throw updateError;
-  }
-
-  await upsertInteractionForStop(input.db, input.userId, updated, {
+  const outcomeExecution = await executeHpoRouteStopOutcomeCore({
+    db: input.db,
+    userId: input.userId,
+    stopId: target.id,
+    status: status as "completed" | "visited" | "closed" | "bad_address" | "skipped",
     notes: message,
     visitOutcome,
     nextAction,
-    nextActionDueAt: updated.next_action_due_at,
-    status,
+    nextActionDueAt: target.next_action_due_at ?? null,
+    idempotencyKey: `route-note:${execution.id}:${target.id}:hpo.route_stop.set_outcome`,
+    sourceChannel: "voice_or_route_note",
+    parentRunId: execution.id,
+    traceId: execution.id,
   });
-  const routeStatus = await syncRouteStatus(input.db, input.userId, input.routeId);
+  const updated = outcomeExecution.stop;
+  const routeStatus = outcomeExecution.routeStatus;
 
   const result = {
     ok: true,
