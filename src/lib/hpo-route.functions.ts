@@ -745,6 +745,43 @@ export const optimizeHpoRoute = createServerFn({ method: "POST" })
       totalDuration += Number(durations[previousNode]?.[endIndex] ?? 0);
     }
 
+    let routeGeometry: Array<[number, number]> | null = null;
+    try {
+      const orderedRoadPoints: Array<{ lat: number; lon: number }> = [];
+      if (startPoint) orderedRoadPoints.push(startPoint);
+      for (const nodeIndex of optimized) {
+        const stop = stopByNode.get(nodeIndex);
+        if (stop && Number.isFinite(stop.latitude) && Number.isFinite(stop.longitude)) {
+          orderedRoadPoints.push({ lat: Number(stop.latitude), lon: Number(stop.longitude) });
+        }
+      }
+      if (endPoint) orderedRoadPoints.push(endPoint);
+      if (orderedRoadPoints.length >= 2) {
+        const coordinates = orderedRoadPoints.map((point) => `${point.lon},${point.lat}`).join(";");
+        const response = await fetch(
+          `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&steps=false`,
+          { headers: { "User-Agent": "EmeryPersonalAI/1.0 personal-route-planner" } },
+        );
+        if (response.ok) {
+          const payload = await response.json();
+          const rawCoordinates = payload?.routes?.[0]?.geometry?.coordinates;
+          if (Array.isArray(rawCoordinates) && rawCoordinates.length >= 2) {
+            const maxPoints = 260;
+            const stride = Math.max(1, Math.ceil(rawCoordinates.length / maxPoints));
+            routeGeometry = rawCoordinates
+              .filter((_point: unknown, index: number) => index % stride === 0 || index === rawCoordinates.length - 1)
+              .map((point: unknown) => {
+                const pair = Array.isArray(point) ? point : [];
+                return [Number(pair[0]), Number(pair[1])] as [number, number];
+              })
+              .filter((point: [number, number]) => Number.isFinite(point[0]) && Number.isFinite(point[1]));
+          }
+        }
+      }
+    } catch {
+      routeGeometry = null;
+    }
+
     const optimizedAt = new Date().toISOString();
     const { error: updateError } = await db
       .from("hpo_route_plans")
@@ -761,6 +798,7 @@ export const optimizeHpoRoute = createServerFn({ method: "POST" })
           ...(route.metadata ?? {}),
           planner: "emery_native_v1",
           optimization_engine: "open_road_matrix",
+          route_geometry: routeGeometry,
           mapquest_dependency: false,
         },
         updated_at: optimizedAt,
