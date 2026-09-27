@@ -73,6 +73,7 @@ type RoutePlan = {
   optimized_duration_seconds: number | null;
   optimized_at: string | null;
   notes: string | null;
+  metadata: Record<string, unknown> | null;
   stops: Stop[];
 };
 
@@ -266,6 +267,21 @@ function RouteMap({ route }: { route: RoutePlan }) {
     sy: point.y - top,
   }));
 
+  const rawGeometry = Array.isArray(route.metadata?.["route_geometry"])
+    ? (route.metadata?.["route_geometry"] as unknown[])
+    : [];
+  const routeLinePoints = rawGeometry
+    .map((value) => {
+      if (!Array.isArray(value) || value.length < 2) return null;
+      const lon = Number(value[0]);
+      const lat = Number(value[1]);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+      const world = projectToWorld(lat, lon, zoom);
+      return { sx: world.x - left, sy: world.y - top };
+    })
+    .filter((value): value is { sx: number; sy: number } => Boolean(value));
+  const visibleRouteLine = routeLinePoints.length >= 2 ? routeLinePoints : screenPoints;
+
   function jumpToStop(stopId?: string) {
     if (!stopId) return;
     document.getElementById(`route-stop-${stopId}`)?.scrollIntoView({
@@ -327,7 +343,7 @@ function RouteMap({ route }: { route: RoutePlan }) {
           aria-hidden="true"
         >
           <polyline
-            points={screenPoints.map((point) => `${point.sx},${point.sy}`).join(" ")}
+            points={visibleRouteLine.map((point) => `${point.sx},${point.sy}`).join(" ")}
             fill="none"
             stroke="rgba(32,105,255,0.86)"
             strokeWidth="5"
@@ -336,7 +352,7 @@ function RouteMap({ route }: { route: RoutePlan }) {
             vectorEffect="non-scaling-stroke"
           />
           <polyline
-            points={screenPoints.map((point) => `${point.sx},${point.sy}`).join(" ")}
+            points={visibleRouteLine.map((point) => `${point.sx},${point.sy}`).join(" ")}
             fill="none"
             stroke="rgba(255,255,255,0.82)"
             strokeWidth="2"
