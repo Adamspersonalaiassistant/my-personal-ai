@@ -6,6 +6,7 @@ import {
   completeExecution,
   failExecution,
 } from "@/lib/execution-ledger";
+import { executeCanonicalTaskCreate } from "@/lib/execution-kernel";
 
 type CalendarActionInput = {
   db: any;
@@ -17,6 +18,8 @@ type CalendarActionInput = {
   openTasks: any[];
   upcomingMeetings: any[];
   sourceMessageId?: string | null;
+  requestId?: string | null;
+  sourceChannel?: string | null;
 };
 
 export type CalendarActionName =
@@ -156,7 +159,9 @@ async function performOperation(
     parentRunId,
     idempotencyKey: input.sourceMessageId
       ? `message:${input.sourceMessageId}:calendar:${operationIndex}:${action}`
-      : null,
+      : input.requestId
+        ? `request:${input.requestId}:calendar:${operationIndex}:${action}`
+        : null,
     targetType:
       action.includes("task") ? "task" : action.includes("event") ? "event" : "notification",
     targetId: targetId || null,
@@ -179,26 +184,33 @@ async function performOperation(
 
   try {
     if (action === "create_task") {
-      if (!title) throw new Error("Task title missing");
-      if (scheduledEnd && !scheduledStart) throw new Error("Scheduled task start missing");
-      if (scheduledStart && scheduledEnd && Date.parse(scheduledEnd) <= Date.parse(scheduledStart)) {
-        throw new Error("Task schedule end must be after start");
-      }
-      const created = await db.rpc("emery_action_create_task_v2", {
-        p_user_id: userId,
-        p_title: title,
-        p_details: details || null,
-        p_due_at: dueAt,
-        p_scheduled_start_at: scheduledStart,
-        p_scheduled_end_at: scheduledEnd,
-        p_reminder_at: reminderAt,
-        p_priority: Math.min(5, Math.max(1, Number(operation.priority ?? 3))),
-        p_source: "emery",
+      const receipt = await executeCanonicalTaskCreate({
+        db,
+        userId,
+        idempotencyKey:
+          input.sourceMessageId
+            ? `message:${input.sourceMessageId}:calendar:${operationIndex}:task.create`
+            : input.requestId
+              ? `request:${input.requestId}:calendar:${operationIndex}:task.create`
+              : `run:${execution.id}:task.create`,
+        title,
+        details: details || null,
+        dueAt,
+        scheduledStartAt: scheduledStart,
+        scheduledEndAt: scheduledEnd,
+        reminderAt,
+        priority: Math.min(5, Math.max(1, Number(operation.priority ?? 3))),
+        sourceChannel: input.sourceChannel || "text",
+        sourceMessageId: input.sourceMessageId ?? null,
+        parentRunId,
+        executionRunId: execution.id,
+        source: "emery",
       });
-      if (created.error) throw created.error;
-      const row = rpcRow(created);
-      if (!row?.id) throw new Error("Task creation returned no record");
-      const item: CalendarActionItemResult = {
+      if (!receipt.ok || receipt.status !== "completed" || !receipt.task?.id) {
+        throw new Error(receipt.errorMessage || "Task creation failed");
+      }
+      const row = receipt.task;
+      return {
         action,
         performed: true,
         recordId: row.id,
@@ -209,15 +221,6 @@ async function performOperation(
         reminderAt: row.reminder_at ?? null,
         eventType: "task",
       };
-      await completeExecution({
-        db,
-        userId,
-        runId: execution.id,
-        resultPayload: item as unknown as Record<string, unknown>,
-        targetType: "task",
-        targetId: row.id,
-      });
-      return item;
     }
 
     if (action === "create_event") {
@@ -689,9 +692,14 @@ ${context}`,
     domain: "calendar",
     action: Array.isArray(parsed.operations) && parsed.operations.length > 1 ? "batch" : String(parsed.operations?.[0]?.action ?? "calendar_action"),
     sourceMessageId: input.sourceMessageId ?? null,
-    idempotencyKey: input.sourceMessageId ? `message:${input.sourceMessageId}:calendar:parent` : null,
+    idempotencyKey: input.sourceMessageId
+      ? `message:${input.sourceMessageId}:calendar:parent`
+      : input.requestId
+        ? `request:${input.requestId}:calendar:parent`
+        : null,
     requestPayload: {
       message,
+      sourceChannel: input.sourceChannel ?? "unknown",
       operations: Array.isArray(parsed.operations) ? parsed.operations : [],
     },
   });
