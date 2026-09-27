@@ -545,13 +545,13 @@ export const getHpoRoutePlanner = createServerFn({ method: "GET" })
         .limit(150),
       db
         .from("tasks")
-        .select("id,title,due_at,priority,status,metadata")
+        .select("id,title,due_at,scheduled_start_at,scheduled_end_at,priority,status,metadata")
         .eq("user_id", userId)
         .neq("status", "completed")
-        .not("due_at", "is", null)
-        .gte("due_at", nowIso)
-        .lte("due_at", horizonIso)
-        .order("due_at", { ascending: true })
+        .not("scheduled_start_at", "is", null)
+        .gte("scheduled_start_at", nowIso)
+        .lte("scheduled_start_at", horizonIso)
+        .order("scheduled_start_at", { ascending: true })
         .limit(150),
     ]);
 
@@ -597,11 +597,11 @@ export const getHpoRoutePlanner = createServerFn({ method: "GET" })
         kind: "task",
         id: item.id,
         title: item.title,
-        at: item.due_at,
-        end_at: null,
-        local_date: localDateKey(item.due_at, timezone),
-        local_time: localClock(item.due_at, timezone),
-        local_end_time: null,
+        at: item.scheduled_start_at,
+        end_at: item.scheduled_end_at,
+        local_date: localDateKey(item.scheduled_start_at, timezone),
+        local_time: localClock(item.scheduled_start_at, timezone),
+        local_end_time: localClock(item.scheduled_end_at, timezone),
         priority: item.priority,
         metadata: item.metadata,
       })),
@@ -1298,11 +1298,11 @@ export const getHpoRouteScheduleAdvice = createServerFn({ method: "POST" })
         .limit(300),
       db
         .from("tasks")
-        .select("title,due_at,priority,status,metadata")
+        .select("title,due_at,scheduled_start_at,scheduled_end_at,priority,status,metadata")
         .eq("user_id", context.userId)
         .neq("status", "completed")
-        .not("due_at", "is", null)
-        .order("due_at", { ascending: true })
+        .not("scheduled_start_at", "is", null)
+        .order("scheduled_start_at", { ascending: true })
         .limit(300),
     ]);
 
@@ -1316,11 +1316,13 @@ export const getHpoRouteScheduleAdvice = createServerFn({ method: "POST" })
           end: localClock(item.end_at, timezone),
         })),
       ...(tasks ?? [])
-        .filter((item: any) => localDateKey(item.due_at, timezone) === route.route_date)
+        .filter((item: any) => localDateKey(item.scheduled_start_at, timezone) === route.route_date)
         .map((item: any) => ({
           kind: "task",
           title: item.title,
-          at: localClock(item.due_at, timezone),
+          at: localClock(item.scheduled_start_at, timezone),
+          end: localClock(item.scheduled_end_at, timezone),
+          deadline: item.due_at,
           priority: item.priority,
         })),
     ];
