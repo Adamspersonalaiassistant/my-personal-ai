@@ -97,3 +97,27 @@ The most important confirmed duplication for the first slice is task creation:
 4. legacy server direct insert
 
 The first kernel migration therefore standardizes **task.create** only. No other working behavior is being redesigned in this slice.
+
+
+## Phase 1 task.create vertical-slice result
+
+Implemented on 2026-09-27:
+
+- Canonical database function: `public.emery_kernel_task_create`
+- Shared TypeScript adapter: `src/lib/execution-kernel.ts`
+- Main Text Emery task.create uses the shared adapter.
+- `/capture` inherits the same main Text Emery path.
+- Realtime Voice passes a stable `session + tool call_id` idempotency key into the same Calendar controller and task.create kernel.
+- Calendar UI task creation uses the shared adapter and preserves one client request id across retry.
+- Direct iPhone Shortcut task creation calls the same canonical database function and carries an execution-run receipt.
+- Legacy server-side `createTask` no longer directly inserts into `tasks`.
+
+Live database acceptance proof:
+1. A temporary task-create request created exactly one task and one completed execution run.
+2. Repeating the same request with the same idempotency key returned the same task/run with `reused=true`.
+3. The completed run's `target_id` matched the persisted task id.
+4. Temporary acceptance records were deleted after verification.
+
+Current maturity statement:
+**task.create kernel proven at the database layer; production channel/user acceptance is still pending.**
+The broader execution architecture remains **built · proving** until migrated actions accumulate real retained production receipts.
