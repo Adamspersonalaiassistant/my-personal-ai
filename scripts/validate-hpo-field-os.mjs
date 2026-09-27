@@ -18,6 +18,9 @@ const v2 = read("src/components/hpo-map/HpoMapV2MapLibre.tsx");
 const routeFns = read("src/lib/hpo-route.functions.ts");
 const packageJson = JSON.parse(read("package.json"));
 const migration = read("supabase/migrations/20260927234500_hpo_map_v2_feature_flag.sql");
+const routeActions = read("src/lib/hpo-route-action-controller.ts");
+const emery = read("src/lib/emery.functions.ts");
+const voice = read("src/lib/voice.functions.ts");
 
 check("Map V1 remains in Route Planner", planner.includes("function OfficePlanningMap("));
 check("Route Planner uses renderer adapter", planner.includes("<HpoMapAdapter"));
@@ -34,6 +37,11 @@ check("Map V2 preserves numbered route stops", v2.includes("hpo-route-stop-numbe
 check("Map V2 exposes current location control", v2.includes("GeolocateControl"));
 check("OSRM routing remains unchanged", routeFns.includes("router.project-osrm.org/table/v1/driving"));
 check("Map V2 is light/blue rather than dark-filter V1", v2.includes('const BLUE = "#1769e8"') && v2.includes('bg-white'));
+check("route-stop outcome has one canonical execution core", routeFns.includes("executeHpoRouteStopOutcomeCore") && routeFns.includes('action = "hpo.route_stop.set_outcome"'));
+check("manual stop save reaches canonical outcome core", routeFns.includes("return executeHpoRouteStopOutcomeCore"));
+check("voice route notes reach canonical outcome core", voice.includes("captureHpoRouteNoteCore") && routeFns.includes("route-note:"));
+check("text HPO route outcomes reach canonical outcome adapter", emery.includes("processHpoRouteStopAction") && routeActions.includes("executeHpoRouteStopOutcomeCore"));
+check("route-stop outcome uses execution ledger and verification", routeFns.includes("beginExecution") && routeFns.includes("completeExecution") && routeFns.includes("Route stop outcome verification failed"));
 
 if (process.exitCode) process.exit(process.exitCode);
 console.log("HPO Field OS Map V2 foundation certification passed.");
