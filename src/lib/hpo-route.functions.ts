@@ -1005,6 +1005,13 @@ export const reorderHpoRouteStops = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+function routeOutcomeSummary(status: string) {
+  if (status === "closed") return { note: "Office closed.", outcome: "Office closed" };
+  if (status === "bad_address") return { note: "Bad or unusable office address.", outcome: "Bad / unusable address" };
+  if (status === "skipped") return { note: "Route stop skipped.", outcome: "Skipped" };
+  return { note: "Visit completed.", outcome: "Visit completed" };
+}
+
 export async function executeHpoRouteStopOutcomeCore(input: {
   db: any;
   userId: string;
@@ -1110,9 +1117,10 @@ export async function executeHpoRouteStopOutcomeCore(input: {
     if (verifyError || !verified) throw verifyError ?? new Error("Route stop verification failed");
     if (verified.status !== input.status) throw new Error("Route stop outcome verification failed");
 
+    const outcomeSummary = routeOutcomeSummary(input.status);
     await upsertInteractionForStop(input.db, input.userId, verified, {
-      notes: input.notes ?? verified.notes,
-      visitOutcome: input.visitOutcome ?? verified.visit_outcome,
+      notes: input.notes?.trim() || verified.notes?.trim() || outcomeSummary.note,
+      visitOutcome: input.visitOutcome?.trim() || verified.visit_outcome?.trim() || outcomeSummary.outcome,
       nextAction: input.nextAction ?? verified.next_action,
       nextActionDueAt: input.nextActionDueAt ?? verified.next_action_due_at,
       status: input.status,
@@ -1158,6 +1166,127 @@ export async function executeHpoRouteStopOutcomeCore(input: {
   }
 }
 
+export async function executeHpoRouteStopVisitCore(input: {
+  db: any;
+  userId: string;
+  stopId: string;
+  status: "completed" | "visited" | "closed" | "bad_address" | "skipped";
+  notes: string;
+  visitOutcome?: string | null | undefined;
+  nextAction?: string | null | undefined;
+  nextActionDueAt?: string | null | undefined;
+  idempotencyKey: string;
+  sourceChannel: string;
+  sourceMessageId?: string | null;
+  parentRunId?: string | null;
+  traceId?: string | null;
+}) {
+  const action = "hpo.route_stop.log_visit";
+  const key = clean(input.idempotencyKey);
+  if (!key) throw new Error("Visit logging requires an idempotency key");
+
+  const execution = await beginExecution({
+    db: input.db,
+    userId: input.userId,
+    domain: "hpo_route",
+    action,
+    sourceMessageId: input.sourceMessageId ?? null,
+    parentRunId: input.parentRunId ?? null,
+    idempotencyKey: key,
+    targetType: "hpo_route_stop",
+    targetId: input.stopId,
+    requestPayload: {
+      capability: action,
+      stopId: input.stopId,
+      status: input.status,
+      notes: input.notes,
+      visitOutcome: input.visitOutcome ?? null,
+      nextAction: input.nextAction ?? null,
+      nextActionDueAt: input.nextActionDueAt ?? null,
+      sourceChannel: input.sourceChannel,
+      traceId: input.traceId ?? null,
+    },
+  });
+
+  if (
+    execution.reused &&
+    execution.status === "completed" &&
+    execution.resultPayload["routeStopVisitResult"]
+  ) {
+    return execution.resultPayload["routeStopVisitResult"] as {
+      ok: true;
+      action: string;
+      executionRunId: string;
+      stop: any;
+      interactionId: string | null;
+      routeStatus: string;
+      reused: boolean;
+    };
+  }
+
+  try {
+    const outcome = await executeHpoRouteStopOutcomeCore({
+      db: input.db,
+      userId: input.userId,
+      stopId: input.stopId,
+      status: input.status,
+      notes: input.notes,
+      visitOutcome: input.visitOutcome,
+      nextAction: input.nextAction,
+      nextActionDueAt: input.nextActionDueAt,
+      idempotencyKey: `${key}:outcome`,
+      sourceChannel: input.sourceChannel,
+      sourceMessageId: input.sourceMessageId ?? null,
+      parentRunId: execution.id,
+      traceId: input.traceId ?? execution.id,
+    });
+
+    let interactionId: string | null = null;
+    if (outcome.stop.account_id) {
+      const { data: interaction, error: interactionError } = await input.db
+        .from("hpo_interactions")
+        .select("id,source_ref")
+        .eq("user_id", input.userId)
+        .eq("source_type", "route")
+        .eq("source_ref", outcome.stop.id)
+        .maybeSingle();
+      if (interactionError) throw interactionError;
+      interactionId = interaction?.id ?? null;
+      if (!interactionId) throw new Error("Visit interaction verification failed");
+    }
+
+    const result = {
+      ok: true as const,
+      action,
+      executionRunId: execution.id,
+      stop: outcome.stop,
+      interactionId,
+      routeStatus: outcome.routeStatus,
+      reused: execution.reused,
+    };
+    await completeExecution({
+      db: input.db,
+      userId: input.userId,
+      runId: execution.id,
+      resultPayload: { routeStopVisitResult: result as unknown as Record<string, unknown> },
+      targetType: "hpo_route_stop",
+      targetId: outcome.stop.id,
+    });
+    return result;
+  } catch (error) {
+    await failExecution({
+      db: input.db,
+      userId: input.userId,
+      runId: execution.id,
+      errorCode: "hpo_route_stop_visit_failed",
+      errorMessage: error instanceof Error ? error.message : String(error),
+      retryable: true,
+      resultPayload: { action, stopId: input.stopId },
+    }).catch(() => undefined);
+    throw error;
+  }
+}
+
 export const updateHpoRouteStop = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
@@ -1194,16 +1323,32 @@ export const updateHpoRouteStop = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const db = context.supabase as any;
     if (data.status && TERMINAL.has(data.status)) {
+      const key = data.idempotencyKey || `ui:${crypto.randomUUID()}:hpo.route_stop.log_visit`;
+      const hasVisitContent =
+        data.notes !== undefined ||
+        data.visitOutcome !== undefined ||
+        data.nextAction !== undefined ||
+        data.nextActionDueAt !== undefined;
+      if (hasVisitContent) {
+        return executeHpoRouteStopVisitCore({
+          db,
+          userId: context.userId,
+          stopId: data.stopId,
+          status: data.status as "completed" | "visited" | "closed" | "bad_address" | "skipped",
+          notes: data.notes ?? "",
+          visitOutcome: data.visitOutcome,
+          nextAction: data.nextAction,
+          nextActionDueAt: data.nextActionDueAt,
+          idempotencyKey: key,
+          sourceChannel: data.sourceChannel,
+        });
+      }
       return executeHpoRouteStopOutcomeCore({
         db,
         userId: context.userId,
         stopId: data.stopId,
         status: data.status as "completed" | "visited" | "closed" | "bad_address" | "skipped",
-        notes: data.notes,
-        visitOutcome: data.visitOutcome,
-        nextAction: data.nextAction,
-        nextActionDueAt: data.nextActionDueAt,
-        idempotencyKey: data.idempotencyKey || `ui:${crypto.randomUUID()}:hpo.route_stop.set_outcome`,
+        idempotencyKey: key,
         sourceChannel: data.sourceChannel,
       });
     }
@@ -1358,7 +1503,7 @@ export async function captureHpoRouteNoteCore(input: {
   const status = inferStatus(message);
   const visitOutcome = inferOutcome(message);
   const nextAction = extractNextAction(message);
-  const outcomeExecution = await executeHpoRouteStopOutcomeCore({
+  const visitExecution = await executeHpoRouteStopVisitCore({
     db: input.db,
     userId: input.userId,
     stopId: target.id,
@@ -1367,13 +1512,13 @@ export async function captureHpoRouteNoteCore(input: {
     visitOutcome,
     nextAction,
     nextActionDueAt: target.next_action_due_at ?? null,
-    idempotencyKey: `route-note:${execution.id}:${target.id}:hpo.route_stop.set_outcome`,
+    idempotencyKey: `route-note:${execution.id}:${target.id}:hpo.route_stop.log_visit`,
     sourceChannel: "voice_or_route_note",
     parentRunId: execution.id,
     traceId: execution.id,
   });
-  const updated = outcomeExecution.stop;
-  const routeStatus = outcomeExecution.routeStatus;
+  const updated = visitExecution.stop;
+  const routeStatus = visitExecution.routeStatus;
 
   const result = {
     ok: true,
