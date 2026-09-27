@@ -7,14 +7,19 @@ import brainImage from "@/assets/neural-brain.png";
 
 export const Route = createFileRoute("/")({
   ssr: false,
-  head: () => ({ meta: [
-    { title: "Sign in to Emery — Personal AI" },
-    { name: "description", content: "Sign in to your private Emery conversation and personal calendar." },
-    { property: "og:title", content: "Emery — Personal AI" },
-    { property: "og:description", content: "A private, persistent personal AI companion." },
-    { property: "og:type", content: "website" },
-    { name: "twitter:card", content: "summary" },
-  ] }),
+  head: () => ({
+    meta: [
+      { title: "Sign in to Emery — Personal AI" },
+      {
+        name: "description",
+        content: "Sign in to your private Emery conversation and personal calendar.",
+      },
+      { property: "og:title", content: "Emery — Personal AI" },
+      { property: "og:description", content: "A private, persistent personal AI companion." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: SignIn,
 });
 
@@ -68,7 +73,9 @@ function SignIn() {
           </div>
 
           <div className="mt-5 text-center">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">Personal intelligence</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">
+              Personal intelligence
+            </p>
             <h1 className="mt-2 text-4xl font-semibold text-foreground">Emery</h1>
             <p className="mx-auto mt-3 max-w-[18rem] text-sm leading-6 text-muted-foreground">
               Your private companion, ready to pick up where you left off.
@@ -113,7 +120,11 @@ function SignIn() {
                 aria-label={showPassword ? "Hide password" : "Show password"}
                 className="absolute right-3 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-xl text-muted-foreground transition hover:text-foreground"
               >
-                {showPassword ? <EyeOff className="size-[18px]" /> : <Eye className="size-[18px]" />}
+                {showPassword ? (
+                  <EyeOff className="size-[18px]" />
+                ) : (
+                  <Eye className="size-[18px]" />
+                )}
               </button>
             </label>
 
@@ -133,7 +144,10 @@ function SignIn() {
             </div>
 
             {error ? (
-              <p className="rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
+              <p
+                className="rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                role="alert"
+              >
                 {error}
               </p>
             ) : null}

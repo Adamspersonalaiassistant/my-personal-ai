@@ -32,14 +32,16 @@ import {
 } from "@/lib/os.functions";
 
 export const Route = createFileRoute("/_authenticated/calendar")({
-  head: () => ({ meta: [
-    { title: "Calendar — Emery" },
-    { name: "description", content: "Your tasks, events, and commitments in Emery Calendar." },
-    { property: "og:title", content: "Calendar — Emery" },
-    { property: "og:description", content: "Your tasks and events in Emery Calendar." },
-    { property: "og:type", content: "website" },
-    { name: "twitter:card", content: "summary" },
-  ] }),
+  head: () => ({
+    meta: [
+      { title: "Calendar — Emery" },
+      { name: "description", content: "Your tasks, events, and commitments in Emery Calendar." },
+      { property: "og:title", content: "Calendar — Emery" },
+      { property: "og:description", content: "Your tasks and events in Emery Calendar." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: CalendarPage,
 });
 
