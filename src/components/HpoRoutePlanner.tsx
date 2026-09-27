@@ -11,6 +11,7 @@ import {
   Clock3,
   ExternalLink,
   MapPinned,
+  Minus,
   Navigation,
   Plus,
   RefreshCw,
@@ -148,87 +149,261 @@ function locationText(stop: Stop) {
   return [stop.address, stop.city].filter(Boolean).join(", ");
 }
 
-function RouteMiniMap({ route }: { route: RoutePlan }) {
-  const points: Array<{ lat: number; lon: number; label: string; kind: string }> = [];
-  if (Number.isFinite(route.start_latitude) && Number.isFinite(route.start_longitude)) {
-    points.push({
-      lat: Number(route.start_latitude),
-      lon: Number(route.start_longitude),
-      label: "S",
-      kind: "start",
-    });
+function projectToWorld(lat: number, lon: number, zoom: number) {
+  const clampedLat = Math.max(-85.05112878, Math.min(85.05112878, lat));
+  const sin = Math.sin((clampedLat * Math.PI) / 180);
+  const scale = 256 * 2 ** zoom;
+  return {
+    x: ((lon + 180) / 360) * scale,
+    y: (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * scale,
+  };
+}
+
+function routeMapBaseZoom(points: Array<{ lat: number; lon: number }>) {
+  if (points.length <= 1) return 14;
+  for (let zoom = 16; zoom >= 6; zoom -= 1) {
+    const projected = points.map((point) => projectToWorld(point.lat, point.lon, zoom));
+    const width = Math.max(...projected.map((point) => point.x)) - Math.min(...projected.map((point) => point.x));
+    const height = Math.max(...projected.map((point) => point.y)) - Math.min(...projected.map((point) => point.y));
+    if (width <= 620 && height <= 245) return zoom;
   }
-  for (const stop of [...route.stops].sort((a, b) => a.stop_order - b.stop_order)) {
-    if (Number.isFinite(stop.latitude) && Number.isFinite(stop.longitude)) {
-      points.push({
-        lat: Number(stop.latitude),
-        lon: Number(stop.longitude),
-        label: String(stop.stop_order),
-        kind: "stop",
+  return 6;
+}
+
+function RouteMap({ route }: { route: RoutePlan }) {
+  const points = useMemo(() => {
+    const result: Array<{
+      lat: number;
+      lon: number;
+      label: string;
+      kind: "start" | "stop" | "end";
+      stopId?: string;
+      status?: string;
+      officeName?: string | null;
+    }> = [];
+    if (Number.isFinite(route.start_latitude) && Number.isFinite(route.start_longitude)) {
+      result.push({
+        lat: Number(route.start_latitude),
+        lon: Number(route.start_longitude),
+        label: "S",
+        kind: "start",
       });
     }
-  }
-  if (Number.isFinite(route.end_latitude) && Number.isFinite(route.end_longitude)) {
-    points.push({
-      lat: Number(route.end_latitude),
-      lon: Number(route.end_longitude),
-      label: "E",
-      kind: "end",
-    });
-  }
-  if (points.length < 2) return null;
+    for (const stop of [...route.stops].sort((a, b) => a.stop_order - b.stop_order)) {
+      if (Number.isFinite(stop.latitude) && Number.isFinite(stop.longitude)) {
+        result.push({
+          lat: Number(stop.latitude),
+          lon: Number(stop.longitude),
+          label: String(stop.stop_order),
+          kind: "stop",
+          stopId: stop.id,
+          status: stop.status,
+          officeName: stop.office_name,
+        });
+      }
+    }
+    if (Number.isFinite(route.end_latitude) && Number.isFinite(route.end_longitude)) {
+      result.push({
+        lat: Number(route.end_latitude),
+        lon: Number(route.end_longitude),
+        label: "E",
+        kind: "end",
+      });
+    }
+    return result;
+  }, [route]);
 
-  const minLat = Math.min(...points.map((point) => point.lat));
-  const maxLat = Math.max(...points.map((point) => point.lat));
-  const minLon = Math.min(...points.map((point) => point.lon));
-  const maxLon = Math.max(...points.map((point) => point.lon));
-  const latSpan = Math.max(maxLat - minLat, 0.01);
-  const lonSpan = Math.max(maxLon - minLon, 0.01);
-  const xy = points.map((point) => ({
+  const fitZoom = useMemo(() => routeMapBaseZoom(points), [points]);
+  const [zoomOffset, setZoomOffset] = useState(0);
+
+  useEffect(() => {
+    setZoomOffset(0);
+  }, [route.id, route.optimized_at]);
+
+  if (!points.length) {
+    return (
+      <section className="overflow-hidden rounded-[1.55rem] border border-border/45 bg-card/30">
+        <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center">
+          <MapPinned className="size-7 text-primary" />
+          <p className="mt-3 text-sm font-semibold">Map appears after route optimization</p>
+          <p className="mt-1 max-w-sm text-xs leading-5 text-muted-foreground">
+            Add your offices and tap Optimize Route. Emery will geocode the stops, choose the driving order and pin every office on the map.
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  const zoom = Math.max(5, Math.min(18, fitZoom + zoomOffset));
+  const width = 760;
+  const height = 340;
+  const projected = points.map((point) => ({ ...point, ...projectToWorld(point.lat, point.lon, zoom) }));
+  const minX = Math.min(...projected.map((point) => point.x));
+  const maxX = Math.max(...projected.map((point) => point.x));
+  const minY = Math.min(...projected.map((point) => point.y));
+  const maxY = Math.max(...projected.map((point) => point.y));
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+  const left = centerX - width / 2;
+  const top = centerY - height / 2;
+  const tileSize = 256;
+  const tileCount = 2 ** zoom;
+  const tileMinX = Math.floor(left / tileSize) - 1;
+  const tileMaxX = Math.floor((left + width) / tileSize) + 1;
+  const tileMinY = Math.max(0, Math.floor(top / tileSize) - 1);
+  const tileMaxY = Math.min(tileCount - 1, Math.floor((top + height) / tileSize) + 1);
+  const tiles: Array<{ x: number; y: number; srcX: number }> = [];
+  for (let y = tileMinY; y <= tileMaxY; y += 1) {
+    for (let x = tileMinX; x <= tileMaxX; x += 1) {
+      const srcX = ((x % tileCount) + tileCount) % tileCount;
+      tiles.push({ x, y, srcX });
+    }
+  }
+
+  const screenPoints = projected.map((point) => ({
     ...point,
-    x: 20 + ((point.lon - minLon) / lonSpan) * 280,
-    y: 130 - ((point.lat - minLat) / latSpan) * 110,
+    sx: point.x - left,
+    sy: point.y - top,
   }));
 
+  function jumpToStop(stopId?: string) {
+    if (!stopId) return;
+    document.getElementById(`route-stop-${stopId}`)?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }
+
   return (
-    <div className="overflow-hidden rounded-2xl border border-border/45 bg-card/30 p-3">
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <p className="text-xs font-semibold">Optimized route preview</p>
-        <p className="text-[10px] text-muted-foreground">Numbered in driving order</p>
+    <section className="overflow-hidden rounded-[1.55rem] border border-border/50 bg-card/25 shadow-[0_18px_45px_rgba(0,0,0,0.18)]">
+      <div className="flex items-center justify-between gap-3 border-b border-border/35 px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">Route Map</p>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">
+            Numbered pins match your stop list · tap a pin to jump to that office
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setZoomOffset((value) => Math.max(-4, value - 1))}
+            className="emery-press flex size-9 items-center justify-center rounded-xl border border-border/45 bg-background/80"
+            aria-label="Zoom map out"
+          >
+            <Minus className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setZoomOffset((value) => Math.min(4, value + 1))}
+            className="emery-press flex size-9 items-center justify-center rounded-xl border border-border/45 bg-background/80"
+            aria-label="Zoom map in"
+          >
+            <Plus className="size-3.5" />
+          </button>
+        </div>
       </div>
-      <svg viewBox="0 0 320 150" className="h-40 w-full">
-        <polyline
-          points={xy.map((point) => `${point.x},${point.y}`).join(" ")}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="3"
-          className="text-primary/65"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        {xy.map((point, index) => (
-          <g key={`${point.kind}-${index}`}>
-            <circle
-              cx={point.x}
-              cy={point.y}
-              r={point.kind === "stop" ? 10 : 9}
-              className={point.kind === "stop" ? "fill-primary" : "fill-card stroke-primary"}
-              strokeWidth="2"
-            />
-            <text
-              x={point.x}
-              y={point.y + 3.5}
-              textAnchor="middle"
-              className={point.kind === "stop" ? "fill-primary-foreground" : "fill-primary"}
-              fontSize="9"
-              fontWeight="700"
+
+      <div className="relative h-[340px] overflow-hidden bg-muted/25">
+        {tiles.map((tile) => (
+          <img
+            key={`${zoom}-${tile.x}-${tile.y}`}
+            src={`https://tile.openstreetmap.org/${zoom}/${tile.srcX}/${tile.y}.png`}
+            alt=""
+            draggable={false}
+            className="pointer-events-none absolute max-w-none select-none"
+            style={{
+              width: tileSize,
+              height: tileSize,
+              left: tile.x * tileSize - left,
+              top: tile.y * tileSize - top,
+            }}
+          />
+        ))}
+
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          preserveAspectRatio="none"
+          className="pointer-events-none absolute inset-0 size-full"
+          aria-hidden="true"
+        >
+          <polyline
+            points={screenPoints.map((point) => `${point.sx},${point.sy}`).join(" ")}
+            fill="none"
+            stroke="rgba(32,105,255,0.86)"
+            strokeWidth="5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+          <polyline
+            points={screenPoints.map((point) => `${point.sx},${point.sy}`).join(" ")}
+            fill="none"
+            stroke="rgba(255,255,255,0.82)"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+
+        {screenPoints.map((point, index) => {
+          const completed = point.kind === "stop" && point.status && terminalStatuses.has(point.status);
+          return (
+            <button
+              key={`${point.kind}-${point.stopId ?? index}`}
+              type="button"
+              onClick={() => jumpToStop(point.stopId)}
+              disabled={point.kind !== "stop"}
+              title={point.officeName ?? (point.kind === "start" ? "Route start" : "Route end")}
+              className={`absolute z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 text-[11px] font-bold shadow-[0_5px_16px_rgba(0,0,0,0.35)] ${
+                point.kind === "stop"
+                  ? completed
+                    ? "size-9 border-background bg-foreground text-background"
+                    : "size-10 border-background bg-primary text-primary-foreground"
+                  : "size-8 border-primary bg-background text-primary"
+              }`}
+              style={{
+                left: `${(point.sx / width) * 100}%`,
+                top: `${(point.sy / height) * 100}%`,
+              }}
             >
               {point.label}
-            </text>
-          </g>
-        ))}
-      </svg>
-    </div>
+            </button>
+          );
+        })}
+
+        <div className="absolute bottom-2 left-2 rounded-lg bg-background/82 px-2 py-1 text-[9px] text-muted-foreground backdrop-blur">
+          © OpenStreetMap contributors
+        </div>
+      </div>
+
+      <div className="flex gap-2 overflow-x-auto border-t border-border/35 px-3 py-3 [scrollbar-width:none]">
+        {[...route.stops]
+          .sort((a, b) => a.stop_order - b.stop_order)
+          .map((stop) => (
+            <button
+              key={stop.id}
+              type="button"
+              onClick={() => jumpToStop(stop.id)}
+              className="emery-press flex min-w-[150px] shrink-0 items-center gap-2 rounded-xl border border-border/40 bg-background/45 px-2.5 py-2 text-left"
+            >
+              <span className={`flex size-7 shrink-0 items-center justify-center rounded-lg text-[10px] font-bold ${
+                terminalStatuses.has(stop.status)
+                  ? "bg-foreground text-background"
+                  : "bg-primary text-primary-foreground"
+              }`}>
+                {stop.stop_order}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-[11px] font-semibold">{stop.office_name || "Route stop"}</span>
+                <span className="mt-0.5 block truncate text-[9px] text-muted-foreground">
+                  {stop.city || stop.address || "Address saved"}
+                </span>
+              </span>
+            </button>
+          ))}
+      </div>
+    </section>
   );
 }
 
@@ -480,8 +655,8 @@ export function HpoRoutePlanner() {
               Plan → optimize → visit → log.
             </h2>
             <p className="mt-1.5 max-w-xl text-sm leading-6 text-muted-foreground">
-              Built into Emery with a familiar multi-stop route-planner workflow. It does not use
-              MapQuest. Your route and daily marketing notes stay in HPO.
+              Map-first multi-stop planning inside Emery: build the day, optimize the driving order,
+              see every numbered stop on the map, then capture notes without leaving the route page.
             </p>
           </div>
           <button
@@ -530,6 +705,15 @@ export function HpoRoutePlanner() {
             try {
               const result = await createRoute({ data: payload });
               setShowBuilder(false);
+              try {
+                await optimize({ data: { routeId: result.routeId } });
+              } catch (optimizeCause) {
+                setError(
+                  optimizeCause instanceof Error
+                    ? `Route saved. ${optimizeCause.message}`
+                    : "Route saved, but optimization needs attention.",
+                );
+              }
               await refresh(result.routeId);
             } catch (cause) {
               setError(cause instanceof Error ? cause.message : "Couldn't create route.");
@@ -612,6 +796,43 @@ export function HpoRoutePlanner() {
             ) : null}
           </div>
 
+          <RouteMap route={activeRoute} />
+
+          <section className="rounded-[1.55rem] border border-primary/15 bg-primary/[0.035] p-4">
+            <div className="flex items-start gap-3">
+              <div className="emery-icon-well flex size-10 shrink-0 items-center justify-center rounded-2xl text-primary">
+                <Sparkles className="size-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold">Emery Route Notes</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  Speak naturally: “Stop 2 — spoke with Jenni, she’ll pass the information to the
+                  attorney. Follow up next week.” Emery attaches the raw note to the right stop.
+                </p>
+              </div>
+            </div>
+            <textarea
+              value={routeNote}
+              onChange={(event) => setRouteNote(event.target.value)}
+              placeholder="What happened at the stop?"
+              className="mt-3 min-h-24 w-full resize-none rounded-2xl border border-border/55 bg-card/55 px-3.5 py-3 text-[16px] leading-6 outline-none focus:border-primary/30"
+            />
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <p className="min-w-0 text-[11px] text-muted-foreground">
+                {routeNoteResult ?? "Raw marketing note is preserved exactly as entered."}
+              </p>
+              <button
+                type="button"
+                disabled={!routeNote.trim() || working}
+                onClick={() => void submitRouteNote(activeRoute)}
+                className="emery-press flex min-h-11 shrink-0 items-center gap-2 rounded-xl bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-40"
+              >
+                <CheckCircle2 className="size-3.5" /> Save Note
+              </button>
+            </div>
+          </section>
+
+
           <section className="rounded-[1.55rem] border border-border/45 bg-card/30 p-4">
             <div className="flex items-start gap-3">
               <div className="emery-icon-well flex size-10 shrink-0 items-center justify-center rounded-2xl text-primary">
@@ -672,43 +893,7 @@ export function HpoRoutePlanner() {
             ) : null}
           </section>
 
-          <RouteMiniMap route={activeRoute} />
-
-          <section className="rounded-[1.55rem] border border-primary/15 bg-primary/[0.035] p-4">
-            <div className="flex items-start gap-3">
-              <div className="emery-icon-well flex size-10 shrink-0 items-center justify-center rounded-2xl text-primary">
-                <Sparkles className="size-4" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold">Emery Route Notes</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  Speak naturally: “Stop 2 — spoke with Jenni, she’ll pass the information to the
-                  attorney. Follow up next week.” Emery attaches the raw note to the right stop.
-                </p>
-              </div>
-            </div>
-            <textarea
-              value={routeNote}
-              onChange={(event) => setRouteNote(event.target.value)}
-              placeholder="What happened at the stop?"
-              className="mt-3 min-h-24 w-full resize-none rounded-2xl border border-border/55 bg-card/55 px-3.5 py-3 text-[16px] leading-6 outline-none focus:border-primary/30"
-            />
-            <div className="mt-2 flex items-center justify-between gap-3">
-              <p className="min-w-0 text-[11px] text-muted-foreground">
-                {routeNoteResult ?? "Raw marketing note is preserved exactly as entered."}
-              </p>
-              <button
-                type="button"
-                disabled={!routeNote.trim() || working}
-                onClick={() => void submitRouteNote(activeRoute)}
-                className="emery-press flex min-h-11 shrink-0 items-center gap-2 rounded-xl bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-40"
-              >
-                <CheckCircle2 className="size-3.5" /> Save Note
-              </button>
-            </div>
-          </section>
-
-          <div className="space-y-2">
+                    <div className="space-y-2">
             {[...activeRoute.stops]
               .sort((a, b) => a.stop_order - b.stop_order)
               .map((stop, index, ordered) => (
@@ -1115,7 +1300,8 @@ function StopCard({
 
   return (
     <article
-      className={`rounded-[1.45rem] border p-4 ${
+      id={`route-stop-${stop.id}`}
+      className={`scroll-mt-24 rounded-[1.45rem] border p-4 ${
         completed ? "border-primary/18 bg-primary/[0.03]" : "border-border/45 bg-card/30"
       }`}
     >
