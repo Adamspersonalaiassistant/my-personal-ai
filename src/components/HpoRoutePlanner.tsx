@@ -1730,7 +1730,14 @@ export function HpoRoutePlanner() {
                     setWorking(true);
                     setError(null);
                     try {
-                      await updateStop({ data: { stopId: stop.id, ...input } });
+                      await updateStop({
+                        data: {
+                          stopId: stop.id,
+                          ...input,
+                          idempotencyKey: `ui:${crypto.randomUUID()}:hpo.route_stop.set_outcome`,
+                          sourceChannel: "ui",
+                        },
+                      });
                       await refresh(activeRoute.id);
                     } catch (cause) {
                       setError(cause instanceof Error ? cause.message : "Couldn't save stop.");
