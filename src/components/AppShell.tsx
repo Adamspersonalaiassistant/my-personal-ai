@@ -26,13 +26,13 @@ import {
 
 const primaryNav = [
   { to: "/chat", label: "Emery", icon: MessageCircle },
-  { to: "/personal", label: "Personal", icon: Heart },
   { to: "/hpo", label: "HPO", icon: BriefcaseBusiness },
   { to: "/calendar", label: "Calendar", icon: CalendarDays },
 ] as const;
 
 const desktopNav = [
   ...primaryNav,
+  { to: "/personal", label: "Personal", icon: Heart },
   { to: "/projects", label: "Projects", icon: FolderKanban },
   { to: "/meetings", label: "Meetings", icon: CalendarDays },
   { to: "/agents", label: "Agents", icon: UsersRound },
@@ -41,34 +41,46 @@ const desktopNav = [
 
 const moreItems = [
   {
+    to: "/personal",
+    label: "Personal",
+    description: "Life, goals and personal context",
+    icon: Heart,
+    group: "Your Space",
+  },
+  {
     to: "/projects",
     label: "Projects",
     description: "Outcomes, priorities and next actions",
     icon: FolderKanban,
+    group: "Your Space",
+  },
+  {
+    to: "/meetings",
+    label: "Meetings",
+    description: "Meeting history and conversation context",
+    icon: CalendarDays,
+    group: "Your Space",
   },
   {
     to: "/agents",
     label: "Agents",
     description: "Specialists working behind Emery",
     icon: UsersRound,
+    group: "Emery System",
   },
   {
     to: "/memories",
     label: "Memories",
     description: "What Emery carries forward about you",
     icon: Brain,
-  },
-  {
-    to: "/meetings",
-    label: "Meetings",
-    description: "Internal meetings and conversation context",
-    icon: CalendarDays,
+    group: "Emery System",
   },
   {
     to: "/settings",
     label: "Settings",
-    description: "Emery, iPhone access and system controls",
+    description: "Voice, iPhone access and system controls",
     icon: SettingsIcon,
+    group: "Emery System",
   },
 ] as const;
 
@@ -211,13 +223,7 @@ export function AppShell({
                 <span className="max-w-24 truncate">{emeryReturnLabel(lastReturn)}</span>
               </Link>
             ) : null}
-            <Link
-              to="/settings"
-              className="flex size-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-white/[0.03] hover:text-foreground md:hidden"
-              aria-label="Open Settings"
-            >
-              <SettingsIcon className="size-[18px]" />
-            </Link>
+
           </div>
         </header>
 
@@ -232,7 +238,7 @@ export function AppShell({
         </main>
 
         <nav
-          className="z-40 grid shrink-0 grid-cols-5 border-t border-border/50 bg-background/95 px-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-0.5 backdrop-blur-lg md:hidden"
+          className="z-40 grid shrink-0 grid-cols-4 gap-1 border-t border-border/45 bg-background/96 px-2 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-xl md:hidden"
           aria-label="Primary navigation"
         >
           {primaryNav.map(({ to, label, icon: Icon }) => (
@@ -242,12 +248,13 @@ export function AppShell({
               onClick={() => {
                 if (to === "/chat") rememberEmeryHandoff();
               }}
-              className="emery-press flex min-h-[48px] flex-col items-center justify-center gap-0.5 rounded-md px-1 text-[10px] font-medium text-muted-foreground transition-colors"
+              className="emery-press relative flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-medium text-muted-foreground transition-all"
               activeProps={{
-                className: "bg-primary/[0.08] text-primary font-semibold [&_svg]:stroke-[2.3]",
+                className:
+                  "bg-primary/[0.085] text-primary font-semibold shadow-[inset_0_0_0_1px_rgba(70,145,255,0.08)] [&_svg]:stroke-[2.35]",
               }}
             >
-              <Icon className="size-[18px]" />
+              <Icon className="size-[20px]" />
               <span>{label}</span>
             </Link>
           ))}
@@ -257,9 +264,13 @@ export function AppShell({
             onClick={() => setMoreOpen(true)}
             aria-label="Open more navigation"
             aria-expanded={moreOpen}
-            className={`flex h-auto min-h-[48px] w-full flex-col items-center justify-center gap-0.5 rounded-md p-0 text-[10px] font-medium ${moreActive ? "bg-primary/[0.08] text-primary" : "text-muted-foreground"}`}
+            className={`emery-press flex h-auto min-h-[52px] w-full flex-col items-center justify-center gap-1 rounded-xl p-0 text-[11px] font-medium transition-all ${
+              moreActive
+                ? "bg-primary/[0.085] text-primary shadow-[inset_0_0_0_1px_rgba(70,145,255,0.08)]"
+                : "text-muted-foreground"
+            }`}
           >
-            <MoreHorizontal className="size-[18px]" />
+            <MoreHorizontal className="size-[20px]" />
             <span>More</span>
           </Button>
         </nav>
@@ -267,47 +278,68 @@ export function AppShell({
 
       {moreOpen ? (
         <div
-          className="fixed inset-0 z-[70] flex items-end bg-background/70 backdrop-blur-sm md:hidden"
+          className="fixed inset-0 z-[70] flex items-end bg-background/72 backdrop-blur-[6px] md:hidden"
           onClick={() => setMoreOpen(false)}
           role="presentation"
         >
           <section
-            className="emery-sheet-in max-h-[78dvh] w-full overflow-hidden rounded-t-xl border-t border-border/55 bg-popover px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2"
+            className="emery-sheet-in max-h-[82dvh] w-full overflow-hidden rounded-t-[1.6rem] border-t border-border/55 bg-popover/98 px-3 pb-[max(0.85rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-20px_60px_rgba(0,0,0,0.38)]"
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"
             aria-label="More Emery destinations"
           >
-            <div className="flex shrink-0 items-center justify-between px-1 py-2">
+            <div className="mx-auto mt-0.5 h-1 w-10 rounded-full bg-border/80" />
+            <div className="flex shrink-0 items-center justify-between px-1 pb-2 pt-3">
               <div>
-                <p className="text-sm font-semibold">More</p>
+                <p className="text-[15px] font-semibold">More</p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  Everything important, without crowding your daily navigation.
+                </p>
               </div>
               <Button
                 variant="ghost"
                 type="button"
                 onClick={() => setMoreOpen(false)}
-                className="size-11 rounded-lg text-muted-foreground hover:text-foreground"
+                className="size-10 rounded-xl text-muted-foreground hover:bg-white/[0.03] hover:text-foreground"
                 aria-label="Close more navigation"
               >
                 <X className="size-4" />
               </Button>
             </div>
-            <div className="emery-scrollbar max-h-[calc(78dvh-4.5rem)] overflow-y-auto overscroll-contain rounded-lg bg-card/38 [-webkit-overflow-scrolling:touch]">
-              {moreItems.map(({ to, label, description, icon: Icon }, index) => (
-                <Link
-                  key={to}
-                  to={to}
-                  className={`flex min-h-[70px] items-center gap-3 px-3.5 py-2.5 ${index ? "border-t border-border/35" : ""}`}
-                >
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/[0.055] text-primary">
-                    <Icon className="size-[17px]" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">{label}</p>
-                    <p className="truncate text-[11px] text-muted-foreground">{description}</p>
-                  </div>
-                </Link>
-              ))}
+
+            <div className="emery-scrollbar max-h-[calc(82dvh-5.5rem)] space-y-4 overflow-y-auto overscroll-contain pb-1 [-webkit-overflow-scrolling:touch]">
+              {["Your Space", "Emery System"].map((group) => {
+                const items = moreItems.filter((item) => item.group === group);
+                return (
+                  <section key={group}>
+                    <p className="mb-1.5 px-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/80">
+                      {group}
+                    </p>
+                    <div className="overflow-hidden rounded-2xl border border-border/40 bg-card/38">
+                      {items.map(({ to, label, description, icon: Icon }, index) => (
+                        <Link
+                          key={to}
+                          to={to}
+                          className={`emery-press flex min-h-[68px] items-center gap-3 px-3.5 py-2.5 transition-colors hover:bg-white/[0.025] ${
+                            index ? "border-t border-border/30" : ""
+                          }`}
+                        >
+                          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-primary/10 bg-primary/[0.055] text-primary">
+                            <Icon className="size-[17px]" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[13px] font-semibold">{label}</p>
+                            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                              {description}
+                            </p>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </section>
+                );
+              })}
             </div>
           </section>
         </div>
