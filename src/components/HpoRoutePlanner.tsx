@@ -550,6 +550,11 @@ export function HpoRoutePlanner() {
   const activeCalendar = activeRoute
     ? (data?.calendar ?? []).filter((item) => item.local_date === activeRoute.route_date)
     : [];
+  const nextStop = activeRoute
+    ? [...activeRoute.stops]
+        .sort((a, b) => a.stop_order - b.stop_order)
+        .find((stop) => !terminalStatuses.has(stop.status)) ?? null
+    : null;
 
   async function optimizeActive(routeId: string) {
     setOptimizing(true);
@@ -829,6 +834,81 @@ export function HpoRoutePlanner() {
               </div>
             ) : null}
           </div>
+
+          <section className="overflow-hidden rounded-[1.55rem] border border-primary/20 bg-[linear-gradient(145deg,rgba(30,95,255,0.09),rgba(8,16,34,0.55))] p-4 shadow-[0_16px_45px_rgba(0,0,0,0.16)]">
+            <p className="emery-kicker">Now</p>
+            {nextStop ? (
+              <>
+                <div className="mt-2 flex items-start gap-3">
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-primary text-sm font-bold text-primary-foreground">
+                    {nextStop.stop_order}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="truncate text-base font-semibold">
+                      {nextStop.office_name || "Next HPO stop"}
+                    </h3>
+                    <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                      {locationText(nextStop) || "Address not saved"}
+                    </p>
+                    {nextStop.drive_seconds_from_previous ? (
+                      <p className="mt-1 text-[10px] font-medium text-primary">
+                        {formatDuration(nextStop.drive_seconds_from_previous)} · {formatMiles(nextStop.distance_meters_from_previous)} from previous stop
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-[10px] font-medium text-primary">Next unfinished stop on this route</p>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {nextStop.address ? (
+                    <a
+                      href={`https://maps.apple.com/?daddr=${encodeURIComponent([nextStop.address, nextStop.city].filter(Boolean).join(", "))}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="emery-press flex min-h-11 items-center justify-center gap-2 rounded-xl border border-primary/20 bg-primary/[0.05] px-3 text-xs font-semibold text-primary"
+                    >
+                      <Navigation className="size-3.5" /> Navigate
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="min-h-11 rounded-xl border border-border/35 px-3 text-xs font-semibold text-muted-foreground opacity-40"
+                    >
+                      Address needed
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const element = document.getElementById(`route-stop-${nextStop.id}`);
+                      element?.scrollIntoView({ behavior: "smooth", block: "center" });
+                      window.setTimeout(() => {
+                        element
+                          ?.querySelector<HTMLButtonElement>("[data-route-note-toggle]")
+                          ?.click();
+                      }, 280);
+                    }}
+                    className="emery-press flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-3 text-xs font-semibold text-primary-foreground"
+                  >
+                    <CheckCircle2 className="size-3.5" /> Log this visit
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="mt-2 flex items-center gap-3">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                  <CheckCircle2 className="size-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Route complete</p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    Every stop on this route has a final status. Review notes or copy the tracker rows.
+                  </p>
+                </div>
+              </div>
+            )}
+          </section>
 
           <RouteMap route={activeRoute} />
 
