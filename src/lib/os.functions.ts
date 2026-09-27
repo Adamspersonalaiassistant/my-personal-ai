@@ -187,15 +187,32 @@ export const createLinkedTask = createServerFn({ method: "POST" })
       title: string;
       details?: string;
       dueAt?: string | null;
+      scheduledStartAt?: string | null;
+      scheduledEndAt?: string | null;
+      reminderAt?: string | null;
       priority?: number;
       projectId?: string | null;
     }) => {
       const title = String(input?.title ?? "").trim();
       if (!title) throw new Error("Task title is required");
+      const dueAt = input?.dueAt ? String(input.dueAt) : null;
+      const scheduledStartAt = input?.scheduledStartAt ? String(input.scheduledStartAt) : null;
+      const scheduledEndAt = input?.scheduledEndAt ? String(input.scheduledEndAt) : null;
+      const reminderAt = input?.reminderAt ? String(input.reminderAt) : null;
+      for (const value of [dueAt, scheduledStartAt, scheduledEndAt, reminderAt]) {
+        if (value && Number.isNaN(Date.parse(value))) throw new Error("Invalid task date/time");
+      }
+      if (scheduledEndAt && !scheduledStartAt) throw new Error("Scheduled task start is required");
+      if (scheduledStartAt && scheduledEndAt && Date.parse(scheduledEndAt) <= Date.parse(scheduledStartAt)) {
+        throw new Error("Scheduled task end must be after start");
+      }
       return {
         title,
         details: String(input?.details ?? "").trim() || null,
-        dueAt: input?.dueAt || null,
+        dueAt,
+        scheduledStartAt,
+        scheduledEndAt,
+        reminderAt,
         priority: Math.min(5, Math.max(1, Number(input?.priority ?? 3))),
         projectId: input?.projectId ? String(input.projectId) : null,
       };
@@ -204,6 +221,14 @@ export const createLinkedTask = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const db = context.supabase as any;
     await verifyProject(db, context.userId, data.projectId);
+    const resolvedEnd =
+      data.scheduledStartAt && !data.scheduledEndAt
+        ? new Date(Date.parse(data.scheduledStartAt) + 30 * 60 * 1000).toISOString()
+        : data.scheduledEndAt;
+    const estimatedMinutes =
+      data.scheduledStartAt && resolvedEnd
+        ? Math.round((Date.parse(resolvedEnd) - Date.parse(data.scheduledStartAt)) / 60000)
+        : null;
     const { data: task, error } = await db
       .from("tasks")
       .insert({
@@ -211,11 +236,15 @@ export const createLinkedTask = createServerFn({ method: "POST" })
         title: data.title,
         details: data.details,
         due_at: data.dueAt,
+        scheduled_start_at: data.scheduledStartAt,
+        scheduled_end_at: resolvedEnd,
+        reminder_at: data.reminderAt,
+        estimated_minutes: estimatedMinutes,
         priority: data.priority,
         project_id: data.projectId,
         status: "inbox",
         source_type: "manual",
-        metadata: {},
+        metadata: { calendar: Boolean(data.scheduledStartAt), event_type: "task" },
       })
       .select("id")
       .single();
@@ -323,7 +352,7 @@ export const listUnifiedTasks = createServerFn({ method: "GET" })
         db
           .from("tasks")
           .select(
-            "id, title, details, status, priority, due_at, completed_at, project_id, metadata, created_at",
+            "id, title, details, status, priority, due_at, scheduled_start_at, scheduled_end_at, reminder_at, estimated_minutes, completed_at, project_id, metadata, created_at",
           )
           .eq("user_id", context.userId)
           .order("completed_at", { ascending: false, nullsFirst: true })
@@ -345,23 +374,60 @@ export const listUnifiedTasks = createServerFn({ method: "GET" })
 
 export const scheduleTask = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { id: string; dueAt: string | null }) => {
+  .inputValidator((input: {
+    id: string;
+    startAt: string | null;
+    endAt?: string | null;
+    reminderAt?: string | null;
+  }) => {
     const id = String(input?.id ?? "").trim();
     if (!id) throw new Error("Task id is required");
-    const dueAt = input?.dueAt ? String(input.dueAt) : null;
-    if (dueAt && Number.isNaN(Date.parse(dueAt))) throw new Error("Invalid task time");
-    return { id, dueAt };
+    const startAt = input?.startAt ? String(input.startAt) : null;
+    const endAt = input?.endAt ? String(input.endAt) : null;
+    const reminderAt = input?.reminderAt ? String(input.reminderAt) : null;
+    for (const value of [startAt, endAt, reminderAt]) {
+      if (value && Number.isNaN(Date.parse(value))) throw new Error("Invalid task time");
+    }
+    if (endAt && !startAt) throw new Error("Task start is required");
+    if (startAt && endAt && Date.parse(endAt) <= Date.parse(startAt))
+      throw new Error("Task end must be after start");
+    return { id, startAt, endAt, reminderAt };
   })
   .handler(async ({ data, context }) => {
-    const { data: task, error } = await (context.supabase as any)
+    const db = context.supabase as any;
+    if (!data.startAt) {
+      const { data: task, error } = await db
+        .from("tasks")
+        .update({
+          scheduled_start_at: null,
+          scheduled_end_at: null,
+          reminder_at: null,
+          metadata: { calendar: false, event_type: "task" },
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", data.id)
+        .eq("user_id", context.userId)
+        .select("id, title, due_at, scheduled_start_at, scheduled_end_at")
+        .single();
+      if (error) throw error;
+      return { task };
+    }
+    const resolvedEnd =
+      data.endAt ?? new Date(Date.parse(data.startAt) + 30 * 60 * 1000).toISOString();
+    const estimatedMinutes = Math.round((Date.parse(resolvedEnd) - Date.parse(data.startAt)) / 60000);
+    const { data: task, error } = await db
       .from("tasks")
       .update({
-        due_at: data.dueAt,
+        scheduled_start_at: data.startAt,
+        scheduled_end_at: resolvedEnd,
+        reminder_at: data.reminderAt,
+        estimated_minutes: Math.max(5, Math.min(720, estimatedMinutes)),
+        metadata: { calendar: true, event_type: "task" },
         updated_at: new Date().toISOString(),
       })
       .eq("id", data.id)
       .eq("user_id", context.userId)
-      .select("id, title, due_at")
+      .select("id, title, due_at, scheduled_start_at, scheduled_end_at, reminder_at, estimated_minutes")
       .single();
     if (error) throw error;
     return { task };
@@ -416,15 +482,15 @@ export const rescheduleMeeting = createServerFn({ method: "POST" })
 export const listDueCalendarNotifications = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const now = new Date().toISOString();
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const { data, error } = await (context.supabase as any)
       .from("app_notifications")
       .select("id, title, body, scheduled_for, status, source_type, source_ref, metadata, delivered_at, read_at, created_at")
       .eq("user_id", context.userId)
-      .lte("scheduled_for", now)
       .in("status", ["pending", "delivered"])
-      .order("scheduled_for", { ascending: false })
-      .limit(50);
+      .gte("scheduled_for", sevenDaysAgo)
+      .order("scheduled_for", { ascending: true })
+      .limit(75);
     if (error) throw error;
     return { notifications: data ?? [] };
   });
