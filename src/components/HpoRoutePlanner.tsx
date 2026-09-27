@@ -7,6 +7,7 @@ import {
   Check,
   CheckCircle2,
   Clipboard,
+  CalendarDays,
   Clock3,
   ExternalLink,
   MapPinned,
@@ -23,8 +24,10 @@ import {
   captureHpoRouteNote,
   createHpoRoute,
   getHpoRoutePlanner,
+  getHpoRouteScheduleAdvice,
   optimizeHpoRoute,
   reorderHpoRouteStops,
+  syncHpoRouteToCalendar,
   updateHpoRouteStop,
 } from "@/lib/hpo-route.functions";
 
@@ -57,6 +60,8 @@ type RoutePlan = {
   route_date: string;
   area: string | null;
   status: string;
+  start_window: string | null;
+  end_window: string | null;
   start_address: string | null;
   end_address: string | null;
   start_latitude: number | null;
@@ -80,10 +85,25 @@ type Candidate = {
   detail: string;
 };
 
+type CalendarItem = {
+  kind: "event" | "task";
+  id: string;
+  title: string;
+  at: string;
+  end_at: string | null;
+  local_date: string;
+  local_time: string;
+  local_end_time: string | null;
+  priority?: number;
+  metadata?: Record<string, unknown> | null;
+};
+
 type PlannerData = {
   routes: RoutePlan[];
   accounts: any[];
   prospects: any[];
+  calendar: CalendarItem[];
+  timezone: string;
   today: string;
 };
 
@@ -109,7 +129,19 @@ function formatMiles(meters: number | null | undefined) {
 }
 
 function routeTitle(route: RoutePlan) {
-  return `${new Date(route.route_date + "T12:00:00").toLocaleDateString("en-US")} - ${route.area || "Marketing Route"}`;
+  const date = new Date(route.route_date + "T12:00:00").toLocaleDateString("en-US");
+  return `${date}- (${route.area || "HPO"}) Marketing Route`;
+}
+
+function defaultRouteDate(today: string) {
+  const date = new Date(today + "T12:00:00");
+  const day = date.getDay();
+  if (day === 6) date.setDate(date.getDate() + 2);
+  if (day === 0) date.setDate(date.getDate() + 1);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const localDay = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${localDay}`;
 }
 
 function locationText(stop: Stop) {
@@ -217,7 +249,13 @@ export function HpoRoutePlannerCompact({ onOpen }: { onOpen: () => void }) {
   }, [load]);
 
   const todayRoute = data?.routes.find((route) => route.route_date === data.today) ?? null;
-  const completed = todayRoute?.stops.filter((stop) => terminalStatuses.has(stop.status)).length ?? 0;
+  const nextRoute =
+    todayRoute ??
+    data?.routes
+      .filter((route) => route.route_date >= (data?.today ?? ""))
+      .sort((a, b) => a.route_date.localeCompare(b.route_date))[0] ??
+    null;
+  const completed = nextRoute?.stops.filter((stop) => terminalStatuses.has(stop.status)).length ?? 0;
 
   return (
     <section className="emery-fade-up rounded-[1.55rem] border border-primary/18 bg-primary/[0.045] p-4">
@@ -228,12 +266,12 @@ export function HpoRoutePlannerCompact({ onOpen }: { onOpen: () => void }) {
         <div className="min-w-0 flex-1">
           <p className="emery-kicker">Route Planner · Daily Marketing Notes</p>
           <p className="mt-1 truncate text-sm font-semibold">
-            {todayRoute ? routeTitle(todayRoute) : "Plan today's field route with Emery"}
+            {nextRoute ? routeTitle(nextRoute) : "Plan your next field route with Emery"}
           </p>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            {todayRoute
-              ? `${completed}/${todayRoute.stops.length} stops logged · notes stay tied to today's route`
-              : "Build the stop list, optimize the driving order, then log every office visit in one place."}
+            {nextRoute
+              ? `${completed}/${nextRoute.stops.length} stops logged · route, Calendar block and notes stay together`
+              : "Build the stop list, fit it around your Calendar, optimize the driving order, then log every office visit in one place."}
           </p>
         </div>
         <button
@@ -256,6 +294,8 @@ export function HpoRoutePlanner() {
   const updateStop = useServerFn(updateHpoRouteStop);
   const reorderStops = useServerFn(reorderHpoRouteStops);
   const captureNote = useServerFn(captureHpoRouteNote);
+  const syncCalendar = useServerFn(syncHpoRouteToCalendar);
+  const askSchedule = useServerFn(getHpoRouteScheduleAdvice);
 
   const [data, setData] = useState<PlannerData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -267,6 +307,9 @@ export function HpoRoutePlanner() {
   const [copied, setCopied] = useState(false);
   const [routeNote, setRouteNote] = useState("");
   const [routeNoteResult, setRouteNoteResult] = useState<string | null>(null);
+  const [calendarMessage, setCalendarMessage] = useState<string | null>(null);
+  const [scheduleAdvice, setScheduleAdvice] = useState<string | null>(null);
+  const [scheduleWorking, setScheduleWorking] = useState(false);
 
   async function refresh(preferredRouteId?: string | null) {
     const result = (await load({})) as PlannerData;
@@ -307,6 +350,9 @@ export function HpoRoutePlanner() {
 
   const activeRoute =
     data?.routes.find((route) => route.id === activeRouteId) ?? data?.routes[0] ?? null;
+  const activeCalendar = activeRoute
+    ? (data?.calendar ?? []).filter((item) => item.local_date === activeRoute.route_date)
+    : [];
 
   async function optimizeActive(routeId: string) {
     setOptimizing(true);
@@ -341,14 +387,15 @@ export function HpoRoutePlanner() {
       .sort((a, b) => a.stop_order - b.stop_order)
       .filter((stop) => terminalStatuses.has(stop.status));
     const rows = [
-      ["Date", "Office/Account", "Location", "Visit Result", "Notes", "Follow-Up/Next Action"],
+      ["Date", "Stop Number", "Office", "Visit Status", "Visit Notes", "Follow-Up", "Account Status"],
       ...completed.map((stop) => [
         route.route_date,
+        String(stop.stop_order),
         stop.office_name ?? "",
-        locationText(stop),
-        stop.visit_outcome ?? stop.status.replaceAll("_", " "),
+        stop.status.replaceAll("_", " "),
         stop.notes ?? stop.visit_summary ?? "",
         stop.next_action ?? "",
+        stop.visit_outcome ?? "",
       ]),
     ];
     const tsv = rows
@@ -380,6 +427,39 @@ export function HpoRoutePlanner() {
       setError(cause instanceof Error ? cause.message : "Couldn't save that route note.");
     } finally {
       setWorking(false);
+    }
+  }
+
+  async function syncActiveRouteCalendar(route: RoutePlan) {
+    setScheduleWorking(true);
+    setError(null);
+    setCalendarMessage(null);
+    try {
+      const result = await syncCalendar({ data: { routeId: route.id } });
+      setCalendarMessage(
+        result.action === "created"
+          ? "Route block added to Emery Calendar."
+          : "Route block updated in Emery Calendar.",
+      );
+      await refresh(route.id);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Couldn't update Calendar.");
+    } finally {
+      setScheduleWorking(false);
+    }
+  }
+
+  async function askEmeryToFitRoute(route: RoutePlan) {
+    setScheduleWorking(true);
+    setError(null);
+    setScheduleAdvice(null);
+    try {
+      const result = await askSchedule({ data: { routeId: route.id } });
+      setScheduleAdvice(result.advice);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Emery couldn't review the schedule.");
+    } finally {
+      setScheduleWorking(false);
     }
   }
 
@@ -506,7 +586,7 @@ export function HpoRoutePlanner() {
                 className="emery-press flex min-h-11 shrink-0 items-center gap-2 rounded-xl border border-primary/20 bg-primary/[0.05] px-3 text-[11px] font-semibold text-primary"
               >
                 {copied ? <Check className="size-3.5" /> : <Clipboard className="size-3.5" />}
-                {copied ? "Copied" : "Copy for Excel"}
+                {copied ? "Copied" : "Copy Tracker Rows"}
               </button>
             </div>
 
@@ -515,6 +595,14 @@ export function HpoRoutePlanner() {
               <Stat label="Drive" value={formatDuration(activeRoute.optimized_duration_seconds)} />
               <Stat label="Distance" value={formatMiles(activeRoute.optimized_distance_meters)} />
             </div>
+            {activeRoute.start_window || activeRoute.end_window ? (
+              <div className="mt-3 flex items-center gap-2 rounded-xl border border-primary/15 bg-primary/[0.035] px-3 py-2.5 text-xs">
+                <Clock3 className="size-3.5 text-primary" />
+                <span className="font-medium">
+                  Route block: {activeRoute.start_window || "—"}–{activeRoute.end_window || "—"}
+                </span>
+              </div>
+            ) : null}
 
             {activeRoute.start_address || activeRoute.end_address ? (
               <div className="mt-3 rounded-xl border border-border/40 px-3 py-2.5 text-[11px] leading-5 text-muted-foreground">
@@ -523,6 +611,66 @@ export function HpoRoutePlanner() {
               </div>
             ) : null}
           </div>
+
+          <section className="rounded-[1.55rem] border border-border/45 bg-card/30 p-4">
+            <div className="flex items-start gap-3">
+              <div className="emery-icon-well flex size-10 shrink-0 items-center justify-center rounded-2xl text-primary">
+                <CalendarDays className="size-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold">Calendar fit</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  Emery uses your saved Calendar for this date so the field route does not compete with lunches, meetings or scheduled tasks.
+                </p>
+              </div>
+            </div>
+
+            {activeCalendar.length ? (
+              <div className="mt-3 space-y-2">
+                {activeCalendar.map((item) => (
+                  <div key={`${item.kind}-${item.id}`} className="emery-surface flex items-start gap-3 rounded-xl px-3 py-2.5">
+                    <Clock3 className="mt-0.5 size-3.5 shrink-0 text-primary" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-semibold">{item.title}</p>
+                      <p className="mt-0.5 text-[10px] text-muted-foreground">
+                        {item.local_time}{item.local_end_time ? `–${item.local_end_time}` : ""} · {item.kind}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-xs text-muted-foreground">No timed Emery Calendar items are saved for this date yet.</p>
+            )}
+
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => void syncActiveRouteCalendar(activeRoute)}
+                disabled={scheduleWorking || !activeRoute.start_window || !activeRoute.end_window}
+                className="emery-press min-h-11 rounded-xl border border-primary/20 bg-primary/[0.055] px-3 text-[11px] font-semibold text-primary disabled:opacity-40"
+              >
+                Add / Update Calendar
+              </button>
+              <button
+                type="button"
+                onClick={() => void askEmeryToFitRoute(activeRoute)}
+                disabled={scheduleWorking}
+                className="emery-press min-h-11 rounded-xl bg-primary px-3 text-[11px] font-semibold text-primary-foreground disabled:opacity-40"
+              >
+                {scheduleWorking ? "Working…" : "Ask Emery to Plan My Day"}
+              </button>
+            </div>
+
+            {calendarMessage ? (
+              <p className="mt-2 text-[11px] text-primary">{calendarMessage}</p>
+            ) : null}
+            {scheduleAdvice ? (
+              <div className="mt-3 whitespace-pre-wrap rounded-2xl border border-primary/15 bg-primary/[0.035] px-3.5 py-3 text-xs leading-5 text-foreground/88">
+                {scheduleAdvice}
+              </div>
+            ) : null}
+          </section>
 
           <RouteMiniMap route={activeRoute} />
 
@@ -623,6 +771,9 @@ function RouteBuilder({
     area: string;
     startAddress: string;
     endAddress: string;
+    startWindow: string;
+    endWindow: string;
+    syncToCalendar: boolean;
     notes: string;
     stops: Array<{
       accountId?: string | null;
@@ -635,15 +786,23 @@ function RouteBuilder({
   }) => Promise<void>;
   working: boolean;
 }) {
-  const [routeDate, setRouteDate] = useState(data.today);
+  const [routeDate, setRouteDate] = useState(defaultRouteDate(data.today));
   const [area, setArea] = useState("");
   const [startAddress, setStartAddress] = useState("");
   const [endAddress, setEndAddress] = useState("");
+  const [startWindow, setStartWindow] = useState("09:00");
+  const [endWindow, setEndWindow] = useState("15:00");
+  const [syncToCalendar, setSyncToCalendar] = useState(true);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Candidate[]>([]);
   const [customName, setCustomName] = useState("");
   const [customAddress, setCustomAddress] = useState("");
   const [customCity, setCustomCity] = useState("");
+
+  const dayCalendar = useMemo(
+    () => data.calendar.filter((item) => item.local_date === routeDate),
+    [data.calendar, routeDate],
+  );
 
   const candidates = useMemo<Candidate[]>(() => {
     const accounts = data.accounts.map((account) => ({
@@ -703,7 +862,7 @@ function RouteBuilder({
           <p className="emery-kicker">New daily route</p>
           <h3 className="mt-1 text-lg font-semibold">Build the stop list first.</h3>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            Add offices in any order. Optimize after saving and Emery will reorder them for driving.
+            Pick the date and time block around your Calendar, add offices in any order, then Emery will optimize the driving order.
           </p>
         </div>
         <button
@@ -730,6 +889,20 @@ function RouteBuilder({
           className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-sm outline-none focus:border-primary/30"
         />
         <input
+          type="time"
+          value={startWindow}
+          onChange={(event) => setStartWindow(event.target.value)}
+          aria-label="Route start time"
+          className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-sm outline-none focus:border-primary/30"
+        />
+        <input
+          type="time"
+          value={endWindow}
+          onChange={(event) => setEndWindow(event.target.value)}
+          aria-label="Route end time"
+          className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-sm outline-none focus:border-primary/30"
+        />
+        <input
           value={startAddress}
           onChange={(event) => setStartAddress(event.target.value)}
           placeholder="Starting address (optional)"
@@ -741,6 +914,37 @@ function RouteBuilder({
           placeholder="Ending address (optional)"
           className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-sm outline-none focus:border-primary/30 sm:col-span-2"
         />
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-primary/15 bg-primary/[0.03] p-3.5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold">Fit around Emery Calendar</p>
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              {dayCalendar.length ? `${dayCalendar.length} timed item${dayCalendar.length === 1 ? "" : "s"} on this date` : "No timed items saved for this date"}
+            </p>
+          </div>
+          <label className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={syncToCalendar}
+              onChange={(event) => setSyncToCalendar(event.target.checked)}
+              className="size-4 accent-current"
+            />
+            Add route block
+          </label>
+        </div>
+        {dayCalendar.length ? (
+          <div className="mt-2 space-y-1.5">
+            {dayCalendar.slice(0, 6).map((item) => (
+              <div key={`${item.kind}-${item.id}`} className="flex items-center gap-2 rounded-xl bg-card/45 px-2.5 py-2 text-[10px]">
+                <Clock3 className="size-3 shrink-0 text-primary" />
+                <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                <span className="shrink-0 text-muted-foreground">{item.local_time}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       <div className="mt-4">
@@ -856,6 +1060,9 @@ function RouteBuilder({
             area,
             startAddress,
             endAddress,
+            startWindow,
+            endWindow,
+            syncToCalendar,
             notes: "",
             stops: selected.map((stop) => ({
               accountId: stop.accountId ?? null,
