@@ -150,17 +150,18 @@ async function performOperation(
   const reminderAt = isoOrNull(operation.reminder_at);
   const eventType = operation.event_type ?? null;
   const targetId = typeof operation.target_id === "string" ? operation.target_id.trim() : "";
+  const executionAction = action === "create_task" ? "task.create" : action;
   const execution = await beginExecution({
     db,
     userId,
-    domain: "calendar",
-    action,
+    domain: action === "create_task" ? "tasks" : "calendar",
+    action: executionAction,
     sourceMessageId: input.sourceMessageId ?? null,
     parentRunId,
     idempotencyKey: input.sourceMessageId
-      ? `message:${input.sourceMessageId}:calendar:${operationIndex}:${action}`
+      ? `message:${input.sourceMessageId}:calendar:${operationIndex}:${executionAction}`
       : input.requestId
-        ? `request:${input.requestId}:calendar:${operationIndex}:${action}`
+        ? `request:${input.requestId}:calendar:${operationIndex}:${executionAction}`
         : null,
     targetType:
       action.includes("task") ? "task" : action.includes("event") ? "event" : "notification",
