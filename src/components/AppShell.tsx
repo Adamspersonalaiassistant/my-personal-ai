@@ -15,6 +15,7 @@ import {
 import { useEffect, useState, type ReactNode } from "react";
 import brainImage from "@/assets/neural-brain.png";
 import { Button } from "@/components/ui/button";
+import { EmeryVoiceControl } from "@/components/EmeryVoiceControl";
 import {
   emeryReturnLabel,
   isEmeryReturnPath,
@@ -89,6 +90,7 @@ export function AppShell({
   const returnTo = resolveEmeryReturn(pathname);
   const prefill = normalizePrefill(askEmery);
   const onChat = pathname.startsWith("/chat");
+  const onHpo = pathname.startsWith("/hpo");
   const [lastReturn, setLastReturn] = useState<EmeryReturnPath | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const moreActive = moreItems.some((item) => pathname.startsWith(item.to));
@@ -198,6 +200,7 @@ export function AppShell({
           </div>
 
           <div className="flex shrink-0 items-center gap-1.5">
+            {!onChat && !onHpo ? <EmeryVoiceControl /> : null}
             {onChat && lastReturn ? (
               <Link
                 to={lastReturn}
