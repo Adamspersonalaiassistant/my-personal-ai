@@ -23,6 +23,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { AppShell, EmptyState } from "@/components/AppShell";
+import { HpoRoutePlanner, HpoRoutePlannerCompact } from "@/components/HpoRoutePlanner";
 import {
   createHpoAccount,
   getHpoDashboard,
@@ -117,6 +118,8 @@ function HpoWorkspace() {
   return (
     <AppShell title="HPO" askEmery={askEmeryContext}>
       <div className="space-y-5 pb-2">
+        <HpoRoutePlannerCompact onOpen={() => setView("routes")} />
+
         <section className="emery-fade-up overflow-hidden rounded-[1.75rem] border border-primary/15 bg-[linear-gradient(150deg,oklch(0.18_0.04_158/0.92),oklch(0.115_0.022_160/0.96))] p-4 shadow-[0_24px_70px_rgba(0,0,0,0.28)] sm:p-5">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -203,7 +206,7 @@ function HpoWorkspace() {
                 onLog={() => setModal("interaction")}
               />
             ) : null}
-            {view === "routes" ? <RoutesView data={data} /> : null}
+            {view === "routes" ? <HpoRoutePlanner /> : null}
             {view === "performance" ? <PerformanceView data={data} /> : null}
             {view === "events" ? <EventsView data={data} /> : null}
             {view === "notes" ? <ActivityView data={data} accountsById={accountsById} /> : null}
