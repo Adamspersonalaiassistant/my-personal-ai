@@ -187,7 +187,10 @@ export function EmeryVoiceControl({
       try {
         if (name === "execute_calendar_action") {
           const result = await executeCalendarAction({
-            data: { request: String(args.request ?? "") },
+            data: {
+              request: String(args.request ?? ""),
+              idempotencyKey: `voice:${sessionIdRef.current ?? "session"}:${callId}`,
+            },
           });
           sendToolOutput(callId, JSON.stringify(result));
           onConversationChanged?.();
