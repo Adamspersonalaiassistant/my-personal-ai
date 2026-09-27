@@ -48,7 +48,6 @@ const views: Array<{ key: ViewKey; label: string; icon: typeof BriefcaseBusiness
   { key: "dashboard", label: "Dashboard", icon: BriefcaseBusiness },
   { key: "accounts", label: "Accounts", icon: UsersRound },
   { key: "relationships", label: "Relationships", icon: Handshake },
-  { key: "routes", label: "Routes", icon: RouteIcon },
   { key: "performance", label: "Performance", icon: BarChart3 },
   { key: "events", label: "Events", icon: CalendarDays },
   { key: "notes", label: "Activity", icon: Activity },
@@ -111,15 +110,47 @@ function HpoWorkspace() {
   }, [data]);
 
   const askEmeryContext =
-    view === "dashboard"
-      ? "I’m in my HPO dashboard. Help me decide the highest-leverage Hudson Pro sales/relationship action next."
-      : `I’m in HPO ${view}. Help me work through what matters here and decide the next action.`;
+    view === "routes"
+      ? "I’m in my HPO Route Planner. Help me build, optimize and fit my field route around my Calendar, then keep my marketing notes organized."
+      : view === "dashboard"
+        ? "I’m in my HPO dashboard. Help me decide the highest-leverage Hudson Pro sales/relationship action next."
+        : `I’m in HPO ${view}. Help me work through what matters here and decide the next action.`;
 
   return (
     <AppShell title="HPO" askEmery={askEmeryContext}>
       <div className="space-y-5 pb-2">
-        <HpoRoutePlannerCompact onOpen={() => setView("routes")} />
+        <nav className="sticky top-0 z-20 -mx-1 rounded-[1.35rem] border border-border/45 bg-background/92 p-1 shadow-[0_10px_35px_rgba(0,0,0,0.2)] backdrop-blur-xl">
+          <div className="grid grid-cols-2 gap-1">
+            <button
+              type="button"
+              onClick={() => setView("dashboard")}
+              className={`emery-press flex min-h-11 items-center justify-center gap-2 rounded-2xl px-3 text-xs font-semibold transition ${
+                view === "routes"
+                  ? "text-muted-foreground"
+                  : "bg-primary/[0.09] text-primary shadow-[inset_0_0_0_1px_rgba(80,155,255,0.12)]"
+              }`}
+            >
+              <BriefcaseBusiness className="size-4" />
+              HPO Home
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("routes")}
+              className={`emery-press flex min-h-11 items-center justify-center gap-2 rounded-2xl px-3 text-xs font-semibold transition ${
+                view === "routes"
+                  ? "bg-primary text-primary-foreground shadow-[0_8px_24px_rgba(35,105,255,0.24)]"
+                  : "text-muted-foreground"
+              }`}
+            >
+              <RouteIcon className="size-4" />
+              Route Planner
+            </button>
+          </div>
+        </nav>
 
+        {view !== "routes" ? <HpoRoutePlannerCompact onOpen={() => setView("routes")} /> : null}
+
+        {view !== "routes" ? (
         <section className="emery-fade-up overflow-hidden rounded-[1.75rem] border border-primary/15 bg-[linear-gradient(150deg,oklch(0.18_0.04_158/0.92),oklch(0.115_0.022_160/0.96))] p-4 shadow-[0_24px_70px_rgba(0,0,0,0.28)] sm:p-5">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -161,7 +192,9 @@ function HpoWorkspace() {
             />
           </div>
         </section>
+        ) : null}
 
+        {view !== "routes" ? (
         <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none]">
           {views.map(({ key, label, icon: Icon }) => (
             <button
@@ -179,6 +212,7 @@ function HpoWorkspace() {
             </button>
           ))}
         </div>
+        ) : null}
 
         {error ? (
           <div
@@ -189,7 +223,9 @@ function HpoWorkspace() {
           </div>
         ) : null}
 
-        {loading ? (
+        {view === "routes" ? (
+          <HpoRoutePlanner />
+        ) : loading ? (
           <div className="emery-glass flex min-h-52 items-center justify-center rounded-[1.6rem] text-sm text-muted-foreground">
             Opening your HPO command center…
           </div>
@@ -206,7 +242,6 @@ function HpoWorkspace() {
                 onLog={() => setModal("interaction")}
               />
             ) : null}
-            {view === "routes" ? <HpoRoutePlanner /> : null}
             {view === "performance" ? <PerformanceView data={data} /> : null}
             {view === "events" ? <EventsView data={data} /> : null}
             {view === "notes" ? <ActivityView data={data} accountsById={accountsById} /> : null}
@@ -214,6 +249,7 @@ function HpoWorkspace() {
           </>
         )}
 
+        {view !== "routes" ? (
         <section className="emery-glass rounded-[1.55rem] p-4">
           <div className="flex items-start gap-3">
             <div className="emery-icon-well flex size-10 shrink-0 items-center justify-center rounded-2xl text-primary">
@@ -244,6 +280,7 @@ function HpoWorkspace() {
             </div>
           </div>
         </section>
+        ) : null}
       </div>
 
       {modal === "account" ? (
