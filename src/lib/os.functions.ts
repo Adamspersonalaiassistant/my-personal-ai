@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { executeCanonicalTaskCreate } from "@/lib/execution-kernel";
 
 function safeMetadata(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -192,6 +193,7 @@ export const createLinkedTask = createServerFn({ method: "POST" })
       reminderAt?: string | null;
       priority?: number;
       projectId?: string | null;
+      idempotencyKey?: string | null;
     }) => {
       const title = String(input?.title ?? "").trim();
       if (!title) throw new Error("Task title is required");
@@ -203,7 +205,11 @@ export const createLinkedTask = createServerFn({ method: "POST" })
         if (value && Number.isNaN(Date.parse(value))) throw new Error("Invalid task date/time");
       }
       if (scheduledEndAt && !scheduledStartAt) throw new Error("Scheduled task start is required");
-      if (scheduledStartAt && scheduledEndAt && Date.parse(scheduledEndAt) <= Date.parse(scheduledStartAt)) {
+      if (
+        scheduledStartAt &&
+        scheduledEndAt &&
+        Date.parse(scheduledEndAt) <= Date.parse(scheduledStartAt)
+      ) {
         throw new Error("Scheduled task end must be after start");
       }
       return {
@@ -215,41 +221,35 @@ export const createLinkedTask = createServerFn({ method: "POST" })
         reminderAt,
         priority: Math.min(5, Math.max(1, Number(input?.priority ?? 3))),
         projectId: input?.projectId ? String(input.projectId) : null,
+        idempotencyKey: input?.idempotencyKey ? String(input.idempotencyKey).trim() : null,
       };
     },
   )
   .handler(async ({ data, context }) => {
     const db = context.supabase as any;
-    await verifyProject(db, context.userId, data.projectId);
-    const resolvedEnd =
-      data.scheduledStartAt && !data.scheduledEndAt
-        ? new Date(Date.parse(data.scheduledStartAt) + 30 * 60 * 1000).toISOString()
-        : data.scheduledEndAt;
-    const estimatedMinutes =
-      data.scheduledStartAt && resolvedEnd
-        ? Math.round((Date.parse(resolvedEnd) - Date.parse(data.scheduledStartAt)) / 60000)
-        : null;
-    const { data: task, error } = await db
-      .from("tasks")
-      .insert({
-        user_id: context.userId,
-        title: data.title,
-        details: data.details,
-        due_at: data.dueAt,
-        scheduled_start_at: data.scheduledStartAt,
-        scheduled_end_at: resolvedEnd,
-        reminder_at: data.reminderAt,
-        estimated_minutes: estimatedMinutes,
-        priority: data.priority,
-        project_id: data.projectId,
-        status: "inbox",
-        source_type: "manual",
-        metadata: { calendar: Boolean(data.scheduledStartAt), event_type: "task" },
-      })
-      .select("id")
-      .single();
-    if (error) throw error;
-    return { id: task.id };
+    const receipt = await executeCanonicalTaskCreate({
+      db,
+      userId: context.userId,
+      idempotencyKey: data.idempotencyKey || `ui:${crypto.randomUUID()}:task.create`,
+      title: data.title,
+      details: data.details,
+      dueAt: data.dueAt,
+      scheduledStartAt: data.scheduledStartAt,
+      scheduledEndAt: data.scheduledEndAt,
+      reminderAt: data.reminderAt,
+      priority: data.priority,
+      projectId: data.projectId,
+      sourceChannel: "ui",
+      source: "manual",
+    });
+    if (!receipt.ok || receipt.status !== "completed" || !receipt.task?.id) {
+      throw new Error(receipt.errorMessage || "Task creation failed");
+    }
+    return {
+      id: receipt.task.id,
+      executionRunId: receipt.executionRunId,
+      reused: receipt.reused,
+    };
   });
 
 export const createLinkedMeeting = createServerFn({ method: "POST" })
