@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
   ArrowDown,
@@ -11,6 +11,7 @@ import {
   Clock3,
   ExternalLink,
   MapPinned,
+  Maximize2,
   Minus,
   Navigation,
   Plus,
@@ -190,6 +191,167 @@ function routeMapBaseZoom(points: Array<{ lat: number; lon: number }>) {
   return 6;
 }
 
+function worldToLatLon(x: number, y: number, zoom: number) {
+  const scale = 256 * 2 ** zoom;
+  const lon = (x / scale) * 360 - 180;
+  const mercatorY = Math.PI - (2 * Math.PI * y) / scale;
+  const lat = (180 / Math.PI) * Math.atan(Math.sinh(mercatorY));
+  return {
+    lat: Math.max(-85.05112878, Math.min(85.05112878, lat)),
+    lon: ((lon + 540) % 360) - 180,
+  };
+}
+
+function centerForPoints(
+  points: Array<{ lat: number; lon: number }>,
+  fallback: { lat: number; lon: number },
+) {
+  if (!points.length) return fallback;
+  const minLat = Math.min(...points.map((point) => point.lat));
+  const maxLat = Math.max(...points.map((point) => point.lat));
+  const minLon = Math.min(...points.map((point) => point.lon));
+  const maxLon = Math.max(...points.map((point) => point.lon));
+  return { lat: (minLat + maxLat) / 2, lon: (minLon + maxLon) / 2 };
+}
+
+function useInteractiveMap({
+  baseCenter,
+  fitZoom,
+  width,
+  height,
+  resetKey,
+}: {
+  baseCenter: { lat: number; lon: number };
+  fitZoom: number;
+  width: number;
+  height: number;
+  resetKey: string;
+}) {
+  const [zoomOffset, setZoomOffset] = useState(0);
+  const [center, setCenter] = useState(baseCenter);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const pointersRef = useRef(new Map<number, { x: number; y: number }>());
+  const panStartRef = useRef<{
+    pointerId: number;
+    x: number;
+    y: number;
+    worldX: number;
+    worldY: number;
+    zoom: number;
+  } | null>(null);
+  const pinchRef = useRef<{ distance: number } | null>(null);
+
+  const zoom = Math.max(5, Math.min(18, fitZoom + zoomOffset));
+
+  useEffect(() => {
+    setZoomOffset(0);
+    setCenter(baseCenter);
+    pointersRef.current.clear();
+    panStartRef.current = null;
+    pinchRef.current = null;
+  }, [baseCenter.lat, baseCenter.lon, resetKey]);
+
+  function zoomBy(delta: number) {
+    setZoomOffset((value) => Math.max(5 - fitZoom, Math.min(18 - fitZoom, value + delta)));
+  }
+
+  function reset() {
+    setZoomOffset(0);
+    setCenter(baseCenter);
+  }
+
+  function beginPan(pointerId: number, x: number, y: number) {
+    const world = projectToWorld(center.lat, center.lon, zoom);
+    panStartRef.current = {
+      pointerId,
+      x,
+      y,
+      worldX: world.x,
+      worldY: world.y,
+      zoom,
+    };
+  }
+
+  function onPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pointersRef.current.size === 1) {
+      beginPan(event.pointerId, event.clientX, event.clientY);
+      pinchRef.current = null;
+    } else if (pointersRef.current.size === 2) {
+      const [a, b] = [...pointersRef.current.values()];
+      if (a && b) pinchRef.current = { distance: Math.hypot(a.x - b.x, a.y - b.y) };
+      panStartRef.current = null;
+    }
+  }
+
+  function onPointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    if (!pointersRef.current.has(event.pointerId)) return;
+    pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    if (pointersRef.current.size >= 2) {
+      const [a, b] = [...pointersRef.current.values()];
+      if (!a || !b) return;
+      const distance = Math.hypot(a.x - b.x, a.y - b.y);
+      const previous = pinchRef.current?.distance ?? distance;
+      if (distance > previous * 1.18) {
+        zoomBy(1);
+        pinchRef.current = { distance };
+      } else if (distance < previous * 0.82) {
+        zoomBy(-1);
+        pinchRef.current = { distance };
+      }
+      return;
+    }
+
+    const start = panStartRef.current;
+    if (!start || start.pointerId !== event.pointerId || start.zoom !== zoom) return;
+    const rect = viewportRef.current?.getBoundingClientRect();
+    if (!rect?.width || !rect.height) return;
+    const dx = (event.clientX - start.x) * (width / rect.width);
+    const dy = (event.clientY - start.y) * (height / rect.height);
+    setCenter(worldToLatLon(start.worldX - dx, start.worldY - dy, zoom));
+  }
+
+  function finishPointer(event: React.PointerEvent<HTMLDivElement>) {
+    pointersRef.current.delete(event.pointerId);
+    try {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    } catch {
+      // Pointer capture may already have been released by the browser.
+    }
+    pinchRef.current = null;
+    const remaining = [...pointersRef.current.entries()][0];
+    if (remaining) {
+      beginPan(remaining[0], remaining[1].x, remaining[1].y);
+    } else {
+      panStartRef.current = null;
+    }
+  }
+
+  function onWheel(event: React.WheelEvent<HTMLDivElement>) {
+    event.preventDefault();
+    zoomBy(event.deltaY < 0 ? 1 : -1);
+  }
+
+  return {
+    center,
+    zoom,
+    viewportRef,
+    zoomIn: () => zoomBy(1),
+    zoomOut: () => zoomBy(-1),
+    reset,
+    handlers: {
+      onPointerDown,
+      onPointerMove,
+      onPointerUp: finishPointer,
+      onPointerCancel: finishPointer,
+      onWheel,
+      onDoubleClick: () => zoomBy(1),
+    },
+  };
+}
+
 function RouteMap({ route }: { route: RoutePlan }) {
   const points = useMemo(() => {
     const result: Array<{
@@ -234,11 +396,19 @@ function RouteMap({ route }: { route: RoutePlan }) {
   }, [route]);
 
   const fitZoom = useMemo(() => routeMapBaseZoom(points), [points]);
-  const [zoomOffset, setZoomOffset] = useState(0);
-
-  useEffect(() => {
-    setZoomOffset(0);
-  }, [route.id, route.optimized_at]);
+  const width = 760;
+  const height = 340;
+  const baseCenter = useMemo(
+    () => centerForPoints(points, { lat: 40.25, lon: -74.65 }),
+    [points],
+  );
+  const map = useInteractiveMap({
+    baseCenter,
+    fitZoom,
+    width,
+    height,
+    resetKey: `${route.id}:${route.optimized_at ?? ""}`,
+  });
 
   if (!points.length) {
     return (
@@ -254,18 +424,11 @@ function RouteMap({ route }: { route: RoutePlan }) {
     );
   }
 
-  const zoom = Math.max(5, Math.min(18, fitZoom + zoomOffset));
-  const width = 760;
-  const height = 340;
+  const zoom = map.zoom;
   const projected = points.map((point) => ({ ...point, ...projectToWorld(point.lat, point.lon, zoom) }));
-  const minX = Math.min(...projected.map((point) => point.x));
-  const maxX = Math.max(...projected.map((point) => point.x));
-  const minY = Math.min(...projected.map((point) => point.y));
-  const maxY = Math.max(...projected.map((point) => point.y));
-  const centerX = (minX + maxX) / 2;
-  const centerY = (minY + maxY) / 2;
-  const left = centerX - width / 2;
-  const top = centerY - height / 2;
+  const centerWorld = projectToWorld(map.center.lat, map.center.lon, zoom);
+  const left = centerWorld.x - width / 2;
+  const top = centerWorld.y - height / 2;
   const tileSize = 256;
   const tileCount = 2 ** zoom;
   const tileMinX = Math.floor(left / tileSize) - 1;
@@ -320,13 +483,21 @@ function RouteMap({ route }: { route: RoutePlan }) {
         <div className="min-w-0">
           <p className="text-sm font-semibold">Route Map</p>
           <p className="mt-0.5 text-[10px] text-muted-foreground">
-            Numbered pins match your stop list · tap a pin to jump to that office
+            Drag to move · pinch/scroll to zoom · tap a pin to open that office
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <button
             type="button"
-            onClick={() => setZoomOffset((value) => Math.max(-4, value - 1))}
+            onClick={map.reset}
+            className="emery-press flex size-9 items-center justify-center rounded-xl border border-border/45 bg-background/80"
+            aria-label="Fit route on map"
+          >
+            <Maximize2 className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={map.zoomOut}
             className="emery-press flex size-9 items-center justify-center rounded-xl border border-border/45 bg-background/80"
             aria-label="Zoom map out"
           >
@@ -334,7 +505,7 @@ function RouteMap({ route }: { route: RoutePlan }) {
           </button>
           <button
             type="button"
-            onClick={() => setZoomOffset((value) => Math.min(4, value + 1))}
+            onClick={map.zoomIn}
             className="emery-press flex size-9 items-center justify-center rounded-xl border border-border/45 bg-background/80"
             aria-label="Zoom map in"
           >
@@ -343,7 +514,12 @@ function RouteMap({ route }: { route: RoutePlan }) {
         </div>
       </div>
 
-      <div className="relative h-[340px] overflow-hidden bg-muted/25">
+      <div
+        ref={map.viewportRef}
+        {...map.handlers}
+        className="relative h-[340px] cursor-grab overflow-hidden bg-[#050b15] active:cursor-grabbing"
+        style={{ touchAction: "none" }}
+      >
         {tiles.map((tile) => (
           <img
             key={`${zoom}-${tile.x}-${tile.y}`}
@@ -352,6 +528,7 @@ function RouteMap({ route }: { route: RoutePlan }) {
             draggable={false}
             className="pointer-events-none absolute max-w-none select-none"
             style={{
+              filter: "invert(0.92) hue-rotate(178deg) brightness(0.68) saturate(0.78) contrast(1.12)",
               width: tileSize,
               height: tileSize,
               left: tile.x * tileSize - left,
@@ -359,6 +536,10 @@ function RouteMap({ route }: { route: RoutePlan }) {
             }}
           />
         ))}
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(16,60,128,0.02),rgba(2,8,18,0.28))]" />
+        <div className="pointer-events-none absolute left-2 top-2 z-20 rounded-xl border border-primary/15 bg-[#07111f]/88 px-2.5 py-1.5 text-[9px] font-medium text-foreground/80 shadow-sm backdrop-blur">
+          Drag · pinch to zoom
+        </div>
 
         <svg
           viewBox={`0 0 ${width} ${height}`}
@@ -468,7 +649,6 @@ function OfficePlanningMap({
 }) {
   const [filter, setFilter] = useState<"all" | "account" | "prospect">("all");
   const [query, setQuery] = useState("");
-  const [zoomOffset, setZoomOffset] = useState(0);
 
   const mapped = useMemo(
     () =>
@@ -500,19 +680,24 @@ function OfficePlanningMap({
   }));
 
   const fitZoom = points.length ? routeMapBaseZoom(points) : 8;
-  const zoom = Math.max(5, Math.min(18, fitZoom + zoomOffset));
   const width = 760;
   const height = 390;
-  const centerFallback = projectToWorld(40.25, -74.65, zoom);
+  const baseCenter = useMemo(
+    () => centerForPoints(points, { lat: 40.25, lon: -74.65 }),
+    [points],
+  );
+  const officeMap = useInteractiveMap({
+    baseCenter,
+    fitZoom,
+    width,
+    height,
+    resetKey: `${filter}:${query.trim().toLowerCase()}:${points.map((point) => point.key).join("|")}`,
+  });
+  const zoom = officeMap.zoom;
   const projected = points.map((point) => ({ ...point, ...projectToWorld(point.lat, point.lon, zoom) }));
-  const centerX = projected.length
-    ? (Math.min(...projected.map((point) => point.x)) + Math.max(...projected.map((point) => point.x))) / 2
-    : centerFallback.x;
-  const centerY = projected.length
-    ? (Math.min(...projected.map((point) => point.y)) + Math.max(...projected.map((point) => point.y))) / 2
-    : centerFallback.y;
-  const left = centerX - width / 2;
-  const top = centerY - height / 2;
+  const centerWorld = projectToWorld(officeMap.center.lat, officeMap.center.lon, zoom);
+  const left = centerWorld.x - width / 2;
+  const top = centerWorld.y - height / 2;
   const tileSize = 256;
   const tileCount = 2 ** zoom;
   const tileMinX = Math.floor(left / tileSize) - 1;
@@ -539,7 +724,7 @@ function OfficePlanningMap({
             <p className="emery-kicker">Office Map · Account Tracker</p>
             <h3 className="mt-1 text-lg font-semibold">See the territory before you build the route.</h3>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              Tap any office pin to inspect the account. Add offices from the map, then build the route from your selected pins.
+              Drag the map like Google Maps, pinch or scroll to zoom, and tap any office pin to inspect the account or add it to a route.
             </p>
           </div>
           <button
@@ -592,7 +777,12 @@ function OfficePlanningMap({
         </div>
       </div>
 
-      <div className="relative h-[390px] overflow-hidden bg-muted/20">
+      <div
+        ref={officeMap.viewportRef}
+        {...officeMap.handlers}
+        className="relative h-[390px] cursor-grab overflow-hidden bg-[#050b15] active:cursor-grabbing"
+        style={{ touchAction: "none" }}
+      >
         {tiles.map((tile) => (
           <img
             key={`${zoom}-${tile.x}-${tile.y}`}
@@ -608,6 +798,10 @@ function OfficePlanningMap({
             }}
           />
         ))}
+
+        <div className="pointer-events-none absolute left-2 top-2 z-20 rounded-xl border border-primary/15 bg-[#07111f]/88 px-2.5 py-1.5 text-[9px] font-medium text-foreground/80 shadow-sm backdrop-blur">
+          Drag · pinch to zoom
+        </div>
 
         {projected.map((office) => {
           const selected = selectedKeys.includes(office.key);
@@ -639,16 +833,24 @@ function OfficePlanningMap({
         <div className="absolute right-2 top-2 z-20 flex flex-col gap-1">
           <button
             type="button"
-            onClick={() => setZoomOffset((value) => Math.min(4, value + 1))}
-            className="emery-press flex size-9 items-center justify-center rounded-xl border border-border/45 bg-background/90 shadow-sm"
+            onClick={officeMap.reset}
+            className="emery-press flex size-9 items-center justify-center rounded-xl border border-primary/20 bg-[#081426]/90 text-primary shadow-[0_6px_18px_rgba(0,0,0,0.28)] backdrop-blur"
+            aria-label="Fit all offices on map"
+          >
+            <Maximize2 className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={officeMap.zoomIn}
+            className="emery-press flex size-9 items-center justify-center rounded-xl border border-primary/20 bg-[#081426]/90 text-foreground shadow-[0_6px_18px_rgba(0,0,0,0.28)] backdrop-blur"
             aria-label="Zoom office map in"
           >
             <Plus className="size-3.5" />
           </button>
           <button
             type="button"
-            onClick={() => setZoomOffset((value) => Math.max(-4, value - 1))}
-            className="emery-press flex size-9 items-center justify-center rounded-xl border border-border/45 bg-background/90 shadow-sm"
+            onClick={officeMap.zoomOut}
+            className="emery-press flex size-9 items-center justify-center rounded-xl border border-primary/20 bg-[#081426]/90 text-foreground shadow-[0_6px_18px_rgba(0,0,0,0.28)] backdrop-blur"
             aria-label="Zoom office map out"
           >
             <Minus className="size-3.5" />
