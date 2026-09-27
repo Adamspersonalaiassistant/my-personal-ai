@@ -1166,6 +1166,169 @@ export async function executeHpoRouteStopOutcomeCore(input: {
   }
 }
 
+export async function executeHpoRouteStopFollowupCore(input: {
+  db: any;
+  userId: string;
+  stopId: string;
+  nextAction: string;
+  nextActionDueAt?: string | null | undefined;
+  idempotencyKey: string;
+  sourceChannel: string;
+  sourceMessageId?: string | null;
+  parentRunId?: string | null;
+  traceId?: string | null;
+}) {
+  const action = "hpo.route_stop.set_followup";
+  const nextAction = clean(input.nextAction);
+  if (!nextAction) throw new Error("Follow-up action is required");
+  const key = clean(input.idempotencyKey);
+  if (!key) throw new Error("Follow-up action requires an idempotency key");
+
+  const execution = await beginExecution({
+    db: input.db,
+    userId: input.userId,
+    domain: "hpo_route",
+    action,
+    sourceMessageId: input.sourceMessageId ?? null,
+    parentRunId: input.parentRunId ?? null,
+    idempotencyKey: key,
+    targetType: "hpo_route_stop",
+    targetId: input.stopId,
+    requestPayload: {
+      capability: action,
+      stopId: input.stopId,
+      nextAction,
+      nextActionDueAt: input.nextActionDueAt ?? null,
+      sourceChannel: input.sourceChannel,
+      traceId: input.traceId ?? null,
+    },
+  });
+
+  if (
+    execution.reused &&
+    execution.status === "completed" &&
+    execution.resultPayload["routeStopFollowupResult"]
+  ) {
+    return execution.resultPayload["routeStopFollowupResult"] as {
+      ok: true;
+      action: string;
+      executionRunId: string;
+      stopId: string;
+      accountId: string | null;
+      nextAction: string;
+      nextActionDueAt: string | null;
+      reused: boolean;
+    };
+  }
+
+  try {
+    const { data: stop, error: stopError } = await input.db
+      .from("hpo_route_stops")
+      .select("*")
+      .eq("id", input.stopId)
+      .eq("user_id", input.userId)
+      .single();
+    if (stopError || !stop) throw stopError ?? new Error("Route stop not found");
+
+    const dueAt = input.nextActionDueAt ?? null;
+    const { data: updated, error: updateError } = await input.db
+      .from("hpo_route_stops")
+      .update({
+        next_action: nextAction,
+        next_action_due_at: dueAt,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", stop.id)
+      .eq("user_id", input.userId)
+      .select("id,account_id,next_action,next_action_due_at,metadata")
+      .single();
+    if (updateError || !updated) throw updateError ?? new Error("Follow-up update returned no record");
+    if (updated.next_action !== nextAction) throw new Error("Follow-up verification failed");
+
+    const metadata =
+      updated.metadata && typeof updated.metadata === "object" && !Array.isArray(updated.metadata)
+        ? updated.metadata
+        : {};
+    const interactionId =
+      typeof metadata.route_interaction_id === "string" ? metadata.route_interaction_id : null;
+
+    if (interactionId) {
+      const { error } = await input.db
+        .from("hpo_interactions")
+        .update({
+          next_action: nextAction,
+          next_action_due_at: dueAt,
+          metadata: {
+            route_id: stop.route_id,
+            route_stop_id: stop.id,
+            execution_run_id: execution.id,
+            source_channel: input.sourceChannel,
+            trace_id: input.traceId ?? null,
+            non_phi: true,
+          },
+        })
+        .eq("id", interactionId)
+        .eq("user_id", input.userId);
+      if (error) throw error;
+    }
+
+    if (stop.account_id) {
+      const { error } = await input.db
+        .from("hpo_accounts")
+        .update({
+          next_action: nextAction,
+          next_action_due_at: dueAt,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", stop.account_id)
+        .eq("user_id", input.userId);
+      if (error) throw error;
+
+      const { data: accountVerify, error: accountVerifyError } = await input.db
+        .from("hpo_accounts")
+        .select("id,next_action,next_action_due_at")
+        .eq("id", stop.account_id)
+        .eq("user_id", input.userId)
+        .single();
+      if (accountVerifyError || !accountVerify) {
+        throw accountVerifyError ?? new Error("Account follow-up verification failed");
+      }
+      if (accountVerify.next_action !== nextAction) throw new Error("Account follow-up verification failed");
+    }
+
+    const result = {
+      ok: true as const,
+      action,
+      executionRunId: execution.id,
+      stopId: stop.id,
+      accountId: stop.account_id ?? null,
+      nextAction,
+      nextActionDueAt: dueAt,
+      reused: execution.reused,
+    };
+    await completeExecution({
+      db: input.db,
+      userId: input.userId,
+      runId: execution.id,
+      resultPayload: { routeStopFollowupResult: result as unknown as Record<string, unknown> },
+      targetType: "hpo_route_stop",
+      targetId: stop.id,
+    });
+    return result;
+  } catch (error) {
+    await failExecution({
+      db: input.db,
+      userId: input.userId,
+      runId: execution.id,
+      errorCode: "hpo_route_stop_followup_failed",
+      errorMessage: error instanceof Error ? error.message : String(error),
+      retryable: true,
+      resultPayload: { action, stopId: input.stopId, nextAction },
+    }).catch(() => undefined);
+    throw error;
+  }
+}
+
 export async function executeHpoRouteStopVisitCore(input: {
   db: any;
   userId: string;
@@ -1240,6 +1403,21 @@ export async function executeHpoRouteStopVisitCore(input: {
       parentRunId: execution.id,
       traceId: input.traceId ?? execution.id,
     });
+
+    if (input.nextAction?.trim()) {
+      await executeHpoRouteStopFollowupCore({
+        db: input.db,
+        userId: input.userId,
+        stopId: input.stopId,
+        nextAction: input.nextAction,
+        nextActionDueAt: input.nextActionDueAt,
+        idempotencyKey: `${key}:followup`,
+        sourceChannel: input.sourceChannel,
+        sourceMessageId: input.sourceMessageId ?? null,
+        parentRunId: execution.id,
+        traceId: input.traceId ?? execution.id,
+      });
+    }
 
     let interactionId: string | null = null;
     if (outcome.stop.account_id) {
@@ -1393,6 +1571,41 @@ export const updateHpoRouteStop = createServerFn({ method: "POST" })
     const routeStatus = await syncRouteStatus(db, context.userId, stop.route_id);
     return { stop: updated, routeStatus };
   });
+
+export const setHpoRouteStopFollowup = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (input: {
+      stopId: string;
+      nextAction: string;
+      nextActionDueAt?: string | null;
+      idempotencyKey?: string | null;
+      sourceChannel?: string | null;
+    }) => ({
+      stopId: clean(input.stopId),
+      nextAction: clean(input.nextAction),
+      nextActionDueAt:
+        input.nextActionDueAt && !Number.isNaN(Date.parse(input.nextActionDueAt))
+          ? new Date(input.nextActionDueAt).toISOString()
+          : input.nextActionDueAt === null
+            ? null
+            : undefined,
+      idempotencyKey: clean(input.idempotencyKey) || null,
+      sourceChannel: clean(input.sourceChannel) || "ui",
+    }),
+  )
+  .handler(async ({ data, context }) =>
+    executeHpoRouteStopFollowupCore({
+      db: context.supabase as any,
+      userId: context.userId,
+      stopId: data.stopId,
+      nextAction: data.nextAction,
+      nextActionDueAt: data.nextActionDueAt,
+      idempotencyKey:
+        data.idempotencyKey || `ui:${crypto.randomUUID()}:hpo.route_stop.set_followup`,
+      sourceChannel: data.sourceChannel,
+    }),
+  );
 
 export async function captureHpoRouteNoteCore(input: {
   db: any;
