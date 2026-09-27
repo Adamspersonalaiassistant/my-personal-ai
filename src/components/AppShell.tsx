@@ -181,19 +181,19 @@ export function AppShell({
       </aside>
 
       <div className="relative z-10 flex min-h-0 min-w-0 flex-col overflow-hidden">
-        <header className="z-40 flex min-h-[60px] shrink-0 items-center justify-between border-b border-border/45 bg-background/95 px-4 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-lg sm:px-5">
+        <header className="z-40 flex min-h-[54px] shrink-0 items-center justify-between border-b border-border/45 bg-background/95 px-3 pb-1.5 pt-[max(0.35rem,env(safe-area-inset-top))] backdrop-blur-lg sm:px-5">
           <div className="flex min-w-0 items-center gap-2.5">
             <Link
               to="/chat"
               onClick={rememberEmeryHandoff}
-              className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-primary/16 bg-primary/[0.04] md:hidden"
+              className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-primary/16 bg-primary/[0.04] md:hidden"
               aria-label="Open Emery"
             >
-              <img src={brainImage} alt="" className="emery-blue-brain size-9 object-cover" />
+              <img src={brainImage} alt="" className="emery-blue-brain size-8 object-cover" />
             </Link>
             <div className="min-w-0">
               <p className="truncate text-base font-semibold">{onChat ? "Emery" : title}</p>
-              {!onChat ? <p className="truncate text-xs text-muted-foreground">Emery</p> : null}
+              {!onChat ? <p className="hidden truncate text-xs text-muted-foreground md:block">Emery</p> : null}
             </div>
           </div>
 
@@ -210,7 +210,7 @@ export function AppShell({
             ) : null}
             <Link
               to="/settings"
-              className="flex size-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-white/[0.03] hover:text-foreground md:hidden"
+              className="flex size-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-white/[0.03] hover:text-foreground md:hidden"
               aria-label="Open Settings"
             >
               <SettingsIcon className="size-[18px]" />
@@ -229,7 +229,7 @@ export function AppShell({
         </main>
 
         <nav
-          className="z-40 grid shrink-0 grid-cols-5 border-t border-border/50 bg-background/95 px-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur-lg md:hidden"
+          className="z-40 grid shrink-0 grid-cols-5 border-t border-border/50 bg-background/95 px-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-0.5 backdrop-blur-lg md:hidden"
           aria-label="Primary navigation"
         >
           {primaryNav.map(({ to, label, icon: Icon }) => (
@@ -239,12 +239,12 @@ export function AppShell({
               onClick={() => {
                 if (to === "/chat") rememberEmeryHandoff();
               }}
-              className="emery-press flex min-h-[58px] flex-col items-center justify-center gap-1 rounded-md px-1 text-[11px] font-medium text-muted-foreground transition-colors"
+              className="emery-press flex min-h-[48px] flex-col items-center justify-center gap-0.5 rounded-md px-1 text-[10px] font-medium text-muted-foreground transition-colors"
               activeProps={{
                 className: "bg-primary/[0.08] text-primary font-semibold [&_svg]:stroke-[2.3]",
               }}
             >
-              <Icon className="size-[19px]" />
+              <Icon className="size-[18px]" />
               <span>{label}</span>
             </Link>
           ))}
@@ -254,9 +254,9 @@ export function AppShell({
             onClick={() => setMoreOpen(true)}
             aria-label="Open more navigation"
             aria-expanded={moreOpen}
-            className={`flex h-auto min-h-[58px] w-full flex-col items-center justify-center gap-1 rounded-md p-0 text-[11px] font-medium ${moreActive ? "bg-primary/[0.08] text-primary" : "text-muted-foreground"}`}
+            className={`flex h-auto min-h-[48px] w-full flex-col items-center justify-center gap-0.5 rounded-md p-0 text-[10px] font-medium ${moreActive ? "bg-primary/[0.08] text-primary" : "text-muted-foreground"}`}
           >
-            <MoreHorizontal className="size-[20px]" />
+            <MoreHorizontal className="size-[18px]" />
             <span>More</span>
           </Button>
         </nav>
