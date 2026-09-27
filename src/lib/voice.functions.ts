@@ -676,8 +676,9 @@ export const persistVoiceTranscript = createServerFn({ method: "POST" })
 
 export const executeVoiceCalendarAction = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { request: string }) => ({
+  .inputValidator((input: { request: string; idempotencyKey?: string | null }) => ({
     request: String(input?.request ?? "").trim().slice(0, 2000),
+    idempotencyKey: input?.idempotencyKey ? String(input.idempotencyKey).trim().slice(0, 240) : null,
   }))
   .handler(async ({ data, context }) => {
     if (!data.request) {
@@ -703,6 +704,8 @@ export const executeVoiceCalendarAction = createServerFn({ method: "POST" })
       timezone: fresh.profile?.timezone ?? "America/New_York",
       openTasks: fresh.actions.tasks,
       upcomingMeetings: fresh.actions.meetings,
+      requestId: data.idempotencyKey,
+      sourceChannel: "voice",
     });
     await recordRuntimeEvent(db, context.userId, {
       channel: "voice",
