@@ -608,7 +608,7 @@ function Chat() {
           </Button>
         ) : null}
 
-        <div className="z-20 shrink-0 border-t border-border/40 bg-background/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2.5 backdrop-blur-lg sm:px-5 sm:pb-4 md:px-7">
+        <div className="z-20 shrink-0 border-t border-border/40 bg-background/95 px-3 pb-2.5 pt-2 backdrop-blur-lg sm:px-5 sm:pb-3 md:px-7">
           {voiceStudioState ? (
             <div className="mx-auto mb-2 max-w-2xl rounded-2xl border border-primary/18 bg-primary/[0.045] p-3 shadow-[0_10px_28px_rgba(0,0,0,0.16)]">
               {voiceStudioState.stage === "previewed" ? (
