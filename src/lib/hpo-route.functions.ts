@@ -1010,10 +1010,10 @@ export async function executeHpoRouteStopOutcomeCore(input: {
   userId: string;
   stopId: string;
   status: "completed" | "visited" | "closed" | "bad_address" | "skipped";
-  notes?: string | null;
-  visitOutcome?: string | null;
-  nextAction?: string | null;
-  nextActionDueAt?: string | null;
+  notes?: string | null | undefined;
+  visitOutcome?: string | null | undefined;
+  nextAction?: string | null | undefined;
+  nextActionDueAt?: string | null | undefined;
   idempotencyKey: string;
   sourceChannel: string;
   sourceMessageId?: string | null;
