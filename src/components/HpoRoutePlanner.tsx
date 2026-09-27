@@ -34,6 +34,7 @@ import {
   updateHpoRouteStop,
 } from "@/lib/hpo-route.functions";
 import { EmeryVoiceControl } from "@/components/EmeryVoiceControl";
+import { HpoMapAdapter } from "@/components/hpo-map/HpoMapAdapter";
 
 type Stop = {
   id: string;
@@ -127,6 +128,9 @@ type PlannerData = {
   calendar: CalendarItem[];
   timezone: string;
   today: string;
+  featureFlags?: {
+    hpoMapV2?: boolean;
+  };
 };
 
 const terminalStatuses = new Set(["completed", "visited", "skipped", "closed", "bad_address"]);
@@ -1403,10 +1407,24 @@ export function HpoRoutePlanner() {
       </section>
 
       {data ? (
-        <OfficePlanningMap
+        <HpoMapAdapter
+          enabled={Boolean(data.featureFlags?.hpoMapV2)}
+          v1={
+            <OfficePlanningMap
+              offices={mapOffices}
+              selectedKeys={mapSelectedKeys}
+              selectedOfficeKey={selectedMapOfficeKey}
+              onSelectOffice={setSelectedMapOfficeKey}
+              onToggleRouteStop={toggleMapRouteStop}
+              onBuildRoute={startRouteFromMap}
+              preparing={mapPreparing}
+              onRefreshPins={() => void refreshOfficePins()}
+            />
+          }
           offices={mapOffices}
           selectedKeys={mapSelectedKeys}
           selectedOfficeKey={selectedMapOfficeKey}
+          route={activeRoute}
           onSelectOffice={setSelectedMapOfficeKey}
           onToggleRouteStop={toggleMapRouteStop}
           onBuildRoute={startRouteFromMap}
