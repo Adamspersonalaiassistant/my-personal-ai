@@ -1,5 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { MODEL_POLICY } from "@/lib/model-policy";
+import {
+  beginExecution,
+  clarifyExecution,
+  completeExecution,
+  failExecution,
+} from "@/lib/execution-ledger";
 
 export type HpoActionResult = {
   recognized: boolean;
@@ -38,6 +44,7 @@ export async function processHpoAction(input: {
   message: string;
   recent?: Array<{ role?: string; text?: string; createdAt?: string }>;
   timezone?: string;
+  sourceMessageId?: string | null;
 }): Promise<HpoActionResult> {
   const { db, userId, apiKey, message } = input;
   const timezone = input.timezone ?? "America/New_York";
@@ -155,39 +162,90 @@ Return strict JSON only.`,
     return { recognized: false, performed: false, needsClarification: false, question: null, action: "none", accountId: null, accountName: null, recordId: null, nextAction: null, dueAt: null };
   }
 
+  const execution = await beginExecution({
+    db,
+    userId,
+    domain: "hpo",
+    action,
+    sourceMessageId: input.sourceMessageId ?? null,
+    idempotencyKey: input.sourceMessageId
+      ? `message:${input.sourceMessageId}:hpo:${action}`
+      : null,
+    targetType: "hpo_account",
+    targetId:
+      typeof parsed.target_account_id === "string" ? parsed.target_account_id : null,
+    requestPayload: {
+      message,
+      action,
+      targetAccountId: parsed.target_account_id ?? null,
+      nextAction: parsed.next_action ?? null,
+      dueAt: parsed.due_at ?? null,
+    },
+  });
+
+  if (
+    execution.reused &&
+    (execution.status === "completed" ||
+      execution.status === "needs_clarification" ||
+      execution.status === "failed") &&
+    execution.resultPayload["hpoResult"]
+  ) {
+    return execution.resultPayload["hpoResult"] as HpoActionResult;
+  }
+
   if (parsed.contains_phi) {
-    return {
+    const result: HpoActionResult = {
       recognized: true, performed: false, needsClarification: true,
       question: "I can log the relationship update, but leave out patient-identifying or medical details. What non-PHI account update should I save?",
       action, accountId: null, accountName: null, recordId: null, nextAction: null, dueAt: null,
     };
+    await clarifyExecution({
+      db,
+      userId,
+      runId: execution.id,
+      question: result.question ?? "What non-PHI account update should I save?",
+      resultPayload: { hpoResult: result as unknown as Record<string, unknown> },
+    });
+    return result;
   }
 
   if (parsed.needs_clarification) {
-    return {
+    const result: HpoActionResult = {
       recognized: true, performed: false, needsClarification: true,
       question: String(parsed.clarification_question || "Which HPO account do you mean?"),
       action, accountId: parsed.target_account_id ?? null, accountName: null, recordId: null,
       nextAction: parsed.next_action || null, dueAt: isoOrNull(parsed.due_at),
     };
+    await clarifyExecution({
+      db,
+      userId,
+      runId: execution.id,
+      question: result.question ?? "Which HPO account do you mean?",
+      resultPayload: { hpoResult: result as unknown as Record<string, unknown> },
+    });
+    return result;
   }
 
   const targetId = typeof parsed.target_account_id === "string" ? parsed.target_account_id : "";
   const target = accountRows.find((a: any) => a.id === targetId);
   if (!target) {
-    return {
+    const result: HpoActionResult = {
       recognized: true, performed: false, needsClarification: true,
       question: "Which HPO account should I apply that to?",
       action, accountId: null, accountName: null, recordId: null, nextAction: parsed.next_action || null, dueAt: isoOrNull(parsed.due_at),
     };
+    await clarifyExecution({ db, userId, runId: execution.id, question: result.question ?? "Which HPO account?", resultPayload: { hpoResult: result as unknown as Record<string, unknown> } });
+    return result;
   }
 
   if (Array.isArray(target.tags) && target.tags.includes("exclude_from_adam_route") && !/\b(despite|even though|bilal|ownership|i am handling|i'm handling)\b/i.test(message)) {
-    return {
+    const result: HpoActionResult = {
       recognized: true, performed: false, needsClarification: true,
       question: `${target.name} is marked as owned by someone else. Do you want me to update that account anyway?`,
       action, accountId: target.id, accountName: target.name, recordId: null, nextAction: parsed.next_action || null, dueAt: isoOrNull(parsed.due_at),
     };
+    await clarifyExecution({ db, userId, runId: execution.id, question: result.question ?? "Update this account anyway?", resultPayload: { hpoResult: result as unknown as Record<string, unknown> } });
+    return result;
   }
 
   const dueAt = isoOrNull(parsed.due_at);
@@ -206,22 +264,29 @@ Return strict JSON only.`,
       p_next_action_due_at: dueAt,
       p_source: "emery",
     });
-    if (result.error) throw result.error;
+    if (result.error) {
+      await failExecution({ db, userId, runId: execution.id, errorCode: "hpo_write_failed", errorMessage: String(result.error.message ?? result.error), retryable: true });
+      throw result.error;
+    }
     const row = Array.isArray(result.data) ? result.data[0] : result.data;
-    return {
+    const hpoResult: HpoActionResult = {
       recognized: true, performed: true, needsClarification: false, question: null, action,
       accountId: target.id, accountName: target.name, recordId: row?.id ?? null,
       nextAction: row?.next_action ?? null, dueAt: row?.next_action_due_at ?? dueAt,
     };
+    await completeExecution({ db, userId, runId: execution.id, resultPayload: { hpoResult: hpoResult as unknown as Record<string, unknown> }, targetType: "hpo_interaction", targetId: hpoResult.recordId });
+    return hpoResult;
   }
 
   const nextAction = String(parsed.next_action ?? "").trim();
   if (!nextAction) {
-    return {
+    const result: HpoActionResult = {
       recognized: true, performed: false, needsClarification: true,
       question: `What should the next action be for ${target.name}?`,
       action, accountId: target.id, accountName: target.name, recordId: null, nextAction: null, dueAt,
     };
+    await clarifyExecution({ db, userId, runId: execution.id, question: result.question ?? "What should the next action be?", resultPayload: { hpoResult: result as unknown as Record<string, unknown> } });
+    return result;
   }
   const result = await db.rpc("emery_hpo_set_followup", {
     p_user_id: userId,
@@ -230,11 +295,16 @@ Return strict JSON only.`,
     p_due_at: dueAt,
     p_source: "emery",
   });
-  if (result.error) throw result.error;
+  if (result.error) {
+    await failExecution({ db, userId, runId: execution.id, errorCode: "hpo_write_failed", errorMessage: String(result.error.message ?? result.error), retryable: true });
+    throw result.error;
+  }
   const row = Array.isArray(result.data) ? result.data[0] : result.data;
-  return {
+  const hpoResult: HpoActionResult = {
     recognized: true, performed: true, needsClarification: false, question: null, action,
     accountId: target.id, accountName: target.name, recordId: row?.id ?? target.id,
     nextAction: row?.next_action ?? nextAction, dueAt: row?.next_action_due_at ?? dueAt,
   };
+  await completeExecution({ db, userId, runId: execution.id, resultPayload: { hpoResult: hpoResult as unknown as Record<string, unknown> }, targetType: "hpo_account", targetId: target.id });
+  return hpoResult;
 }
