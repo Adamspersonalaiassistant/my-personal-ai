@@ -42,6 +42,9 @@ check("manual stop save reaches canonical outcome core", routeFns.includes("retu
 check("voice route notes reach canonical outcome core", voice.includes("captureHpoRouteNoteCore") && routeFns.includes("route-note:"));
 check("text HPO route outcomes reach canonical outcome adapter", emery.includes("processHpoRouteStopAction") && routeActions.includes("executeHpoRouteStopOutcomeCore"));
 check("route-stop outcome uses execution ledger and verification", routeFns.includes("beginExecution") && routeFns.includes("completeExecution") && routeFns.includes("Route stop outcome verification failed"));
+check("visit logging is a canonical vertical action", routeFns.includes("executeHpoRouteStopVisitCore") && routeFns.includes('"hpo.route_stop.log_visit"'));
+check("visit logging preserves interaction linkage", routeFns.includes("Visit interaction verification failed") && routeFns.includes("route_interaction_id"));
+check("route-note voice/text capture uses canonical visit action", routeFns.includes("hpo.route_stop.log_visit") && routeFns.includes("visitExecution"));
 
 if (process.exitCode) process.exit(process.exitCode);
 console.log("HPO Field OS Map V2 foundation certification passed.");
