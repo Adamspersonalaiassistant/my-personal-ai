@@ -9,6 +9,8 @@ type RouteStopInput = {
   officeName: string;
   address: string;
   city?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   visitPriority?: string | null;
 };
 
@@ -355,6 +357,126 @@ async function upsertInteractionForStop(
     .eq("user_id", userId);
 }
 
+
+async function geocodeOfficeForMap(address: string) {
+  const response = await fetch(
+    `https://photon.komoot.io/api/?limit=1&lang=en&q=${encodeURIComponent(address)}`,
+    {
+      headers: {
+        "User-Agent": "EmeryPersonalAI/1.0 HPO-office-map",
+        Accept: "application/json",
+      },
+    },
+  );
+  if (!response.ok) return null;
+  const payload = (await response.json()) as {
+    features?: Array<{ geometry?: { coordinates?: [number, number] } }>;
+  };
+  const coordinates = payload.features?.[0]?.geometry?.coordinates;
+  if (!coordinates || coordinates.length < 2) return null;
+  const lon = Number(coordinates[0]);
+  const lat = Number(coordinates[1]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  // Reject obvious out-of-region geocodes. Emery's current HPO field map is NJ-focused.
+  if (lat < 38.7 || lat > 41.5 || lon < -75.7 || lon > -73.7) return null;
+  return { lat, lon };
+}
+
+export const prepareHpoOfficeMap = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { limit?: number }) => ({
+    limit: Math.max(1, Math.min(100, Number(input?.limit ?? 100) || 100)),
+  }))
+  .handler(async ({ data, context }) => {
+    const db = context.supabase as any;
+    const userId = context.userId;
+
+    const [{ data: accounts, error: accountError }, { data: prospects, error: prospectError }] =
+      await Promise.all([
+        db
+          .from("hpo_accounts")
+          .select("id,name,address,city,latitude,longitude,geocoded_at")
+          .eq("user_id", userId)
+          .eq("status", "active")
+          .not("address", "is", null)
+          .is("latitude", null)
+          .limit(data.limit),
+        db
+          .from("hpo_prospects")
+          .select("id,name,address,city,latitude,longitude,geocoded_at")
+          .eq("user_id", userId)
+          .neq("fit_status", "rejected")
+          .not("address", "is", null)
+          .is("latitude", null)
+          .limit(data.limit),
+      ]);
+    if (accountError) throw accountError;
+    if (prospectError) throw prospectError;
+
+    const work = [
+      ...(accounts ?? []).map((row: any) => ({ ...row, kind: "account" as const })),
+      ...(prospects ?? []).map((row: any) => ({ ...row, kind: "prospect" as const })),
+    ].slice(0, data.limit);
+
+    let mapped = 0;
+    let attempted = 0;
+    const chunkSize = 8;
+    for (let start = 0; start < work.length; start += chunkSize) {
+      const chunk = work.slice(start, start + chunkSize);
+      const results = await Promise.all(
+        chunk.map(async (row: any) => {
+          attempted += 1;
+          const query = [row.address, row.city, "NJ"].filter(Boolean).join(", ");
+          try {
+            const point = await geocodeOfficeForMap(query);
+            const table = row.kind === "account" ? "hpo_accounts" : "hpo_prospects";
+            const patch: Record<string, unknown> = { geocoded_at: new Date().toISOString() };
+            if (point) {
+              patch["latitude"] = point.lat;
+              patch["longitude"] = point.lon;
+            }
+            const { error } = await db
+              .from(table)
+              .update(patch)
+              .eq("id", row.id)
+              .eq("user_id", userId);
+            if (error) throw error;
+            if (point) mapped += 1;
+            return point;
+          } catch {
+            return null;
+          }
+        }),
+      );
+      void results;
+      if (start + chunkSize < work.length)
+        await new Promise((resolve) => setTimeout(resolve, 180));
+    }
+
+    const [{ count: remainingAccounts }, { count: remainingProspects }] = await Promise.all([
+      db
+        .from("hpo_accounts")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .eq("status", "active")
+        .not("address", "is", null)
+        .is("latitude", null),
+      db
+        .from("hpo_prospects")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .neq("fit_status", "rejected")
+        .not("address", "is", null)
+        .is("latitude", null),
+    ]);
+
+    return {
+      mapped,
+      attempted,
+      remaining: Number(remainingAccounts ?? 0) + Number(remainingProspects ?? 0),
+    };
+  });
+
 export const getHpoRoutePlanner = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
@@ -397,7 +519,7 @@ export const getHpoRoutePlanner = createServerFn({ method: "GET" })
         .limit(90),
       db
         .from("hpo_accounts")
-        .select("id,name,account_type,specialty,city,address,priority,relationship_stage,status")
+        .select("id,name,account_type,specialty,city,address,latitude,longitude,geocoded_at,priority,relationship_stage,relationship_health,status,owner_name,last_touch_at,next_action,next_action_due_at")
         .eq("user_id", userId)
         .eq("status", "active")
         .not("address", "is", null)
@@ -405,7 +527,7 @@ export const getHpoRoutePlanner = createServerFn({ method: "GET" })
         .limit(300),
       db
         .from("hpo_prospects")
-        .select("id,name,prospect_type,specialty,city,address,fit_status,verification_status")
+        .select("id,name,prospect_type,specialty,city,address,latitude,longitude,geocoded_at,fit_status,verification_status,metadata")
         .eq("user_id", userId)
         .not("address", "is", null)
         .neq("fit_status", "rejected")
@@ -534,6 +656,10 @@ export const createHpoRoute = createServerFn({ method: "POST" })
           officeName: clean(stop.officeName),
           address: clean(stop.address),
           city: clean(stop.city) || null,
+          latitude:
+            typeof stop.latitude === "number" && Number.isFinite(stop.latitude) ? stop.latitude : null,
+          longitude:
+            typeof stop.longitude === "number" && Number.isFinite(stop.longitude) ? stop.longitude : null,
           visitPriority: clean(stop.visitPriority) || null,
         })),
       };
@@ -576,6 +702,8 @@ export const createHpoRoute = createServerFn({ method: "POST" })
         office_name: stop.officeName,
         address: stop.address,
         city: stop.city,
+        latitude: stop.latitude,
+        longitude: stop.longitude,
         metadata: { non_phi: true, planner: "emery_native_v1" },
       })),
     );
