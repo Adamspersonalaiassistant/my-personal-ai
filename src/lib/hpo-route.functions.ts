@@ -43,7 +43,7 @@ function localDateKey(value: string | null | undefined, timeZone: string) {
     day: "2-digit",
   }).formatToParts(date);
   const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${map.year}-${map.month}-${map.day}`;
+  return `${map["year"]}-${map["month"]}-${map["day"]}`;
 }
 
 function localClock(value: string | null | undefined, timeZone: string) {
@@ -58,8 +58,13 @@ function localClock(value: string | null | undefined, timeZone: string) {
 }
 
 function zonedDateTimeToUtc(dateString: string, timeString: string, timeZone: string) {
-  const [year, month, day] = dateString.split("-").map(Number);
-  const [hour, minute] = timeString.split(":").map(Number);
+  const [yearRaw, monthRaw, dayRaw] = dateString.split("-");
+  const [hourRaw, minuteRaw] = timeString.split(":");
+  const year = Number(yearRaw ?? 1970);
+  const month = Number(monthRaw ?? 1);
+  const day = Number(dayRaw ?? 1);
+  const hour = Number(hourRaw ?? 0);
+  const minute = Number(minuteRaw ?? 0);
   let guess = Date.UTC(year, month - 1, day, hour, minute, 0);
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const parts = new Intl.DateTimeFormat("en-US", {
@@ -73,11 +78,11 @@ function zonedDateTimeToUtc(dateString: string, timeString: string, timeZone: st
     }).formatToParts(new Date(guess));
     const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
     const represented = Date.UTC(
-      Number(map.year),
-      Number(map.month) - 1,
-      Number(map.day),
-      Number(map.hour),
-      Number(map.minute),
+      Number(map["year"]),
+      Number(map["month"]) - 1,
+      Number(map["day"]),
+      Number(map["hour"]),
+      Number(map["minute"]),
       0,
     );
     const desired = Date.UTC(year, month - 1, day, hour, minute, 0);
@@ -341,8 +346,8 @@ async function upsertInteractionForStop(
     last_touch_at: occurredAt,
     updated_at: new Date().toISOString(),
   };
-  if (patch.nextAction?.trim()) accountPatch.next_action = patch.nextAction.trim();
-  if (patch.nextActionDueAt) accountPatch.next_action_due_at = patch.nextActionDueAt;
+  if (patch.nextAction?.trim()) accountPatch["next_action"] = patch.nextAction.trim();
+  if (patch.nextActionDueAt) accountPatch["next_action_due_at"] = patch.nextActionDueAt;
   await db
     .from("hpo_accounts")
     .update(accountPatch)
@@ -631,7 +636,7 @@ export const optimizeHpoRoute = createServerFn({ method: "POST" })
       .eq("user_id", userId)
       .order("stop_order", { ascending: true });
     if (stopError) throw stopError;
-    const stops = stopRows ?? [];
+    const stops: any[] = stopRows ?? [];
     if (!stops.length) throw new Error("This route has no stops");
 
     const unresolved: any[] = [];
@@ -702,11 +707,11 @@ export const optimizeHpoRoute = createServerFn({ method: "POST" })
     const { durations, distances } = await roadMatrix(points);
     const startIndex = startPoint ? 0 : null;
     const stopOffset = startPoint ? 1 : 0;
-    const stopIndexes = stops.map((_, index) => stopOffset + index);
+    const stopIndexes = stops.map((_stop: any, index: number) => stopOffset + index);
     const endIndex = endPoint ? points.length - 1 : null;
     const optimized = optimizeSequence(stopIndexes, durations, startIndex, endIndex);
     const stopByNode = new Map<number, any>();
-    stops.forEach((stop, index) => stopByNode.set(stopOffset + index, stop));
+    stops.forEach((stop: any, index: number) => stopByNode.set(stopOffset + index, stop));
 
     let previousNode = startIndex;
     let totalDistance = 0;
@@ -849,16 +854,16 @@ export const updateHpoRouteStop = createServerFn({ method: "POST" })
 
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (data.status) {
-      patch.status = data.status;
-      if (TERMINAL.has(data.status) && !stop.visited_at) patch.visited_at = new Date().toISOString();
+      patch["status"] = data.status;
+      if (TERMINAL.has(data.status) && !stop.visited_at) patch["visited_at"] = new Date().toISOString();
     }
     if (data.notes !== undefined) {
-      patch.notes = data.notes || null;
-      patch.visit_summary = data.notes || null;
+      patch["notes"] = data.notes || null;
+      patch["visit_summary"] = data.notes || null;
     }
-    if (data.visitOutcome !== undefined) patch.visit_outcome = data.visitOutcome || null;
-    if (data.nextAction !== undefined) patch.next_action = data.nextAction || null;
-    if (data.nextActionDueAt !== undefined) patch.next_action_due_at = data.nextActionDueAt;
+    if (data.visitOutcome !== undefined) patch["visit_outcome"] = data.visitOutcome || null;
+    if (data.nextAction !== undefined) patch["next_action"] = data.nextAction || null;
+    if (data.nextActionDueAt !== undefined) patch["next_action_due_at"] = data.nextActionDueAt;
 
     const { data: updated, error } = await db
       .from("hpo_route_stops")
