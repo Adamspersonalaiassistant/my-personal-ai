@@ -192,8 +192,8 @@ export function AppShell({
               <img src={brainImage} alt="" className="emery-blue-brain size-9 object-cover" />
             </Link>
             <div className="min-w-0">
-               <p className="truncate text-base font-semibold">{onChat ? "Emery" : title}</p>
-               {!onChat ? <p className="truncate text-xs text-muted-foreground">Emery</p> : null}
+              <p className="truncate text-base font-semibold">{onChat ? "Emery" : title}</p>
+              {!onChat ? <p className="truncate text-xs text-muted-foreground">Emery</p> : null}
             </div>
           </div>
 
