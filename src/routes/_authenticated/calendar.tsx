@@ -151,6 +151,12 @@ function inputLocal(date: Date) {
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
+function clientRequestId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 function CalendarPage() {
   const loadTasks = useServerFn(listUnifiedTasks);
@@ -201,6 +207,7 @@ function CalendarPage() {
   );
 
   const gridRef = useRef<HTMLDivElement | null>(null);
+  const addRequestIdRef = useRef<string | null>(null);
 
   async function refresh() {
     const [taskResult, meetingResult, notificationResult] = await Promise.all([
@@ -514,6 +521,7 @@ function CalendarPage() {
     );
     setDeadlineWhen("");
     setAddKind(surface === "tasks" ? "task" : addKind);
+    addRequestIdRef.current = clientRequestId();
     setShowAdd(true);
   }
 
@@ -545,6 +553,7 @@ function CalendarPage() {
             reminderAt: null,
             priority,
             projectId: projectId || null,
+            idempotencyKey: addRequestIdRef.current || clientRequestId(),
           },
         });
       } else {
@@ -567,6 +576,7 @@ function CalendarPage() {
         });
       }
       resetForm();
+      addRequestIdRef.current = null;
       setShowAdd(false);
       await refresh();
     } catch {
