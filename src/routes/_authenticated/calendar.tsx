@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
+  AlertTriangle,
   Bell,
   CalendarDays,
   Check,
@@ -10,7 +11,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Circle,
+  Clock3,
   List,
+  ListTodo,
   Plus,
   Rows3,
   X,
@@ -46,6 +49,7 @@ export const Route = createFileRoute("/_authenticated/calendar")({
 });
 
 type CalendarView = "agenda" | "day" | "3day" | "month";
+type CalendarSurface = "calendar" | "tasks";
 type AddKind = "task" | "event";
 
 type Task = {
@@ -55,6 +59,10 @@ type Task = {
   status: string;
   priority: number;
   due_at: string | null;
+  scheduled_start_at: string | null;
+  scheduled_end_at: string | null;
+  reminder_at: string | null;
+  estimated_minutes: number | null;
   completed_at: string | null;
   project_id: string | null;
   project_name: string | null;
@@ -162,6 +170,7 @@ function CalendarPage() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
+  const [surface, setSurface] = useState<CalendarSurface>("calendar");
   const [view, setView] = useState<CalendarView>("day");
   const [selectedDate, setSelectedDate] = useState(() => dayStart(new Date()));
   const [loading, setLoading] = useState(true);
@@ -182,6 +191,8 @@ function CalendarPage() {
   const [details, setDetails] = useState("");
   const [when, setWhen] = useState("");
   const [endWhen, setEndWhen] = useState("");
+  const [deadlineWhen, setDeadlineWhen] = useState("");
+  const [taskBlockEnabled, setTaskBlockEnabled] = useState(false);
   const [priority, setPriority] = useState(3);
   const [projectId, setProjectId] = useState("");
   const [participants, setParticipants] = useState("");
@@ -362,12 +373,26 @@ function CalendarPage() {
     () => tasks.filter((task) => task.status === "completed"),
     [tasks],
   );
-  const unscheduled = openTasks.filter((task) => !task.due_at);
+  const nowMs = Date.now();
+  const unscheduled = openTasks.filter((task) => !task.scheduled_start_at);
+  const overdueTasks = openTasks.filter(
+    (task) => Boolean(task.due_at) && Date.parse(task.due_at!) < nowMs,
+  );
+  const missedBlocks = openTasks.filter((task) => {
+    const end = task.scheduled_end_at ?? task.scheduled_start_at;
+    return Boolean(end) && Date.parse(end!) < nowMs;
+  });
 
   const items = useMemo<CalendarItem[]>(() => {
     const taskItems: CalendarItem[] = openTasks
-      .filter((task) => Boolean(task.due_at))
-      .map((task) => ({ kind: "task", id: task.id, title: task.title, at: task.due_at!, task }));
+      .filter((task) => Boolean(task.scheduled_start_at))
+      .map((task) => ({
+        kind: "task",
+        id: task.id,
+        title: task.title,
+        at: task.scheduled_start_at!,
+        task,
+      }));
     const meetingItems: CalendarItem[] = meetings
       .filter((meeting) => Boolean(meeting.meeting_at))
       .map((meeting) => ({
@@ -423,7 +448,12 @@ function CalendarPage() {
       const fallbackEnd = new Date(new Date(item.at).getTime() + 60 * 60 * 1000);
       setRescheduleEndValue(inputLocal(new Date(item.meeting.end_at ?? fallbackEnd.toISOString())));
     } else {
-      setRescheduleEndValue("");
+      const fallbackEnd = new Date(
+        new Date(item.at).getTime() + Math.max(15, item.task.estimated_minutes ?? 30) * 60 * 1000,
+      );
+      setRescheduleEndValue(
+        inputLocal(new Date(item.task.scheduled_end_at ?? fallbackEnd.toISOString())),
+      );
     }
   }
 
@@ -434,7 +464,11 @@ function CalendarPage() {
     try {
       const iso = new Date(rescheduleValue).toISOString();
       if (editing.kind === "task") {
-        await moveTask({ data: { id: editing.id, dueAt: iso } });
+        if (!rescheduleEndValue) throw new Error("Task end time is required");
+        const endIso = new Date(rescheduleEndValue).toISOString();
+        if (Date.parse(endIso) <= Date.parse(iso))
+          throw new Error("Task end time must be after start time");
+        await moveTask({ data: { id: editing.id, startAt: iso, endAt: endIso } });
       } else {
         if (!rescheduleEndValue) throw new Error("End time is required");
         const endIso = new Date(rescheduleEndValue).toISOString();
@@ -456,6 +490,8 @@ function CalendarPage() {
     setDetails("");
     setWhen("");
     setEndWhen("");
+    setDeadlineWhen("");
+    setTaskBlockEnabled(false);
     setPriority(3);
     setProjectId("");
     setParticipants("");
@@ -470,8 +506,14 @@ function CalendarPage() {
     } else {
       defaultTime.setHours(9, 0, 0, 0);
     }
-    setWhen(inputLocal(defaultTime));
-    setEndWhen(inputLocal(new Date(defaultTime.getTime() + 60 * 60 * 1000)));
+    const shouldTimeBlock = surface === "calendar";
+    setTaskBlockEnabled(shouldTimeBlock);
+    setWhen(shouldTimeBlock ? inputLocal(defaultTime) : "");
+    setEndWhen(
+      shouldTimeBlock ? inputLocal(new Date(defaultTime.getTime() + 30 * 60 * 1000)) : "",
+    );
+    setDeadlineWhen("");
+    setAddKind(surface === "tasks" ? "task" : addKind);
     setShowAdd(true);
   }
 
@@ -483,11 +525,24 @@ function CalendarPage() {
     setError(null);
     try {
       if (addKind === "task") {
+        const scheduledStartAt = taskBlockEnabled && when ? new Date(when).toISOString() : null;
+        const scheduledEndAt =
+          taskBlockEnabled && endWhen ? new Date(endWhen).toISOString() : null;
+        if (
+          scheduledStartAt &&
+          scheduledEndAt &&
+          Date.parse(scheduledEndAt) <= Date.parse(scheduledStartAt)
+        ) {
+          throw new Error("Task end time must be after start time");
+        }
         await addTask({
           data: {
             title,
             details,
-            dueAt: when ? new Date(when).toISOString() : null,
+            dueAt: deadlineWhen ? new Date(deadlineWhen).toISOString() : null,
+            scheduledStartAt,
+            scheduledEndAt,
+            reminderAt: null,
             priority,
             projectId: projectId || null,
           },
@@ -528,7 +583,7 @@ function CalendarPage() {
     <AppShell
       title="Calendar"
       padded={false}
-      askEmery="I'm in Calendar. Help me plan realistic time blocks around my meetings, priorities, and open tasks. If something is unscheduled, help me decide when it should happen."
+      askEmery="I'm in Calendar & Tasks. Keep my Task List separate from Calendar time blocks. Help me choose useful unscheduled tasks when I have free time, identify overdue deadlines, and only schedule tasks when I ask or when we deliberately time-block them."
     >
       <div className="flex h-full min-h-0 flex-col bg-background">
         <header className="shrink-0 border-b border-border/35 bg-background/96">
@@ -577,7 +632,37 @@ function CalendarPage() {
             </div>
           </div>
 
-          {view !== "month" ? (
+          <div className="mx-4 mb-3 grid grid-cols-2 gap-1 rounded-xl border border-border/35 bg-card/30 p-1">
+            <button
+              type="button"
+              onClick={() => setSurface("calendar")}
+              className={`emery-press flex min-h-10 items-center justify-center gap-2 rounded-lg text-xs font-semibold ${
+                surface === "calendar"
+                  ? "bg-primary/[0.12] text-primary"
+                  : "text-muted-foreground"
+              }`}
+            >
+              <CalendarDays className="size-4" /> Calendar
+            </button>
+            <button
+              type="button"
+              onClick={() => setSurface("tasks")}
+              className={`emery-press flex min-h-10 items-center justify-center gap-2 rounded-lg text-xs font-semibold ${
+                surface === "tasks"
+                  ? "bg-primary/[0.12] text-primary"
+                  : "text-muted-foreground"
+              }`}
+            >
+              <ListTodo className="size-4" /> Tasks
+              {overdueTasks.length ? (
+                <span className="rounded-full bg-destructive/15 px-1.5 py-0.5 text-[9px] text-destructive">
+                  {overdueTasks.length}
+                </span>
+              ) : null}
+            </button>
+          </div>
+
+          {surface === "calendar" && view !== "month" ? (
             <div className="flex items-center border-t border-border/20 px-1">
               <button
                 type="button"
@@ -621,13 +706,15 @@ function CalendarPage() {
             </div>
           ) : null}
 
-          {unscheduled.length ? (
+          {surface === "calendar" && unscheduled.length ? (
             <div className="flex items-center justify-between border-t border-border/25 px-4 py-2">
-              <button type="button" onClick={() => setView("agenda")} className="text-left">
-                <p className="text-[11px] font-semibold">Needs scheduling · {unscheduled.length}</p>
-                <p className="text-xs text-muted-foreground">Unscheduled tasks</p>
+              <button type="button" onClick={() => setSurface("tasks")} className="text-left">
+                <p className="text-[11px] font-semibold">Task List · {openTasks.length} open</p>
+                <p className="text-xs text-muted-foreground">
+                  {unscheduled.length} available without a time block
+                </p>
               </button>
-              <List className="size-4 text-primary" />
+              <ListTodo className="size-4 text-primary" />
             </div>
           ) : null}
         </header>
@@ -640,7 +727,27 @@ function CalendarPage() {
 
         <div className="min-h-0 flex-1">
           {loading ? <CalendarSkeleton /> : null}
-          {!loading && view === "agenda" ? (
+          {!loading && surface === "tasks" ? (
+            <TaskListView
+              tasks={openTasks}
+              completed={completedTasks}
+              overdue={overdueTasks}
+              missedBlocks={missedBlocks}
+              onToggle={handleToggle}
+              onSchedule={(task) => {
+                const start = new Date();
+                start.setMinutes(start.getMinutes() < 30 ? 30 : 60, 0, 0);
+                if (start.getMinutes() === 60) {
+                  start.setHours(start.getHours() + 1, 0, 0, 0);
+                }
+                const end = new Date(start.getTime() + Math.max(15, task.estimated_minutes ?? 30) * 60 * 1000);
+                setEditing({ kind: "task", id: task.id, title: task.title, at: start.toISOString(), task });
+                setRescheduleValue(inputLocal(start));
+                setRescheduleEndValue(inputLocal(end));
+              }}
+            />
+          ) : null}
+          {!loading && surface === "calendar" && view === "agenda" ? (
             <AgendaView
               items={items}
               unscheduled={unscheduled}
@@ -649,17 +756,17 @@ function CalendarPage() {
               onOpen={openEditor}
             />
           ) : null}
-          {!loading && view === "day" ? (
+          {!loading && surface === "calendar" && view === "day" ? (
             <DayGrid scrollRef={gridRef} dates={[selectedDate]} items={items} onOpen={openEditor} />
           ) : null}
-          {!loading && view === "3day" ? (
+          {!loading && surface === "calendar" && view === "3day" ? (
             <DayGrid
               dates={[selectedDate, addDays(selectedDate, 1), addDays(selectedDate, 2)]}
               items={items}
               onOpen={openEditor}
             />
           ) : null}
-          {!loading && view === "month" ? (
+          {!loading && surface === "calendar" && view === "month" ? (
             <MonthView
               selectedDate={selectedDate}
               items={items}
@@ -687,7 +794,7 @@ function CalendarPage() {
                 <div>
                   <p className="text-base font-semibold">Emery notifications</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    Lunch confirmations and schedule reminders.
+                    Task reminders, schedule reminders, and lunch confirmations.
                   </p>
                 </div>
                 <button
@@ -712,7 +819,7 @@ function CalendarPage() {
                     <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
                       {pushEnabled
                         ? "Emery can alert you even when the app is closed."
-                        : "Required for day-before lunch confirmations when Emery is closed."}
+                        : "Required for scheduled task reminders and lunch confirmations when Emery is closed."}
                     </p>
                   </div>
                   {!pushEnabled ? (
@@ -740,6 +847,12 @@ function CalendarPage() {
                       type="button"
                       key={notification.id}
                       onClick={async () => {
+                        if (
+                          notification.status === "pending" &&
+                          Date.parse(notification.scheduled_for) > Date.now()
+                        ) {
+                          return;
+                        }
                         await updateNotification({ data: { id: notification.id, state: "read" } });
                         await refreshNotifications();
                       }}
@@ -756,6 +869,9 @@ function CalendarPage() {
                           </p>
                         ) : null}
                         <p className="mt-1 text-[10px] text-muted-foreground">
+                          {notification.status === "pending" && Date.parse(notification.scheduled_for) > Date.now()
+                            ? "Scheduled · "
+                            : "Delivered · "}
                           {new Date(notification.scheduled_for).toLocaleString([], {
                             dateStyle: "medium",
                             timeStyle: "short",
@@ -770,7 +886,7 @@ function CalendarPage() {
                     <CheckCircle2 className="mx-auto size-6 text-primary/70" />
                     <p className="mt-2 text-sm font-medium">You're caught up.</p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Emery will create a confirmation reminder one day before every lunch.
+                      Future reminders you ask Emery to create will appear here before they fire.
                     </p>
                   </div>
                 )}
@@ -802,6 +918,7 @@ function CalendarPage() {
                   type="button"
                   key={value}
                   onClick={() => {
+                    setSurface("calendar");
                     setView(value);
                     setShowViewMenu(false);
                   }}
@@ -829,9 +946,11 @@ function CalendarPage() {
               <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/12" />
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-base font-semibold">Add to Calendar</p>
+                  <p className="text-base font-semibold">{addKind === "task" ? "Add Task" : "Add to Calendar"}</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    Tasks and commitments live together.
+                    {addKind === "task"
+                      ? "Tasks can stay unscheduled until you choose to time-block them."
+                      : "Events and meetings are fixed Calendar commitments."}
                   </p>
                 </div>
                 <button
@@ -846,7 +965,14 @@ function CalendarPage() {
               <div className="mt-4 grid grid-cols-2 gap-1 rounded-xl bg-card/45 p-1">
                 <button
                   type="button"
-                  onClick={() => setAddKind("task")}
+                  onClick={() => {
+                    setAddKind("task");
+                    if (surface === "tasks") {
+                      setTaskBlockEnabled(false);
+                      setWhen("");
+                      setEndWhen("");
+                    }
+                  }}
                   className={`min-h-10 rounded-lg text-xs font-semibold ${addKind === "task" ? "bg-primary/[0.12] text-primary" : "text-muted-foreground"}`}
                 >
                   Task
@@ -937,12 +1063,68 @@ function CalendarPage() {
                     </label>
                   </div>
                 ) : (
-                  <input
-                    type="datetime-local"
-                    value={when}
-                    onChange={(event) => setWhen(event.target.value)}
-                    className="min-h-11 w-full rounded-xl border border-border/55 bg-card/45 px-3 text-[14px] outline-none"
-                  />
+                  <div className="space-y-3">
+                    <label className="block">
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                        Deadline (optional)
+                      </span>
+                      <input
+                        type="datetime-local"
+                        value={deadlineWhen}
+                        onChange={(event) => setDeadlineWhen(event.target.value)}
+                        className="mt-1.5 min-h-11 w-full rounded-xl border border-border/55 bg-card/45 px-3 text-[14px] outline-none"
+                      />
+                    </label>
+                    <label className="flex min-h-11 items-center justify-between rounded-xl border border-border/45 bg-card/35 px-3">
+                      <span>
+                        <span className="block text-xs font-semibold">Put this task on Calendar</span>
+                        <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                          Optional time block — the task still exists without one
+                        </span>
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={taskBlockEnabled}
+                        onChange={(event) => {
+                          const enabled = event.target.checked;
+                          setTaskBlockEnabled(enabled);
+                          if (enabled && !when) {
+                            const start = new Date();
+                            start.setHours(start.getHours() + 1, 0, 0, 0);
+                            setWhen(inputLocal(start));
+                            setEndWhen(inputLocal(new Date(start.getTime() + 30 * 60 * 1000)));
+                          }
+                        }}
+                        className="size-4 accent-current"
+                      />
+                    </label>
+                    {taskBlockEnabled ? (
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="block">
+                          <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                            Start
+                          </span>
+                          <input
+                            type="datetime-local"
+                            value={when}
+                            onChange={(event) => setWhen(event.target.value)}
+                            className="mt-1.5 min-h-11 w-full rounded-xl border border-border/55 bg-card/45 px-2 text-[13px] outline-none"
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                            End
+                          </span>
+                          <input
+                            type="datetime-local"
+                            value={endWhen}
+                            onChange={(event) => setEndWhen(event.target.value)}
+                            className="mt-1.5 min-h-11 w-full rounded-xl border border-border/55 bg-card/45 px-2 text-[13px] outline-none"
+                          />
+                        </label>
+                      </div>
+                    ) : null}
+                  </div>
                 )}
                 {addKind === "task" ? (
                   <select
@@ -971,10 +1153,22 @@ function CalendarPage() {
                 </select>
                 <button
                   type="submit"
-                  disabled={!title.trim() || saving || (addKind === "event" && (!when || !endWhen))}
+                  disabled={
+                    !title.trim() ||
+                    saving ||
+                    (addKind === "event" && (!when || !endWhen)) ||
+                    (addKind === "task" && taskBlockEnabled && (!when || !endWhen))
+                  }
                   className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary font-semibold text-primary-foreground disabled:opacity-40"
                 >
-                  <Check className="size-4" /> {saving ? "Saving…" : "Add to Calendar"}
+                  <Check className="size-4" />{" "}
+                  {saving
+                    ? "Saving…"
+                    : addKind === "task"
+                      ? taskBlockEnabled
+                        ? "Add Task + Time Block"
+                        : "Add to Task List"
+                      : "Add to Calendar"}
                 </button>
               </div>
             </form>
@@ -1020,10 +1214,10 @@ function CalendarPage() {
                     className="mt-1.5 min-h-12 w-full rounded-xl border border-border/55 bg-card/45 px-3 text-[15px] outline-none"
                   />
                 </label>
-                {editing.kind === "event" ? (
+                {editing.kind === "event" || editing.kind === "task" ? (
                   <label className="block">
                     <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-                      End
+                      {editing.kind === "task" ? "Block ends" : "End"}
                     </span>
                     <input
                       type="datetime-local"
@@ -1038,7 +1232,7 @@ function CalendarPage() {
                 type="button"
                 onClick={() => void saveReschedule()}
                 disabled={
-                  saving || !rescheduleValue || (editing.kind === "event" && !rescheduleEndValue)
+                  saving || !rescheduleValue || !rescheduleEndValue
                 }
                 className="mt-3 flex min-h-12 w-full items-center justify-center rounded-xl bg-primary font-semibold text-primary-foreground disabled:opacity-40"
               >
@@ -1046,19 +1240,41 @@ function CalendarPage() {
                   ? "Moving…"
                   : editing.kind === "event"
                     ? "Save time & duration"
-                    : "Move item"}
+                    : "Schedule task"}
               </button>
               {editing.kind === "task" ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleToggle(editing.task);
-                    setEditing(null);
-                  }}
-                  className="mt-2 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-border/50 text-sm font-semibold"
-                >
-                  <CheckCircle2 className="size-4" /> Mark complete
-                </button>
+                <>
+                  {editing.task.scheduled_start_at ? (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setSaving(true);
+                        try {
+                          await moveTask({ data: { id: editing.task.id, startAt: null } });
+                          setEditing(null);
+                          await refresh();
+                        } catch {
+                          setError("Couldn't remove that time block.");
+                        } finally {
+                          setSaving(false);
+                        }
+                      }}
+                      className="mt-2 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-border/50 text-sm font-semibold text-muted-foreground"
+                    >
+                      Move back to Task List
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleToggle(editing.task);
+                      setEditing(null);
+                    }}
+                    className="mt-2 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-border/50 text-sm font-semibold"
+                  >
+                    <CheckCircle2 className="size-4" /> Mark complete
+                  </button>
+                </>
               ) : null}
             </div>
           </div>
@@ -1100,7 +1316,7 @@ function AgendaView({
       {unscheduled.length ? (
         <section className="mb-5">
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-            Needs scheduling
+            Available tasks
           </p>
           <div className="overflow-hidden rounded-lg bg-card/45">
             {unscheduled.map((task, index) => (
@@ -1118,7 +1334,7 @@ function AgendaView({
                 </button>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{task.title}</p>
-                  <p className="text-xs text-muted-foreground">Unscheduled task</p>
+                  <p className="text-xs text-muted-foreground">Task List · no time block</p>
                 </div>
               </div>
             ))}
@@ -1161,6 +1377,168 @@ function AgendaView({
         <p className="pb-4 text-center text-[10px] text-muted-foreground">
           {completed.length} completed task{completed.length === 1 ? "" : "s"}
         </p>
+      ) : null}
+    </div>
+  );
+}
+
+function TaskListView({
+  tasks,
+  completed,
+  overdue,
+  missedBlocks,
+  onToggle,
+  onSchedule,
+}: {
+  tasks: Task[];
+  completed: Task[];
+  overdue: Task[];
+  missedBlocks: Task[];
+  onToggle: (task: Task) => void;
+  onSchedule: (task: Task) => void;
+}) {
+  const overdueIds = new Set(overdue.map((task) => task.id));
+  const missedIds = new Set(missedBlocks.map((task) => task.id));
+  const scheduled = tasks
+    .filter((task) => task.scheduled_start_at)
+    .sort(
+      (a, b) =>
+        Date.parse(a.scheduled_start_at ?? "") - Date.parse(b.scheduled_start_at ?? ""),
+    );
+  const available = tasks
+    .filter((task) => !task.scheduled_start_at && !overdueIds.has(task.id))
+    .sort((a, b) => b.priority - a.priority);
+
+  function section(
+    title: string,
+    subtitle: string,
+    rows: Task[],
+    tone: "normal" | "overdue" = "normal",
+  ) {
+    if (!rows.length) return null;
+    return (
+      <section className="mb-5">
+        <div className="mb-2 flex items-end justify-between gap-3">
+          <div>
+            <p
+              className={`text-[11px] font-semibold uppercase tracking-[0.1em] ${
+                tone === "overdue" ? "text-destructive" : "text-muted-foreground"
+              }`}
+            >
+              {title} · {rows.length}
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>
+          </div>
+        </div>
+        <div className="overflow-hidden rounded-xl border border-border/35 bg-card/30">
+          {rows.map((task, index) => {
+            const isOverdue = overdueIds.has(task.id);
+            const missed = missedIds.has(task.id);
+            return (
+              <div
+                key={task.id}
+                className={`flex min-h-[72px] items-center gap-2 px-3 py-2.5 ${
+                  index ? "border-t border-border/30" : ""
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => void onToggle(task)}
+                  aria-label={`Complete ${task.title}`}
+                  className="flex size-10 shrink-0 items-center justify-center text-muted-foreground"
+                >
+                  <Circle className="size-5" />
+                </button>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{task.title}</p>
+                  <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
+                    <span>P{task.priority}</span>
+                    {task.estimated_minutes ? <span>{task.estimated_minutes} min</span> : null}
+                    {task.due_at ? (
+                      <span className={isOverdue ? "font-semibold text-destructive" : ""}>
+                        {isOverdue ? "Overdue" : "Due"}{" "}
+                        {new Date(task.due_at).toLocaleString([], {
+                          dateStyle: "short",
+                          timeStyle: "short",
+                        })}
+                      </span>
+                    ) : null}
+                    {task.scheduled_start_at ? (
+                      <span className={missed ? "font-semibold text-amber-400" : "text-primary"}>
+                        {missed ? "Missed block · " : "Scheduled · "}
+                        {new Date(task.scheduled_start_at).toLocaleString([], {
+                          weekday: "short",
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    ) : (
+                      <span>Available when you have free time</span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onSchedule(task)}
+                  className="emery-press min-h-10 shrink-0 rounded-xl border border-border/45 px-2.5 text-[10px] font-semibold text-primary"
+                >
+                  {task.scheduled_start_at ? "Reschedule" : "Schedule"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <div className="emery-scrollbar h-full overflow-y-auto overscroll-contain px-4 py-4">
+      <section className="mb-5 rounded-2xl border border-primary/15 bg-primary/[0.035] p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-primary/[0.1] text-primary">
+            <ListTodo className="size-4" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold">Your Task List is not your Calendar.</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Keep work here until you intentionally time-block it. Ask Emery what to do when you
+              have free time, or ask her to schedule the highest-priority tasks around your day.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {section(
+        "Overdue",
+        "Deadlines that have passed and still need attention.",
+        overdue,
+        "overdue",
+      )}
+      {section(
+        "Scheduled",
+        "Tasks with an intentional Calendar time block.",
+        scheduled,
+      )}
+      {section(
+        "Available",
+        "Unscheduled work Emery can recommend when you have free time.",
+        available,
+      )}
+
+      {completed.length ? (
+        <p className="pb-5 text-center text-[10px] text-muted-foreground">
+          {completed.length} completed task{completed.length === 1 ? "" : "s"} in history
+        </p>
+      ) : null}
+      {!tasks.length ? (
+        <div className="py-16 text-center">
+          <CheckCircle2 className="mx-auto size-7 text-primary/70" />
+          <p className="mt-3 text-sm font-semibold">No open tasks.</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Add something here or tell Emery what you need to remember.
+          </p>
+        </div>
       ) : null}
     </div>
   );
@@ -1261,14 +1639,17 @@ function DayGrid({
                             item.meeting.end_at ??
                               new Date(time.getTime() + 60 * 60 * 1000).toISOString(),
                           )
-                        : null;
-                    const durationMinutes = end
-                      ? Math.max(15, (end.getTime() - time.getTime()) / 60000)
-                      : 0;
-                    const height =
-                      item.kind === "event"
-                        ? Math.max(42, (durationMinutes / 60) * HOUR_HEIGHT - 4)
-                        : 42;
+                        : new Date(
+                            item.task.scheduled_end_at ??
+                              new Date(
+                                time.getTime() + Math.max(15, item.task.estimated_minutes ?? 30) * 60 * 1000,
+                              ).toISOString(),
+                          );
+                    const durationMinutes = Math.max(
+                      15,
+                      (end.getTime() - time.getTime()) / 60000,
+                    );
+                    const height = Math.max(42, (durationMinutes / 60) * HOUR_HEIGHT - 4);
                     return (
                       <button
                         type="button"
@@ -1283,7 +1664,7 @@ function DayGrid({
                         <span className="mt-0.5 block text-[9px] text-muted-foreground">
                           {item.kind === "event"
                             ? `${formatClock(item.at)}–${formatClock(item.meeting.end_at ?? new Date(new Date(item.at).getTime() + 60 * 60 * 1000).toISOString())}`
-                            : `${formatClock(item.at)} · Task`}
+                            : `${formatClock(item.at)}–${formatClock(item.task.scheduled_end_at ?? new Date(new Date(item.at).getTime() + Math.max(15, item.task.estimated_minutes ?? 30) * 60 * 1000).toISOString())} · Task`}
                         </span>
                       </button>
                     );
