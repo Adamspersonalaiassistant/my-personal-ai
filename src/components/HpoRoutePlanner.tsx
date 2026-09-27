@@ -31,6 +31,7 @@ import {
   syncHpoRouteToCalendar,
   updateHpoRouteStop,
 } from "@/lib/hpo-route.functions";
+import { EmeryVoiceControl } from "@/components/EmeryVoiceControl";
 
 type Stop = {
   id: string;
@@ -707,6 +708,18 @@ export function HpoRoutePlanner() {
             <Sparkles className="size-4" />
             {optimizing ? "Optimizing…" : "Optimize Route"}
           </button>
+        </div>
+        <div className="mt-2 flex min-h-12 items-center gap-3 rounded-2xl border border-primary/15 bg-primary/[0.035] px-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold">Talk to Emery</p>
+            <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+              Ask about the day or say “Stop 3…” and dictate the visit note hands-free.
+            </p>
+          </div>
+          <EmeryVoiceControl
+            hpoRouteId={activeRoute?.id ?? null}
+            onConversationChanged={() => void refresh(activeRoute?.id ?? null)}
+          />
         </div>
       </section>
 
