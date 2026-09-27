@@ -20,7 +20,17 @@ import { supabase } from "@/integrations/supabase/client";
 import { getMainConversationPage } from "@/lib/chat-history.functions";
 import { sendEmeryMessage } from "@/lib/emery.functions";
 
-export const Route = createFileRoute("/_authenticated/chat")({ component: Chat });
+export const Route = createFileRoute("/_authenticated/chat")({
+  head: () => ({ meta: [
+    { title: "Conversation — Emery" },
+    { name: "description", content: "Continue your private, ongoing conversation with Emery." },
+    { property: "og:title", content: "Conversation — Emery" },
+    { property: "og:description", content: "A private ongoing conversation with Emery." },
+    { property: "og:type", content: "website" },
+    { name: "twitter:card", content: "summary" },
+  ] }),
+  component: Chat,
+});
 
 type Attachment = {
   id: string;
