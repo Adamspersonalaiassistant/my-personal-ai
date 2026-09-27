@@ -400,6 +400,7 @@ export const prepareHpoOfficeMap = createServerFn({ method: "POST" })
           .eq("status", "active")
           .not("address", "is", null)
           .is("latitude", null)
+          .is("geocoded_at", null)
           .limit(data.limit),
         db
           .from("hpo_prospects")
