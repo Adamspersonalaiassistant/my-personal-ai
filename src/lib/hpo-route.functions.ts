@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { MODEL_POLICY } from "@/lib/model-policy";
 
 type RouteStopInput = {
   accountId?: string | null;
@@ -15,6 +16,84 @@ const TERMINAL = new Set(["completed", "visited", "skipped", "closed", "bad_addr
 
 function clean(value: unknown) {
   return String(value ?? "").trim();
+}
+
+function routeTitle(routeDate: string, area?: string | null) {
+  const [year, month, day] = routeDate.split("-");
+  return `${month}/${day}/${year}- (${area?.trim() || "HPO"}) Marketing Route`;
+}
+
+async function getTimezone(db: any, userId: string) {
+  const { data } = await db
+    .from("profiles")
+    .select("timezone")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return data?.timezone || "America/New_York";
+}
+
+function localDateKey(value: string | null | undefined, timeZone: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${map.year}-${map.month}-${map.day}`;
+}
+
+function localClock(value: string | null | undefined, timeZone: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function zonedDateTimeToUtc(dateString: string, timeString: string, timeZone: string) {
+  const [year, month, day] = dateString.split("-").map(Number);
+  const [hour, minute] = timeString.split(":").map(Number);
+  let guess = Date.UTC(year, month - 1, day, hour, minute, 0);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new Date(guess));
+    const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    const represented = Date.UTC(
+      Number(map.year),
+      Number(map.month) - 1,
+      Number(map.day),
+      Number(map.hour),
+      Number(map.minute),
+      0,
+    );
+    const desired = Date.UTC(year, month - 1, day, hour, minute, 0);
+    guess += desired - represented;
+  }
+  return new Date(guess).toISOString();
+}
+
+function responseText(payload: any) {
+  if (typeof payload?.output_text === "string") return payload.output_text.trim();
+  return (payload?.output ?? [])
+    .flatMap((item: any) => (Array.isArray(item?.content) ? item.content : []))
+    .filter((item: any) => item?.type === "output_text")
+    .map((item: any) => item?.text ?? "")
+    .join("")
+    .trim();
 }
 
 function normalize(value: string) {
@@ -298,7 +377,9 @@ export const getHpoRoutePlanner = createServerFn({ method: "GET" })
     const past = localDate(new Date(today.getTime() - 75 * 24 * 60 * 60 * 1000));
     const future = localDate(new Date(today.getTime() + 45 * 24 * 60 * 60 * 1000));
 
-    const [routesResult, accountsResult, prospectsResult] = await Promise.all([
+    const nowIso = new Date().toISOString();
+    const horizonIso = new Date(today.getTime() + 45 * 24 * 60 * 60 * 1000).toISOString();
+    const [routesResult, accountsResult, prospectsResult, meetingsResult, tasksResult] = await Promise.all([
       db
         .from("hpo_route_plans")
         .select(
@@ -325,9 +406,27 @@ export const getHpoRoutePlanner = createServerFn({ method: "GET" })
         .neq("fit_status", "rejected")
         .order("name", { ascending: true })
         .limit(300),
+      db
+        .from("meetings")
+        .select("id,title,meeting_at,end_at,participants,metadata")
+        .eq("user_id", userId)
+        .gte("meeting_at", nowIso)
+        .lte("meeting_at", horizonIso)
+        .order("meeting_at", { ascending: true })
+        .limit(150),
+      db
+        .from("tasks")
+        .select("id,title,due_at,priority,status,metadata")
+        .eq("user_id", userId)
+        .neq("status", "completed")
+        .not("due_at", "is", null)
+        .gte("due_at", nowIso)
+        .lte("due_at", horizonIso)
+        .order("due_at", { ascending: true })
+        .limit(150),
     ]);
 
-    for (const result of [routesResult, accountsResult, prospectsResult]) {
+    for (const result of [routesResult, accountsResult, prospectsResult, meetingsResult, tasksResult]) {
       if (result.error) throw result.error;
     }
 
@@ -353,13 +452,42 @@ export const getHpoRoutePlanner = createServerFn({ method: "GET" })
       byRoute.set(stop.route_id, existing);
     }
 
+    const calendar = [
+      ...(meetingsResult.data ?? []).map((item: any) => ({
+        kind: "event",
+        id: item.id,
+        title: item.title || "Untitled event",
+        at: item.meeting_at,
+        end_at: item.end_at,
+        local_date: localDateKey(item.meeting_at, timezone),
+        local_time: localClock(item.meeting_at, timezone),
+        local_end_time: localClock(item.end_at, timezone),
+        metadata: item.metadata,
+      })),
+      ...(tasksResult.data ?? []).map((item: any) => ({
+        kind: "task",
+        id: item.id,
+        title: item.title,
+        at: item.due_at,
+        end_at: null,
+        local_date: localDateKey(item.due_at, timezone),
+        local_time: localClock(item.due_at, timezone),
+        local_end_time: null,
+        priority: item.priority,
+        metadata: item.metadata,
+      })),
+    ].sort((a: any, b: any) => Date.parse(a.at) - Date.parse(b.at));
+
     return {
       routes: (routesResult.data ?? []).map((route: any) => ({
         ...route,
         stops: byRoute.get(route.id) ?? [],
+        title: routeTitle(route.route_date, route.area),
       })),
       accounts: accountsResult.data ?? [],
       prospects: prospectsResult.data ?? [],
+      calendar,
+      timezone,
       today: localDate(today),
     };
   });
@@ -372,6 +500,9 @@ export const createHpoRoute = createServerFn({ method: "POST" })
       area?: string;
       startAddress?: string;
       endAddress?: string;
+      startWindow?: string;
+      endWindow?: string;
+      syncToCalendar?: boolean;
       notes?: string;
       stops: RouteStopInput[];
     }) => {
@@ -388,6 +519,9 @@ export const createHpoRoute = createServerFn({ method: "POST" })
         area: clean(input.area) || null,
         startAddress: clean(input.startAddress) || null,
         endAddress: clean(input.endAddress) || null,
+        startWindow: clean(input.startWindow) || null,
+        endWindow: clean(input.endWindow) || null,
+        syncToCalendar: Boolean(input.syncToCalendar),
         notes: clean(input.notes) || null,
         stops: stops.map((stop) => ({
           accountId: clean(stop.accountId) || null,
@@ -409,11 +543,17 @@ export const createHpoRoute = createServerFn({ method: "POST" })
         route_date: data.routeDate,
         area: data.area,
         status: "planned",
+        start_window: data.startWindow,
+        end_window: data.endWindow,
         start_address: data.startAddress,
         end_address: data.endAddress,
         notes: data.notes,
         source_type: "emery_route_planner",
-        metadata: { non_phi: true, planner: "emery_native_v1" },
+        metadata: {
+          non_phi: true,
+          planner: "emery_native_v1",
+          route_title: routeTitle(data.routeDate, data.area),
+        },
       })
       .select("id")
       .single();
@@ -442,7 +582,32 @@ export const createHpoRoute = createServerFn({ method: "POST" })
         .eq("user_id", context.userId);
       throw stopsError;
     }
-    return { routeId: route.id };
+
+    let calendarAction: "created" | "skipped" = "skipped";
+    if (data.syncToCalendar && data.startWindow && data.endWindow) {
+      const timezone = await getTimezone(db, context.userId);
+      const start = zonedDateTimeToUtc(data.routeDate, data.startWindow, timezone);
+      const end = zonedDateTimeToUtc(data.routeDate, data.endWindow, timezone);
+      if (Date.parse(end) > Date.parse(start)) {
+        const { error: meetingError } = await db.from("meetings").insert({
+          user_id: context.userId,
+          title: `HPO Marketing Route — ${data.area || "Field Marketing"}`,
+          meeting_at: start,
+          end_at: end,
+          participants: [],
+          metadata: {
+            domain: "hpo",
+            hpo: true,
+            event_type: "field_route",
+            hpo_route_id: route.id,
+            source_type: "route_planner",
+          },
+        });
+        if (meetingError) throw meetingError;
+        calendarAction = "created";
+      }
+    }
+    return { routeId: route.id, calendarAction };
   });
 
 export const optimizeHpoRoute = createServerFn({ method: "POST" })
@@ -849,4 +1014,165 @@ export const captureHpoRouteNote = createServerFn({ method: "POST" })
       nextAction,
       routeStatus,
     } as const;
+  });
+
+
+export const syncHpoRouteToCalendar = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { routeId: string }) => ({ routeId: clean(input.routeId) }))
+  .handler(async ({ data, context }) => {
+    const db = context.supabase as any;
+    const { data: route, error } = await db
+      .from("hpo_route_plans")
+      .select("id,route_date,area,start_window,end_window")
+      .eq("id", data.routeId)
+      .eq("user_id", context.userId)
+      .single();
+    if (error || !route) throw error ?? new Error("Route not found");
+    if (!route.start_window || !route.end_window)
+      throw new Error("Set a route start and end time first.");
+
+    const timezone = await getTimezone(db, context.userId);
+    const start = zonedDateTimeToUtc(route.route_date, route.start_window, timezone);
+    const end = zonedDateTimeToUtc(route.route_date, route.end_window, timezone);
+    if (Date.parse(end) <= Date.parse(start))
+      throw new Error("Route end time must be after the start time.");
+
+    const title = `HPO Marketing Route — ${route.area || "Field Marketing"}`;
+    const metadata = {
+      domain: "hpo",
+      hpo: true,
+      event_type: "field_route",
+      hpo_route_id: route.id,
+      source_type: "route_planner",
+    };
+
+    const { data: existing } = await db
+      .from("meetings")
+      .select("id")
+      .eq("user_id", context.userId)
+      .contains("metadata", { hpo_route_id: route.id })
+      .maybeSingle();
+
+    if (existing?.id) {
+      const { error: updateError } = await db
+        .from("meetings")
+        .update({ title, meeting_at: start, end_at: end, metadata })
+        .eq("id", existing.id)
+        .eq("user_id", context.userId);
+      if (updateError) throw updateError;
+      return { id: existing.id, action: "updated" as const };
+    }
+
+    const { data: meeting, error: insertError } = await db
+      .from("meetings")
+      .insert({
+        user_id: context.userId,
+        title,
+        meeting_at: start,
+        end_at: end,
+        participants: [],
+        metadata,
+      })
+      .select("id")
+      .single();
+    if (insertError) throw insertError;
+    return { id: meeting.id, action: "created" as const };
+  });
+
+export const getHpoRouteScheduleAdvice = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { routeId: string }) => ({ routeId: clean(input.routeId) }))
+  .handler(async ({ data, context }) => {
+    const apiKey = process.env["OPENAI_API_KEY"];
+    if (!apiKey) throw new Error("Emery AI is not configured.");
+    const db = context.supabase as any;
+    const timezone = await getTimezone(db, context.userId);
+
+    const { data: route, error } = await db
+      .from("hpo_route_plans")
+      .select("*")
+      .eq("id", data.routeId)
+      .eq("user_id", context.userId)
+      .single();
+    if (error || !route) throw error ?? new Error("Route not found");
+
+    const { data: stops } = await db
+      .from("hpo_route_stops")
+      .select("stop_order,office_name,address,city,status,visit_priority,drive_seconds_from_previous")
+      .eq("route_id", route.id)
+      .eq("user_id", context.userId)
+      .order("stop_order", { ascending: true });
+
+    const [{ data: meetings }, { data: tasks }] = await Promise.all([
+      db
+        .from("meetings")
+        .select("title,meeting_at,end_at,metadata")
+        .eq("user_id", context.userId)
+        .order("meeting_at", { ascending: true })
+        .limit(300),
+      db
+        .from("tasks")
+        .select("title,due_at,priority,status,metadata")
+        .eq("user_id", context.userId)
+        .neq("status", "completed")
+        .not("due_at", "is", null)
+        .order("due_at", { ascending: true })
+        .limit(300),
+    ]);
+
+    const calendar = [
+      ...(meetings ?? [])
+        .filter((item: any) => localDateKey(item.meeting_at, timezone) === route.route_date)
+        .map((item: any) => ({
+          kind: "event",
+          title: item.title,
+          start: localClock(item.meeting_at, timezone),
+          end: localClock(item.end_at, timezone),
+        })),
+      ...(tasks ?? [])
+        .filter((item: any) => localDateKey(item.due_at, timezone) === route.route_date)
+        .map((item: any) => ({
+          kind: "task",
+          title: item.title,
+          at: localClock(item.due_at, timezone),
+          priority: item.priority,
+        })),
+    ];
+
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: MODEL_POLICY.primary,
+        input: [
+          {
+            role: "system",
+            content:
+              "You are Emery helping Adam plan one Hudson Pro field-marketing day. Be concise and schedule-aware. Use only the supplied non-PHI route and Calendar facts. Never invent office hours, people, addresses, traffic, travel times, or appointments. Treat optimized driving time as an estimate. Assume roughly 15 minutes inside each office unless Adam later changes that. Identify any Calendar conflict, whether the planned block is realistic, and the single best adjustment. End with a simple recommended day sequence.",
+          },
+          {
+            role: "user",
+            content: JSON.stringify({
+              timezone,
+              route: {
+                title: routeTitle(route.route_date, route.area),
+                date: route.route_date,
+                area: route.area,
+                start_window: route.start_window,
+                end_window: route.end_window,
+                optimized_drive_minutes: route.optimized_duration_seconds
+                  ? Math.round(route.optimized_duration_seconds / 60)
+                  : null,
+                stop_count: (stops ?? []).length,
+              },
+              stops: stops ?? [],
+              calendar,
+            }),
+          },
+        ],
+      }),
+    });
+    if (!response.ok) throw new Error("Emery could not review the route schedule right now.");
+    return { advice: responseText(await response.json()) };
   });
