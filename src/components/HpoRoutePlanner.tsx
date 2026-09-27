@@ -284,10 +284,15 @@ function RouteMap({ route }: { route: RoutePlan }) {
 
   function jumpToStop(stopId?: string) {
     if (!stopId) return;
-    document.getElementById(`route-stop-${stopId}`)?.scrollIntoView({
-      behavior: "smooth",
-      block: "center",
-    });
+    const element = document.getElementById(`route-stop-${stopId}`);
+    element?.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => {
+      if (element?.dataset["expanded"] !== "true") {
+        element
+          ?.querySelector<HTMLButtonElement>("[data-route-note-toggle]")
+          ?.click();
+      }
+    }, 280);
   }
 
   return (
@@ -1308,16 +1313,29 @@ function StopCard({
   const [notes, setNotes] = useState(stop.notes ?? "");
   const [visitOutcome, setVisitOutcome] = useState(stop.visit_outcome ?? "");
   const [nextAction, setNextAction] = useState(stop.next_action ?? "");
+  const [expanded, setExpanded] = useState(false);
 
   const completed = terminalStatuses.has(status);
   const mapsHref = stop.address
     ? `https://maps.apple.com/?daddr=${encodeURIComponent([stop.address, stop.city].filter(Boolean).join(", "))}`
     : null;
 
+  async function saveAndCollapse() {
+    await onSave({
+      status,
+      notes,
+      visitOutcome,
+      nextAction,
+      nextActionDueAt: null,
+    });
+    setExpanded(false);
+  }
+
   return (
     <article
       id={`route-stop-${stop.id}`}
-      className={`scroll-mt-24 rounded-[1.45rem] border p-4 ${
+      data-expanded={expanded ? "true" : "false"}
+      className={`scroll-mt-24 rounded-[1.45rem] border p-3.5 transition ${
         completed ? "border-primary/18 bg-primary/[0.03]" : "border-border/45 bg-card/30"
       }`}
     >
@@ -1330,7 +1348,18 @@ function StopCard({
           {stop.stop_order}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{stop.office_name || "Route stop"}</p>
+          <div className="flex min-w-0 items-center gap-2">
+            <p className="truncate text-sm font-semibold">{stop.office_name || "Route stop"}</p>
+            <span
+              className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold capitalize ${
+                completed
+                  ? "bg-primary/[0.1] text-primary"
+                  : "bg-muted/70 text-muted-foreground"
+              }`}
+            >
+              {status.replaceAll("_", " ")}
+            </span>
+          </div>
           <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
             {locationText(stop) || "Address not saved"}
           </p>
@@ -1363,43 +1392,20 @@ function StopCard({
         </div>
       </div>
 
-      <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
-        {["planned", "completed", "closed", "bad_address", "skipped"].map((value) => (
-          <button
-            key={value}
-            type="button"
-            onClick={() => setStatus(value)}
-            className={`emery-press min-h-9 shrink-0 rounded-xl border px-2.5 text-[10px] font-semibold capitalize ${
-              status === value
-                ? "border-primary/25 bg-primary/[0.08] text-primary"
-                : "border-border/40 text-muted-foreground"
-            }`}
-          >
-            {value.replaceAll("_", " ")}
-          </button>
-        ))}
-      </div>
-
-      <textarea
-        value={notes}
-        onChange={(event) => setNotes(event.target.value)}
-        placeholder="Marketing note — saved exactly as typed"
-        className="mt-3 min-h-24 w-full resize-none rounded-xl border border-border/50 bg-card/50 px-3 py-2.5 text-sm leading-5 outline-none focus:border-primary/30"
-      />
-      <div className="mt-2 grid gap-2 sm:grid-cols-2">
-        <input
-          value={visitOutcome}
-          onChange={(event) => setVisitOutcome(event.target.value)}
-          placeholder="Visit result"
-          className="h-11 rounded-xl border border-border/50 bg-card/50 px-3 text-sm outline-none focus:border-primary/30"
-        />
-        <input
-          value={nextAction}
-          onChange={(event) => setNextAction(event.target.value)}
-          placeholder="Follow-up / next action"
-          className="h-11 rounded-xl border border-border/50 bg-card/50 px-3 text-sm outline-none focus:border-primary/30"
-        />
-      </div>
+      {!expanded && (stop.notes || stop.visit_summary || stop.next_action) ? (
+        <div className="mt-2 rounded-xl border border-border/30 bg-background/35 px-3 py-2">
+          {stop.notes || stop.visit_summary ? (
+            <p className="line-clamp-2 text-[11px] leading-4 text-muted-foreground">
+              {stop.notes || stop.visit_summary}
+            </p>
+          ) : null}
+          {stop.next_action ? (
+            <p className="mt-1 truncate text-[10px] font-medium text-primary">
+              Next: {stop.next_action}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="mt-3 flex items-center gap-2">
         {mapsHref ? (
@@ -1407,7 +1413,7 @@ function StopCard({
             href={mapsHref}
             target="_blank"
             rel="noreferrer"
-            className="emery-press flex min-h-11 items-center gap-2 rounded-xl border border-border/50 px-3 text-xs font-semibold text-muted-foreground"
+            className="emery-press flex min-h-10 items-center gap-2 rounded-xl border border-border/45 px-3 text-[11px] font-semibold text-muted-foreground"
           >
             <Navigation className="size-3.5" /> Navigate
             <ExternalLink className="size-3" />
@@ -1415,21 +1421,69 @@ function StopCard({
         ) : null}
         <button
           type="button"
-          disabled={working}
-          onClick={() =>
-            void onSave({
-              status,
-              notes,
-              visitOutcome,
-              nextAction,
-              nextActionDueAt: null,
-            })
-          }
-          className="emery-press ml-auto flex min-h-11 items-center gap-2 rounded-xl bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-40"
+          data-route-note-toggle
+          onClick={() => setExpanded((value) => !value)}
+          className={`emery-press ml-auto min-h-10 rounded-xl px-3 text-[11px] font-semibold ${
+            expanded
+              ? "border border-border/45 text-muted-foreground"
+              : "bg-primary text-primary-foreground"
+          }`}
         >
-          <CheckCircle2 className="size-3.5" /> Save stop
+          {expanded ? "Close details" : stop.notes ? "Edit visit" : "Log visit"}
         </button>
       </div>
+
+      {expanded ? (
+        <div className="mt-3 border-t border-border/30 pt-3">
+          <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
+            {["planned", "completed", "closed", "bad_address", "skipped"].map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setStatus(value)}
+                className={`emery-press min-h-9 shrink-0 rounded-xl border px-2.5 text-[10px] font-semibold capitalize ${
+                  status === value
+                    ? "border-primary/25 bg-primary/[0.08] text-primary"
+                    : "border-border/40 text-muted-foreground"
+                }`}
+              >
+                {value.replaceAll("_", " ")}
+              </button>
+            ))}
+          </div>
+
+          <textarea
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            placeholder="What happened at this office?"
+            autoFocus
+            className="mt-3 min-h-24 w-full resize-none rounded-xl border border-border/50 bg-card/50 px-3 py-2.5 text-[16px] leading-5 outline-none focus:border-primary/30"
+          />
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <input
+              value={visitOutcome}
+              onChange={(event) => setVisitOutcome(event.target.value)}
+              placeholder="Visit result"
+              className="h-11 rounded-xl border border-border/50 bg-card/50 px-3 text-sm outline-none focus:border-primary/30"
+            />
+            <input
+              value={nextAction}
+              onChange={(event) => setNextAction(event.target.value)}
+              placeholder="Follow-up / next action"
+              className="h-11 rounded-xl border border-border/50 bg-card/50 px-3 text-sm outline-none focus:border-primary/30"
+            />
+          </div>
+
+          <button
+            type="button"
+            disabled={working}
+            onClick={() => void saveAndCollapse()}
+            className="emery-press mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-40"
+          >
+            <CheckCircle2 className="size-3.5" /> Save visit note
+          </button>
+        </div>
+      ) : null}
     </article>
   );
 }
