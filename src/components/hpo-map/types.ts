@@ -9,16 +9,16 @@ export type HpoMapOffice = {
   longitude?: number | null | undefined;
   detail: string;
   kind: "account" | "prospect";
-  specialty?: string | null | undefined;
-  priority?: number | null | undefined;
-  relationshipStage?: string | null | undefined;
-  relationshipHealth?: string | null | undefined;
-  ownerName?: string | null | undefined;
-  lastTouchAt?: string | null | undefined;
-  nextAction?: string | null | undefined;
-  nextActionDueAt?: string | null | undefined;
-  fitStatus?: string | null | undefined;
-  verificationStatus?: string | null | undefined;
+  specialty?: string | null;
+  priority?: number | null;
+  relationshipStage?: string | null;
+  relationshipHealth?: string | null;
+  ownerName?: string | null;
+  lastTouchAt?: string | null;
+  nextAction?: string | null;
+  nextActionDueAt?: string | null;
+  fitStatus?: string | null;
+  verificationStatus?: string | null;
   mapped: boolean;
 };
 
