@@ -225,7 +225,9 @@ function Chat() {
     setLoadingOlder(true);
     setError(null);
     try {
-      const result = await loadPage({ data: { limit: CHAT_PAGE_SIZE, beforeCreatedAt: historyCursor } });
+      const result = await loadPage({
+        data: { limit: CHAT_PAGE_SIZE, beforeCreatedAt: historyCursor },
+      });
       const older = (result?.messages ?? []) as Message[];
       setMessages((current) => {
         const ids = new Set(current.map((message) => message.id));
@@ -357,9 +359,13 @@ function Chat() {
         setVoiceStudioState({ stage: "approved", voiceId: studio.voiceId });
       } else if (
         studio &&
-        ["designing", "candidate_blocked", "candidate_selected", "design_refined_needs_preview", "preview_failed"].includes(
-          String(studio.stage),
-        )
+        [
+          "designing",
+          "candidate_blocked",
+          "candidate_selected",
+          "design_refined_needs_preview",
+          "preview_failed",
+        ].includes(String(studio.stage))
       ) {
         setVoiceStudioState(null);
       }
@@ -405,7 +411,9 @@ function Chat() {
       });
       setSelectedFiles([]);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Couldn't send your message. Please try again.");
+      setError(
+        caught instanceof Error ? caught.message : "Couldn't send your message. Please try again.",
+      );
       try {
         await refreshLatest();
       } catch {
@@ -442,26 +450,43 @@ function Chat() {
                 disabled={loadingOlder}
                 className="emery-press flex min-h-11 items-center gap-2 rounded-full px-3 text-xs font-medium text-muted-foreground hover:bg-white/[0.03] hover:text-foreground disabled:opacity-50"
               >
-                {loadingOlder ? <Loader2 className="size-3.5 animate-spin" /> : <ChevronUp className="size-3.5" />}
+                {loadingOlder ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <ChevronUp className="size-3.5" />
+                )}
                 {loadingOlder ? "Loading earlier…" : "Earlier messages"}
               </button>
             </div>
           ) : null}
 
           {loading ? (
-            <div className="flex min-h-[48vh] flex-col items-center justify-center gap-3" role="status">
+            <div
+              className="flex min-h-[48vh] flex-col items-center justify-center gap-3"
+              role="status"
+            >
               <div className="flex size-12 items-center justify-center overflow-hidden rounded-lg bg-primary/[0.04]">
-                <img src={brainImage} alt="" className="emery-blue-brain size-11 object-cover opacity-90" />
+                <img
+                  src={brainImage}
+                  alt=""
+                  className="emery-blue-brain size-11 object-cover opacity-90"
+                />
               </div>
               <p className="text-xs text-muted-foreground">Opening your conversation…</p>
             </div>
           ) : messages.length === 0 ? (
             <div className="mx-auto flex min-h-[54vh] max-w-md flex-col items-center justify-center py-8 text-center">
               <div className="flex size-20 items-center justify-center overflow-hidden rounded-xl bg-primary/[0.04]">
-                <img src={brainImage} alt="Emery neural brain" className="emery-blue-brain size-16 object-cover" />
+                <img
+                  src={brainImage}
+                  alt="Emery neural brain"
+                  className="emery-blue-brain size-16 object-cover"
+                />
               </div>
               <h2 className="mt-5 text-2xl font-semibold">I’m here, Adam.</h2>
-              <p className="mt-1.5 max-w-xs text-sm leading-6 text-muted-foreground">What are we working through?</p>
+              <p className="mt-1.5 max-w-xs text-sm leading-6 text-muted-foreground">
+                What are we working through?
+              </p>
               <div className="mt-6 flex w-full flex-wrap justify-center gap-2">
                 {quickPrompts.map((prompt) => (
                   <button
@@ -482,21 +507,35 @@ function Chat() {
                   <div key={message.id} className="flex justify-end pl-8 sm:pl-20">
                     <div className="max-w-[92%] rounded-lg bg-primary px-3.5 py-2.5 text-[15px] leading-6 text-primary-foreground sm:max-w-[84%]">
                       {message.attachments.length ? (
-                        <div className={`grid gap-2 ${message.attachments.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+                        <div
+                          className={`grid gap-2 ${message.attachments.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}
+                        >
                           {message.attachments.map((attachment) => (
                             <AttachmentCard key={attachment.id} attachment={attachment} />
                           ))}
                         </div>
                       ) : null}
                       {message.text ? (
-                        <p className={message.attachments.length ? "mt-2.5 whitespace-pre-wrap" : "whitespace-pre-wrap"}>{message.text}</p>
+                        <p
+                          className={
+                            message.attachments.length
+                              ? "mt-2.5 whitespace-pre-wrap"
+                              : "whitespace-pre-wrap"
+                          }
+                        >
+                          {message.text}
+                        </p>
                       ) : null}
                     </div>
                   </div>
                 ) : (
                   <div key={message.id} className="flex items-start gap-2.5 pr-1 sm:gap-3 sm:pr-12">
                     <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary/[0.045]">
-                      <img src={brainImage} alt="" className="emery-blue-brain size-7 object-cover" />
+                      <img
+                        src={brainImage}
+                        alt=""
+                        className="emery-blue-brain size-7 object-cover"
+                      />
                     </div>
                     <div className="max-w-[calc(100%-2.6rem)] whitespace-pre-wrap pt-0.5 text-[15px] leading-7 text-foreground/96 sm:max-w-[88%]">
                       {cleanAssistantText(message.text)}
@@ -508,7 +547,11 @@ function Chat() {
           )}
 
           {pending ? (
-            <div className="mx-auto mt-6 flex max-w-2xl items-center gap-2.5" role="status" aria-live="polite">
+            <div
+              className="mx-auto mt-6 flex max-w-2xl items-center gap-2.5"
+              role="status"
+              aria-live="polite"
+            >
               <div className="flex size-8 items-center justify-center overflow-hidden rounded-lg bg-primary/[0.045]">
                 <img src={brainImage} alt="" className="emery-blue-brain size-7 object-cover" />
               </div>
@@ -524,7 +567,10 @@ function Chat() {
           ) : null}
 
           {error ? (
-            <p className="mx-auto mt-4 max-w-2xl rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-center text-sm text-destructive" role="alert">
+            <p
+              className="mx-auto mt-4 max-w-2xl rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-center text-sm text-destructive"
+              role="alert"
+            >
               {error}
             </p>
           ) : null}
@@ -555,9 +601,12 @@ function Chat() {
                       <Volume2 className="size-4" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold capitalize">{voiceStudioState.voiceId} preview</p>
+                      <p className="text-sm font-semibold capitalize">
+                        {voiceStudioState.voiceId} preview
+                      </p>
                       <p className="mt-0.5 text-[11px] leading-5 text-muted-foreground">
-                        AI-generated provider preview. Listen before approval; this is not Emery’s approved voice yet.
+                        AI-generated provider preview. Listen before approval; this is not Emery’s
+                        approved voice yet.
                       </p>
                     </div>
                     <button
@@ -598,7 +647,8 @@ function Chat() {
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold">Emery Voice is approved</p>
                     <p className="mt-0.5 text-[11px] leading-5 text-muted-foreground">
-                      {voiceStudioState.voiceId} is saved as the base voice. The microphone is unlocked for the first live conversation.
+                      {voiceStudioState.voiceId} is saved as the base voice. The microphone is
+                      unlocked for the first live conversation.
                     </p>
                   </div>
                   <button
@@ -620,7 +670,9 @@ function Chat() {
                 <SelectedFileCard
                   key={`${file.name}-${file.lastModified}-${file.size}`}
                   file={file}
-                  onRemove={() => setSelectedFiles((prev) => prev.filter((_, itemIndex) => itemIndex !== index))}
+                  onRemove={() =>
+                    setSelectedFiles((prev) => prev.filter((_, itemIndex) => itemIndex !== index))
+                  }
                 />
               ))}
             </div>
@@ -659,7 +711,8 @@ function Chat() {
               onKeyDown={(event) => {
                 if (event.nativeEvent.isComposing) return;
                 if (event.key === "Enter" && !event.shiftKey) {
-                  const finePointer = typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches;
+                  const finePointer =
+                    typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches;
                   if (finePointer) {
                     event.preventDefault();
                     void sendMessage(draft);
@@ -675,7 +728,7 @@ function Chat() {
             <button
               type="submit"
               aria-label="Send"
-               className="emery-press flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground disabled:opacity-30"
+              className="emery-press flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground disabled:opacity-30"
               disabled={(!draft.trim() && selectedFiles.length === 0) || pending}
             >
               <ArrowUp className="size-[18px]" strokeWidth={2.2} />

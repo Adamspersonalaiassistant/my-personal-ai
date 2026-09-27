@@ -135,7 +135,6 @@ export function AppShell({
 
   return (
     <div className="relative mx-auto grid h-[100dvh] w-full max-w-[1180px] grid-cols-1 overflow-hidden bg-background text-foreground md:my-4 md:h-[calc(100dvh-32px)] md:grid-cols-[220px_minmax(0,1fr)] md:rounded-xl md:border md:border-border/60 md:shadow-2xl">
-
       <aside className="relative z-20 hidden min-h-0 overflow-hidden border-r border-border/50 bg-sidebar md:flex md:flex-col">
         <div className="flex shrink-0 items-center gap-3 px-4 pb-5 pt-5">
           <Link
@@ -160,8 +159,8 @@ export function AppShell({
               onClick={() => {
                 if (to === "/chat") rememberEmeryHandoff();
               }}
-               className="emery-press flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-               activeProps={{ className: "bg-accent text-foreground [&_svg]:text-primary" }}
+              className="emery-press flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+              activeProps={{ className: "bg-accent text-foreground [&_svg]:text-primary" }}
             >
               <Icon className="size-[17px]" />
               <span>{label}</span>
@@ -181,7 +180,7 @@ export function AppShell({
       </aside>
 
       <div className="relative z-10 flex min-h-0 min-w-0 flex-col overflow-hidden">
-         <header className="z-40 flex min-h-[60px] shrink-0 items-center justify-between border-b border-border/45 bg-background/95 px-4 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-lg sm:px-5">
+        <header className="z-40 flex min-h-[60px] shrink-0 items-center justify-between border-b border-border/45 bg-background/95 px-4 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-lg sm:px-5">
           <div className="flex min-w-0 items-center gap-2.5">
             <Link
               to="/chat"
@@ -193,7 +192,9 @@ export function AppShell({
             </Link>
             <div className="min-w-0">
               <p className="truncate text-[15px] font-semibold">{onChat ? "Emery" : title}</p>
-               <p className="truncate text-xs text-muted-foreground">{onChat ? "Conversation" : "Emery"}</p>
+              <p className="truncate text-xs text-muted-foreground">
+                {onChat ? "Conversation" : "Emery"}
+              </p>
             </div>
           </div>
 
@@ -219,16 +220,17 @@ export function AppShell({
         </header>
 
         <main
-          className={`emery-route-enter relative min-h-0 flex-1 ${padded
-            ? "emery-scrollbar overflow-y-auto overscroll-contain px-4 py-4 [touch-action:pan-y] [-webkit-overflow-scrolling:touch] sm:px-5 md:px-7 md:py-6"
-            : "overflow-hidden"
+          className={`emery-route-enter relative min-h-0 flex-1 ${
+            padded
+              ? "emery-scrollbar overflow-y-auto overscroll-contain px-4 py-4 [touch-action:pan-y] [-webkit-overflow-scrolling:touch] sm:px-5 md:px-7 md:py-6"
+              : "overflow-hidden"
           }`}
         >
           {children}
         </main>
 
         <nav
-           className="z-40 grid shrink-0 grid-cols-5 border-t border-border/50 bg-background/95 px-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur-lg md:hidden"
+          className="z-40 grid shrink-0 grid-cols-5 border-t border-border/50 bg-background/95 px-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur-lg md:hidden"
           aria-label="Primary navigation"
         >
           {primaryNav.map(({ to, label, icon: Icon }) => (
@@ -238,24 +240,24 @@ export function AppShell({
               onClick={() => {
                 if (to === "/chat") rememberEmeryHandoff();
               }}
-               className="emery-press flex min-h-[58px] flex-col items-center justify-center gap-1 rounded-md px-1 text-[10px] font-medium text-muted-foreground"
-               activeProps={{ className: "text-primary font-semibold [&_svg]:stroke-[2.3]" }}
+              className="emery-press flex min-h-[58px] flex-col items-center justify-center gap-1 rounded-md px-1 text-[10px] font-medium text-muted-foreground"
+              activeProps={{ className: "text-primary font-semibold [&_svg]:stroke-[2.3]" }}
             >
               <Icon className="size-[19px]" />
               <span>{label}</span>
             </Link>
           ))}
-           <Button
-             variant="ghost"
+          <Button
+            variant="ghost"
             type="button"
             onClick={() => setMoreOpen(true)}
             aria-label="Open more navigation"
             aria-expanded={moreOpen}
-             className={`flex h-auto min-h-[58px] w-full flex-col items-center justify-center gap-1 rounded-md p-0 text-[10px] font-medium ${moreActive ? "text-primary" : "text-muted-foreground"}`}
+            className={`flex h-auto min-h-[58px] w-full flex-col items-center justify-center gap-1 rounded-md p-0 text-[10px] font-medium ${moreActive ? "text-primary" : "text-muted-foreground"}`}
           >
             <MoreHorizontal className="size-[20px]" />
             <span>More</span>
-           </Button>
+          </Button>
         </nav>
       </div>
 
@@ -275,7 +277,7 @@ export function AppShell({
             <div className="flex shrink-0 items-center justify-between px-1 py-2">
               <div>
                 <p className="text-sm font-semibold">More</p>
-             <p className="text-xs text-muted-foreground">Your workspaces and settings</p>
+                <p className="text-xs text-muted-foreground">Your workspaces and settings</p>
               </div>
               <button
                 type="button"

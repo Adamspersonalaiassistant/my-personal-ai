@@ -128,7 +128,12 @@ select:focus-visible {
 }
 
 .emery-text-gradient {
-  background: linear-gradient(135deg, oklch(0.99 0.007 245), oklch(0.8 0.12 235) 58%, oklch(0.72 0.18 255));
+  background: linear-gradient(
+    135deg,
+    oklch(0.99 0.007 245),
+    oklch(0.8 0.12 235) 58%,
+    oklch(0.72 0.18 255)
+  );
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
@@ -192,11 +197,13 @@ select:focus-visible {
   0%,
   100% {
     transform: scale(1);
-    filter: hue-rotate(95deg) saturate(1.42) brightness(1.05) contrast(1.06) drop-shadow(0 0 12px oklch(0.72 0.185 250 / 0.18));
+    filter: hue-rotate(95deg) saturate(1.42) brightness(1.05) contrast(1.06)
+      drop-shadow(0 0 12px oklch(0.72 0.185 250 / 0.18));
   }
   50% {
     transform: scale(1.012);
-    filter: hue-rotate(95deg) saturate(1.46) brightness(1.07) contrast(1.06) drop-shadow(0 0 20px oklch(0.72 0.185 250 / 0.26));
+    filter: hue-rotate(95deg) saturate(1.46) brightness(1.07) contrast(1.06)
+      drop-shadow(0 0 20px oklch(0.72 0.185 250 / 0.26));
   }
 }
 
