@@ -155,6 +155,54 @@ export type Database = {
           },
         ]
       }
+      app_notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          delivered_at: string | null
+          id: string
+          metadata: Json
+          read_at: string | null
+          scheduled_for: string
+          source_ref: string | null
+          source_type: string | null
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          delivered_at?: string | null
+          id?: string
+          metadata?: Json
+          read_at?: string | null
+          scheduled_for: string
+          source_ref?: string | null
+          source_type?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          delivered_at?: string | null
+          id?: string
+          metadata?: Json
+          read_at?: string | null
+          scheduled_for?: string
+          source_ref?: string | null
+          source_type?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       assistant_preferences: {
         Row: {
           category: string
@@ -201,6 +249,7 @@ export type Database = {
           created_at: string
           id: string
           role: string
+          source_metadata: Json
           user_id: string
         }
         Insert: {
@@ -209,6 +258,7 @@ export type Database = {
           created_at?: string
           id?: string
           role: string
+          source_metadata?: Json
           user_id: string
         }
         Update: {
@@ -217,6 +267,7 @@ export type Database = {
           created_at?: string
           id?: string
           role?: string
+          source_metadata?: Json
           user_id?: string
         }
         Relationships: [
@@ -501,6 +552,129 @@ export type Database = {
           },
         ]
       }
+      emery_owner_registry: {
+        Row: {
+          created_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      emery_routine_runs: {
+        Row: {
+          created_at: string
+          id: string
+          metadata: Json
+          routine_key: string
+          run_key: string
+          status: string
+          summary: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          metadata?: Json
+          routine_key: string
+          run_key: string
+          status?: string
+          summary?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          metadata?: Json
+          routine_key?: string
+          run_key?: string
+          status?: string
+          summary?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      emery_runtime_events: {
+        Row: {
+          action: string | null
+          channel: string
+          created_at: string
+          domain: string | null
+          duration_ms: number | null
+          event_type: string
+          id: string
+          metadata: Json
+          model: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          action?: string | null
+          channel: string
+          created_at?: string
+          domain?: string | null
+          duration_ms?: number | null
+          event_type: string
+          id?: string
+          metadata?: Json
+          model?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          action?: string | null
+          channel?: string
+          created_at?: string
+          domain?: string | null
+          duration_ms?: number | null
+          event_type?: string
+          id?: string
+          metadata?: Json
+          model?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      emery_security_events: {
+        Row: {
+          channel: string
+          created_at: string
+          event_type: string
+          id: string
+          metadata: Json
+          request_fingerprint: string | null
+          severity: string
+          user_id: string | null
+        }
+        Insert: {
+          channel?: string
+          created_at?: string
+          event_type: string
+          id?: string
+          metadata?: Json
+          request_fingerprint?: string | null
+          severity?: string
+          user_id?: string | null
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          event_type?: string
+          id?: string
+          metadata?: Json
+          request_fingerprint?: string | null
+          severity?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       emery_self_evaluations: {
         Row: {
           created_at: string
@@ -537,11 +711,621 @@ export type Database = {
         }
         Relationships: []
       }
+      hpo_accounts: {
+        Row: {
+          account_type: string | null
+          address: string | null
+          blockers: string | null
+          city: string | null
+          created_at: string
+          dedupe_key: string | null
+          id: string
+          last_touch_at: string | null
+          metadata: Json
+          name: string
+          next_action: string | null
+          next_action_due_at: string | null
+          next_interaction_at: string | null
+          notes: string | null
+          opportunity: string | null
+          owner_name: string | null
+          priority: number
+          relationship_health: string | null
+          relationship_stage: string
+          source_origin: string | null
+          source_ref: string | null
+          specialty: string | null
+          status: string
+          tags: string[]
+          territory: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_type?: string | null
+          address?: string | null
+          blockers?: string | null
+          city?: string | null
+          created_at?: string
+          dedupe_key?: string | null
+          id?: string
+          last_touch_at?: string | null
+          metadata?: Json
+          name: string
+          next_action?: string | null
+          next_action_due_at?: string | null
+          next_interaction_at?: string | null
+          notes?: string | null
+          opportunity?: string | null
+          owner_name?: string | null
+          priority?: number
+          relationship_health?: string | null
+          relationship_stage?: string
+          source_origin?: string | null
+          source_ref?: string | null
+          specialty?: string | null
+          status?: string
+          tags?: string[]
+          territory?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_type?: string | null
+          address?: string | null
+          blockers?: string | null
+          city?: string | null
+          created_at?: string
+          dedupe_key?: string | null
+          id?: string
+          last_touch_at?: string | null
+          metadata?: Json
+          name?: string
+          next_action?: string | null
+          next_action_due_at?: string | null
+          next_interaction_at?: string | null
+          notes?: string | null
+          opportunity?: string | null
+          owner_name?: string | null
+          priority?: number
+          relationship_health?: string | null
+          relationship_stage?: string
+          source_origin?: string | null
+          source_ref?: string | null
+          specialty?: string | null
+          status?: string
+          tags?: string[]
+          territory?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      hpo_contacts: {
+        Row: {
+          account_id: string
+          created_at: string
+          dedupe_key: string | null
+          email: string | null
+          id: string
+          metadata: Json
+          name: string
+          phone: string | null
+          preferred_contact_method: string | null
+          relationship_notes: string | null
+          role_title: string | null
+          source_origin: string | null
+          source_ref: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          dedupe_key?: string | null
+          email?: string | null
+          id?: string
+          metadata?: Json
+          name: string
+          phone?: string | null
+          preferred_contact_method?: string | null
+          relationship_notes?: string | null
+          role_title?: string | null
+          source_origin?: string | null
+          source_ref?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          dedupe_key?: string | null
+          email?: string | null
+          id?: string
+          metadata?: Json
+          name?: string
+          phone?: string | null
+          preferred_contact_method?: string | null
+          relationship_notes?: string | null
+          role_title?: string | null
+          source_origin?: string | null
+          source_ref?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hpo_contacts_user_account_fkey"
+            columns: ["user_id", "account_id"]
+            isOneToOne: false
+            referencedRelation: "hpo_accounts"
+            referencedColumns: ["user_id", "id"]
+          },
+        ]
+      }
+      hpo_data_imports: {
+        Row: {
+          created_at: string
+          id: string
+          imported_count: number | null
+          metadata: Json
+          notes: string | null
+          rejected_count: number | null
+          row_count: number | null
+          source_name: string | null
+          source_type: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          imported_count?: number | null
+          metadata?: Json
+          notes?: string | null
+          rejected_count?: number | null
+          row_count?: number | null
+          source_name?: string | null
+          source_type: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          imported_count?: number | null
+          metadata?: Json
+          notes?: string | null
+          rejected_count?: number | null
+          row_count?: number | null
+          source_name?: string | null
+          source_type?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      hpo_import_rows: {
+        Row: {
+          created_at: string
+          dedupe_key: string | null
+          entity_type: string
+          id: string
+          import_id: string
+          issue: string | null
+          normalized_data: Json
+          raw_data: Json
+          row_number: number
+          status: string
+          target_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          dedupe_key?: string | null
+          entity_type: string
+          id?: string
+          import_id: string
+          issue?: string | null
+          normalized_data?: Json
+          raw_data?: Json
+          row_number: number
+          status?: string
+          target_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          dedupe_key?: string | null
+          entity_type?: string
+          id?: string
+          import_id?: string
+          issue?: string | null
+          normalized_data?: Json
+          raw_data?: Json
+          row_number?: number
+          status?: string
+          target_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hpo_import_rows_user_id_import_id_fkey"
+            columns: ["user_id", "import_id"]
+            isOneToOne: false
+            referencedRelation: "hpo_data_imports"
+            referencedColumns: ["user_id", "id"]
+          },
+        ]
+      }
+      hpo_interactions: {
+        Row: {
+          account_id: string
+          contact_id: string | null
+          created_at: string
+          id: string
+          interaction_type: string
+          metadata: Json
+          next_action: string | null
+          next_action_due_at: string | null
+          occurred_at: string
+          outcome: string | null
+          relationship_signal: string | null
+          source_ref: string | null
+          source_type: string
+          summary: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          contact_id?: string | null
+          created_at?: string
+          id?: string
+          interaction_type?: string
+          metadata?: Json
+          next_action?: string | null
+          next_action_due_at?: string | null
+          occurred_at?: string
+          outcome?: string | null
+          relationship_signal?: string | null
+          source_ref?: string | null
+          source_type?: string
+          summary: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          contact_id?: string | null
+          created_at?: string
+          id?: string
+          interaction_type?: string
+          metadata?: Json
+          next_action?: string | null
+          next_action_due_at?: string | null
+          occurred_at?: string
+          outcome?: string | null
+          relationship_signal?: string | null
+          source_ref?: string | null
+          source_type?: string
+          summary?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hpo_interactions_user_account_fkey"
+            columns: ["user_id", "account_id"]
+            isOneToOne: false
+            referencedRelation: "hpo_accounts"
+            referencedColumns: ["user_id", "id"]
+          },
+          {
+            foreignKeyName: "hpo_interactions_user_contact_fkey"
+            columns: ["user_id", "contact_id"]
+            isOneToOne: false
+            referencedRelation: "hpo_contacts"
+            referencedColumns: ["user_id", "id"]
+          },
+        ]
+      }
+      hpo_prospects: {
+        Row: {
+          address: string | null
+          city: string | null
+          created_at: string
+          disposition_reason: string | null
+          fit_status: string
+          id: string
+          metadata: Json
+          name: string
+          normalized_name: string
+          notes: string | null
+          phone: string | null
+          promoted_account_id: string | null
+          promoted_at: string | null
+          prospect_type: string | null
+          provenance: Json
+          source_ref: string | null
+          source_type: string
+          specialty: string | null
+          territory: string | null
+          updated_at: string
+          user_id: string
+          verification_status: string
+          website: string | null
+        }
+        Insert: {
+          address?: string | null
+          city?: string | null
+          created_at?: string
+          disposition_reason?: string | null
+          fit_status?: string
+          id?: string
+          metadata?: Json
+          name: string
+          normalized_name: string
+          notes?: string | null
+          phone?: string | null
+          promoted_account_id?: string | null
+          promoted_at?: string | null
+          prospect_type?: string | null
+          provenance?: Json
+          source_ref?: string | null
+          source_type?: string
+          specialty?: string | null
+          territory?: string | null
+          updated_at?: string
+          user_id: string
+          verification_status?: string
+          website?: string | null
+        }
+        Update: {
+          address?: string | null
+          city?: string | null
+          created_at?: string
+          disposition_reason?: string | null
+          fit_status?: string
+          id?: string
+          metadata?: Json
+          name?: string
+          normalized_name?: string
+          notes?: string | null
+          phone?: string | null
+          promoted_account_id?: string | null
+          promoted_at?: string | null
+          prospect_type?: string | null
+          provenance?: Json
+          source_ref?: string | null
+          source_type?: string
+          specialty?: string | null
+          territory?: string | null
+          updated_at?: string
+          user_id?: string
+          verification_status?: string
+          website?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hpo_prospects_promoted_account_id_fkey"
+            columns: ["promoted_account_id"]
+            isOneToOne: false
+            referencedRelation: "hpo_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hpo_route_plans: {
+        Row: {
+          area: string | null
+          created_at: string
+          end_window: string | null
+          id: string
+          metadata: Json
+          notes: string | null
+          route_date: string
+          source_ref: string | null
+          source_type: string
+          start_window: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          area?: string | null
+          created_at?: string
+          end_window?: string | null
+          id?: string
+          metadata?: Json
+          notes?: string | null
+          route_date: string
+          source_ref?: string | null
+          source_type?: string
+          start_window?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          area?: string | null
+          created_at?: string
+          end_window?: string | null
+          id?: string
+          metadata?: Json
+          notes?: string | null
+          route_date?: string
+          source_ref?: string | null
+          source_type?: string
+          start_window?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      hpo_route_stops: {
+        Row: {
+          account_id: string | null
+          created_at: string
+          id: string
+          metadata: Json
+          next_action: string | null
+          next_action_due_at: string | null
+          notes: string | null
+          office_name: string | null
+          planned_at: string | null
+          prospect_id: string | null
+          route_id: string
+          status: string
+          stop_order: number
+          updated_at: string
+          user_id: string
+          visit_outcome: string | null
+          visit_priority: string | null
+          visit_summary: string | null
+          visited_at: string | null
+        }
+        Insert: {
+          account_id?: string | null
+          created_at?: string
+          id?: string
+          metadata?: Json
+          next_action?: string | null
+          next_action_due_at?: string | null
+          notes?: string | null
+          office_name?: string | null
+          planned_at?: string | null
+          prospect_id?: string | null
+          route_id: string
+          status?: string
+          stop_order: number
+          updated_at?: string
+          user_id: string
+          visit_outcome?: string | null
+          visit_priority?: string | null
+          visit_summary?: string | null
+          visited_at?: string | null
+        }
+        Update: {
+          account_id?: string | null
+          created_at?: string
+          id?: string
+          metadata?: Json
+          next_action?: string | null
+          next_action_due_at?: string | null
+          notes?: string | null
+          office_name?: string | null
+          planned_at?: string | null
+          prospect_id?: string | null
+          route_id?: string
+          status?: string
+          stop_order?: number
+          updated_at?: string
+          user_id?: string
+          visit_outcome?: string | null
+          visit_priority?: string | null
+          visit_summary?: string | null
+          visited_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hpo_route_stops_prospect_id_fkey"
+            columns: ["prospect_id"]
+            isOneToOne: false
+            referencedRelation: "hpo_prospects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hpo_route_stops_user_account_fkey"
+            columns: ["user_id", "account_id"]
+            isOneToOne: false
+            referencedRelation: "hpo_accounts"
+            referencedColumns: ["user_id", "id"]
+          },
+          {
+            foreignKeyName: "hpo_route_stops_user_route_fkey"
+            columns: ["user_id", "route_id"]
+            isOneToOne: false
+            referencedRelation: "hpo_route_plans"
+            referencedColumns: ["user_id", "id"]
+          },
+        ]
+      }
+      hpo_sales_metrics: {
+        Row: {
+          account_id: string | null
+          blocked_exception_count: number
+          created_at: string
+          entered_care_count: number
+          id: string
+          metadata: Json
+          notes: string | null
+          period_end: string
+          period_start: string
+          progressing_count: number
+          referral_count: number
+          relationship_impact_count: number
+          source_ref: string | null
+          source_type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          blocked_exception_count?: number
+          created_at?: string
+          entered_care_count?: number
+          id?: string
+          metadata?: Json
+          notes?: string | null
+          period_end: string
+          period_start: string
+          progressing_count?: number
+          referral_count?: number
+          relationship_impact_count?: number
+          source_ref?: string | null
+          source_type?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          blocked_exception_count?: number
+          created_at?: string
+          entered_care_count?: number
+          id?: string
+          metadata?: Json
+          notes?: string | null
+          period_end?: string
+          period_start?: string
+          progressing_count?: number
+          referral_count?: number
+          relationship_impact_count?: number
+          source_ref?: string | null
+          source_type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hpo_sales_metrics_user_account_fkey"
+            columns: ["user_id", "account_id"]
+            isOneToOne: false
+            referencedRelation: "hpo_accounts"
+            referencedColumns: ["user_id", "id"]
+          },
+        ]
+      }
       meetings: {
         Row: {
           action_items: Json
           created_at: string
           decisions: Json
+          end_at: string | null
           id: string
           meeting_at: string | null
           metadata: Json
@@ -557,6 +1341,7 @@ export type Database = {
           action_items?: Json
           created_at?: string
           decisions?: Json
+          end_at?: string | null
           id?: string
           meeting_at?: string | null
           metadata?: Json
@@ -572,6 +1357,7 @@ export type Database = {
           action_items?: Json
           created_at?: string
           decisions?: Json
+          end_at?: string | null
           id?: string
           meeting_at?: string | null
           metadata?: Json
@@ -819,6 +1605,39 @@ export type Database = {
         }
         Relationships: []
       }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          p256dh: string
+          updated_at: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          p256dh: string
+          updated_at?: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          p256dh?: string
+          updated_at?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       tasks: {
         Row: {
           completed_at: string | null
@@ -888,12 +1707,347 @@ export type Database = {
           },
         ]
       }
+      voice_profile_versions: {
+        Row: {
+          change_request: string | null
+          change_source: string
+          created_at: string
+          id: string
+          snapshot: Json
+          user_id: string
+          version: number
+          voice_profile_id: string
+        }
+        Insert: {
+          change_request?: string | null
+          change_source?: string
+          created_at?: string
+          id?: string
+          snapshot: Json
+          user_id: string
+          version: number
+          voice_profile_id: string
+        }
+        Update: {
+          change_request?: string | null
+          change_source?: string
+          created_at?: string
+          id?: string
+          snapshot?: Json
+          user_id?: string
+          version?: number
+          voice_profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voice_profile_versions_voice_profile_id_fkey"
+            columns: ["voice_profile_id"]
+            isOneToOne: false
+            referencedRelation: "voice_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      voice_profiles: {
+        Row: {
+          approved_at: string | null
+          base_voice_id: string | null
+          contextual_preferences: Json
+          created_at: string
+          delivery_preferences: Json
+          id: string
+          pronunciation_preferences: Json
+          provider_capabilities: Json
+          stable_identity: Json
+          updated_at: string
+          user_id: string
+          version: number
+        }
+        Insert: {
+          approved_at?: string | null
+          base_voice_id?: string | null
+          contextual_preferences?: Json
+          created_at?: string
+          delivery_preferences?: Json
+          id?: string
+          pronunciation_preferences?: Json
+          provider_capabilities?: Json
+          stable_identity?: Json
+          updated_at?: string
+          user_id: string
+          version?: number
+        }
+        Update: {
+          approved_at?: string | null
+          base_voice_id?: string | null
+          contextual_preferences?: Json
+          created_at?: string
+          delivery_preferences?: Json
+          id?: string
+          pronunciation_preferences?: Json
+          provider_capabilities?: Json
+          stable_identity?: Json
+          updated_at?: string
+          user_id?: string
+          version?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      emery_action_authorized: { Args: { p_user_id: string }; Returns: boolean }
+      emery_action_complete_task: {
+        Args: { p_task_id: string; p_user_id: string }
+        Returns: {
+          completed_at: string | null
+          created_at: string
+          details: string | null
+          due_at: string | null
+          id: string
+          metadata: Json
+          person_id: string | null
+          priority: number
+          project_id: string | null
+          source_ref: string | null
+          source_type: string | null
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tasks"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      emery_action_create_event: {
+        Args: {
+          p_end_at?: string
+          p_event_type?: string
+          p_participants?: Json
+          p_source?: string
+          p_start_at: string
+          p_title: string
+          p_user_id: string
+        }
+        Returns: {
+          action_items: Json
+          created_at: string
+          decisions: Json
+          end_at: string | null
+          id: string
+          meeting_at: string | null
+          metadata: Json
+          participants: Json
+          plaud_recording_id: string | null
+          summary: string | null
+          title: string | null
+          transcript: string | null
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "meetings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      emery_action_create_task: {
+        Args: {
+          p_details?: string
+          p_due_at?: string
+          p_priority?: number
+          p_source?: string
+          p_title: string
+          p_user_id: string
+        }
+        Returns: {
+          completed_at: string | null
+          created_at: string
+          details: string | null
+          due_at: string | null
+          id: string
+          metadata: Json
+          person_id: string | null
+          priority: number
+          project_id: string | null
+          source_ref: string | null
+          source_type: string | null
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tasks"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      emery_action_reschedule_event: {
+        Args: {
+          p_end_at?: string
+          p_event_id: string
+          p_start_at: string
+          p_user_id: string
+        }
+        Returns: {
+          action_items: Json
+          created_at: string
+          decisions: Json
+          end_at: string | null
+          id: string
+          meeting_at: string | null
+          metadata: Json
+          participants: Json
+          plaud_recording_id: string | null
+          summary: string | null
+          title: string | null
+          transcript: string | null
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "meetings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      emery_action_schedule_task: {
+        Args: { p_due_at: string; p_task_id: string; p_user_id: string }
+        Returns: {
+          completed_at: string | null
+          created_at: string
+          details: string | null
+          due_at: string | null
+          id: string
+          metadata: Json
+          person_id: string | null
+          priority: number
+          project_id: string | null
+          source_ref: string | null
+          source_type: string | null
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tasks"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      emery_hpo_log_touch: {
+        Args: {
+          p_account_id: string
+          p_interaction_type: string
+          p_next_action?: string
+          p_next_action_due_at?: string
+          p_outcome?: string
+          p_relationship_signal?: string
+          p_source?: string
+          p_summary: string
+          p_user_id: string
+        }
+        Returns: {
+          account_id: string
+          contact_id: string | null
+          created_at: string
+          id: string
+          interaction_type: string
+          metadata: Json
+          next_action: string | null
+          next_action_due_at: string | null
+          occurred_at: string
+          outcome: string | null
+          relationship_signal: string | null
+          source_ref: string | null
+          source_type: string
+          summary: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "hpo_interactions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      emery_hpo_set_followup: {
+        Args: {
+          p_account_id: string
+          p_due_at?: string
+          p_next_action: string
+          p_source?: string
+          p_user_id: string
+        }
+        Returns: {
+          account_type: string | null
+          address: string | null
+          blockers: string | null
+          city: string | null
+          created_at: string
+          dedupe_key: string | null
+          id: string
+          last_touch_at: string | null
+          metadata: Json
+          name: string
+          next_action: string | null
+          next_action_due_at: string | null
+          next_interaction_at: string | null
+          notes: string | null
+          opportunity: string | null
+          owner_name: string | null
+          priority: number
+          relationship_health: string | null
+          relationship_stage: string
+          source_origin: string | null
+          source_ref: string | null
+          specialty: string | null
+          status: string
+          tags: string[]
+          territory: string | null
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "hpo_accounts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      get_hpo_route_candidates: {
+        Args: { p_limit?: number; p_territory?: string; p_user_id: string }
+        Returns: {
+          address: string
+          city: string
+          entity_id: string
+          entity_type: string
+          name: string
+          priority_score: number
+          reason: string
+          territory: string
+        }[]
+      }
+      get_internal_secret: { Args: { p_name: string }; Returns: string }
+      is_emery_owner: { Args: never; Returns: boolean }
+      run_emery_proactive_checks: { Args: never; Returns: Json }
+      run_emery_safe_autotune: { Args: never; Returns: Json }
+      validate_internal_cron_token: {
+        Args: { p_name: string; p_token: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never

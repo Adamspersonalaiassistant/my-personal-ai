@@ -12,12 +12,14 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedAgentsRouteImport } from './routes/_authenticated/agents'
+import { Route as AuthenticatedCalendarRouteImport } from './routes/_authenticated/calendar'
 import { Route as AuthenticatedCaptureRouteImport } from './routes/_authenticated/capture'
 import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/chat'
 import { Route as AuthenticatedHpoRouteImport } from './routes/_authenticated/hpo'
 import { Route as AuthenticatedIphoneRouteImport } from './routes/_authenticated/iphone'
 import { Route as AuthenticatedMeetingsRouteImport } from './routes/_authenticated/meetings'
 import { Route as AuthenticatedMemoriesRouteImport } from './routes/_authenticated/memories'
+import { Route as AuthenticatedPersonalRouteImport } from './routes/_authenticated/personal'
 import { Route as AuthenticatedProjectsRouteImport } from './routes/_authenticated/projects'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedTasksRouteImport } from './routes/_authenticated/tasks'
@@ -35,6 +37,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const AuthenticatedAgentsRoute = AuthenticatedAgentsRouteImport.update({
   id: '/agents',
   path: '/agents',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedCalendarRoute = AuthenticatedCalendarRouteImport.update({
+  id: '/calendar',
+  path: '/calendar',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedCaptureRoute = AuthenticatedCaptureRouteImport.update({
@@ -67,6 +74,11 @@ const AuthenticatedMemoriesRoute = AuthenticatedMemoriesRouteImport.update({
   path: '/memories',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedPersonalRoute = AuthenticatedPersonalRouteImport.update({
+  id: '/personal',
+  path: '/personal',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedProjectsRoute = AuthenticatedProjectsRouteImport.update({
   id: '/projects',
   path: '/projects',
@@ -92,13 +104,14 @@ const AuthenticatedAgentsAgentIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agents': typeof AuthenticatedAgentsRoute
+  '/calendar': typeof AuthenticatedCalendarRoute
   '/capture': typeof AuthenticatedCaptureRoute
   '/chat': typeof AuthenticatedChatRoute
   '/hpo': typeof AuthenticatedHpoRoute
   '/iphone': typeof AuthenticatedIphoneRoute
-  '/iphone': typeof AuthenticatedIphoneRoute
   '/meetings': typeof AuthenticatedMeetingsRoute
   '/memories': typeof AuthenticatedMemoriesRoute
+  '/personal': typeof AuthenticatedPersonalRoute
   '/projects': typeof AuthenticatedProjectsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/tasks': typeof AuthenticatedTasksRoute
@@ -107,11 +120,14 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agents': typeof AuthenticatedAgentsRoute
+  '/calendar': typeof AuthenticatedCalendarRoute
   '/capture': typeof AuthenticatedCaptureRoute
   '/chat': typeof AuthenticatedChatRoute
   '/hpo': typeof AuthenticatedHpoRoute
+  '/iphone': typeof AuthenticatedIphoneRoute
   '/meetings': typeof AuthenticatedMeetingsRoute
   '/memories': typeof AuthenticatedMemoriesRoute
+  '/personal': typeof AuthenticatedPersonalRoute
   '/projects': typeof AuthenticatedProjectsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/tasks': typeof AuthenticatedTasksRoute
@@ -122,12 +138,14 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/_authenticated/agents': typeof AuthenticatedAgentsRoute
+  '/_authenticated/calendar': typeof AuthenticatedCalendarRoute
   '/_authenticated/capture': typeof AuthenticatedCaptureRoute
   '/_authenticated/chat': typeof AuthenticatedChatRoute
   '/_authenticated/hpo': typeof AuthenticatedHpoRoute
   '/_authenticated/iphone': typeof AuthenticatedIphoneRoute
   '/_authenticated/meetings': typeof AuthenticatedMeetingsRoute
   '/_authenticated/memories': typeof AuthenticatedMemoriesRoute
+  '/_authenticated/personal': typeof AuthenticatedPersonalRoute
   '/_authenticated/projects': typeof AuthenticatedProjectsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/tasks': typeof AuthenticatedTasksRoute
@@ -138,13 +156,14 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/agents'
+    | '/calendar'
     | '/capture'
     | '/chat'
     | '/hpo'
     | '/iphone'
-    | '/iphone'
     | '/meetings'
     | '/memories'
+    | '/personal'
     | '/projects'
     | '/settings'
     | '/tasks'
@@ -153,11 +172,14 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/agents'
+    | '/calendar'
     | '/capture'
     | '/chat'
     | '/hpo'
+    | '/iphone'
     | '/meetings'
     | '/memories'
+    | '/personal'
     | '/projects'
     | '/settings'
     | '/tasks'
@@ -167,12 +189,14 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/_authenticated/agents'
+    | '/_authenticated/calendar'
     | '/_authenticated/capture'
     | '/_authenticated/chat'
     | '/_authenticated/hpo'
     | '/_authenticated/iphone'
     | '/_authenticated/meetings'
     | '/_authenticated/memories'
+    | '/_authenticated/personal'
     | '/_authenticated/projects'
     | '/_authenticated/settings'
     | '/_authenticated/tasks'
@@ -205,6 +229,13 @@ declare module '@tanstack/react-router' {
       path: '/agents'
       fullPath: '/agents'
       preLoaderRoute: typeof AuthenticatedAgentsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/calendar': {
+      id: '/_authenticated/calendar'
+      path: '/calendar'
+      fullPath: '/calendar'
+      preLoaderRoute: typeof AuthenticatedCalendarRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/capture': {
@@ -249,6 +280,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedMemoriesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/personal': {
+      id: '/_authenticated/personal'
+      path: '/personal'
+      fullPath: '/personal'
+      preLoaderRoute: typeof AuthenticatedPersonalRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/projects': {
       id: '/_authenticated/projects'
       path: '/projects'
@@ -282,12 +320,14 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAgentsRoute: typeof AuthenticatedAgentsRoute
+  AuthenticatedCalendarRoute: typeof AuthenticatedCalendarRoute
   AuthenticatedCaptureRoute: typeof AuthenticatedCaptureRoute
   AuthenticatedChatRoute: typeof AuthenticatedChatRoute
   AuthenticatedHpoRoute: typeof AuthenticatedHpoRoute
   AuthenticatedIphoneRoute: typeof AuthenticatedIphoneRoute
   AuthenticatedMeetingsRoute: typeof AuthenticatedMeetingsRoute
   AuthenticatedMemoriesRoute: typeof AuthenticatedMemoriesRoute
+  AuthenticatedPersonalRoute: typeof AuthenticatedPersonalRoute
   AuthenticatedProjectsRoute: typeof AuthenticatedProjectsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedTasksRoute: typeof AuthenticatedTasksRoute
@@ -296,12 +336,14 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAgentsRoute: AuthenticatedAgentsRoute,
+  AuthenticatedCalendarRoute: AuthenticatedCalendarRoute,
   AuthenticatedCaptureRoute: AuthenticatedCaptureRoute,
   AuthenticatedChatRoute: AuthenticatedChatRoute,
   AuthenticatedHpoRoute: AuthenticatedHpoRoute,
   AuthenticatedIphoneRoute: AuthenticatedIphoneRoute,
   AuthenticatedMeetingsRoute: AuthenticatedMeetingsRoute,
   AuthenticatedMemoriesRoute: AuthenticatedMemoriesRoute,
+  AuthenticatedPersonalRoute: AuthenticatedPersonalRoute,
   AuthenticatedProjectsRoute: AuthenticatedProjectsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedTasksRoute: AuthenticatedTasksRoute,
