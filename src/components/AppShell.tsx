@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import brainImage from "@/assets/neural-brain.png";
+import { Button } from "@/components/ui/button";
 import {
   emeryReturnLabel,
   isEmeryReturnPath,
@@ -133,10 +134,9 @@ export function AppShell({
   }
 
   return (
-    <div className="relative mx-auto grid h-[100dvh] w-full max-w-[1180px] grid-cols-1 overflow-hidden bg-background/84 text-foreground md:my-[18px] md:h-[calc(100dvh-36px)] md:grid-cols-[220px_minmax(0,1fr)] md:rounded-[1.45rem] md:border md:border-border/45 md:shadow-[0_30px_90px_rgba(0,0,0,0.42)]">
-      <div aria-hidden className="emery-grid pointer-events-none absolute inset-0 opacity-20" />
+    <div className="relative mx-auto grid h-[100dvh] w-full max-w-[1180px] grid-cols-1 overflow-hidden bg-background text-foreground md:my-4 md:h-[calc(100dvh-32px)] md:grid-cols-[220px_minmax(0,1fr)] md:rounded-xl md:border md:border-border/60 md:shadow-2xl">
 
-      <aside className="relative z-20 hidden min-h-0 overflow-hidden border-r border-border/40 bg-[oklch(0.105_0.03_255/0.82)] md:flex md:flex-col">
+      <aside className="relative z-20 hidden min-h-0 overflow-hidden border-r border-border/50 bg-sidebar md:flex md:flex-col">
         <div className="flex shrink-0 items-center gap-3 px-4 pb-5 pt-5">
           <Link
             to="/chat"
@@ -148,7 +148,7 @@ export function AppShell({
           </Link>
           <div>
             <p className="text-sm font-semibold">Emery</p>
-            <p className="text-[10px] text-muted-foreground">Personal intelligence</p>
+            <p className="text-xs text-muted-foreground">Personal AI</p>
           </div>
         </div>
 
@@ -160,8 +160,8 @@ export function AppShell({
               onClick={() => {
                 if (to === "/chat") rememberEmeryHandoff();
               }}
-              className="emery-press flex min-h-11 items-center gap-3 rounded-xl px-3 text-[13px] font-medium text-muted-foreground hover:bg-white/[0.035] hover:text-foreground"
-              activeProps={{ className: "bg-primary/[0.09] text-foreground" }}
+               className="emery-press flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+               activeProps={{ className: "bg-accent text-foreground [&_svg]:text-primary" }}
             >
               <Icon className="size-[17px]" />
               <span>{label}</span>
@@ -181,7 +181,7 @@ export function AppShell({
       </aside>
 
       <div className="relative z-10 flex min-h-0 min-w-0 flex-col overflow-hidden">
-        <header className="z-40 flex min-h-[58px] shrink-0 items-center justify-between border-b border-border/35 bg-background/92 px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-2xl">
+         <header className="z-40 flex min-h-[60px] shrink-0 items-center justify-between border-b border-border/45 bg-background/95 px-4 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-lg sm:px-5">
           <div className="flex min-w-0 items-center gap-2.5">
             <Link
               to="/chat"
@@ -193,9 +193,7 @@ export function AppShell({
             </Link>
             <div className="min-w-0">
               <p className="truncate text-[15px] font-semibold">{onChat ? "Emery" : title}</p>
-              <p className="truncate text-[10px] text-muted-foreground">
-                {onChat ? "Your continuous conversation" : "Same Emery · one OS"}
-              </p>
+               <p className="truncate text-xs text-muted-foreground">{onChat ? "Conversation" : "Emery"}</p>
             </div>
           </div>
 
@@ -230,7 +228,7 @@ export function AppShell({
         </main>
 
         <nav
-          className="z-40 grid shrink-0 grid-cols-5 border-t border-border/35 bg-background/96 px-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur-2xl md:hidden"
+           className="z-40 grid shrink-0 grid-cols-5 border-t border-border/50 bg-background/95 px-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur-lg md:hidden"
           aria-label="Primary navigation"
         >
           {primaryNav.map(({ to, label, icon: Icon }) => (
@@ -240,23 +238,24 @@ export function AppShell({
               onClick={() => {
                 if (to === "/chat") rememberEmeryHandoff();
               }}
-              className="emery-press flex min-h-[56px] flex-col items-center justify-center gap-1 rounded-xl px-1 text-[9px] font-semibold text-muted-foreground"
-              activeProps={{ className: "text-primary" }}
+               className="emery-press flex min-h-[58px] flex-col items-center justify-center gap-1 rounded-md px-1 text-[10px] font-medium text-muted-foreground"
+               activeProps={{ className: "text-primary font-semibold [&_svg]:stroke-[2.3]" }}
             >
               <Icon className="size-[19px]" />
               <span>{label}</span>
             </Link>
           ))}
-          <button
+           <Button
+             variant="ghost"
             type="button"
             onClick={() => setMoreOpen(true)}
             aria-label="Open more navigation"
             aria-expanded={moreOpen}
-            className={`flex min-h-[56px] flex-col items-center justify-center gap-1 rounded-xl text-[9px] font-semibold ${moreActive ? "text-primary" : "text-muted-foreground"}`}
+             className={`flex h-auto min-h-[58px] w-full flex-col items-center justify-center gap-1 rounded-md p-0 text-[10px] font-medium ${moreActive ? "text-primary" : "text-muted-foreground"}`}
           >
             <MoreHorizontal className="size-[20px]" />
             <span>More</span>
-          </button>
+           </Button>
         </nav>
       </div>
 
@@ -276,7 +275,7 @@ export function AppShell({
             <div className="flex shrink-0 items-center justify-between px-1 py-2">
               <div>
                 <p className="text-sm font-semibold">More</p>
-                <p className="text-[11px] text-muted-foreground">Everything else Emery manages.</p>
+             <p className="text-xs text-muted-foreground">Your workspaces and settings</p>
               </div>
               <button
                 type="button"
