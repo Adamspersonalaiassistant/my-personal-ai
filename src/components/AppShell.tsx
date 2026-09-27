@@ -159,8 +159,8 @@ export function AppShell({
               onClick={() => {
                 if (to === "/chat") rememberEmeryHandoff();
               }}
-              className="emery-press flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-              activeProps={{ className: "bg-accent text-foreground [&_svg]:text-primary" }}
+              className="emery-press flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+              activeProps={{ className: "bg-primary/[0.08] text-primary [&_svg]:stroke-[2.2]" }}
             >
               <Icon className="size-[17px]" />
               <span>{label}</span>
@@ -171,7 +171,8 @@ export function AppShell({
         <div className="shrink-0 border-t border-border/35 p-2">
           <Link
             to="/settings"
-            className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-[13px] text-muted-foreground hover:bg-white/[0.03] hover:text-foreground"
+            className="flex min-h-11 items-center gap-3 rounded-md px-3 text-[13px] text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+            activeProps={{ className: "bg-primary/[0.08] text-primary" }}
           >
             <SettingsIcon className="size-[17px]" />
             Settings
@@ -191,10 +192,8 @@ export function AppShell({
               <img src={brainImage} alt="" className="emery-blue-brain size-9 object-cover" />
             </Link>
             <div className="min-w-0">
-              <p className="truncate text-[15px] font-semibold">{onChat ? "Emery" : title}</p>
-              <p className="truncate text-xs text-muted-foreground">
-                {onChat ? "Conversation" : "Emery"}
-              </p>
+               <p className="truncate text-base font-semibold">{onChat ? "Emery" : title}</p>
+               {!onChat ? <p className="truncate text-xs text-muted-foreground">Emery</p> : null}
             </div>
           </div>
 
@@ -240,7 +239,7 @@ export function AppShell({
               onClick={() => {
                 if (to === "/chat") rememberEmeryHandoff();
               }}
-              className="emery-press flex min-h-[58px] flex-col items-center justify-center gap-1 rounded-md px-1 text-[10px] font-medium text-muted-foreground transition-colors"
+              className="emery-press flex min-h-[58px] flex-col items-center justify-center gap-1 rounded-md px-1 text-[11px] font-medium text-muted-foreground transition-colors"
               activeProps={{
                 className: "bg-primary/[0.08] text-primary font-semibold [&_svg]:stroke-[2.3]",
               }}
@@ -255,7 +254,7 @@ export function AppShell({
             onClick={() => setMoreOpen(true)}
             aria-label="Open more navigation"
             aria-expanded={moreOpen}
-            className={`flex h-auto min-h-[58px] w-full flex-col items-center justify-center gap-1 rounded-md p-0 text-[10px] font-medium ${moreActive ? "bg-primary/[0.08] text-primary" : "text-muted-foreground"}`}
+            className={`flex h-auto min-h-[58px] w-full flex-col items-center justify-center gap-1 rounded-md p-0 text-[11px] font-medium ${moreActive ? "bg-primary/[0.08] text-primary" : "text-muted-foreground"}`}
           >
             <MoreHorizontal className="size-[20px]" />
             <span>More</span>
@@ -279,16 +278,16 @@ export function AppShell({
             <div className="flex shrink-0 items-center justify-between px-1 py-2">
               <div>
                 <p className="text-sm font-semibold">More</p>
-                <p className="text-xs text-muted-foreground">Your workspaces and settings</p>
               </div>
-              <button
+              <Button
+                variant="ghost"
                 type="button"
                 onClick={() => setMoreOpen(false)}
-                className="flex size-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-white/[0.03] hover:text-foreground"
+                className="size-11 rounded-lg text-muted-foreground hover:text-foreground"
                 aria-label="Close more navigation"
               >
                 <X className="size-4" />
-              </button>
+              </Button>
             </div>
             <div className="emery-scrollbar max-h-[calc(78dvh-4.5rem)] overflow-y-auto overscroll-contain rounded-lg bg-card/38 [-webkit-overflow-scrolling:touch]">
               {moreItems.map(({ to, label, description, icon: Icon }, index) => (
