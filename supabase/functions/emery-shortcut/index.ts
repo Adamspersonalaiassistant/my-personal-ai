@@ -246,7 +246,7 @@ Deno.serve(async (req: Request) => {
     let reply = String(parsed.reply ?? "").trim();
     let continueConversation = parsed.continue_conversation === true;
     const action = parsed.action ?? { type: "none" };
-    let actionTaken: { type: string; id?: string; title?: string } | null = null;
+    let actionTaken: { type: string; id?: string; title?: string; executionRunId?: string } | null = null;
 
     if (action.type === "create_task") {
       const title = String(action.title ?? "").trim();
@@ -283,7 +283,12 @@ Deno.serve(async (req: Request) => {
         throw new Error(receipt?.errorMessage || "Task creation failed");
       }
       const row = receipt.task;
-      actionTaken = { type: "create_task", id: row.id, title: row.title };
+      actionTaken = {
+        type: "create_task",
+        id: row.id,
+        title: row.title,
+        executionRunId: receipt.executionRunId ?? undefined,
+      };
       if (row.scheduled_start_at) {
         const startText = new Date(row.scheduled_start_at).toLocaleString("en-US", { timeZone: TIMEZONE, dateStyle: "medium", timeStyle: "short" });
         const endText = new Date(row.scheduled_end_at).toLocaleTimeString("en-US", { timeZone: TIMEZONE, hour: "numeric", minute: "2-digit" });
