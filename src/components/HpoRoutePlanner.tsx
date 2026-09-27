@@ -27,6 +27,7 @@ import {
   getHpoRoutePlanner,
   getHpoRouteScheduleAdvice,
   optimizeHpoRoute,
+  prepareHpoOfficeMap,
   reorderHpoRouteStops,
   syncHpoRouteToCalendar,
   updateHpoRouteStop,
@@ -85,7 +86,24 @@ type Candidate = {
   officeName: string;
   address: string;
   city?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   detail: string;
+};
+
+type MapOffice = Candidate & {
+  kind: "account" | "prospect";
+  specialty?: string | null;
+  priority?: number | null;
+  relationshipStage?: string | null;
+  relationshipHealth?: string | null;
+  ownerName?: string | null;
+  lastTouchAt?: string | null;
+  nextAction?: string | null;
+  nextActionDueAt?: string | null;
+  fitStatus?: string | null;
+  verificationStatus?: string | null;
+  mapped: boolean;
 };
 
 type CalendarItem = {
@@ -429,6 +447,334 @@ function RouteMap({ route }: { route: RoutePlan }) {
   );
 }
 
+function OfficePlanningMap({
+  offices,
+  selectedKeys,
+  selectedOfficeKey,
+  onSelectOffice,
+  onToggleRouteStop,
+  onBuildRoute,
+  preparing,
+  onRefreshPins,
+}: {
+  offices: MapOffice[];
+  selectedKeys: string[];
+  selectedOfficeKey: string | null;
+  onSelectOffice: (key: string) => void;
+  onToggleRouteStop: (office: MapOffice) => void;
+  onBuildRoute: () => void;
+  preparing: boolean;
+  onRefreshPins: () => void;
+}) {
+  const [filter, setFilter] = useState<"all" | "account" | "prospect">("all");
+  const [query, setQuery] = useState("");
+  const [zoomOffset, setZoomOffset] = useState(0);
+
+  const mapped = useMemo(
+    () =>
+      offices.filter(
+        (office) =>
+          office.mapped &&
+          Number.isFinite(office.latitude) &&
+          Number.isFinite(office.longitude) &&
+          (filter === "all" || office.kind === filter) &&
+          (!query.trim() ||
+            [office.officeName, office.address, office.city, office.specialty, office.detail]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase()
+              .includes(query.trim().toLowerCase())),
+      ),
+    [filter, offices, query],
+  );
+
+  const selectedOffice =
+    offices.find((office) => office.key === selectedOfficeKey) ??
+    offices.find((office) => selectedKeys.includes(office.key)) ??
+    null;
+
+  const points = mapped.map((office) => ({
+    ...office,
+    lat: Number(office.latitude),
+    lon: Number(office.longitude),
+  }));
+
+  const fitZoom = points.length ? routeMapBaseZoom(points) : 8;
+  const zoom = Math.max(5, Math.min(18, fitZoom + zoomOffset));
+  const width = 760;
+  const height = 390;
+  const centerFallback = projectToWorld(40.25, -74.65, zoom);
+  const projected = points.map((point) => ({ ...point, ...projectToWorld(point.lat, point.lon, zoom) }));
+  const centerX = projected.length
+    ? (Math.min(...projected.map((point) => point.x)) + Math.max(...projected.map((point) => point.x))) / 2
+    : centerFallback.x;
+  const centerY = projected.length
+    ? (Math.min(...projected.map((point) => point.y)) + Math.max(...projected.map((point) => point.y))) / 2
+    : centerFallback.y;
+  const left = centerX - width / 2;
+  const top = centerY - height / 2;
+  const tileSize = 256;
+  const tileCount = 2 ** zoom;
+  const tileMinX = Math.floor(left / tileSize) - 1;
+  const tileMaxX = Math.floor((left + width) / tileSize) + 1;
+  const tileMinY = Math.max(0, Math.floor(top / tileSize) - 1);
+  const tileMaxY = Math.min(tileCount - 1, Math.floor((top + height) / tileSize) + 1);
+  const tiles: Array<{ x: number; y: number; srcX: number }> = [];
+  for (let y = tileMinY; y <= tileMaxY; y += 1) {
+    for (let x = tileMinX; x <= tileMaxX; x += 1) {
+      const srcX = ((x % tileCount) + tileCount) % tileCount;
+      tiles.push({ x, y, srcX });
+    }
+  }
+
+  const selectedCount = selectedKeys.length;
+  const totalWithAddress = offices.filter((office) => office.address).length;
+  const totalMapped = offices.filter((office) => office.mapped).length;
+
+  return (
+    <section className="overflow-hidden rounded-[1.6rem] border border-primary/18 bg-card/25 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
+      <div className="border-b border-border/35 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="emery-kicker">Office Map · Account Tracker</p>
+            <h3 className="mt-1 text-lg font-semibold">See the territory before you build the route.</h3>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Tap any office pin to inspect the account. Add offices from the map, then build the route from your selected pins.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onRefreshPins}
+            disabled={preparing}
+            className="emery-press flex size-10 shrink-0 items-center justify-center rounded-xl border border-border/45 text-muted-foreground disabled:opacity-40"
+            aria-label="Refresh office map pins"
+          >
+            <RefreshCw className={`size-3.5 ${preparing ? "animate-spin" : ""}`} />
+          </button>
+        </div>
+
+        <div className="mt-3 flex items-center gap-2">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search offices, cities, specialties"
+              className="h-11 w-full rounded-xl border border-border/45 bg-background/55 pl-9 pr-3 text-sm outline-none focus:border-primary/30"
+            />
+          </div>
+          <div className="flex shrink-0 gap-1 rounded-xl border border-border/40 bg-background/45 p-1">
+            {([
+              ["all", "All"],
+              ["account", "Accounts"],
+              ["prospect", "Prospects"],
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setFilter(value)}
+                className={`emery-press min-h-9 rounded-lg px-2.5 text-[10px] font-semibold ${
+                  filter === value ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-2 flex items-center justify-between gap-3 text-[10px] text-muted-foreground">
+          <span>
+            {totalMapped}/{totalWithAddress} offices mapped
+            {preparing ? " · preparing pins…" : ""}
+          </span>
+          <span>{selectedCount} selected for route</span>
+        </div>
+      </div>
+
+      <div className="relative h-[390px] overflow-hidden bg-muted/20">
+        {tiles.map((tile) => (
+          <img
+            key={`${zoom}-${tile.x}-${tile.y}`}
+            src={`https://tile.openstreetmap.org/${zoom}/${tile.srcX}/${tile.y}.png`}
+            alt=""
+            draggable={false}
+            className="pointer-events-none absolute max-w-none select-none"
+            style={{
+              width: tileSize,
+              height: tileSize,
+              left: tile.x * tileSize - left,
+              top: tile.y * tileSize - top,
+            }}
+          />
+        ))}
+
+        {projected.map((office) => {
+          const selected = selectedKeys.includes(office.key);
+          const focused = office.key === selectedOfficeKey;
+          return (
+            <button
+              key={office.key}
+              type="button"
+              onClick={() => onSelectOffice(office.key)}
+              title={office.officeName}
+              aria-label={`Open ${office.officeName}`}
+              className={`absolute z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 text-[9px] font-bold shadow-[0_4px_14px_rgba(0,0,0,0.32)] transition ${
+                selected
+                  ? "size-10 border-background bg-primary text-primary-foreground"
+                  : office.kind === "account"
+                    ? "size-8 border-background bg-foreground text-background"
+                    : "size-8 border-background bg-background text-foreground"
+              } ${focused ? "ring-4 ring-primary/25" : ""}`}
+              style={{
+                left: `${((office.x - left) / width) * 100}%`,
+                top: `${((office.y - top) / height) * 100}%`,
+              }}
+            >
+              {selected ? <Check className="size-3.5" /> : office.kind === "account" ? "A" : "P"}
+            </button>
+          );
+        })}
+
+        <div className="absolute right-2 top-2 z-20 flex flex-col gap-1">
+          <button
+            type="button"
+            onClick={() => setZoomOffset((value) => Math.min(4, value + 1))}
+            className="emery-press flex size-9 items-center justify-center rounded-xl border border-border/45 bg-background/90 shadow-sm"
+            aria-label="Zoom office map in"
+          >
+            <Plus className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setZoomOffset((value) => Math.max(-4, value - 1))}
+            className="emery-press flex size-9 items-center justify-center rounded-xl border border-border/45 bg-background/90 shadow-sm"
+            aria-label="Zoom office map out"
+          >
+            <Minus className="size-3.5" />
+          </button>
+        </div>
+
+        {!points.length ? (
+          <div className="absolute inset-x-4 top-1/2 z-20 -translate-y-1/2 rounded-2xl border border-border/45 bg-background/90 p-4 text-center backdrop-blur">
+            <MapPinned className="mx-auto size-6 text-primary" />
+            <p className="mt-2 text-sm font-semibold">Your office map is ready for pins.</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Emery is mapping saved office addresses. The map stays available even before you create a route.
+            </p>
+          </div>
+        ) : null}
+
+        <div className="absolute bottom-2 left-2 rounded-lg bg-background/84 px-2 py-1 text-[9px] text-muted-foreground backdrop-blur">
+          A = account · P = prospect · © OpenStreetMap contributors
+        </div>
+      </div>
+
+      {selectedOffice ? (
+        <div className="border-t border-border/35 p-4">
+          <div className="flex items-start gap-3">
+            <div className={`flex size-10 shrink-0 items-center justify-center rounded-2xl text-xs font-bold ${
+              selectedOffice.kind === "account"
+                ? "bg-foreground text-background"
+                : "bg-primary/[0.09] text-primary"
+            }`}>
+              {selectedOffice.kind === "account" ? "A" : "P"}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-2">
+                <h4 className="truncate text-sm font-semibold">{selectedOffice.officeName}</h4>
+                <span className="shrink-0 rounded-full bg-muted/65 px-2 py-0.5 text-[9px] font-semibold capitalize text-muted-foreground">
+                  {selectedOffice.kind}
+                </span>
+              </div>
+              <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
+                {[selectedOffice.address, selectedOffice.city].filter(Boolean).join(", ")}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-1.5 text-[9px]">
+                {selectedOffice.relationshipStage ? (
+                  <span className="rounded-full border border-border/40 px-2 py-1">
+                    {selectedOffice.relationshipStage}
+                  </span>
+                ) : null}
+                {selectedOffice.priority ? (
+                  <span className="rounded-full border border-border/40 px-2 py-1">
+                    Priority {selectedOffice.priority}
+                  </span>
+                ) : null}
+                {selectedOffice.fitStatus ? (
+                  <span className="rounded-full border border-border/40 px-2 py-1 capitalize">
+                    {selectedOffice.fitStatus}
+                  </span>
+                ) : null}
+                {selectedOffice.specialty ? (
+                  <span className="rounded-full border border-border/40 px-2 py-1">
+                    {selectedOffice.specialty}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          {selectedOffice.nextAction || selectedOffice.lastTouchAt ? (
+            <div className="mt-3 rounded-xl border border-border/35 bg-background/35 px-3 py-2.5">
+              {selectedOffice.nextAction ? (
+                <p className="text-[11px]">
+                  <span className="font-semibold text-foreground">Next:</span>{" "}
+                  <span className="text-muted-foreground">{selectedOffice.nextAction}</span>
+                </p>
+              ) : null}
+              {selectedOffice.lastTouchAt ? (
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  Last touch: {new Date(selectedOffice.lastTouchAt).toLocaleDateString()}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <a
+              href={`https://maps.apple.com/?q=${encodeURIComponent([selectedOffice.officeName, selectedOffice.address, selectedOffice.city].filter(Boolean).join(", "))}`}
+              target="_blank"
+              rel="noreferrer"
+              className="emery-press flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border/45 px-3 text-xs font-semibold text-muted-foreground"
+            >
+              <MapPinned className="size-3.5" /> Open location
+            </a>
+            <button
+              type="button"
+              onClick={() => onToggleRouteStop(selectedOffice)}
+              className={`emery-press min-h-11 rounded-xl px-3 text-xs font-semibold ${
+                selectedKeys.includes(selectedOffice.key)
+                  ? "border border-primary/20 bg-primary/[0.06] text-primary"
+                  : "bg-primary text-primary-foreground"
+              }`}
+            >
+              {selectedKeys.includes(selectedOffice.key) ? "Remove from route" : "Add to route"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="flex items-center gap-2 border-t border-border/35 p-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold">{selectedCount ? `${selectedCount} offices selected` : "Tap pins to build a route"}</p>
+          <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+            Your selections become the stop list in the route builder.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onBuildRoute}
+          disabled={!selectedCount}
+          className="emery-press min-h-11 shrink-0 rounded-xl bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-35"
+        >
+          Build Route
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export function HpoRoutePlannerCompact({ onOpen }: { onOpen: () => void }) {
   const load = useServerFn(getHpoRoutePlanner);
   const [data, setData] = useState<PlannerData | null>(null);
@@ -493,6 +839,7 @@ export function HpoRoutePlanner() {
   const captureNote = useServerFn(captureHpoRouteNote);
   const syncCalendar = useServerFn(syncHpoRouteToCalendar);
   const askSchedule = useServerFn(getHpoRouteScheduleAdvice);
+  const prepareOfficeMap = useServerFn(prepareHpoOfficeMap);
 
   const [data, setData] = useState<PlannerData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -507,6 +854,11 @@ export function HpoRoutePlanner() {
   const [calendarMessage, setCalendarMessage] = useState<string | null>(null);
   const [scheduleAdvice, setScheduleAdvice] = useState<string | null>(null);
   const [scheduleWorking, setScheduleWorking] = useState(false);
+  const [mapSelectedKeys, setMapSelectedKeys] = useState<string[]>([]);
+  const [selectedMapOfficeKey, setSelectedMapOfficeKey] = useState<string | null>(null);
+  const [mapSeedStops, setMapSeedStops] = useState<Candidate[]>([]);
+  const [mapPreparing, setMapPreparing] = useState(false);
+  const [mapPreparedOnce, setMapPreparedOnce] = useState(false);
 
   async function refresh(preferredRouteId?: string | null) {
     const result = (await load({})) as PlannerData;
@@ -545,6 +897,28 @@ export function HpoRoutePlanner() {
     };
   }, [load]);
 
+  useEffect(() => {
+    if (!data || mapPreparedOnce || mapPreparing) return;
+    const needsPins = [...data.accounts, ...data.prospects].some(
+      (office: any) =>
+        office.address &&
+        (!Number.isFinite(office.latitude) || !Number.isFinite(office.longitude)) &&
+        !office.geocoded_at,
+    );
+    if (!needsPins) {
+      setMapPreparedOnce(true);
+      return;
+    }
+    setMapPreparing(true);
+    setMapPreparedOnce(true);
+    void prepareOfficeMap({ data: { limit: 100 } })
+      .then(() => refresh(activeRouteId))
+      .catch((cause) => {
+        setError(cause instanceof Error ? cause.message : "Couldn't prepare all office map pins.");
+      })
+      .finally(() => setMapPreparing(false));
+  }, [activeRouteId, data, mapPreparedOnce, mapPreparing, prepareOfficeMap]);
+
   const activeRoute =
     data?.routes.find((route) => route.id === activeRouteId) ?? data?.routes[0] ?? null;
   const activeCalendar = activeRoute
@@ -555,6 +929,101 @@ export function HpoRoutePlanner() {
         .sort((a, b) => a.stop_order - b.stop_order)
         .find((stop) => !terminalStatuses.has(stop.status)) ?? null
     : null;
+
+  const mapOffices = useMemo<MapOffice[]>(() => {
+    if (!data) return [];
+    const accounts = data.accounts.map((account: any) => ({
+      key: `account:${account.id}`,
+      accountId: account.id,
+      officeName: account.name,
+      address: account.address || "",
+      city: account.city,
+      latitude: account.latitude,
+      longitude: account.longitude,
+      detail: [account.account_type, account.specialty].filter(Boolean).join(" · ") || "HPO account",
+      kind: "account" as const,
+      specialty: account.specialty,
+      priority: account.priority,
+      relationshipStage: account.relationship_stage,
+      relationshipHealth: account.relationship_health,
+      ownerName: account.owner_name,
+      lastTouchAt: account.last_touch_at,
+      nextAction: account.next_action,
+      nextActionDueAt: account.next_action_due_at,
+      fitStatus: null,
+      verificationStatus: null,
+      mapped: Number.isFinite(account.latitude) && Number.isFinite(account.longitude),
+    }));
+    const prospects = data.prospects.map((prospect: any) => ({
+      key: `prospect:${prospect.id}`,
+      prospectId: prospect.id,
+      officeName: prospect.name,
+      address: prospect.address || "",
+      city: prospect.city,
+      latitude: prospect.latitude,
+      longitude: prospect.longitude,
+      detail: [prospect.prospect_type, prospect.specialty].filter(Boolean).join(" · ") || "Prospect",
+      kind: "prospect" as const,
+      specialty: prospect.specialty,
+      priority:
+        typeof prospect.metadata?.internal_priority === "number"
+          ? prospect.metadata.internal_priority
+          : null,
+      relationshipStage: null,
+      relationshipHealth: null,
+      ownerName: null,
+      lastTouchAt: null,
+      nextAction: null,
+      nextActionDueAt: null,
+      fitStatus: prospect.fit_status,
+      verificationStatus: prospect.verification_status,
+      mapped: Number.isFinite(prospect.latitude) && Number.isFinite(prospect.longitude),
+    }));
+    return [...accounts, ...prospects];
+  }, [data]);
+
+  const mapSelectedOffices = useMemo(
+    () => mapSelectedKeys.map((key) => mapOffices.find((office) => office.key === key)).filter(Boolean) as MapOffice[],
+    [mapOffices, mapSelectedKeys],
+  );
+
+  function toggleMapRouteStop(office: MapOffice) {
+    setSelectedMapOfficeKey(office.key);
+    setMapSelectedKeys((current) =>
+      current.includes(office.key)
+        ? current.filter((key) => key !== office.key)
+        : [...current, office.key].slice(0, 30),
+    );
+  }
+
+  function startRouteFromMap() {
+    const stops = mapSelectedOffices.map((office) => ({
+      key: office.key,
+      accountId: office.accountId,
+      prospectId: office.prospectId,
+      officeName: office.officeName,
+      address: office.address,
+      city: office.city,
+      latitude: office.latitude,
+      longitude: office.longitude,
+      detail: office.detail,
+    }));
+    setMapSeedStops(stops);
+    setShowBuilder(true);
+  }
+
+  async function refreshOfficePins() {
+    setMapPreparing(true);
+    setError(null);
+    try {
+      await prepareOfficeMap({ data: { limit: 100 } });
+      await refresh(activeRouteId);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Couldn't refresh office map pins.");
+    } finally {
+      setMapPreparing(false);
+    }
+  }
 
   async function optimizeActive(routeId: string) {
     setOptimizing(true);
@@ -699,7 +1168,10 @@ export function HpoRoutePlanner() {
         <div className="mt-4 grid grid-cols-2 gap-2">
           <button
             type="button"
-            onClick={() => setShowBuilder(true)}
+            onClick={() => {
+              setMapSeedStops([]);
+              setShowBuilder(true);
+            }}
             className="emery-press flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-primary px-3 text-xs font-semibold text-primary-foreground"
           >
             <Plus className="size-4" /> New Route
@@ -728,6 +1200,19 @@ export function HpoRoutePlanner() {
         </div>
       </section>
 
+      {data ? (
+        <OfficePlanningMap
+          offices={mapOffices}
+          selectedKeys={mapSelectedKeys}
+          selectedOfficeKey={selectedMapOfficeKey}
+          onSelectOffice={setSelectedMapOfficeKey}
+          onToggleRouteStop={toggleMapRouteStop}
+          onBuildRoute={startRouteFromMap}
+          preparing={mapPreparing}
+          onRefreshPins={() => void refreshOfficePins()}
+        />
+      ) : null}
+
       {error ? (
         <div className="rounded-2xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
@@ -737,6 +1222,7 @@ export function HpoRoutePlanner() {
       {showBuilder && data ? (
         <RouteBuilder
           data={data}
+          initialSelected={mapSeedStops}
           onClose={() => setShowBuilder(false)}
           onCreate={async (payload) => {
             setWorking(true);
@@ -744,6 +1230,8 @@ export function HpoRoutePlanner() {
             try {
               const result = await createRoute({ data: payload });
               setShowBuilder(false);
+              setMapSelectedKeys([]);
+              setMapSeedStops([]);
               try {
                 await optimize({ data: { routeId: result.routeId } });
               } catch (optimizeCause) {
@@ -1059,11 +1547,13 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function RouteBuilder({
   data,
+  initialSelected,
   onClose,
   onCreate,
   working,
 }: {
   data: PlannerData;
+  initialSelected: Candidate[];
   onClose: () => void;
   onCreate: (payload: {
     routeDate: string;
@@ -1093,7 +1583,7 @@ function RouteBuilder({
   const [endWindow, setEndWindow] = useState("15:00");
   const [syncToCalendar, setSyncToCalendar] = useState(true);
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<Candidate[]>([]);
+  const [selected, setSelected] = useState<Candidate[]>(initialSelected);
   const [customName, setCustomName] = useState("");
   const [customAddress, setCustomAddress] = useState("");
   const [customCity, setCustomCity] = useState("");
