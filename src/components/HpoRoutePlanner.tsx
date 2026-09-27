@@ -1570,6 +1570,8 @@ function RouteBuilder({
       officeName: string;
       address: string;
       city?: string | null;
+      latitude?: number | null;
+      longitude?: number | null;
       visitPriority?: string | null;
     }>;
   }) => Promise<void>;
@@ -1600,6 +1602,8 @@ function RouteBuilder({
       officeName: account.name,
       address: account.address,
       city: account.city,
+      latitude: account.latitude,
+      longitude: account.longitude,
       detail: [account.account_type, account.city, `P${account.priority}`].filter(Boolean).join(" · "),
     }));
     const prospects = data.prospects.map((prospect) => ({
@@ -1608,6 +1612,8 @@ function RouteBuilder({
       officeName: prospect.name,
       address: prospect.address,
       city: prospect.city,
+      latitude: prospect.latitude,
+      longitude: prospect.longitude,
       detail: [prospect.prospect_type, prospect.city, prospect.verification_status]
         .filter(Boolean)
         .join(" · "),
@@ -1859,6 +1865,8 @@ function RouteBuilder({
               officeName: stop.officeName,
               address: stop.address,
               city: stop.city ?? null,
+              latitude: stop.latitude ?? null,
+              longitude: stop.longitude ?? null,
             })),
           })
         }
