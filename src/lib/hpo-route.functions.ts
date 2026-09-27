@@ -2,6 +2,12 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { MODEL_POLICY } from "@/lib/model-policy";
+import {
+  beginExecution,
+  clarifyExecution,
+  completeExecution,
+  failExecution,
+} from "@/lib/execution-ledger";
 
 type RouteStopInput = {
   accountId?: string | null;
@@ -1062,6 +1068,15 @@ export async function captureHpoRouteNoteCore(input: {
 }) {
   const message = clean(input.message);
   if (!message) throw new Error("Tell Emery what happened at the stop");
+  const execution = await beginExecution({
+    db: input.db,
+    userId: input.userId,
+    domain: "hpo_route",
+    action: "capture_route_note",
+    targetType: "hpo_route",
+    targetId: input.routeId,
+    requestPayload: { routeId: input.routeId, message },
+  });
   const { data: stops, error } = await input.db
     .from("hpo_route_stops")
     .select("*")
@@ -1136,11 +1151,19 @@ export async function captureHpoRouteNoteCore(input: {
   }
 
   if (!target) {
-    return {
+    const result = {
       ok: false,
       needsClarification: true,
       question: "Which stop is this note for? You can say the stop number or office name.",
     } as const;
+    await clarifyExecution({
+      db: input.db,
+      userId: input.userId,
+      runId: execution.id,
+      question: result.question,
+      resultPayload: { routeNoteResult: result as unknown as Record<string, unknown> },
+    });
+    return result;
   }
 
   const status = inferStatus(message);
@@ -1163,7 +1186,17 @@ export async function captureHpoRouteNoteCore(input: {
     .eq("user_id", input.userId)
     .select("*")
     .single();
-  if (updateError) throw updateError;
+  if (updateError) {
+    await failExecution({
+      db: input.db,
+      userId: input.userId,
+      runId: execution.id,
+      errorCode: "route_note_write_failed",
+      errorMessage: String(updateError.message ?? updateError),
+      retryable: true,
+    });
+    throw updateError;
+  }
 
   await upsertInteractionForStop(input.db, input.userId, updated, {
     notes: message,
@@ -1174,7 +1207,7 @@ export async function captureHpoRouteNoteCore(input: {
   });
   const routeStatus = await syncRouteStatus(input.db, input.userId, input.routeId);
 
-  return {
+  const result = {
     ok: true,
     needsClarification: false,
     stopId: updated.id,
@@ -1185,6 +1218,15 @@ export async function captureHpoRouteNoteCore(input: {
     nextAction,
     routeStatus,
   } as const;
+  await completeExecution({
+    db: input.db,
+    userId: input.userId,
+    runId: execution.id,
+    resultPayload: { routeNoteResult: result as unknown as Record<string, unknown> },
+    targetType: "hpo_route_stop",
+    targetId: updated.id,
+  });
+  return result;
 }
 
 export const captureHpoRouteNote = createServerFn({ method: "POST" })
