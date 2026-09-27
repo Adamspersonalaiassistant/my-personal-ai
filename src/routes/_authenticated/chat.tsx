@@ -9,7 +9,6 @@ import {
   FileText,
   Loader2,
   Paperclip,
-  Sparkles,
   Volume2,
   X,
 } from "lucide-react";
@@ -428,7 +427,7 @@ function Chat() {
         <div
           ref={scrollRef}
           onScroll={handleScroll}
-          className="emery-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-5 pt-3 [touch-action:pan-y] [-webkit-overflow-scrolling:touch] sm:px-5 sm:pb-6 sm:pt-4 md:px-7"
+          className="emery-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-4 [touch-action:pan-y] [-webkit-overflow-scrolling:touch] sm:px-6 sm:pt-5 md:px-7"
           aria-label="Emery conversation"
         >
           <div className="mx-auto mb-3 max-w-2xl">
@@ -451,21 +450,17 @@ function Chat() {
 
           {loading ? (
             <div className="flex min-h-[48vh] flex-col items-center justify-center gap-3" role="status">
-              <div className="emery-breathe flex size-12 items-center justify-center overflow-hidden rounded-xl bg-primary/[0.04]">
+              <div className="flex size-12 items-center justify-center overflow-hidden rounded-lg bg-primary/[0.04]">
                 <img src={brainImage} alt="" className="emery-blue-brain size-11 object-cover opacity-90" />
               </div>
               <p className="text-xs text-muted-foreground">Opening your conversation…</p>
             </div>
           ) : messages.length === 0 ? (
-            <div className="emery-fade-up mx-auto flex min-h-[54vh] max-w-md flex-col items-center justify-center py-8 text-center">
-              <div className="emery-breathe flex size-20 items-center justify-center overflow-hidden rounded-[1.35rem] border border-primary/14 bg-primary/[0.04]">
+            <div className="mx-auto flex min-h-[54vh] max-w-md flex-col items-center justify-center py-8 text-center">
+              <div className="flex size-20 items-center justify-center overflow-hidden rounded-xl bg-primary/[0.04]">
                 <img src={brainImage} alt="Emery neural brain" className="emery-blue-brain size-16 object-cover" />
               </div>
-              <div className="mt-5 flex items-center gap-2 text-primary">
-                <Sparkles className="size-3.5" />
-                <span className="text-[10px] font-semibold uppercase tracking-[0.13em]">Emery</span>
-              </div>
-              <h2 className="mt-2 text-[1.55rem] font-semibold tracking-[-0.035em]">I’m here, Adam.</h2>
+              <h2 className="mt-5 text-2xl font-semibold">I’m here, Adam.</h2>
               <p className="mt-1.5 max-w-xs text-sm leading-6 text-muted-foreground">What are we working through?</p>
               <div className="mt-6 flex w-full flex-wrap justify-center gap-2">
                 {quickPrompts.map((prompt) => (
@@ -473,7 +468,7 @@ function Chat() {
                     key={prompt}
                     type="button"
                     onClick={() => void sendMessage(prompt)}
-                    className="emery-press min-h-11 rounded-xl border border-border/40 bg-card/28 px-3 text-xs font-medium text-muted-foreground hover:border-primary/20 hover:bg-primary/[0.04] hover:text-foreground"
+                    className="emery-press min-h-11 rounded-lg border border-border/50 bg-card/40 px-3 text-sm font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground"
                   >
                     {prompt}
                   </button>
@@ -481,11 +476,11 @@ function Chat() {
               </div>
             </div>
           ) : (
-            <div className="mx-auto max-w-2xl space-y-6">
+            <div className="mx-auto max-w-2xl space-y-5">
               {messages.map((message) =>
                 message.role === "user" ? (
-                  <div key={message.id} className="emery-fade-up flex justify-end pl-8 sm:pl-20">
-                    <div className="max-w-[92%] rounded-[1.2rem] rounded-br-[0.35rem] bg-[linear-gradient(145deg,oklch(0.69_0.19_248),oklch(0.56_0.17_255))] px-3.5 py-2.5 text-[15px] leading-6 text-white shadow-[0_8px_24px_rgba(0,70,160,0.16)] sm:max-w-[84%]">
+                  <div key={message.id} className="flex justify-end pl-8 sm:pl-20">
+                    <div className="max-w-[92%] rounded-lg bg-primary px-3.5 py-2.5 text-[15px] leading-6 text-primary-foreground sm:max-w-[84%]">
                       {message.attachments.length ? (
                         <div className={`grid gap-2 ${message.attachments.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
                           {message.attachments.map((attachment) => (
@@ -499,7 +494,7 @@ function Chat() {
                     </div>
                   </div>
                 ) : (
-                  <div key={message.id} className="emery-fade-up flex items-start gap-2.5 pr-1 sm:gap-3 sm:pr-12">
+                  <div key={message.id} className="flex items-start gap-2.5 pr-1 sm:gap-3 sm:pr-12">
                     <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary/[0.045]">
                       <img src={brainImage} alt="" className="emery-blue-brain size-7 object-cover" />
                     </div>
@@ -517,8 +512,8 @@ function Chat() {
               <div className="flex size-8 items-center justify-center overflow-hidden rounded-lg bg-primary/[0.045]">
                 <img src={brainImage} alt="" className="emery-blue-brain size-7 object-cover" />
               </div>
-              <div className="flex min-h-9 items-center gap-2 text-xs text-muted-foreground">
-                <span>Emery is thinking</span>
+              <div className="flex min-h-9 items-center gap-2 text-sm text-muted-foreground">
+                <span>Thinking</span>
                 <span className="flex items-center gap-1" aria-hidden>
                   <span className="emery-dot size-1.5 rounded-full bg-primary" />
                   <span className="emery-dot size-1.5 rounded-full bg-primary" />
@@ -544,13 +539,13 @@ function Chat() {
               scrollToLatest("smooth");
             }}
             aria-label="Jump to latest message"
-            className="emery-press absolute bottom-[5.4rem] right-4 z-30 flex size-11 items-center justify-center rounded-full border border-border/45 bg-card/95 text-primary shadow-lg backdrop-blur-xl"
+            className="emery-press absolute bottom-[5.4rem] right-4 z-30 flex size-11 items-center justify-center rounded-full border border-border/60 bg-card text-primary shadow-sm"
           >
             <ArrowDown className="size-4" />
           </button>
         ) : null}
 
-        <div className="z-20 shrink-0 bg-[linear-gradient(180deg,transparent,oklch(0.09_0.028_255/0.98)_18%)] px-2.5 pb-2.5 pt-5 sm:px-5 sm:pb-3 md:px-7">
+        <div className="z-20 shrink-0 border-t border-border/40 bg-background/95 px-3 pb-3 pt-3 backdrop-blur-lg sm:px-5 sm:pb-4 md:px-7">
           {voiceStudioState ? (
             <div className="mx-auto mb-2 max-w-2xl rounded-2xl border border-primary/18 bg-primary/[0.045] p-3 shadow-[0_10px_28px_rgba(0,0,0,0.16)]">
               {voiceStudioState.stage === "previewed" ? (
@@ -633,7 +628,7 @@ function Chat() {
 
           <form
             onSubmit={send}
-            className="mx-auto flex max-w-2xl items-end gap-1 rounded-[1.25rem] border border-border/55 bg-[oklch(0.135_0.036_255/0.97)] p-1.5 shadow-[0_14px_36px_rgba(0,0,0,0.3)] backdrop-blur-xl sm:gap-1.5"
+            className="mx-auto flex max-w-2xl items-end gap-1 rounded-xl border border-input bg-card p-1.5 shadow-sm sm:gap-1.5"
           >
             <input
               ref={fileInputRef}
@@ -680,7 +675,7 @@ function Chat() {
             <button
               type="submit"
               aria-label="Send"
-              className="emery-press flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_6px_16px_rgba(31,124,255,0.18)] disabled:opacity-30"
+               className="emery-press flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground disabled:opacity-30"
               disabled={(!draft.trim() && selectedFiles.length === 0) || pending}
             >
               <ArrowUp className="size-[18px]" strokeWidth={2.2} />
