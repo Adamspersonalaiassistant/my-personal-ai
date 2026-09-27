@@ -75,9 +75,7 @@ html {
 }
 
 body {
-  background:
-    radial-gradient(circle at 50% -12%, oklch(0.43 0.13 248 / 0.12), transparent 34rem),
-    linear-gradient(180deg, oklch(0.104 0.031 255), oklch(0.078 0.023 258));
+  background: var(--background);
 }
 
 ::selection {
@@ -104,33 +102,29 @@ select:focus-visible {
 }
 
 .emery-glass {
-  background: linear-gradient(180deg, oklch(0.174 0.043 254 / 0.78), oklch(0.126 0.032 257 / 0.9));
-  border-color: oklch(0.74 0.135 248 / 0.14);
-  box-shadow:
-    inset 0 1px 0 oklch(0.95 0.035 235 / 0.045),
-    0 12px 32px oklch(0.025 0.02 260 / 0.18);
-  backdrop-filter: blur(16px) saturate(112%);
-  -webkit-backdrop-filter: blur(16px) saturate(112%);
+  background: var(--card);
+  border-color: var(--border);
+  box-shadow: 0 8px 24px oklch(0.025 0.02 260 / 0.12);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .emery-glass-strong {
-  background: linear-gradient(180deg, oklch(0.164 0.042 254 / 0.96), oklch(0.116 0.031 258 / 0.985));
-  border-color: oklch(0.76 0.14 247 / 0.16);
-  box-shadow:
-    inset 0 1px 0 oklch(0.96 0.035 235 / 0.05),
-    0 18px 44px oklch(0.02 0.02 262 / 0.24);
-  backdrop-filter: blur(18px) saturate(115%);
-  -webkit-backdrop-filter: blur(18px) saturate(115%);
+  background: var(--popover);
+  border-color: var(--border);
+  box-shadow: 0 12px 32px oklch(0.02 0.02 262 / 0.16);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
 .emery-surface {
-  background: oklch(0.145 0.036 255 / 0.72);
-  border-color: oklch(0.72 0.11 248 / 0.11);
-  box-shadow: inset 0 1px 0 oklch(0.94 0.03 235 / 0.025);
+  background: var(--card);
+  border-color: var(--border);
+  box-shadow: none;
 }
 
 .emery-glow {
-  box-shadow: 0 0 28px oklch(0.72 0.185 250 / 0.14);
+  box-shadow: 0 0 18px oklch(0.72 0.185 250 / 0.08);
 }
 
 .emery-text-gradient {
@@ -161,7 +155,7 @@ select:focus-visible {
 }
 
 .emery-blue-brain {
-  filter: hue-rotate(95deg) saturate(1.42) brightness(1.05) contrast(1.06);
+  filter: hue-rotate(95deg) saturate(1.15) brightness(1.02);
 }
 
 .emery-route-enter {
@@ -207,7 +201,7 @@ select:focus-visible {
 }
 
 .emery-breathe {
-  animation-name: emery-breathe-blue;
+  animation: none;
 }
 
 [class*="text-emerald-"],
@@ -236,7 +230,7 @@ select:focus-visible {
 
 @media (max-width: 767px) {
   body {
-    background: linear-gradient(180deg, oklch(0.104 0.031 255), oklch(0.078 0.023 258));
+    background: var(--background);
   }
 }
 

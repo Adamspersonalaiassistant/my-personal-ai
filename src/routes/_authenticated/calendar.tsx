@@ -462,7 +462,7 @@ function CalendarPage() {
     >
       <div className="flex h-full min-h-0 flex-col bg-background">
         <header className="shrink-0 border-b border-border/35 bg-background/96">
-          <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-3">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-4 pb-3 pt-3 sm:gap-3">
             <button
               type="button"
               onClick={() => setShowViewMenu(true)}
@@ -470,8 +470,8 @@ function CalendarPage() {
             >
               <CalendarDays className="size-5 shrink-0 text-primary" />
               <div className="min-w-0">
-                <p className="truncate text-[20px] font-semibold tracking-[-0.03em]">{monthLabel}</p>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{viewLabel} view</p>
+                <p className="truncate text-lg font-semibold">{monthLabel}</p>
+                <p className="text-xs text-muted-foreground">{viewLabel}</p>
               </div>
               <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
             </button>
@@ -479,7 +479,7 @@ function CalendarPage() {
               <button
                 type="button"
                 onClick={() => setShowNotifications(true)}
-                className="emery-press relative flex size-10 items-center justify-center rounded-xl text-muted-foreground"
+                className="emery-press relative flex size-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent/50"
                 aria-label="Open Emery notifications"
               >
                 <Bell className="size-[18px]" />
@@ -489,8 +489,8 @@ function CalendarPage() {
                   </span>
                 ) : null}
               </button>
-              <button type="button" onClick={() => setSelectedDate(dayStart(new Date()))} className="emery-press min-h-10 rounded-xl px-3 text-xs font-semibold text-primary">Today</button>
-              <button type="button" onClick={() => openAddFor()} className="emery-press flex size-11 items-center justify-center rounded-full bg-primary text-primary-foreground" aria-label="Add calendar item">
+              <button type="button" onClick={() => setSelectedDate(dayStart(new Date()))} className="emery-press min-h-11 rounded-lg px-2 text-xs font-semibold text-primary">Today</button>
+              <button type="button" onClick={() => openAddFor()} className="emery-press flex size-11 items-center justify-center rounded-lg bg-primary text-primary-foreground" aria-label="Add calendar item">
                 <Plus className="size-5" />
               </button>
             </div>
@@ -498,7 +498,7 @@ function CalendarPage() {
 
           {view !== "month" ? (
             <div className="flex items-center border-t border-border/20 px-1">
-              <button type="button" onClick={() => moveSelection(-1)} className="flex size-10 shrink-0 items-center justify-center text-muted-foreground"><ChevronLeft className="size-4" /></button>
+               <button type="button" onClick={() => moveSelection(-1)} aria-label="Previous week" className="flex size-11 shrink-0 items-center justify-center text-muted-foreground"><ChevronLeft className="size-4" /></button>
               <div className="grid min-w-0 flex-1 grid-cols-7">
                 {weekDates.map((date) => {
                   const selected = sameDay(date, selectedDate);
@@ -516,7 +516,7 @@ function CalendarPage() {
                   );
                 })}
               </div>
-              <button type="button" onClick={() => moveSelection(1)} className="flex size-10 shrink-0 items-center justify-center text-muted-foreground"><ChevronRight className="size-4" /></button>
+               <button type="button" onClick={() => moveSelection(1)} aria-label="Next week" className="flex size-11 shrink-0 items-center justify-center text-muted-foreground"><ChevronRight className="size-4" /></button>
             </div>
           ) : null}
 
@@ -524,7 +524,7 @@ function CalendarPage() {
             <div className="flex items-center justify-between border-t border-border/25 px-4 py-2">
               <button type="button" onClick={() => setView("agenda")} className="text-left">
                 <p className="text-[11px] font-semibold">Needs scheduling · {unscheduled.length}</p>
-                <p className="text-[10px] text-muted-foreground">Ask Emery when these should happen.</p>
+                 <p className="text-xs text-muted-foreground">Unscheduled tasks</p>
               </button>
               <List className="size-4 text-primary" />
             </div>
@@ -794,11 +794,11 @@ function AgendaView({
       {unscheduled.length ? (
         <section className="mb-5">
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Needs scheduling</p>
-          <div className="overflow-hidden rounded-2xl border border-border/40 bg-card/30">
+           <div className="overflow-hidden rounded-lg bg-card/45">
             {unscheduled.map((task, index) => (
               <div key={task.id} className={`flex min-h-14 items-center gap-2 px-3 ${index ? "border-t border-border/30" : ""}`}>
-                <button type="button" onClick={() => void onToggle(task)} className="flex size-10 items-center justify-center text-muted-foreground"><Circle className="size-5" /></button>
-                <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{task.title}</p><p className="text-[10px] text-muted-foreground">Ask Emery to schedule this</p></div>
+                 <button type="button" onClick={() => void onToggle(task)} aria-label={`Complete ${task.title}`} className="flex size-11 shrink-0 items-center justify-center text-muted-foreground"><Circle className="size-5" /></button>
+                 <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{task.title}</p><p className="text-xs text-muted-foreground">Unscheduled task</p></div>
               </div>
             ))}
           </div>
@@ -809,15 +809,15 @@ function AgendaView({
         return (
           <section key={key} className="mb-5">
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">{date.toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" })}</p>
-            <div className="overflow-hidden rounded-2xl border border-border/40 bg-card/25">
+             <div className="overflow-hidden rounded-lg bg-card/35">
               {dayItems.map((item, index) => (
                 <button type="button" key={item.kind + item.id} onClick={() => onOpen(item)} className={`flex min-h-16 w-full items-center gap-3 px-3 text-left ${index ? "border-t border-border/30" : ""}`}>
-                  <span className="w-20 shrink-0 text-xs font-semibold text-primary">
+                   <span className="w-20 shrink-0 text-xs font-medium text-primary">
                     {item.kind === "event"
                       ? `${formatClock(item.at)}–${formatClock(item.meeting.end_at ?? new Date(new Date(item.at).getTime() + 60 * 60 * 1000).toISOString())}`
                       : formatClock(item.at)}
                   </span>
-                  <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{item.title}</span><span className="text-[10px] text-muted-foreground">{item.kind === "task" ? "Task" : "Event"}</span></span>
+                   <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{item.title}</span><span className="text-xs text-muted-foreground">{item.kind === "task" ? "Task" : "Event"}</span></span>
                 </button>
               ))}
             </div>
@@ -901,9 +901,7 @@ function DayGrid({
         </div>
       </div>
       {dates.length === 1 ? (
-        <div className="shrink-0 border-t border-border/30 bg-background/96 px-3 py-2 text-[10px] font-medium text-muted-foreground">
-          Tap any block to move it. Tasks can also be completed from their detail sheet.
-        </div>
+         null
       ) : null}
     </div>
   );
@@ -947,7 +945,7 @@ function MonthView({
       <div className="grid grid-cols-7 text-center text-[9px] font-semibold uppercase text-muted-foreground">
         {["S","M","T","W","T","F","S"].map((day, index) => <div key={day + index} className="py-2">{day}</div>)}
       </div>
-      <div className="grid grid-cols-7 overflow-hidden rounded-2xl border border-border/35">
+       <div className="grid grid-cols-7 overflow-hidden rounded-lg border border-border/35">
         {days.map((date) => {
           const dayItems = itemsForDate(items, date);
           const inMonth = date.getMonth() === selectedDate.getMonth();
