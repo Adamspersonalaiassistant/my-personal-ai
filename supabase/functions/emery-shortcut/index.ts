@@ -81,6 +81,7 @@ Deno.serve(async (req: Request) => {
 
     const body = await req.json().catch(() => ({}));
     const message = String(body?.message ?? "").trim().slice(0, 4000);
+    const shortcutRequestId = String(body?.request_id ?? body?.requestId ?? "").trim().slice(0, 240);
     if (!message) return json({ error: "message is required" }, 400);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -257,8 +258,11 @@ Deno.serve(async (req: Request) => {
         ? new Date(action.scheduled_end_at).toISOString() : null;
       const reminderAt = action.reminder_at && !Number.isNaN(Date.parse(action.reminder_at))
         ? new Date(action.reminder_at).toISOString() : null;
-      const created = await db.rpc("emery_action_create_task_v2", {
+      const created = await db.rpc("emery_kernel_task_create", {
         p_user_id: USER_ID,
+        p_idempotency_key: shortcutRequestId
+          ? `shortcut:${shortcutRequestId}:task.create`
+          : `shortcut-message:${userInsert.data.id}:task.create`,
         p_title: title,
         p_details: String(action.details ?? "").trim() || null,
         p_due_at: dueAt,
@@ -266,11 +270,19 @@ Deno.serve(async (req: Request) => {
         p_scheduled_end_at: scheduledEndAt,
         p_reminder_at: reminderAt,
         p_priority: Math.min(5, Math.max(1, Number(action.priority ?? 3))),
+        p_project_id: null,
+        p_source_channel: "shortcut",
+        p_source_message_id: userInsert.data.id,
+        p_parent_run_id: null,
+        p_execution_run_id: null,
         p_source: "emery-shortcut",
       });
       if (created.error) throw created.error;
-      const row = rpcRow(created);
-      if (!row?.id) throw new Error("Task creation returned no record");
+      const receipt = created.data as any;
+      if (!receipt?.ok || receipt?.status !== "completed" || !receipt?.task?.id) {
+        throw new Error(receipt?.errorMessage || "Task creation failed");
+      }
+      const row = receipt.task;
       actionTaken = { type: "create_task", id: row.id, title: row.title };
       if (row.scheduled_start_at) {
         const startText = new Date(row.scheduled_start_at).toLocaleString("en-US", { timeZone: TIMEZONE, dateStyle: "medium", timeStyle: "short" });
