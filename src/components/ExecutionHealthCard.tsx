@@ -49,7 +49,7 @@ export function ExecutionHealthCard() {
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold">Execution health</p>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            Emery only calls an action done after the execution layer confirms a real write.
+            Migrated structured actions record verified execution receipts here. Coverage is still being expanded.
           </p>
         </div>
       </div>
@@ -88,7 +88,7 @@ export function ExecutionHealthCard() {
         </div>
       ) : (
         <div className="px-4 pb-4 text-xs text-muted-foreground">
-          Execution receipts will appear here after Emery performs structured actions.
+          No retained production receipts yet. The execution architecture is built and still being proven through real use.
         </div>
       )}
     </section>
