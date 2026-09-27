@@ -81,13 +81,13 @@ type RoutePlan = {
 
 type Candidate = {
   key: string;
-  accountId?: string;
-  prospectId?: string;
+  accountId?: string | undefined;
+  prospectId?: string | undefined;
   officeName: string;
   address: string;
-  city?: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
+  city?: string | null | undefined;
+  latitude?: number | null | undefined;
+  longitude?: number | null | undefined;
   detail: string;
 };
 
