@@ -413,6 +413,7 @@ export type Database = {
         Row: {
           agent_route_confidence: number
           auto_apply_low_risk: boolean
+          hpo_map_v2: boolean
           memory_max_characters: number
           memory_max_items: number
           proactive_focus_enabled: boolean
@@ -423,6 +424,7 @@ export type Database = {
         Insert: {
           agent_route_confidence?: number
           auto_apply_low_risk?: boolean
+          hpo_map_v2?: boolean
           memory_max_characters?: number
           memory_max_items?: number
           proactive_focus_enabled?: boolean
@@ -433,6 +435,7 @@ export type Database = {
         Update: {
           agent_route_confidence?: number
           auto_apply_low_risk?: boolean
+          hpo_map_v2?: boolean
           memory_max_characters?: number
           memory_max_items?: number
           proactive_focus_enabled?: boolean
