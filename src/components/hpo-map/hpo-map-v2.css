@@ -1,0 +1,49 @@
+.hpo-map-v2 .maplibregl-map {
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+}
+
+.hpo-map-v2 .maplibregl-ctrl-top-right {
+  top: 46px;
+  right: 6px;
+}
+
+.hpo-map-v2 .maplibregl-ctrl-group {
+  overflow: hidden;
+  border: 1px solid rgb(226 232 240);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 5px 18px rgba(15, 23, 42, 0.14);
+}
+
+.hpo-map-v2 .maplibregl-ctrl-group button {
+  width: 36px;
+  height: 36px;
+}
+
+.hpo-map-v2 .maplibregl-ctrl-group button + button {
+  border-top-color: rgb(226 232 240);
+}
+
+.hpo-map-v2 .maplibregl-ctrl button .maplibregl-ctrl-icon {
+  filter: saturate(0.6);
+}
+
+.hpo-map-v2 .maplibregl-ctrl-attrib {
+  border-radius: 8px 0 0 0;
+  background: rgba(255, 255, 255, 0.86);
+  color: rgb(100 116 139);
+  font-size: 9px;
+}
+
+.hpo-map-v2 .maplibregl-ctrl-attrib a {
+  color: rgb(71 85 105);
+}
+
+.hpo-map-v2 .maplibregl-user-location-dot,
+.hpo-map-v2 .maplibregl-user-location-dot::before {
+  background-color: #1769e8;
+}
+
+.hpo-map-v2 .maplibregl-user-location-dot::after {
+  border-color: #ffffff;
+}
