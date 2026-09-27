@@ -514,7 +514,7 @@ export const getHpoRoutePlanner = createServerFn({ method: "GET" })
 
     const nowIso = new Date().toISOString();
     const horizonIso = new Date(today.getTime() + 45 * 24 * 60 * 60 * 1000).toISOString();
-    const [routesResult, accountsResult, prospectsResult, meetingsResult, tasksResult] = await Promise.all([
+    const [routesResult, accountsResult, prospectsResult, meetingsResult, tasksResult, configResult] = await Promise.all([
       db
         .from("hpo_route_plans")
         .select(
@@ -559,9 +559,14 @@ export const getHpoRoutePlanner = createServerFn({ method: "GET" })
         .lte("scheduled_start_at", horizonIso)
         .order("scheduled_start_at", { ascending: true })
         .limit(150),
+      db
+        .from("emery_config")
+        .select("hpo_map_v2")
+        .eq("user_id", userId)
+        .maybeSingle(),
     ]);
 
-    for (const result of [routesResult, accountsResult, prospectsResult, meetingsResult, tasksResult]) {
+    for (const result of [routesResult, accountsResult, prospectsResult, meetingsResult, tasksResult, configResult]) {
       if (result.error) throw result.error;
     }
 
@@ -624,6 +629,9 @@ export const getHpoRoutePlanner = createServerFn({ method: "GET" })
       calendar,
       timezone,
       today: localDate(today),
+      featureFlags: {
+        hpoMapV2: Boolean(configResult.data?.hpo_map_v2),
+      },
     };
   });
 
