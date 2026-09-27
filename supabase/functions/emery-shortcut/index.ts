@@ -11,11 +11,15 @@ const IDENTITY = `You are Emery, Adam's one persistent personal AI companion and
 SHORTCUT STYLE: respond for listening, usually 1-3 natural sentences. Ask exactly one short follow-up question at a time when required information is missing. Never invent dates, times, people, or completed actions.
 
 CALENDAR/TASK RULES:
-- Emery's internal Calendar combines scheduled tasks and meetings/events.
+- Task List and Calendar are distinct. A task can stay unscheduled in the Task List.
+- For tasks, due_at is an optional deadline; scheduled_start_at/scheduled_end_at are the optional Calendar time block; reminder_at is the optional notification time.
 - A task may be created unscheduled if Adam explicitly asks to add/save a task without a time.
-- If Adam explicitly asks to put/schedule a task on the Calendar, a date and time are required. Ask for whichever key detail is missing.
+- If Adam explicitly asks to put/schedule a task on the Calendar, a date and time are required. Ask for whichever key detail is missing. Do not invent a deadline just because the task has a Calendar block.
+- When Adam asks what he can do with free time, use unscheduled open tasks, priority, deadlines and estimated duration; do not create or schedule anything unless he asks.
 - A meeting/event/lunch requires a title or identifiable person/purpose plus a date and start time. If details are missing, ask one question at a time.
 - Event duration matters. If Adam says a range such as "7-11pm" or "7 PM to 11 PM", preserve BOTH times exactly: due_at=start and end_at=end. If he gives a duration such as "for 4 hours", calculate end_at from that duration.
+- For task scheduling, use scheduled_start_at and scheduled_end_at, not due_at. If a task has a separate deadline, put that in due_at. Preserve explicit task durations exactly.
+- If Adam asks for a notification/reminder tied to a task, put the exact reminder time in reminder_at.
 - If Adam gives only a start time for a new event and no end/duration, default end_at to 60 minutes after due_at. Never shorten an explicit range to one hour.
 - Standing instruction from Adam: whenever he clearly says he HAS a lunch and supplies enough details for who/purpose plus date and time, that statement itself authorizes create_event. Do not ask for separate permission.
 - "Book a lunch" without who/when is incomplete; ask who first, then continue gathering the next missing detail in later turns.
@@ -129,7 +133,7 @@ Deno.serve(async (req: Request) => {
         .eq("user_id", USER_ID).order("importance", { ascending: false }).order("updated_at", { ascending: false }).limit(16),
       db.from("conversation_messages").select("id, role, content, created_at")
         .eq("user_id", USER_ID).eq("conversation_id", conversation.id).order("created_at", { ascending: false }).limit(20),
-      db.from("tasks").select("id, title, details, status, priority, due_at, project_id, metadata")
+      db.from("tasks").select("id, title, details, status, priority, due_at, scheduled_start_at, scheduled_end_at, reminder_at, estimated_minutes, project_id, metadata")
         .eq("user_id", USER_ID).neq("status", "completed").order("priority", { ascending: false }).order("due_at", { ascending: true, nullsFirst: false }).limit(30),
       db.from("projects").select("id, name, status, priority, next_action")
         .eq("user_id", USER_ID).eq("status", "active").order("priority", { ascending: false }).limit(15),
@@ -199,6 +203,9 @@ Deno.serve(async (req: Request) => {
                     title: { type: "string" },
                     details: { type: "string" },
                     due_at: { type: ["string", "null"] },
+                    scheduled_start_at: { type: ["string", "null"] },
+                    scheduled_end_at: { type: ["string", "null"] },
+                    reminder_at: { type: ["string", "null"] },
                     end_at: { type: ["string", "null"] },
                     priority: { type: "integer", minimum: 1, maximum: 5 },
                     participants: { type: "array", items: { type: "string" }, maxItems: 20 },
@@ -210,7 +217,7 @@ Deno.serve(async (req: Request) => {
                     next_action: { type: "string" },
                     contains_phi: { type: "boolean" },
                   },
-                  required: ["type", "title", "details", "due_at", "end_at", "priority", "participants", "target_task_id", "target_hpo_account_id", "interaction_type", "outcome", "relationship_signal", "next_action", "contains_phi"],
+                  required: ["type", "title", "details", "due_at", "scheduled_start_at", "scheduled_end_at", "reminder_at", "end_at", "priority", "participants", "target_task_id", "target_hpo_account_id", "interaction_type", "outcome", "relationship_signal", "next_action", "contains_phi"],
                 },
               },
               required: ["reply", "continue_conversation", "action"],
@@ -244,11 +251,20 @@ Deno.serve(async (req: Request) => {
       const title = String(action.title ?? "").trim();
       if (!title) return json({ error: "Task title missing" }, 422);
       const dueAt = action.due_at && !Number.isNaN(Date.parse(action.due_at)) ? new Date(action.due_at).toISOString() : null;
-      const created = await db.rpc("emery_action_create_task", {
+      const scheduledStartAt = action.scheduled_start_at && !Number.isNaN(Date.parse(action.scheduled_start_at))
+        ? new Date(action.scheduled_start_at).toISOString() : null;
+      const scheduledEndAt = action.scheduled_end_at && !Number.isNaN(Date.parse(action.scheduled_end_at))
+        ? new Date(action.scheduled_end_at).toISOString() : null;
+      const reminderAt = action.reminder_at && !Number.isNaN(Date.parse(action.reminder_at))
+        ? new Date(action.reminder_at).toISOString() : null;
+      const created = await db.rpc("emery_action_create_task_v2", {
         p_user_id: USER_ID,
         p_title: title,
         p_details: String(action.details ?? "").trim() || null,
         p_due_at: dueAt,
+        p_scheduled_start_at: scheduledStartAt,
+        p_scheduled_end_at: scheduledEndAt,
+        p_reminder_at: reminderAt,
         p_priority: Math.min(5, Math.max(1, Number(action.priority ?? 3))),
         p_source: "emery-shortcut",
       });
@@ -256,6 +272,15 @@ Deno.serve(async (req: Request) => {
       const row = rpcRow(created);
       if (!row?.id) throw new Error("Task creation returned no record");
       actionTaken = { type: "create_task", id: row.id, title: row.title };
+      if (row.scheduled_start_at) {
+        const startText = new Date(row.scheduled_start_at).toLocaleString("en-US", { timeZone: TIMEZONE, dateStyle: "medium", timeStyle: "short" });
+        const endText = new Date(row.scheduled_end_at).toLocaleTimeString("en-US", { timeZone: TIMEZONE, hour: "numeric", minute: "2-digit" });
+        reply = `Added “${row.title}” to your Task List and Calendar for ${startText}–${endText}.${row.reminder_at ? " The reminder is scheduled too." : ""}`;
+      } else if (row.due_at) {
+        reply = `Added “${row.title}” to your Task List with its deadline saved.`;
+      } else {
+        reply = `Added “${row.title}” to your Task List. It stays unscheduled until you choose to time-block it.`;
+      }
       continueConversation = false;
     }
 
@@ -338,20 +363,33 @@ Deno.serve(async (req: Request) => {
         actionTaken = { type: "complete_task", id: row.id, title: row.title };
         continueConversation = false;
       } else {
-        const dueAt = action.due_at && !Number.isNaN(Date.parse(action.due_at)) ? new Date(action.due_at).toISOString() : null;
-        if (!dueAt) {
+        const startAt = action.scheduled_start_at && !Number.isNaN(Date.parse(action.scheduled_start_at))
+          ? new Date(action.scheduled_start_at).toISOString()
+          : action.due_at && !Number.isNaN(Date.parse(action.due_at))
+            ? new Date(action.due_at).toISOString()
+            : null;
+        const endAt = action.scheduled_end_at && !Number.isNaN(Date.parse(action.scheduled_end_at))
+          ? new Date(action.scheduled_end_at).toISOString() : null;
+        const reminderAt = action.reminder_at && !Number.isNaN(Date.parse(action.reminder_at))
+          ? new Date(action.reminder_at).toISOString() : null;
+        if (!startAt) {
           reply = reply || "What day and time should I schedule that task?";
           continueConversation = true;
         } else {
-          const updated = await db.rpc("emery_action_schedule_task", {
+          const updated = await db.rpc("emery_action_schedule_task_v2", {
             p_user_id: USER_ID,
             p_task_id: target.id,
-            p_due_at: dueAt,
+            p_start_at: startAt,
+            p_end_at: endAt,
+            p_reminder_at: reminderAt,
           });
           if (updated.error) throw updated.error;
           const row = rpcRow(updated);
           if (!row?.id) throw new Error("Task scheduling returned no record");
           actionTaken = { type: "schedule_task", id: row.id, title: row.title };
+          const startText = new Date(row.scheduled_start_at).toLocaleString("en-US", { timeZone: TIMEZONE, dateStyle: "medium", timeStyle: "short" });
+          const endText = new Date(row.scheduled_end_at).toLocaleTimeString("en-US", { timeZone: TIMEZONE, hour: "numeric", minute: "2-digit" });
+          reply = `Scheduled “${row.title}” for ${startText}–${endText}.${row.reminder_at ? " The reminder is scheduled too." : ""}`;
           continueConversation = false;
         }
       }
