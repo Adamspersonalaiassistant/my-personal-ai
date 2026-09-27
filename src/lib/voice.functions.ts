@@ -88,7 +88,7 @@ async function loadVoiceContext(db: any, userId: string, query = "current voice 
       .maybeSingle(),
     db
       .from("tasks")
-      .select("id,title,details,status,priority,due_at,metadata,project_id")
+      .select("id,title,details,status,priority,due_at,scheduled_start_at,scheduled_end_at,reminder_at,estimated_minutes,metadata,project_id")
       .eq("user_id", userId)
       .neq("status", "completed")
       .order("priority", { ascending: false })
@@ -132,8 +132,19 @@ async function loadVoiceContext(db: any, userId: string, query = "current voice 
     maxCharacters: memoryMaxCharacters,
   });
 
+  const voiceTasks = taskResult.data ?? [];
+  const nowMs = Date.now();
   const actions = {
-    tasks: taskResult.data ?? [],
+    tasks: voiceTasks,
+    task_pool: voiceTasks.filter((task: any) => !task.scheduled_start_at),
+    scheduled_tasks: voiceTasks.filter((task: any) => Boolean(task.scheduled_start_at)),
+    overdue_tasks: voiceTasks.filter(
+      (task: any) => task.due_at && Date.parse(task.due_at) < nowMs,
+    ),
+    missed_time_blocks: voiceTasks.filter((task: any) => {
+      const end = task.scheduled_end_at ?? task.scheduled_start_at;
+      return end && Date.parse(end) < nowMs;
+    }),
     projects: projectResult.data ?? [],
     meetings: meetingResult.data ?? [],
   };
