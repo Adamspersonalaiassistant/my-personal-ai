@@ -599,7 +599,7 @@ function CalendarPage() {
                       className="emery-press flex min-h-[58px] flex-col items-center justify-center gap-1"
                     >
                       <span className="text-[9px] font-semibold uppercase text-muted-foreground">
-                          {date.toLocaleDateString([], { weekday: "short" })}
+                        {date.toLocaleDateString([], { weekday: "short" })}
                       </span>
                       <span
                         className={`flex size-8 items-center justify-center rounded-full text-sm font-semibold ${selected ? "bg-primary text-primary-foreground" : today ? "text-primary" : "text-foreground"}`}

@@ -458,12 +458,12 @@ function Chat() {
 
           {!loading && messages.length > 0 && hasMore ? (
             <div className="mx-auto mb-5 flex max-w-2xl justify-center">
-               <Button
-                 variant="ghost"
+              <Button
+                variant="ghost"
                 type="button"
                 onClick={() => void loadOlder()}
                 disabled={loadingOlder}
-                 className="emery-press min-h-11 gap-2 rounded-lg px-3 text-xs font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-50"
+                className="emery-press min-h-11 gap-2 rounded-lg px-3 text-xs font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-50"
               >
                 {loadingOlder ? (
                   <Loader2 className="size-3.5 animate-spin" />
@@ -471,7 +471,7 @@ function Chat() {
                   <ChevronUp className="size-3.5" />
                 )}
                 {loadingOlder ? "Loading earlier…" : "Earlier messages"}
-               </Button>
+              </Button>
             </div>
           ) : null}
 
@@ -605,7 +605,7 @@ function Chat() {
             className="emery-press absolute bottom-[5.4rem] right-4 z-30 size-11 rounded-full border-border/60 bg-card text-primary shadow-sm"
           >
             <ArrowDown className="size-4" />
-           </Button>
+          </Button>
         ) : null}
 
         <div className="z-20 shrink-0 border-t border-border/40 bg-background/95 px-3 pb-3 pt-3 backdrop-blur-lg sm:px-5 sm:pb-4 md:px-7">
@@ -718,7 +718,7 @@ function Chat() {
               title="Attach photos or files"
               onClick={() => fileInputRef.current?.click()}
               disabled={pending}
-               className="emery-press size-11 shrink-0 rounded-lg text-muted-foreground hover:bg-accent/50 hover:text-primary disabled:opacity-40"
+              className="emery-press size-11 shrink-0 rounded-lg text-muted-foreground hover:bg-accent/50 hover:text-primary disabled:opacity-40"
             >
               <Paperclip className="size-[18px]" strokeWidth={1.9} />
             </Button>
@@ -743,14 +743,14 @@ function Chat() {
               className="max-h-32 min-h-11 min-w-0 flex-1 overflow-y-auto bg-transparent px-1.5 py-2 text-[16px] leading-6 text-foreground outline-none placeholder:text-muted-foreground/60 sm:px-2 sm:text-[15px]"
             />
             <EmeryVoiceControl onConversationChanged={() => void refreshLatest()} />
-             <Button
+            <Button
               type="submit"
               aria-label="Send"
-               className="emery-press size-11 shrink-0 rounded-lg shadow-none disabled:opacity-30"
+              className="emery-press size-11 shrink-0 rounded-lg shadow-none disabled:opacity-30"
               disabled={(!draft.trim() && selectedFiles.length === 0) || pending}
             >
               <ArrowUp className="size-[18px]" strokeWidth={2.2} />
-             </Button>
+            </Button>
           </form>
         </div>
       </div>

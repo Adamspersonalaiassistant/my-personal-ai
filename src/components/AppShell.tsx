@@ -241,7 +241,9 @@ export function AppShell({
                 if (to === "/chat") rememberEmeryHandoff();
               }}
               className="emery-press flex min-h-[58px] flex-col items-center justify-center gap-1 rounded-md px-1 text-[10px] font-medium text-muted-foreground transition-colors"
-              activeProps={{ className: "bg-primary/[0.08] text-primary font-semibold [&_svg]:stroke-[2.3]" }}
+              activeProps={{
+                className: "bg-primary/[0.08] text-primary font-semibold [&_svg]:stroke-[2.3]",
+              }}
             >
               <Icon className="size-[19px]" />
               <span>{label}</span>
