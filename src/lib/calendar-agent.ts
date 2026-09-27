@@ -1,5 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { MODEL_POLICY } from "@/lib/model-policy";
+import {
+  beginExecution,
+  clarifyExecution,
+  completeExecution,
+  failExecution,
+} from "@/lib/execution-ledger";
 
 type CalendarActionInput = {
   db: any;
@@ -10,6 +16,7 @@ type CalendarActionInput = {
   timezone: string;
   openTasks: any[];
   upcomingMeetings: any[];
+  sourceMessageId?: string | null;
 };
 
 export type CalendarActionName =
@@ -124,7 +131,12 @@ async function upsertEventReminder(input: {
   if (error) throw error;
 }
 
-async function performOperation(input: CalendarActionInput, operation: any): Promise<CalendarActionItemResult> {
+async function performOperation(
+  input: CalendarActionInput,
+  operation: any,
+  operationIndex: number,
+  parentRunId: string | null,
+): Promise<CalendarActionItemResult> {
   const { db, userId, openTasks, upcomingMeetings } = input;
   const action = String(operation.action ?? "") as CalendarActionItemResult["action"];
   const title = typeof operation.title === "string" ? operation.title.trim() : "";
@@ -135,6 +147,35 @@ async function performOperation(input: CalendarActionInput, operation: any): Pro
   const reminderAt = isoOrNull(operation.reminder_at);
   const eventType = operation.event_type ?? null;
   const targetId = typeof operation.target_id === "string" ? operation.target_id.trim() : "";
+  const execution = await beginExecution({
+    db,
+    userId,
+    domain: "calendar",
+    action,
+    sourceMessageId: input.sourceMessageId ?? null,
+    parentRunId,
+    idempotencyKey: input.sourceMessageId
+      ? `message:${input.sourceMessageId}:calendar:${operationIndex}:${action}`
+      : null,
+    targetType:
+      action.includes("task") ? "task" : action.includes("event") ? "event" : "notification",
+    targetId: targetId || null,
+    requestPayload: {
+      title,
+      details,
+      dueAt,
+      scheduledStart,
+      scheduledEnd,
+      reminderAt,
+      eventType,
+      targetId: targetId || null,
+      priority: operation.priority ?? null,
+    },
+  });
+
+  if (execution.reused && execution.status === "completed") {
+    return execution.resultPayload as unknown as CalendarActionItemResult;
+  }
 
   try {
     if (action === "create_task") {
@@ -157,7 +198,7 @@ async function performOperation(input: CalendarActionInput, operation: any): Pro
       if (created.error) throw created.error;
       const row = rpcRow(created);
       if (!row?.id) throw new Error("Task creation returned no record");
-      return {
+      const item: CalendarActionItemResult = {
         action,
         performed: true,
         recordId: row.id,
@@ -168,6 +209,15 @@ async function performOperation(input: CalendarActionInput, operation: any): Pro
         reminderAt: row.reminder_at ?? null,
         eventType: "task",
       };
+      await completeExecution({
+        db,
+        userId,
+        runId: execution.id,
+        resultPayload: item as unknown as Record<string, unknown>,
+        targetType: "task",
+        targetId: row.id,
+      });
+      return item;
     }
 
     if (action === "create_event") {
@@ -200,7 +250,7 @@ async function performOperation(input: CalendarActionInput, operation: any): Pro
           reminderAt,
         });
       }
-      return {
+      const item: CalendarActionItemResult = {
         action,
         performed: true,
         recordId: row.id,
@@ -211,6 +261,15 @@ async function performOperation(input: CalendarActionInput, operation: any): Pro
         reminderAt,
         eventType: (row.metadata ?? {}).event_type ?? eventType ?? "event",
       };
+      await completeExecution({
+        db,
+        userId,
+        runId: execution.id,
+        resultPayload: item as unknown as Record<string, unknown>,
+        targetType: "event",
+        targetId: row.id,
+      });
+      return item;
     }
 
     if (action === "create_reminder") {
@@ -229,7 +288,7 @@ async function performOperation(input: CalendarActionInput, operation: any): Pro
         .select("id,title,scheduled_for")
         .single();
       if (error) throw error;
-      return {
+      const item: CalendarActionItemResult = {
         action,
         performed: true,
         recordId: row.id,
@@ -240,6 +299,15 @@ async function performOperation(input: CalendarActionInput, operation: any): Pro
         reminderAt: row.scheduled_for,
         eventType: null,
       };
+      await completeExecution({
+        db,
+        userId,
+        runId: execution.id,
+        resultPayload: item as unknown as Record<string, unknown>,
+        targetType: "notification",
+        targetId: row.id,
+      });
+      return item;
     }
 
     if (!targetId) throw new Error("Target id missing");
@@ -253,7 +321,7 @@ async function performOperation(input: CalendarActionInput, operation: any): Pro
       });
       if (updated.error) throw updated.error;
       const row = rpcRow(updated);
-      return {
+      const item: CalendarActionItemResult = {
         action,
         performed: Boolean(row?.id),
         recordId: row?.id ?? null,
@@ -264,6 +332,16 @@ async function performOperation(input: CalendarActionInput, operation: any): Pro
         reminderAt: null,
         eventType: "task",
       };
+      if (!item.performed) throw new Error("Task completion returned no record");
+      await completeExecution({
+        db,
+        userId,
+        runId: execution.id,
+        resultPayload: item as unknown as Record<string, unknown>,
+        targetType: "task",
+        targetId: item.recordId,
+      });
+      return item;
     }
 
     if (action === "schedule_task") {
@@ -279,7 +357,7 @@ async function performOperation(input: CalendarActionInput, operation: any): Pro
       });
       if (updated.error) throw updated.error;
       const row = rpcRow(updated);
-      return {
+      const item: CalendarActionItemResult = {
         action,
         performed: Boolean(row?.id),
         recordId: row?.id ?? null,
@@ -290,6 +368,9 @@ async function performOperation(input: CalendarActionInput, operation: any): Pro
         reminderAt: row?.reminder_at ?? reminderAt,
         eventType: "task",
       };
+      if (!item.performed) throw new Error("Task scheduling returned no record");
+      await completeExecution({ db, userId, runId: execution.id, resultPayload: item as unknown as Record<string, unknown>, targetType: "task", targetId: item.recordId });
+      return item;
     }
 
     if (action === "unschedule_task") {
@@ -301,7 +382,7 @@ async function performOperation(input: CalendarActionInput, operation: any): Pro
       });
       if (updated.error) throw updated.error;
       const row = rpcRow(updated);
-      return {
+      const item: CalendarActionItemResult = {
         action,
         performed: Boolean(row?.id),
         recordId: row?.id ?? null,
@@ -312,6 +393,9 @@ async function performOperation(input: CalendarActionInput, operation: any): Pro
         reminderAt: null,
         eventType: "task",
       };
+      if (!item.performed) throw new Error("Task unschedule returned no record");
+      await completeExecution({ db, userId, runId: execution.id, resultPayload: item as unknown as Record<string, unknown>, targetType: "task", targetId: item.recordId });
+      return item;
     }
 
     if (action === "set_task_deadline") {
@@ -324,7 +408,7 @@ async function performOperation(input: CalendarActionInput, operation: any): Pro
       });
       if (updated.error) throw updated.error;
       const row = rpcRow(updated);
-      return {
+      const item: CalendarActionItemResult = {
         action,
         performed: Boolean(row?.id),
         recordId: row?.id ?? null,
@@ -335,6 +419,9 @@ async function performOperation(input: CalendarActionInput, operation: any): Pro
         reminderAt: row?.reminder_at ?? target.reminder_at ?? null,
         eventType: "task",
       };
+      if (!item.performed) throw new Error("Task deadline update returned no record");
+      await completeExecution({ db, userId, runId: execution.id, resultPayload: item as unknown as Record<string, unknown>, targetType: "task", targetId: item.recordId });
+      return item;
     }
 
     if (action === "reschedule_event") {
@@ -360,7 +447,7 @@ async function performOperation(input: CalendarActionInput, operation: any): Pro
           reminderAt,
         });
       }
-      return {
+      const item: CalendarActionItemResult = {
         action,
         performed: true,
         recordId: row.id,
@@ -371,11 +458,26 @@ async function performOperation(input: CalendarActionInput, operation: any): Pro
         reminderAt,
         eventType: (row.metadata ?? {}).event_type ?? eventType,
       };
+      await completeExecution({ db, userId, runId: execution.id, resultPayload: item as unknown as Record<string, unknown>, targetType: "event", targetId: row.id });
+      return item;
     }
 
     throw new Error("Unsupported calendar action");
   } catch (error) {
     console.error("Calendar operation failed", action, error);
+    await failExecution({
+      db,
+      userId,
+      runId: execution.id,
+      errorCode: "calendar_write_failed",
+      errorMessage: error instanceof Error ? error.message : String(error),
+      retryable: true,
+      resultPayload: {
+        action,
+        title: title || null,
+        targetId: targetId || null,
+      },
+    }).catch((ledgerError) => console.error("Execution ledger failure", ledgerError));
     return {
       action,
       performed: false,
@@ -581,27 +683,68 @@ ${context}`,
 
   if (!parsed.recognized) return emptyResult();
 
+  const parentExecution = await beginExecution({
+    db,
+    userId,
+    domain: "calendar",
+    action: Array.isArray(parsed.operations) && parsed.operations.length > 1 ? "batch" : String(parsed.operations?.[0]?.action ?? "calendar_action"),
+    sourceMessageId: input.sourceMessageId ?? null,
+    idempotencyKey: input.sourceMessageId ? `message:${input.sourceMessageId}:calendar:parent` : null,
+    requestPayload: {
+      message,
+      operations: Array.isArray(parsed.operations) ? parsed.operations : [],
+    },
+  });
+
+  if (
+    parentExecution.reused &&
+    (parentExecution.status === "completed" ||
+      parentExecution.status === "needs_clarification" ||
+      parentExecution.status === "failed") &&
+    parentExecution.resultPayload["calendarResult"]
+  ) {
+    return parentExecution.resultPayload["calendarResult"] as CalendarActionResult;
+  }
+
   if (parsed.needs_clarification) {
-    return {
+    const clarificationResult: CalendarActionResult = {
       ...emptyResult(),
       recognized: true,
       needsClarification: true,
       question: String(parsed.clarification_question ?? "What detail should I use?"),
     };
+    await clarifyExecution({
+      db,
+      userId,
+      runId: parentExecution.id,
+      question: clarificationResult.question ?? "What detail should I use?",
+      resultPayload: { calendarResult: clarificationResult as unknown as Record<string, unknown> },
+    });
+    return clarificationResult;
   }
 
   const operations = Array.isArray(parsed.operations) ? parsed.operations.slice(0, 20) : [];
   if (!operations.length) {
-    return {
+    const failed = {
       ...emptyResult(),
       recognized: true,
       error: "calendar_action_empty",
     };
+    await failExecution({
+      db,
+      userId,
+      runId: parentExecution.id,
+      errorCode: "calendar_action_empty",
+      errorMessage: "Calendar controller recognized the request but produced no operations.",
+      retryable: false,
+      resultPayload: { calendarResult: failed as unknown as Record<string, unknown> },
+    });
+    return failed;
   }
 
   const items: CalendarActionItemResult[] = [];
-  for (const operation of operations) {
-    items.push(await performOperation(input, operation));
+  for (let index = 0; index < operations.length; index += 1) {
+    items.push(await performOperation(input, operations[index], index, parentExecution.id));
   }
 
   const successful = items.filter((item) => item.performed);
@@ -619,7 +762,7 @@ ${context}`,
   }
 
   const first = successful[0] ?? items[0] ?? null;
-  return {
+  const result: CalendarActionResult = {
     recognized: true,
     performed: successful.length > 0,
     partialSuccess: successful.length > 0 && successful.length < items.length,
@@ -642,4 +785,27 @@ ${context}`,
           ? "calendar_partial_write"
           : null,
   };
+
+  if (successful.length > 0) {
+    await completeExecution({
+      db,
+      userId,
+      runId: parentExecution.id,
+      resultPayload: { calendarResult: result as unknown as Record<string, unknown> },
+      targetType: result.action === "batch" ? "batch" : first?.eventType ?? null,
+      targetId: result.recordId,
+    });
+  } else {
+    await failExecution({
+      db,
+      userId,
+      runId: parentExecution.id,
+      errorCode: "calendar_write_failed",
+      errorMessage: "No requested Calendar or Task writes were completed.",
+      retryable: true,
+      resultPayload: { calendarResult: result as unknown as Record<string, unknown> },
+    });
+  }
+
+  return result;
 }
