@@ -924,141 +924,153 @@ export const updateHpoRouteStop = createServerFn({ method: "POST" })
     return { stop: updated, routeStatus };
   });
 
+export async function captureHpoRouteNoteCore(input: {
+  db: any;
+  userId: string;
+  routeId: string;
+  message: string;
+}) {
+  const message = clean(input.message);
+  if (!message) throw new Error("Tell Emery what happened at the stop");
+  const { data: stops, error } = await input.db
+    .from("hpo_route_stops")
+    .select("*")
+    .eq("route_id", input.routeId)
+    .eq("user_id", input.userId)
+    .order("stop_order", { ascending: true });
+  if (error) throw error;
+  const rows = stops ?? [];
+  if (!rows.length) throw new Error("This route has no stops");
+
+  const numberMatch = message.match(/\bstop\s*#?\s*(\d{1,2})\b/i);
+  const ordinalWords: Record<string, number> = {
+    first: 1,
+    second: 2,
+    third: 3,
+    fourth: 4,
+    fifth: 5,
+    sixth: 6,
+    seventh: 7,
+    eighth: 8,
+    ninth: 9,
+    tenth: 10,
+    eleventh: 11,
+    twelfth: 12,
+    thirteenth: 13,
+    fourteenth: 14,
+    fifteenth: 15,
+    sixteenth: 16,
+    seventeenth: 17,
+    eighteenth: 18,
+    nineteenth: 19,
+    twentieth: 20,
+  };
+  const ordinalMatch = message.toLowerCase().match(
+    /\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth)\s+(?:stop|office)\b/,
+  );
+  const explicitOrder = numberMatch
+    ? Number(numberMatch[1])
+    : ordinalMatch
+      ? ordinalWords[ordinalMatch[1] ?? ""]
+      : null;
+  let target =
+    explicitOrder && explicitOrder > 0
+      ? rows.find((row: any) => Number(row.stop_order) === explicitOrder)
+      : null;
+
+  if (!target && /\b(next stop|next office)\b/i.test(message)) {
+    target = rows.find((row: any) => !TERMINAL.has(row.status)) ?? null;
+  }
+
+  if (!target) {
+    const messageNorm = normalize(message);
+    let best: { row: any; score: number } | null = null;
+    for (const row of rows) {
+      const office = normalize(row.office_name ?? "");
+      if (!office) continue;
+      if (messageNorm.includes(office)) {
+        target = row;
+        break;
+      }
+      const tokens = office.split(" ").filter((token) => token.length >= 4);
+      const matched = tokens.filter((token) => messageNorm.includes(token)).length;
+      const score = tokens.length ? matched / tokens.length : 0;
+      if (!best || score > best.score) best = { row, score };
+    }
+    if (!target && best && best.score >= 0.5) target = best.row;
+  }
+
+  if (!target) {
+    const active = rows.filter((row: any) => !TERMINAL.has(row.status));
+    if (active.length === 1) target = active[0];
+  }
+
+  if (!target) {
+    return {
+      ok: false,
+      needsClarification: true,
+      question: "Which stop is this note for? You can say the stop number or office name.",
+    } as const;
+  }
+
+  const status = inferStatus(message);
+  const visitOutcome = inferOutcome(message);
+  const nextAction = extractNextAction(message);
+  const patch: Record<string, unknown> = {
+    status,
+    notes: message,
+    visit_summary: message,
+    visit_outcome: visitOutcome,
+    next_action: nextAction,
+    visited_at: target.visited_at ?? new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data: updated, error: updateError } = await input.db
+    .from("hpo_route_stops")
+    .update(patch)
+    .eq("id", target.id)
+    .eq("user_id", input.userId)
+    .select("*")
+    .single();
+  if (updateError) throw updateError;
+
+  await upsertInteractionForStop(input.db, input.userId, updated, {
+    notes: message,
+    visitOutcome,
+    nextAction,
+    nextActionDueAt: updated.next_action_due_at,
+    status,
+  });
+  const routeStatus = await syncRouteStatus(input.db, input.userId, input.routeId);
+
+  return {
+    ok: true,
+    needsClarification: false,
+    stopId: updated.id,
+    stopOrder: updated.stop_order,
+    officeName: updated.office_name,
+    status: updated.status,
+    visitOutcome,
+    nextAction,
+    routeStatus,
+  } as const;
+}
+
 export const captureHpoRouteNote = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { routeId: string; message: string }) => ({
     routeId: clean(input.routeId),
     message: clean(input.message),
   }))
-  .handler(async ({ data, context }) => {
-    if (!data.message) throw new Error("Tell Emery what happened at the stop");
-    const db = context.supabase as any;
-    const { data: stops, error } = await db
-      .from("hpo_route_stops")
-      .select("*")
-      .eq("route_id", data.routeId)
-      .eq("user_id", context.userId)
-      .order("stop_order", { ascending: true });
-    if (error) throw error;
-    const rows = stops ?? [];
-    if (!rows.length) throw new Error("This route has no stops");
-
-    const numberMatch = data.message.match(/\bstop\s*#?\s*(\d{1,2})\b/i);
-    const ordinalWords: Record<string, number> = {
-      first: 1,
-      second: 2,
-      third: 3,
-      fourth: 4,
-      fifth: 5,
-      sixth: 6,
-      seventh: 7,
-      eighth: 8,
-      ninth: 9,
-      tenth: 10,
-      eleventh: 11,
-      twelfth: 12,
-      thirteenth: 13,
-      fourteenth: 14,
-      fifteenth: 15,
-      sixteenth: 16,
-      seventeenth: 17,
-      eighteenth: 18,
-      nineteenth: 19,
-      twentieth: 20,
-    };
-    const ordinalMatch = data.message.toLowerCase().match(
-      /\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth)\s+(?:stop|office)\b/,
-    );
-    const explicitOrder = numberMatch
-      ? Number(numberMatch[1])
-      : ordinalMatch
-        ? ordinalWords[ordinalMatch[1] ?? ""]
-        : null;
-    let target =
-      explicitOrder && explicitOrder > 0
-        ? rows.find((row: any) => Number(row.stop_order) === explicitOrder)
-        : null;
-
-    if (!target && /\b(next stop|next office)\b/i.test(data.message)) {
-      target = rows.find((row: any) => !TERMINAL.has(row.status)) ?? null;
-    }
-
-    if (!target) {
-      const messageNorm = normalize(data.message);
-      let best: { row: any; score: number } | null = null;
-      for (const row of rows) {
-        const office = normalize(row.office_name ?? "");
-        if (!office) continue;
-        if (messageNorm.includes(office)) {
-          target = row;
-          break;
-        }
-        const tokens = office.split(" ").filter((token) => token.length >= 4);
-        const matched = tokens.filter((token) => messageNorm.includes(token)).length;
-        const score = tokens.length ? matched / tokens.length : 0;
-        if (!best || score > best.score) best = { row, score };
-      }
-      if (!target && best && best.score >= 0.5) target = best.row;
-    }
-
-    if (!target) {
-      const active = rows.filter((row: any) => !TERMINAL.has(row.status));
-      if (active.length === 1) target = active[0];
-    }
-
-    if (!target) {
-      return {
-        ok: false,
-        needsClarification: true,
-        question: "Which stop is this note for? You can say the stop number or office name.",
-      } as const;
-    }
-
-    const status = inferStatus(data.message);
-    const visitOutcome = inferOutcome(data.message);
-    const nextAction = extractNextAction(data.message);
-
-    const patch: Record<string, unknown> = {
-      status,
-      notes: data.message,
-      visit_summary: data.message,
-      visit_outcome: visitOutcome,
-      next_action: nextAction,
-      visited_at: target.visited_at ?? new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    const { data: updated, error: updateError } = await db
-      .from("hpo_route_stops")
-      .update(patch)
-      .eq("id", target.id)
-      .eq("user_id", context.userId)
-      .select("*")
-      .single();
-    if (updateError) throw updateError;
-
-    await upsertInteractionForStop(db, context.userId, updated, {
-      notes: data.message,
-      visitOutcome,
-      nextAction,
-      nextActionDueAt: updated.next_action_due_at,
-      status,
-    });
-    const routeStatus = await syncRouteStatus(db, context.userId, data.routeId);
-
-    return {
-      ok: true,
-      needsClarification: false,
-      stopId: updated.id,
-      stopOrder: updated.stop_order,
-      officeName: updated.office_name,
-      status: updated.status,
-      visitOutcome,
-      nextAction,
-      routeStatus,
-    } as const;
-  });
-
+  .handler(async ({ data, context }) =>
+    captureHpoRouteNoteCore({
+      db: context.supabase as any,
+      userId: context.userId,
+      routeId: data.routeId,
+      message: data.message,
+    }),
+  );
 
 export const syncHpoRouteToCalendar = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
