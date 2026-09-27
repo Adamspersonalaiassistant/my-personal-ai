@@ -504,15 +504,15 @@ function Chat() {
               </p>
               <div className="mt-6 flex w-full flex-wrap justify-center gap-2">
                 {quickPrompts.map((prompt) => (
-           <Button
-             variant="outline"
+                  <Button
+                    variant="outline"
                     key={prompt}
                     type="button"
                     onClick={() => void sendMessage(prompt)}
                     className="emery-press min-h-11 rounded-lg border border-border/50 bg-card/40 px-3 text-sm font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground"
                   >
                     {prompt}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -594,14 +594,15 @@ function Chat() {
         </div>
 
         {!nearBottom && !loading ? (
-          <button
+          <Button
+            variant="outline"
             type="button"
             onClick={() => {
               setNearBottom(true);
               scrollToLatest("smooth");
             }}
             aria-label="Jump to latest message"
-             className="emery-press absolute bottom-[5.4rem] right-4 z-30 size-11 rounded-full border-border/60 bg-card text-primary shadow-sm"
+            className="emery-press absolute bottom-[5.4rem] right-4 z-30 size-11 rounded-full border-border/60 bg-card text-primary shadow-sm"
           >
             <ArrowDown className="size-4" />
            </Button>
@@ -625,15 +626,15 @@ function Chat() {
                         approved voice yet.
                       </p>
                     </div>
-             <Button
-               variant="ghost"
+                    <Button
+                      variant="ghost"
                       type="button"
                       onClick={() => setVoiceStudioState(null)}
                       className="emery-press flex size-9 items-center justify-center rounded-lg text-muted-foreground"
                       aria-label="Close voice preview"
                     >
                       <X className="size-4" />
-                    </button>
+                    </Button>
                   </div>
                   <audio
                     data-emery-voice-preview="true"
@@ -710,7 +711,8 @@ function Chat() {
                 event.currentTarget.value = "";
               }}
             />
-            <button
+            <Button
+              variant="ghost"
               type="button"
               aria-label="Attach photos or files"
               title="Attach photos or files"
@@ -719,7 +721,7 @@ function Chat() {
                className="emery-press size-11 shrink-0 rounded-lg text-muted-foreground hover:bg-accent/50 hover:text-primary disabled:opacity-40"
             >
               <Paperclip className="size-[18px]" strokeWidth={1.9} />
-             </Button>
+            </Button>
             <textarea
               ref={textareaRef}
               value={draft}
