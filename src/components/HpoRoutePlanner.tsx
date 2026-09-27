@@ -1734,7 +1734,7 @@ export function HpoRoutePlanner() {
                         data: {
                           stopId: stop.id,
                           ...input,
-                          idempotencyKey: `ui:${crypto.randomUUID()}:hpo.route_stop.set_outcome`,
+                          idempotencyKey: `ui:${crypto.randomUUID()}:hpo.route_stop.log_visit`,
                           sourceChannel: "ui",
                         },
                       });
