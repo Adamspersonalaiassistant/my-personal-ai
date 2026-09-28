@@ -1432,6 +1432,74 @@ export const completeHpoRoute = createServerFn({ method: "POST" })
     }),
   );
 
+export async function getHpoRouteTrackerExportCore(input: {
+  db: any;
+  userId: string;
+  routeId: string;
+}) {
+  const route = await loadRoute(input.db, input.userId, input.routeId);
+  const stops = await loadStops(input.db, input.userId, route.id);
+  const completed = [...stops]
+    .sort((a: any, b: any) => Number(a.stop_order) - Number(b.stop_order))
+    .filter((stop: any) => TERMINAL.has(String(stop.status)));
+
+  const rows = completed.map((stop: any) => ({
+    date: route.route_date,
+    stopNumber: Number(stop.stop_order),
+    office: clean(stop.office_name),
+    visitStatus: clean(stop.status).replaceAll("_", " "),
+    visitNotes: clean(stop.notes || stop.visit_summary),
+    followUp: clean(stop.next_action),
+    accountStatus: clean(stop.visit_outcome),
+    routeStopId: stop.id,
+    accountId: stop.account_id ?? null,
+    prospectId: stop.prospect_id ?? null,
+  }));
+
+  const cells = [
+    ["Date", "Stop Number", "Office", "Visit Status", "Visit Notes", "Follow-Up", "Account Status"],
+    ...rows.map((row) => [
+      row.date,
+      String(row.stopNumber),
+      row.office,
+      row.visitStatus,
+      row.visitNotes,
+      row.followUp,
+      row.accountStatus,
+    ]),
+  ];
+  const tsv = cells
+    .map((row) =>
+      row
+        .map((cell) => String(cell ?? "").replace(/[\t\n\r]+/g, " ").trim())
+        .join("\t"),
+    )
+    .join("\n");
+
+  return {
+    ok: true as const,
+    action: "hpo.route.export" as const,
+    routeId: route.id,
+    routeDate: route.route_date,
+    area: route.area ?? null,
+    completedCount: rows.length,
+    totalStops: stops.length,
+    rows,
+    tsv,
+  };
+}
+
+export const exportHpoRouteTracker = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { routeId: string }) => ({ routeId: clean(input.routeId) }))
+  .handler(async ({ data, context }) =>
+    getHpoRouteTrackerExportCore({
+      db: context.supabase as any,
+      userId: context.userId,
+      routeId: data.routeId,
+    }),
+  );
+
 export const getHpoAccountFieldContext = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { accountId: string }) => ({ accountId: clean(input.accountId) }))
