@@ -994,9 +994,14 @@ export const executeVoiceHpoRouteStopAction = createServerFn({ method: "POST" })
 
 export const executeVoiceHpoRouteNote = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { request: string; routeId?: string | null }) => ({
+  .inputValidator((input: {
+    request: string;
+    routeId?: string | null;
+    requestId?: string | null;
+  }) => ({
     request: String(input?.request ?? "").trim().slice(0, 5000),
     routeId: input?.routeId ? String(input.routeId).trim() : null,
+    requestId: input?.requestId ? String(input.requestId).trim().slice(0, 240) : null,
   }))
   .handler(async ({ data, context }) => {
     if (!data.request) {
@@ -1068,6 +1073,10 @@ export const executeVoiceHpoRouteNote = createServerFn({ method: "POST" })
       userId: context.userId,
       routeId,
       message: data.request,
+      idempotencyKey: data.requestId
+        ? `request:${data.requestId}:hpo.route_stop.log_visit`
+        : `voice:${routeId}:route-note:${Date.now()}`,
+      sourceChannel: "voice",
     });
 
     await recordRuntimeEvent(db, context.userId, {
