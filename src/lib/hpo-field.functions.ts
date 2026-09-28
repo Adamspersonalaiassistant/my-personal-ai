@@ -418,20 +418,151 @@ export const arriveHpoRouteStop = createServerFn({ method: "POST" })
     }
   });
 
+export type HpoRouteStopCandidate = {
+  accountId?: string | null;
+  prospectId?: string | null;
+  officeName: string;
+  address: string;
+  city?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  visitPriority?: string | null;
+};
+
+export async function executeHpoRouteAddStopsCore(input: {
+  db: any;
+  userId: string;
+  routeId: string;
+  stops: HpoRouteStopCandidate[];
+  idempotencyKey: string;
+  sourceChannel: string;
+  sourceMessageId?: string | null;
+}) {
+  if (!input.stops.length) throw new Error("Choose at least one office to add");
+  const action = "hpo.route.add_stops";
+  const run = await beginExecution({
+    db: input.db,
+    userId: input.userId,
+    domain: "hpo_route",
+    action,
+    sourceMessageId: input.sourceMessageId ?? null,
+    idempotencyKey: input.idempotencyKey,
+    targetType: "hpo_route",
+    targetId: input.routeId,
+    requestPayload: {
+      routeId: input.routeId,
+      stops: input.stops,
+      sourceChannel: input.sourceChannel,
+    },
+  });
+  if (run.reused && run.status === "completed" && run.resultPayload["routeAddStops"]) {
+    return run.resultPayload["routeAddStops"];
+  }
+  try {
+    const route = await loadRoute(input.db, input.userId, input.routeId);
+    if (route.status === "completed") throw new Error("Completed routes cannot receive new stops");
+    const existing = await loadStops(input.db, input.userId, input.routeId);
+    const accountIds = new Set(existing.map((stop: any) => stop.account_id).filter(Boolean));
+    const prospectIds = new Set(existing.map((stop: any) => stop.prospect_id).filter(Boolean));
+    const eligible = input.stops.filter(
+      (stop) =>
+        (!stop.accountId || !accountIds.has(stop.accountId)) &&
+        (!stop.prospectId || !prospectIds.has(stop.prospectId)),
+    );
+    if (!eligible.length) {
+      const result = {
+        ok: true,
+        action,
+        executionRunId: run.id,
+        added: [],
+        skippedDuplicates: input.stops.length,
+        reused: run.reused,
+      };
+      await completeExecution({
+        db: input.db,
+        userId: input.userId,
+        runId: run.id,
+        resultPayload: { routeAddStops: result },
+        targetType: "hpo_route",
+        targetId: route.id,
+      });
+      return result;
+    }
+    const maxOrder = existing.reduce(
+      (max: number, stop: any) => Math.max(max, Number(stop.stop_order) || 0),
+      0,
+    );
+    const { data: inserted, error } = await input.db
+      .from("hpo_route_stops")
+      .insert(
+        eligible.map((stop, index) => ({
+          user_id: input.userId,
+          route_id: route.id,
+          account_id: stop.accountId ?? null,
+          prospect_id: stop.prospectId ?? null,
+          stop_order: maxOrder + index + 1,
+          visit_priority: stop.visitPriority ?? null,
+          status: "planned",
+          office_name: stop.officeName,
+          address: stop.address,
+          city: stop.city ?? null,
+          latitude: stop.latitude ?? null,
+          longitude: stop.longitude ?? null,
+          metadata: {
+            non_phi: true,
+            source_channel: input.sourceChannel,
+            execution_run_id: run.id,
+            added_during_route: true,
+          },
+        })),
+      )
+      .select("*");
+    if (error) throw error;
+    const ids = (inserted ?? []).map((stop: any) => stop.id);
+    const { data: verified, error: verifyError } = await input.db
+      .from("hpo_route_stops")
+      .select("*")
+      .in("id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"])
+      .eq("user_id", input.userId);
+    if (verifyError || (verified ?? []).length !== ids.length) {
+      throw verifyError ?? new Error("Added route stops could not be verified");
+    }
+    await clearRouteOptimization(input.db, input.userId, route.id);
+    const result = {
+      ok: true,
+      action,
+      executionRunId: run.id,
+      added: verified ?? [],
+      skippedDuplicates: input.stops.length - eligible.length,
+      reused: run.reused,
+    };
+    await completeExecution({
+      db: input.db,
+      userId: input.userId,
+      runId: run.id,
+      resultPayload: { routeAddStops: result },
+      targetType: "hpo_route",
+      targetId: route.id,
+    });
+    return result;
+  } catch (error) {
+    await failExecution({
+      db: input.db,
+      userId: input.userId,
+      runId: run.id,
+      errorCode: "hpo_route_add_stops_failed",
+      errorMessage: error instanceof Error ? error.message : String(error),
+      retryable: true,
+    }).catch(() => undefined);
+    throw error;
+  }
+}
+
 export const addHpoRouteStops = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: {
     routeId: string;
-    stops: Array<{
-      accountId?: string | null;
-      prospectId?: string | null;
-      officeName: string;
-      address: string;
-      city?: string | null;
-      latitude?: number | null;
-      longitude?: number | null;
-      visitPriority?: string | null;
-    }>;
+    stops: HpoRouteStopCandidate[];
     idempotencyKey: string;
     sourceChannel?: string | null;
   }) => ({
@@ -449,208 +580,134 @@ export const addHpoRouteStops = createServerFn({ method: "POST" })
     idempotencyKey: clean(input.idempotencyKey),
     sourceChannel: clean(input.sourceChannel) || "ui",
   }))
-  .handler(async ({ data, context }) => {
-    if (!data.stops.length) throw new Error("Choose at least one office to add");
-    const db = context.supabase as any;
-    const action = "hpo.route.add_stops";
-    const run = await beginExecution({
-      db,
+  .handler(async ({ data, context }) =>
+    executeHpoRouteAddStopsCore({
+      db: context.supabase as any,
       userId: context.userId,
-      domain: "hpo_route",
-      action,
+      routeId: data.routeId,
+      stops: data.stops,
       idempotencyKey: data.idempotencyKey,
-      targetType: "hpo_route",
-      targetId: data.routeId,
-      requestPayload: { routeId: data.routeId, stops: data.stops, sourceChannel: data.sourceChannel },
-    });
-    if (run.reused && run.status === "completed" && run.resultPayload["routeAddStops"]) {
-      return run.resultPayload["routeAddStops"];
-    }
-    try {
-      const route = await loadRoute(db, context.userId, data.routeId);
-      if (route.status === "completed") throw new Error("Completed routes cannot receive new stops");
-      const existing = await loadStops(db, context.userId, data.routeId);
-      const accountIds = new Set(existing.map((stop: any) => stop.account_id).filter(Boolean));
-      const prospectIds = new Set(existing.map((stop: any) => stop.prospect_id).filter(Boolean));
-      const eligible = data.stops.filter(
-        (stop) =>
-          (!stop.accountId || !accountIds.has(stop.accountId)) &&
-          (!stop.prospectId || !prospectIds.has(stop.prospectId)),
-      );
-      if (!eligible.length) {
-        const result = {
-          ok: true,
-          action,
-          executionRunId: run.id,
-          added: [],
-          skippedDuplicates: data.stops.length,
-          reused: run.reused,
-        };
-        await completeExecution({
-          db,
-          userId: context.userId,
-          runId: run.id,
-          resultPayload: { routeAddStops: result },
-          targetType: "hpo_route",
-          targetId: route.id,
-        });
-        return result;
-      }
-      const maxOrder = existing.reduce((max: number, stop: any) => Math.max(max, Number(stop.stop_order) || 0), 0);
-      const { data: inserted, error } = await db
-        .from("hpo_route_stops")
-        .insert(
-          eligible.map((stop, index) => ({
-            user_id: context.userId,
-            route_id: route.id,
-            account_id: stop.accountId,
-            prospect_id: stop.prospectId,
-            stop_order: maxOrder + index + 1,
-            visit_priority: stop.visitPriority,
-            status: "planned",
-            office_name: stop.officeName,
-            address: stop.address,
-            city: stop.city,
-            latitude: stop.latitude,
-            longitude: stop.longitude,
-            metadata: {
-              non_phi: true,
-              source_channel: data.sourceChannel,
-              execution_run_id: run.id,
-              added_during_route: true,
-            },
-          })),
-        )
-        .select("*");
-      if (error) throw error;
-      const ids = (inserted ?? []).map((stop: any) => stop.id);
-      const { data: verified, error: verifyError } = await db
-        .from("hpo_route_stops")
-        .select("*")
-        .in("id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"])
-        .eq("user_id", context.userId);
-      if (verifyError || (verified ?? []).length !== ids.length) {
-        throw verifyError ?? new Error("Added route stops could not be verified");
-      }
-      await clearRouteOptimization(db, context.userId, route.id);
-      const result = {
-        ok: true,
-        action,
-        executionRunId: run.id,
-        added: verified ?? [],
-        skippedDuplicates: data.stops.length - eligible.length,
-        reused: run.reused,
-      };
-      await completeExecution({
-        db,
-        userId: context.userId,
-        runId: run.id,
-        resultPayload: { routeAddStops: result },
-        targetType: "hpo_route",
-        targetId: route.id,
-      });
-      return result;
-    } catch (error) {
-      await failExecution({
-        db,
-        userId: context.userId,
-        runId: run.id,
-        errorCode: "hpo_route_add_stops_failed",
-        errorMessage: error instanceof Error ? error.message : String(error),
-        retryable: true,
-      }).catch(() => undefined);
-      throw error;
-    }
+      sourceChannel: data.sourceChannel,
+    }),
+  );
+
+export async function executeHpoRouteRemoveStopCore(input: {
+  db: any;
+  userId: string;
+  routeId: string;
+  stopId: string;
+  idempotencyKey: string;
+  sourceChannel: string;
+  sourceMessageId?: string | null;
+}) {
+  const action = "hpo.route.remove_stop";
+  const run = await beginExecution({
+    db: input.db,
+    userId: input.userId,
+    domain: "hpo_route",
+    action,
+    sourceMessageId: input.sourceMessageId ?? null,
+    idempotencyKey: input.idempotencyKey,
+    targetType: "hpo_route_stop",
+    targetId: input.stopId,
+    requestPayload: {
+      routeId: input.routeId,
+      stopId: input.stopId,
+      sourceChannel: input.sourceChannel,
+    },
   });
+  if (run.reused && run.status === "completed" && run.resultPayload["routeRemoveStop"]) {
+    return run.resultPayload["routeRemoveStop"];
+  }
+  try {
+    const stops = await loadStops(input.db, input.userId, input.routeId);
+    const stop = stops.find((row: any) => row.id === input.stopId);
+    if (!stop) throw new Error("Route stop not found");
+    if (TERMINAL.has(String(stop.status))) {
+      throw new Error("Completed/closed/skipped stops stay in route history and cannot be removed");
+    }
+    const { error } = await input.db
+      .from("hpo_route_stops")
+      .delete()
+      .eq("id", stop.id)
+      .eq("route_id", input.routeId)
+      .eq("user_id", input.userId);
+    if (error) throw error;
+    const remaining = (await loadStops(input.db, input.userId, input.routeId)).sort(
+      (left: any, right: any) => left.stop_order - right.stop_order,
+    );
+    for (let index = 0; index < remaining.length; index += 1) {
+      const row = remaining[index]!;
+      if (row.stop_order === index + 1) continue;
+      const { error: orderError } = await input.db
+        .from("hpo_route_stops")
+        .update({ stop_order: index + 1, updated_at: new Date().toISOString() })
+        .eq("id", row.id)
+        .eq("user_id", input.userId);
+      if (orderError) throw orderError;
+    }
+    const { data: verify } = await input.db
+      .from("hpo_route_stops")
+      .select("id")
+      .eq("id", stop.id)
+      .eq("user_id", input.userId)
+      .maybeSingle();
+    if (verify) throw new Error("Route stop removal verification failed");
+    await clearRouteOptimization(input.db, input.userId, input.routeId);
+    const result = {
+      ok: true,
+      action,
+      executionRunId: run.id,
+      removedStopId: stop.id,
+      officeName: stop.office_name ?? null,
+      remaining: remaining.length,
+      reused: run.reused,
+    };
+    await completeExecution({
+      db: input.db,
+      userId: input.userId,
+      runId: run.id,
+      resultPayload: { routeRemoveStop: result },
+      targetType: "hpo_route",
+      targetId: input.routeId,
+    });
+    return result;
+  } catch (error) {
+    await failExecution({
+      db: input.db,
+      userId: input.userId,
+      runId: run.id,
+      errorCode: "hpo_route_remove_stop_failed",
+      errorMessage: error instanceof Error ? error.message : String(error),
+      retryable: true,
+    }).catch(() => undefined);
+    throw error;
+  }
+}
 
 export const removeHpoRouteStop = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { routeId: string; stopId: string; idempotencyKey: string; sourceChannel?: string | null }) => ({
+  .inputValidator((input: {
+    routeId: string;
+    stopId: string;
+    idempotencyKey: string;
+    sourceChannel?: string | null;
+  }) => ({
     routeId: clean(input.routeId),
     stopId: clean(input.stopId),
     idempotencyKey: clean(input.idempotencyKey),
     sourceChannel: clean(input.sourceChannel) || "ui",
   }))
-  .handler(async ({ data, context }) => {
-    const db = context.supabase as any;
-    const action = "hpo.route.remove_stop";
-    const run = await beginExecution({
-      db,
+  .handler(async ({ data, context }) =>
+    executeHpoRouteRemoveStopCore({
+      db: context.supabase as any,
       userId: context.userId,
-      domain: "hpo_route",
-      action,
+      routeId: data.routeId,
+      stopId: data.stopId,
       idempotencyKey: data.idempotencyKey,
-      targetType: "hpo_route_stop",
-      targetId: data.stopId,
-      requestPayload: { routeId: data.routeId, stopId: data.stopId, sourceChannel: data.sourceChannel },
-    });
-    if (run.reused && run.status === "completed" && run.resultPayload["routeRemoveStop"]) {
-      return run.resultPayload["routeRemoveStop"];
-    }
-    try {
-      const stops = await loadStops(db, context.userId, data.routeId);
-      const stop = stops.find((row: any) => row.id === data.stopId);
-      if (!stop) throw new Error("Route stop not found");
-      if (TERMINAL.has(String(stop.status))) {
-        throw new Error("Completed/closed/skipped stops stay in route history and cannot be removed");
-      }
-      const { error } = await db
-        .from("hpo_route_stops")
-        .delete()
-        .eq("id", stop.id)
-        .eq("route_id", data.routeId)
-        .eq("user_id", context.userId);
-      if (error) throw error;
-      const remaining = (await loadStops(db, context.userId, data.routeId)).sort(
-        (a: any, b: any) => a.stop_order - b.stop_order,
-      );
-      for (let index = 0; index < remaining.length; index += 1) {
-        const row = remaining[index]!;
-        if (row.stop_order === index + 1) continue;
-        const { error: orderError } = await db
-          .from("hpo_route_stops")
-          .update({ stop_order: index + 1, updated_at: new Date().toISOString() })
-          .eq("id", row.id)
-          .eq("user_id", context.userId);
-        if (orderError) throw orderError;
-      }
-      const { data: verify } = await db
-        .from("hpo_route_stops")
-        .select("id")
-        .eq("id", stop.id)
-        .eq("user_id", context.userId)
-        .maybeSingle();
-      if (verify) throw new Error("Route stop removal verification failed");
-      await clearRouteOptimization(db, context.userId, data.routeId);
-      const result = {
-        ok: true,
-        action,
-        executionRunId: run.id,
-        removedStopId: stop.id,
-        remaining: remaining.length,
-        reused: run.reused,
-      };
-      await completeExecution({
-        db,
-        userId: context.userId,
-        runId: run.id,
-        resultPayload: { routeRemoveStop: result },
-        targetType: "hpo_route",
-        targetId: data.routeId,
-      });
-      return result;
-    } catch (error) {
-      await failExecution({
-        db,
-        userId: context.userId,
-        runId: run.id,
-        errorCode: "hpo_route_remove_stop_failed",
-        errorMessage: error instanceof Error ? error.message : String(error),
-        retryable: true,
-      }).catch(() => undefined);
-      throw error;
-    }
-  });
+      sourceChannel: data.sourceChannel,
+    }),
+  );
 
 export const reorderHpoRouteStopsCanonical = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
