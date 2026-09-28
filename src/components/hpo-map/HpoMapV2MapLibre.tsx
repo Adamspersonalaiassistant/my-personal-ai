@@ -24,9 +24,9 @@ const LIGHT_EMERY_STYLE: StyleSpecification = {
   sources: {
     osm: {
       type: "raster",
-      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+      tiles: ["https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"],
       tileSize: 256,
-      attribution: "© OpenStreetMap contributors",
+      attribution: "© OpenStreetMap contributors © CARTO",
       maxzoom: 19,
     },
   },
