@@ -306,6 +306,7 @@ function useInteractiveMap({
   }
 
   function onPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if ((event.target as HTMLElement).closest("button, a, input, select, textarea")) return;
     event.currentTarget.setPointerCapture?.(event.pointerId);
     pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (pointersRef.current.size === 1) {
@@ -373,6 +374,10 @@ function useInteractiveMap({
     viewportRef,
     zoomIn: () => zoomBy(1),
     zoomOut: () => zoomBy(-1),
+    focus: (lat: number, lon: number, targetZoom: number) => {
+      setCenter({ lat, lon });
+      setZoomOffset(Math.max(5 - fitZoom, Math.min(18 - fitZoom, targetZoom - fitZoom)));
+    },
     reset,
     handlers: {
       onPointerDown,
@@ -671,6 +676,7 @@ function OfficePlanningMap({
   selectedKeys,
   selectedOfficeKey,
   onSelectOffice,
+  onOpenAccount,
   onToggleRouteStop,
   onBuildRoute,
   preparing,
@@ -680,6 +686,7 @@ function OfficePlanningMap({
   selectedKeys: string[];
   selectedOfficeKey: string | null;
   onSelectOffice: (key: string) => void;
+  onOpenAccount: (accountId: string) => void;
   onToggleRouteStop: (office: MapOffice) => void;
   onBuildRoute: () => void;
   preparing: boolean;
@@ -687,6 +694,7 @@ function OfficePlanningMap({
 }) {
   const [filter, setFilter] = useState<"all" | "account" | "prospect">("all");
   const [query, setQuery] = useState("");
+  const [tileIssue, setTileIssue] = useState(false);
 
   const mapped = useMemo(
     () =>
@@ -753,6 +761,63 @@ function OfficePlanningMap({
   const selectedCount = selectedKeys.length;
   const totalWithAddress = offices.filter((office) => office.address).length;
   const totalMapped = offices.filter((office) => office.mapped).length;
+  const markerItems = (() => {
+    const cluster = points.length > 70 && zoom < 11.25;
+    if (!cluster)
+      return projected.map((office) => ({
+        type: "office" as const,
+        key: office.key,
+        x: office.x,
+        y: office.y,
+        office,
+      }));
+
+    const pinned = projected.filter(
+      (office) => selectedKeys.includes(office.key) || office.key === selectedOfficeKey,
+    );
+    const ordinary = projected.filter(
+      (office) => !selectedKeys.includes(office.key) && office.key !== selectedOfficeKey,
+    );
+    const cellSize = zoom < 8 ? 76 : zoom < 9.5 ? 62 : 50;
+    const buckets = new Map<string, typeof ordinary>();
+    for (const office of ordinary) {
+      const key = `${Math.floor((office.x - left) / cellSize)}:${Math.floor((office.y - top) / cellSize)}`;
+      const bucket = buckets.get(key) ?? [];
+      bucket.push(office);
+      buckets.set(key, bucket);
+    }
+    const items: Array<
+      | { type: "office"; key: string; x: number; y: number; office: (typeof projected)[number] }
+      | {
+          type: "cluster";
+          key: string;
+          x: number;
+          y: number;
+          lat: number;
+          lon: number;
+          count: number;
+        }
+    > = [];
+    for (const [key, bucket] of buckets) {
+      if (bucket.length === 1) {
+        const office = bucket[0]!;
+        items.push({ type: "office", key: office.key, x: office.x, y: office.y, office });
+      } else {
+        items.push({
+          type: "cluster",
+          key: `cluster:${key}`,
+          x: bucket.reduce((sum, office) => sum + office.x, 0) / bucket.length,
+          y: bucket.reduce((sum, office) => sum + office.y, 0) / bucket.length,
+          lat: bucket.reduce((sum, office) => sum + office.lat, 0) / bucket.length,
+          lon: bucket.reduce((sum, office) => sum + office.lon, 0) / bucket.length,
+          count: bucket.length,
+        });
+      }
+    }
+    for (const office of pinned)
+      items.push({ type: "office", key: office.key, x: office.x, y: office.y, office });
+    return items;
+  })();
 
   return (
     <section className="overflow-hidden rounded-[1.6rem] border border-primary/18 bg-card/25 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
@@ -779,7 +844,7 @@ function OfficePlanningMap({
           </button>
         </div>
 
-        <div className="mt-3 flex items-center gap-2">
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -823,7 +888,7 @@ function OfficePlanningMap({
       <div
         ref={officeMap.viewportRef}
         {...officeMap.handlers}
-        className="relative h-[390px] cursor-grab overflow-hidden bg-[#050b15] active:cursor-grabbing"
+        className="relative h-[52dvh] min-h-[300px] max-h-[390px] cursor-grab overflow-hidden bg-[#dbe5ee] active:cursor-grabbing"
         style={{ touchAction: "none" }}
       >
         {tiles.map((tile) => (
@@ -832,6 +897,8 @@ function OfficePlanningMap({
             src={`https://tile.openstreetmap.org/${zoom}/${tile.srcX}/${tile.y}.png`}
             alt=""
             draggable={false}
+            onLoad={() => setTileIssue(false)}
+            onError={() => setTileIssue(true)}
             className="pointer-events-none absolute max-w-none select-none"
             style={{
               width: tileSize,
@@ -846,7 +913,25 @@ function OfficePlanningMap({
           Drag · pinch to zoom
         </div>
 
-        {projected.map((office) => {
+        {markerItems.map((item) => {
+          if (item.type === "cluster") {
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => officeMap.focus(item.lat, item.lon, Math.min(15, zoom + 2.4))}
+                aria-label={`${item.count} HPO offices in this area`}
+                className="absolute z-10 flex size-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-[3px] border-white bg-[#1769e8] text-[11px] font-extrabold text-white shadow-[0_5px_16px_rgba(15,23,42,0.34)]"
+                style={{
+                  left: `${((item.x - left) / width) * 100}%`,
+                  top: `${((item.y - top) / height) * 100}%`,
+                }}
+              >
+                {item.count}
+              </button>
+            );
+          }
+          const office = item.office;
           const selected = selectedKeys.includes(office.key);
           const focused = office.key === selectedOfficeKey;
           return (
@@ -856,22 +941,29 @@ function OfficePlanningMap({
               onClick={() => onSelectOffice(office.key)}
               title={office.officeName}
               aria-label={`Open ${office.officeName}`}
-              className={`absolute z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 text-[9px] font-bold shadow-[0_4px_14px_rgba(0,0,0,0.32)] transition ${
-                selected
-                  ? "size-10 border-background bg-primary text-primary-foreground"
-                  : office.kind === "account"
-                    ? "size-8 border-background bg-foreground text-background"
-                    : "size-8 border-background bg-background text-foreground"
-              } ${focused ? "ring-4 ring-primary/25" : ""}`}
+              className={`absolute z-10 size-9 -translate-x-1/2 -translate-y-full border-0 bg-transparent p-0 drop-shadow-[0_4px_5px_rgba(15,23,42,0.38)] ${focused ? "scale-110" : ""}`}
               style={{
                 left: `${((office.x - left) / width) * 100}%`,
                 top: `${((office.y - top) / height) * 100}%`,
               }}
             >
-              {selected ? <Check className="size-3.5" /> : office.kind === "account" ? "A" : "P"}
+              <span
+                className={`flex size-8 rotate-[-45deg] items-center justify-center rounded-[50%_50%_50%_0] border-2 border-white ${selected || focused ? "bg-[#0f4fb9]" : "bg-[#1769e8]"}`}
+              >
+                <span className="flex size-3.5 rotate-45 items-center justify-center rounded-full bg-white text-[#1769e8]">
+                  {selected ? <Check className="size-2.5" strokeWidth={3} /> : null}
+                </span>
+              </span>
             </button>
           );
         })}
+
+        {tileIssue ? (
+          <div className="absolute inset-x-12 top-1/2 z-30 -translate-y-1/2 rounded-xl border border-amber-200 bg-white/95 p-3 text-center text-xs font-medium text-slate-700 shadow-xl">
+            Street tiles could not load. Office pins remain available; check your connection and
+            retry.
+          </div>
+        ) : null}
 
         <div className="absolute right-2 top-2 z-20 flex flex-col gap-1">
           <button
@@ -979,7 +1071,9 @@ function OfficePlanningMap({
             </div>
           ) : null}
 
-          <div className="mt-3 grid grid-cols-2 gap-2">
+          <div
+            className={`mt-3 grid gap-2 ${selectedOffice.accountId ? "grid-cols-3" : "grid-cols-2"}`}
+          >
             <a
               href={`https://maps.apple.com/?q=${encodeURIComponent([selectedOffice.officeName, selectedOffice.address, selectedOffice.city].filter(Boolean).join(", "))}`}
               target="_blank"
@@ -988,6 +1082,15 @@ function OfficePlanningMap({
             >
               <MapPinned className="size-3.5" /> Open location
             </a>
+            {selectedOffice.accountId ? (
+              <button
+                type="button"
+                onClick={() => onOpenAccount(selectedOffice.accountId!)}
+                className="emery-press min-h-11 rounded-xl border border-border/45 px-3 text-xs font-semibold text-muted-foreground"
+              >
+                Account
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => onToggleRouteStop(selectedOffice)}
@@ -1523,9 +1626,9 @@ export function HpoRoutePlanner({
     <div id="hpo-route-planner" className="relative h-full min-h-0 w-full overflow-hidden">
       {data || mapOffices.length ? (
         mapRendererFailed ? (
-          <div className="h-full min-h-0 overflow-y-auto bg-[#eef2f7] p-3 pb-28">
+          <div className="h-full min-h-0 overflow-y-auto bg-[#eef2f7] p-2 pb-28 sm:p-3">
             <div className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-blue-200 bg-white px-3 py-2 text-[11px] text-slate-600 shadow-sm">
-              <span>Compatible street map is active so HPO stays usable on this device.</span>
+              <span>Compatible street map active.</span>
               <button
                 type="button"
                 onClick={() => {
@@ -1542,6 +1645,7 @@ export function HpoRoutePlanner({
               selectedKeys={mapSelectedKeys}
               selectedOfficeKey={selectedMapOfficeKey}
               onSelectOffice={setSelectedMapOfficeKey}
+              onOpenAccount={setMapAccountDetailId}
               onToggleRouteStop={toggleMapRouteStop}
               onBuildRoute={startRouteFromMap}
               preparing={mapPreparing}
@@ -1564,7 +1668,8 @@ export function HpoRoutePlanner({
             onNavigateHpo={onNavigateHpo}
             onFatalError={(message) => {
               setMapRendererFailed(true);
-              setError(`Using compatible map: ${message}`);
+              setError(null);
+              console.warn("HPO MapLibre renderer unavailable; using compatible map.", message);
             }}
           />
         )
