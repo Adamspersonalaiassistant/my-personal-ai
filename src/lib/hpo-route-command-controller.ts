@@ -219,7 +219,7 @@ async function findOffice(db: any, userId: string, phrase: string) {
     })),
   ]
     .filter((row) => row.score >= 45)
-    .sort((left, right) => right.score - left.score);
+    .sort((left: { row: any; score: number }, right: { row: any; score: number }) => right.score - left.score);
 
   if (!candidates.length) return { match: null, ambiguous: false };
   if (candidates.length > 1 && candidates[0]!.score - candidates[1]!.score < 10) {
@@ -411,7 +411,7 @@ export async function processHpoRouteCommand(input: {
           sourceMessageId: input.sourceMessageId ?? null,
         },
       });
-      const optimized = await executeHpoRouteOptimizeCore({
+      const optimized: any = await executeHpoRouteOptimizeCore({
         db: input.db,
         userId: input.userId,
         routeId: created.routeId,
@@ -425,7 +425,7 @@ export async function processHpoRouteCommand(input: {
         performed: true,
         routeId: created.routeId,
         executionRunId: created.executionRunId,
-        reply: `Your ${selected.area} route is saved for ${routeDate} with ${created.stopCount} stops. I optimized it to about ${optimized.driveMinutes} minutes of driving across ${optimized.distanceMiles.toFixed(1)} miles.`,
+        reply: `Your ${selected.area} route is saved for ${routeDate} with ${created.stopCount} stops. I optimized it to about ${optimized.driveMinutes} minutes of driving across ${Number(optimized.distanceMiles ?? 0).toFixed(1)} miles.`,
       });
     }
 
@@ -439,7 +439,7 @@ export async function processHpoRouteCommand(input: {
     }
 
     if (action === "hpo.route.optimize") {
-      const result = await executeHpoRouteOptimizeCore({
+      const result: any = await executeHpoRouteOptimizeCore({
         db: input.db,
         userId: input.userId,
         routeId: route.id,
@@ -453,12 +453,12 @@ export async function processHpoRouteCommand(input: {
         performed: true,
         routeId: route.id,
         executionRunId: result.executionRunId,
-        reply: `Route optimized. ${result.stopCount} stops · about ${result.driveMinutes} minutes of driving · ${result.distanceMiles.toFixed(1)} miles.`,
+        reply: `Route optimized. ${result.stopCount} stops · about ${result.driveMinutes} minutes of driving · ${Number(result.distanceMiles ?? 0).toFixed(1)} miles.`,
       });
     }
 
     if (action === "hpo.route.reoptimize") {
-      const result = await executeHpoRouteReoptimizeCore({
+      const result: any = await executeHpoRouteReoptimizeCore({
         db: input.db,
         userId: input.userId,
         routeId: route.id,
@@ -487,7 +487,7 @@ export async function processHpoRouteCommand(input: {
         const ranked = stops
           .filter((row: any) => !TERMINAL.has(String(row.status)))
           .map((row: any) => ({ row, score: nameScore(officeTargetPhrase(input.message) || input.message, row.office_name ?? "") }))
-          .filter((item) => item.score >= 45)
+          .filter((item: { row: any; score: number }) => item.score >= 45)
           .sort((left, right) => right.score - left.score);
         if (ranked.length > 1 && ranked[0]!.score - ranked[1]!.score < 10) {
           return empty({
@@ -505,7 +505,7 @@ export async function processHpoRouteCommand(input: {
           reply: "Which route stop should I remove?",
         });
       }
-      const result = await executeHpoRouteRemoveStopCore({
+      const result: any = await executeHpoRouteRemoveStopCore({
         db: input.db,
         userId: input.userId,
         routeId: route.id,
@@ -540,7 +540,7 @@ export async function processHpoRouteCommand(input: {
           reply: "Which saved HPO office or prospect do you want to add?",
         });
       }
-      const result = await executeHpoRouteAddStopsCore({
+      const result: any = await executeHpoRouteAddStopsCore({
         db: input.db,
         userId: input.userId,
         routeId: route.id,
