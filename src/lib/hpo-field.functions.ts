@@ -1224,7 +1224,7 @@ export async function getHpoNearbyBackupsCore(input: {
     db
       .from("hpo_prospects")
       .select(
-        "id,name,prospect_type,specialty,address,city,latitude,longitude,fit_status,verification_status,metadata",
+        "id,name,prospect_type,specialty,address,city,latitude,longitude,fit_status,verification_status,promoted_account_id,metadata",
       )
       .eq("user_id", input.userId)
       .in("fit_status", ["undecided", "qualified"])
@@ -1269,10 +1269,20 @@ export async function getHpoNearbyBackupsCore(input: {
       })),
     ...(prospectsResult.data ?? [])
       .filter((row: any) => !existingProspects.has(row.id))
+      .filter((row: any) => {
+        const metadata =
+          row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+            ? row.metadata
+            : {};
+        if (metadata["exclude_from_adam_route"] === true) return false;
+        if (row.promoted_account_id && existingAccounts.has(row.promoted_account_id)) return false;
+        if (!row.promoted_account_id) return true;
+        return metadata["map_as_location"] === true;
+      })
       .map((row: any) => ({
         key: `prospect:${row.id}`,
-        kind: "prospect" as const,
-        accountId: null,
+        kind: row.promoted_account_id ? ("account" as const) : ("prospect" as const),
+        accountId: row.promoted_account_id ?? null,
         prospectId: row.id,
         officeName: row.name,
         address: row.address,
