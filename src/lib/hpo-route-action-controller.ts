@@ -204,7 +204,7 @@ export async function processHpoRouteStopAction(input: {
         stopId: visit.stopId,
         officeName: visit.officeName ?? null,
         status: visit.status,
-        executionRunId: null,
+        executionRunId: visit.executionRunId ?? null,
         nextStopId: next?.id ?? null,
         nextStopName: next?.office_name ?? null,
         followupTaskId: visit.followupTaskId ?? null,
