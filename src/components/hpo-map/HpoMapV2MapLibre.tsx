@@ -19,9 +19,10 @@ const BLUE = "#1769e8";
 const BLUE_DARK = "#0f4fb8";
 const BLUE_LIGHT = "#dbeafe";
 
-const LIGHT_EMERY_STYLE: StyleSpecification = {
+const PROFESSIONAL_MAP_STYLE = "https://tiles.openfreemap.org/styles/bright";
+
+const FALLBACK_LIGHT_STYLE: StyleSpecification = {
   version: 8,
-  glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
   sources: {
     osm: {
       type: "raster",
@@ -33,15 +34,15 @@ const LIGHT_EMERY_STYLE: StyleSpecification = {
   },
   layers: [
     {
-      id: "emery-light-basemap",
+      id: "emery-fallback-basemap",
       type: "raster",
       source: "osm",
       paint: {
-        "raster-saturation": -1,
-        "raster-contrast": -0.34,
-        "raster-brightness-min": 0.82,
+        "raster-saturation": -0.2,
+        "raster-contrast": -0.04,
+        "raster-brightness-min": 0.2,
         "raster-brightness-max": 1,
-        "raster-opacity": 0.52,
+        "raster-opacity": 1,
       },
     },
   ],
@@ -221,6 +222,58 @@ function isStale(office: HpoMapOffice, now: number) {
   if (!office.lastTouchAt) return true;
   const parsed = Date.parse(office.lastTouchAt);
   return !Number.isNaN(parsed) && now - parsed >= 60 * 24 * 60 * 60 * 1000;
+}
+
+function createOfficePinElement({
+  officeName,
+  selected,
+  focused,
+  onSelect,
+}: {
+  officeName: string;
+  selected: boolean;
+  focused: boolean;
+  onSelect: () => void;
+}) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.setAttribute("aria-label", officeName);
+  button.title = officeName;
+  button.style.width = selected || focused ? "36px" : "31px";
+  button.style.height = selected || focused ? "44px" : "38px";
+  button.style.border = "0";
+  button.style.background = "transparent";
+  button.style.padding = "0";
+  button.style.cursor = "pointer";
+  button.style.filter =
+    selected || focused
+      ? "drop-shadow(0 5px 8px rgba(15,23,42,.36))"
+      : "drop-shadow(0 3px 6px rgba(15,23,42,.28))";
+  button.style.transformOrigin = "50% 100%";
+  button.style.transition = "transform 120ms ease, filter 120ms ease";
+  button.innerHTML = `
+    <svg viewBox="0 0 32 42" width="100%" height="100%" aria-hidden="true" focusable="false">
+      <path
+        d="M16 1.5C8.1 1.5 2.25 7.48 2.25 15.23c0 10.22 10.54 20.48 12.93 22.7.46.43 1.18.43 1.64 0 2.39-2.22 12.93-12.48 12.93-22.7C29.75 7.48 23.9 1.5 16 1.5Z"
+        fill="${focused ? BLUE_DARK : BLUE}"
+        stroke="#ffffff"
+        stroke-width="${selected || focused ? 2.6 : 2.2}"
+      />
+      <circle cx="16" cy="15.2" r="5.1" fill="#ffffff" />
+      <circle cx="16" cy="15.2" r="2.15" fill="${focused ? BLUE_DARK : BLUE}" opacity=".22" />
+    </svg>
+  `;
+  button.addEventListener("mouseenter", () => {
+    button.style.transform = "translateY(-2px) scale(1.06)";
+  });
+  button.addEventListener("mouseleave", () => {
+    button.style.transform = "";
+  });
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    onSelect();
+  });
+  return button;
 }
 
 function boundsForOffices(offices: HpoMapOffice[]) {
@@ -425,6 +478,7 @@ export function HpoMapV2MapLibre({
   const mapRef = useRef<MapLibreMap | null>(null);
   const geolocateRef = useRef<maplibregl.GeolocateControl | null>(null);
   const officeMarkersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+  const fallbackStyleUsedRef = useRef(false);
   const [ready, setReady] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
   const [signalFilter, setSignalFilter] = useState<SignalFilter>("all");
@@ -465,7 +519,7 @@ export function HpoMapV2MapLibre({
     try {
       const map = new maplibregl.Map({
         container: containerRef.current,
-        style: LIGHT_EMERY_STYLE,
+        style: PROFESSIONAL_MAP_STYLE,
         center: [-74.3, 40.5],
         zoom: 8,
         minZoom: 5,
@@ -483,12 +537,18 @@ export function HpoMapV2MapLibre({
       geolocateRef.current = geolocate;
       map.addControl(geolocate, "top-right");
 
-      map.on("load", () => {
+      map.on("style.load", () => {
         setupSourcesAndLayers(map);
         setReady(true);
       });
       map.on("error", (event: any) => {
         const message = String(event?.error?.message ?? "");
+        const styleLoadProblem = /style|source|sprite|glyph|fetch|network|http/i.test(message);
+        if (!ready && styleLoadProblem && !fallbackStyleUsedRef.current) {
+          fallbackStyleUsedRef.current = true;
+          map.setStyle(FALLBACK_LIGHT_STYLE);
+          return;
+        }
         if (/webgl|context|initial/i.test(message))
           onFatalError?.(message || "MapLibre could not initialize.");
       });
@@ -533,27 +593,18 @@ export function HpoMapV2MapLibre({
 
       const selected = selectedSet.has(office.key);
       const focused = office.key === selectedOfficeKey;
-      const element = document.createElement("button");
-      element.type = "button";
-      element.setAttribute("aria-label", office.officeName);
-      element.style.width = selected || focused ? "22px" : "17px";
-      element.style.height = selected || focused ? "22px" : "17px";
-      element.style.borderRadius = "9999px";
-      element.style.border = selected || focused ? "4px solid white" : "3px solid white";
-      element.style.background = focused ? BLUE_DARK : BLUE;
-      element.style.boxShadow =
-        selected || focused
-          ? "0 0 0 3px rgba(23,105,232,.24), 0 4px 12px rgba(15,23,42,.28)"
-          : "0 2px 8px rgba(15,23,42,.28)";
-      element.style.cursor = "pointer";
-      element.style.padding = "0";
-      element.style.display = "block";
-      element.addEventListener("click", (event) => {
-        event.stopPropagation();
-        onSelectOffice(office.key);
+      const element = createOfficePinElement({
+        officeName: office.officeName,
+        selected,
+        focused,
+        onSelect: () => onSelectOffice(office.key),
       });
 
-      const marker = new maplibregl.Marker({ element, anchor: "center" })
+      const marker = new maplibregl.Marker({
+        element,
+        anchor: "bottom",
+        offset: [0, 1],
+      })
         .setLngLat([Number(office.longitude), Number(office.latitude)])
         .addTo(map);
 
@@ -820,7 +871,7 @@ export function HpoMapV2MapLibre({
       <div className={viewMode === "map" ? "relative" : "hidden"}>
         <div
           ref={containerRef}
-          className="h-[min(64dvh,620px)] min-h-[500px] w-full bg-[#f1f5f4]"
+          className="h-[min(64dvh,620px)] min-h-[500px] w-full bg-[#eef2f7]"
         />
         {drawMode ? (
           <div className="absolute left-3 top-3 z-10 flex items-center gap-1 rounded-xl bg-white/95 p-1.5 shadow-lg">
