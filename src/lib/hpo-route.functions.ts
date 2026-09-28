@@ -1869,8 +1869,9 @@ export async function executeHpoRouteStopVisitCore(input: {
       baseUpdatedAt: input.baseUpdatedAt ?? null,
     });
 
+    let followupResult: any = null;
     if (input.nextAction?.trim()) {
-      await executeHpoRouteStopFollowupCore({
+      followupResult = await executeHpoRouteStopFollowupCore({
         db: input.db,
         userId: input.userId,
         stopId: input.stopId,
@@ -1906,6 +1907,8 @@ export async function executeHpoRouteStopVisitCore(input: {
       stop: outcome.stop,
       interactionId,
       routeStatus: outcome.routeStatus,
+      followupExecutionRunId: followupResult?.executionRunId ?? null,
+      followupTaskId: followupResult?.taskId ?? null,
       reused: execution.reused,
     };
     await completeExecution({
