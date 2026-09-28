@@ -273,6 +273,7 @@ export function EmeryVoiceControl({
             data: {
               request: String(args.request ?? ""),
               routeId: hpoRouteId ?? null,
+              requestId: `voice:${sessionIdRef.current ?? "session"}:${callId}`,
             },
           });
           sendToolOutput(callId, JSON.stringify(result));
