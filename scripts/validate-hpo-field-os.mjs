@@ -18,6 +18,7 @@ const v2 = read("src/components/hpo-map/HpoMapV2MapLibre.tsx");
 const routeFns = read("src/lib/hpo-route.functions.ts");
 const geocode = read("src/lib/hpo-geocode.ts");
 const hpoChatRouter = read("src/lib/hpo-chat-router.ts");
+const hpoEmerySheet = read("src/components/HpoEmerySheet.tsx");
 const packageJson = JSON.parse(read("package.json"));
 const migration = read("supabase/migrations/20260927234500_hpo_map_v2_feature_flag.sql");
 const routeActions = read("src/lib/hpo-route-action-controller.ts");
@@ -53,16 +54,16 @@ check(
     !planner.includes("<HpoMapAdapter"),
 );
 check(
-  "Map V2 uses GeoJSON clustering",
-  v2.includes("cluster: true") && v2.includes("hpo-office-clusters"),
+  "Map V2 renders every mapped office directly instead of hiding them in clusters",
+  v2.includes('id: "hpo-office-points"') && !v2.includes("cluster: true"),
 );
 check(
   "Map V2 preserves account/prospect filters",
   v2.includes('"account"') && v2.includes('"prospect"'),
 );
 check(
-  "Map V2 distinguishes account and prospect points",
-  v2.includes("hpo-office-points") && v2.includes("hpo-prospect-points"),
+  "Map V2 renders canonical accounts and prospects through one reliable blue point layer",
+  v2.includes('id: "hpo-office-points"') && v2.includes("officeCollection"),
 );
 check(
   "Map V2 supports synchronized office focus",
@@ -90,7 +91,7 @@ check(
   "Map V2 preserves route line",
   v2.includes("hpo-route-line") && v2.includes("route_geometry"),
 );
-check("Map V2 preserves numbered route stops", v2.includes("hpo-route-stop-numbers"));
+check("Map V2 preserves route-stop markers", v2.includes("hpo-route-stop-points"));
 check("Map V2 exposes current location control", v2.includes("GeolocateControl"));
 check(
   "OSRM routing remains unchanged",
@@ -115,11 +116,23 @@ check(
     hpoChatRouter.includes("plotted on the HPO map"),
 );
 check(
-  "Map V2 uses the white/light blue-point theme and Map/List workflow",
+  "HPO has an embedded Emery action sheet using the canonical main conversation",
+  hpoEmerySheet.includes("sendEmeryMessage") &&
+    hpoEmerySheet.includes("EmeryVoiceControl") &&
+    hpoEmerySheet.includes("same HPO accounts, routes and activity"),
+);
+check(
+  "Map route actions open Emery instead of forcing a separate route-builder workflow",
+  v2.includes("Add with Emery") &&
+    v2.includes("openHpoEmery") &&
+    v2.includes("Ask Emery"),
+);
+check(
+  "Map V2 uses a true light basemap, visible blue points, and Map/List workflow",
   v2.includes('const BLUE = "#1769e8"') &&
-    v2.includes('hpo-blue-pin') &&
-    v2.includes('hpo-blue-active-pin') &&
-    v2.includes('"raster-saturation": -1') &&
+    v2.includes("basemaps.cartocdn.com/light_all") &&
+    v2.includes('circle-color": BLUE') &&
+    v2.includes('circle-opacity": 0.98') &&
     v2.includes('viewMode') &&
     v2.includes('MapIcon') &&
     v2.includes('> List'),
