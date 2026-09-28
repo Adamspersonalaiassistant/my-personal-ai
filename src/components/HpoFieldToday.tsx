@@ -333,22 +333,65 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
     setWorking(true);
     setError(null);
     setMessage(null);
-    const key = `field:${crypto.randomUUID()}:hpo.route_stop.set_outcome`;
+    const hasDraft = Boolean(note.trim());
+    const dueIso = followupDue ? new Date(`${followupDue}T12:00:00`).toISOString() : null;
+    const payload = {
+      status,
+      notes: note.trim() || null,
+      visitOutcome:
+        status === "closed"
+          ? "Office closed"
+          : status === "bad_address"
+            ? "Bad / unusable address"
+            : status === "skipped"
+              ? "Skipped"
+              : "Visit completed",
+      nextAction: followup.trim() || null,
+      nextActionDueAt: dueIso,
+    };
+    const action = hasDraft ? "hpo.route_stop.log_visit" : "hpo.route_stop.set_outcome";
+    const key = `field:${crypto.randomUUID()}:${action}`;
+
     if (typeof navigator !== "undefined" && !navigator.onLine) {
-      await queueMutation("hpo.route_stop.set_outcome", nextStop.id, { status }, key);
+      await queueMutation(
+        hasDraft ? "hpo.route_stop.log_visit" : "hpo.route_stop.set_outcome",
+        nextStop.id,
+        payload,
+        key,
+      );
       optimisticFinalStatus(status);
+      setNote("");
+      setFollowup("");
+      setFollowupDue("");
+      setShowNote(false);
       setWorking(false);
       return;
     }
+
     try {
-      await outcome({
-        data: {
-          stopId: nextStop.id,
-          status,
-          idempotencyKey: key,
-          sourceChannel: "field_ui",
-        },
-      });
+      if (hasDraft) {
+        await saveVisit({
+          data: {
+            stopId: nextStop.id,
+            status,
+            notes: note.trim(),
+            visitOutcome: payload.visitOutcome,
+            nextAction: payload.nextAction,
+            nextActionDueAt: payload.nextActionDueAt,
+            idempotencyKey: key,
+            sourceChannel: "field_ui",
+          },
+        });
+      } else {
+        await outcome({
+          data: {
+            stopId: nextStop.id,
+            status,
+            idempotencyKey: key,
+            sourceChannel: "field_ui",
+          },
+        });
+      }
       setMessage(
         status === "closed"
           ? "Office marked closed."
@@ -359,11 +402,24 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
               : "Visit completed.",
       );
       await clearHpoDraftNote(nextStop.id).catch(() => undefined);
+      setNote("");
+      setFollowup("");
+      setFollowupDue("");
+      setShowNote(false);
       await load();
     } catch (caught) {
       if (isNetworkFailure(caught)) {
-        await queueMutation("hpo.route_stop.set_outcome", nextStop.id, { status }, key);
+        await queueMutation(
+          hasDraft ? "hpo.route_stop.log_visit" : "hpo.route_stop.set_outcome",
+          nextStop.id,
+          payload,
+          key,
+        );
         optimisticFinalStatus(status);
+        setNote("");
+        setFollowup("");
+        setFollowupDue("");
+        setShowNote(false);
       } else {
         setError(caught instanceof Error ? caught.message : "Couldn't update this stop.");
       }
