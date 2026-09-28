@@ -128,12 +128,13 @@ check(
     v2.includes("Ask Emery"),
 );
 check(
-  "Map V2 uses a no-key light basemap, reliable blue DOM markers, and Map/List workflow",
-  v2.includes('const BLUE = "#1769e8"') &&
+  "Map V2 uses a professional no-key vector basemap and blue pin markers",
+  v2.includes('const PROFESSIONAL_MAP_STYLE = "https://tiles.openfreemap.org/styles/bright"') &&
     v2.includes("tile.openstreetmap.org") &&
     v2.includes("officeMarkersRef") &&
     v2.includes("new maplibregl.Marker") &&
-    v2.includes("element.style.background = focused ? BLUE_DARK : BLUE") &&
+    v2.includes("createOfficePinElement") &&
+    v2.includes('anchor: "bottom"') &&
     v2.includes('viewMode') &&
     v2.includes('MapIcon') &&
     v2.includes('> List'),
