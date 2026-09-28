@@ -142,6 +142,23 @@ type PlannerData = {
 };
 
 const terminalStatuses = new Set(["completed", "visited", "skipped", "closed", "bad_address"]);
+const inactiveRouteStatuses = new Set(["completed", "cancelled", "canceled", "archived"]);
+
+function currentRouteId(routes: RoutePlan[], today: string, preferredRouteId?: string | null) {
+  const preferred = preferredRouteId
+    ? routes.find(
+        (route) => route.id === preferredRouteId && !inactiveRouteStatuses.has(route.status),
+      )
+    : null;
+  if (preferred) return preferred.id;
+
+  return (
+    routes.find((route) => route.route_date === today && !inactiveRouteStatuses.has(route.status))
+      ?.id ??
+    routes.find((route) => ["active", "in_progress"].includes(route.status))?.id ??
+    null
+  );
+}
 
 function formatDate(value: string) {
   const parsed = new Date(value + "T12:00:00");
@@ -1024,11 +1041,17 @@ export function HpoRoutePlannerCompact({ onOpen }: { onOpen: () => void }) {
     };
   }, [load]);
 
-  const todayRoute = data?.routes.find((route) => route.route_date === data.today) ?? null;
+  const todayRoute =
+    data?.routes.find(
+      (route) => route.route_date === data.today && !inactiveRouteStatuses.has(route.status),
+    ) ?? null;
   const nextRoute =
     todayRoute ??
     data?.routes
-      .filter((route) => route.route_date >= (data?.today ?? ""))
+      .filter(
+        (route) =>
+          route.route_date >= (data?.today ?? "") && !inactiveRouteStatuses.has(route.status),
+      )
       .sort((a, b) => a.route_date.localeCompare(b.route_date))[0] ??
     null;
   const completed =
@@ -1107,13 +1130,7 @@ export function HpoRoutePlanner({
   async function refresh(preferredRouteId?: string | null) {
     const result = (await load({})) as PlannerData;
     setData(result);
-    const nextId =
-      preferredRouteId ||
-      activeRouteId ||
-      result.routes.find((route) => route.route_date === result.today)?.id ||
-      result.routes[0]?.id ||
-      null;
-    setActiveRouteId(nextId);
+    setActiveRouteId(currentRouteId(result.routes, result.today, preferredRouteId));
     return result;
   }
 
@@ -1124,11 +1141,7 @@ export function HpoRoutePlanner({
         if (cancelled) return;
         const next = result as PlannerData;
         setData(next);
-        setActiveRouteId(
-          next.routes.find((route) => route.route_date === next.today)?.id ??
-            next.routes[0]?.id ??
-            null,
-        );
+        setActiveRouteId(currentRouteId(next.routes, next.today));
       })
       .catch(async (cause) => {
         if (cancelled) return;
@@ -1170,8 +1183,7 @@ export function HpoRoutePlanner({
       .finally(() => setMapPreparing(false));
   }, [activeRouteId, data, mapPreparedOnce, mapPreparing, prepareOfficeMap]);
 
-  const activeRoute =
-    data?.routes.find((route) => route.id === activeRouteId) ?? data?.routes[0] ?? null;
+  const activeRoute = data?.routes.find((route) => route.id === activeRouteId) ?? null;
   const activeCalendar = activeRoute
     ? (data?.calendar ?? []).filter((item) => item.local_date === activeRoute.route_date)
     : [];
@@ -1561,6 +1573,7 @@ export function HpoRoutePlanner({
                     );
                   }
                   await refresh(result.routeId);
+                  onNavigateHpo?.("today");
                 } catch (cause) {
                   setError(cause instanceof Error ? cause.message : "Couldn't create route.");
                 } finally {
@@ -1632,13 +1645,15 @@ function RouteBuilder({
   }) => Promise<void>;
   working: boolean;
 }) {
-  const [routeDate, setRouteDate] = useState(defaultRouteDate(data.today));
+  const [routeDate, setRouteDate] = useState(data.today);
   const [area, setArea] = useState("");
   const [startAddress, setStartAddress] = useState("");
   const [endAddress, setEndAddress] = useState("");
-  const [startWindow, setStartWindow] = useState("09:00");
-  const [endWindow, setEndWindow] = useState("15:00");
-  const [syncToCalendar, setSyncToCalendar] = useState(true);
+  const [startWindow, setStartWindow] = useState("");
+  const [endWindow, setEndWindow] = useState("");
+  const [syncToCalendar, setSyncToCalendar] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showCustomOffice, setShowCustomOffice] = useState(false);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Candidate[]>(initialSelected);
   const [customName, setCustomName] = useState("");
@@ -1711,11 +1726,10 @@ function RouteBuilder({
     <section className="emery-glass rounded-[1.6rem] p-4 sm:p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="emery-kicker">New daily route</p>
-          <h3 className="mt-1 text-lg font-semibold">Build the stop list first.</h3>
+          <p className="emery-kicker">Today's field route</p>
+          <h3 className="mt-1 text-lg font-semibold">Choose offices, then optimize.</h3>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            Pick the date and time block around your Calendar, add offices in any order, then Emery
-            will optimize the driving order.
+            Add the offices you want to visit. Emery will calculate the best driving order.
           </p>
         </div>
         <button
@@ -1728,82 +1742,71 @@ function RouteBuilder({
         </button>
       </div>
 
-      <div className="mt-4 grid gap-2 sm:grid-cols-2">
-        <input
-          type="date"
-          value={routeDate}
-          onChange={(event) => setRouteDate(event.target.value)}
-          className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-base outline-none focus:border-primary/30"
-        />
-        <input
-          value={area}
-          onChange={(event) => setArea(event.target.value)}
-          placeholder="Area — e.g. Jersey City / Hoboken"
-          className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-base outline-none focus:border-primary/30"
-        />
-        <input
-          type="time"
-          value={startWindow}
-          onChange={(event) => setStartWindow(event.target.value)}
-          aria-label="Route start time"
-          className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-base outline-none focus:border-primary/30"
-        />
-        <input
-          type="time"
-          value={endWindow}
-          onChange={(event) => setEndWindow(event.target.value)}
-          aria-label="Route end time"
-          className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-base outline-none focus:border-primary/30"
-        />
-        <input
-          value={startAddress}
-          onChange={(event) => setStartAddress(event.target.value)}
-          placeholder="Starting address (optional)"
-          className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-base outline-none focus:border-primary/30 sm:col-span-2"
-        />
-        <input
-          value={endAddress}
-          onChange={(event) => setEndAddress(event.target.value)}
-          placeholder="Ending address (optional)"
-          className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-base outline-none focus:border-primary/30 sm:col-span-2"
-        />
-      </div>
+      <button
+        type="button"
+        onClick={() => setShowSettings((value) => !value)}
+        className="mt-4 flex min-h-11 w-full items-center justify-between rounded-xl border border-border/45 bg-card/35 px-3 text-left text-xs font-semibold"
+      >
+        <span>Route settings</span>
+        <span className="text-[10px] font-normal text-muted-foreground">
+          {routeDate === data.today ? "Today" : formatDate(routeDate)} · Optional
+        </span>
+      </button>
 
-      <div className="mt-4 rounded-2xl border border-primary/15 bg-primary/[0.03] p-3.5">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold">Fit around Emery Calendar</p>
-            <p className="mt-1 text-[10px] text-muted-foreground">
-              {dayCalendar.length
-                ? `${dayCalendar.length} timed item${dayCalendar.length === 1 ? "" : "s"} on this date`
-                : "No timed items saved for this date"}
-            </p>
-          </div>
-          <label className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground">
+      {showSettings ? (
+        <div className="mt-2 grid gap-2 rounded-2xl border border-border/40 bg-card/20 p-3 sm:grid-cols-2">
+          <input
+            type="date"
+            value={routeDate}
+            onChange={(event) => setRouteDate(event.target.value)}
+            className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-base outline-none focus:border-primary/30"
+          />
+          <input
+            value={area}
+            onChange={(event) => setArea(event.target.value)}
+            placeholder="Area (optional)"
+            className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-base outline-none focus:border-primary/30"
+          />
+          <input
+            type="time"
+            value={startWindow}
+            onChange={(event) => setStartWindow(event.target.value)}
+            aria-label="Route start time"
+            className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-base outline-none focus:border-primary/30"
+          />
+          <input
+            type="time"
+            value={endWindow}
+            onChange={(event) => setEndWindow(event.target.value)}
+            aria-label="Route end time"
+            className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-base outline-none focus:border-primary/30"
+          />
+          <input
+            value={startAddress}
+            onChange={(event) => setStartAddress(event.target.value)}
+            placeholder="Starting address (optional)"
+            className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-base outline-none focus:border-primary/30 sm:col-span-2"
+          />
+          <input
+            value={endAddress}
+            onChange={(event) => setEndAddress(event.target.value)}
+            placeholder="Ending address (optional)"
+            className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-base outline-none focus:border-primary/30 sm:col-span-2"
+          />
+          <label className="flex min-h-11 items-center gap-2 text-xs font-semibold text-muted-foreground sm:col-span-2">
             <input
               type="checkbox"
               checked={syncToCalendar}
               onChange={(event) => setSyncToCalendar(event.target.checked)}
               className="size-4 accent-current"
             />
-            Add route block
+            Add route block to Emery Calendar
+            {dayCalendar.length
+              ? ` · ${dayCalendar.length} scheduled item${dayCalendar.length === 1 ? "" : "s"}`
+              : ""}
           </label>
         </div>
-        {dayCalendar.length ? (
-          <div className="mt-2 space-y-1.5">
-            {dayCalendar.slice(0, 6).map((item) => (
-              <div
-                key={`${item.kind}-${item.id}`}
-                className="flex items-center gap-2 rounded-xl bg-card/45 px-2.5 py-2 text-[10px]"
-              >
-                <Clock3 className="size-3 shrink-0 text-primary" />
-                <span className="min-w-0 flex-1 truncate">{item.title}</span>
-                <span className="shrink-0 text-muted-foreground">{item.local_time}</span>
-              </div>
-            ))}
-          </div>
-        ) : null}
-      </div>
+      ) : null}
 
       <div className="mt-4">
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -1848,39 +1851,47 @@ function RouteBuilder({
         ) : null}
       </div>
 
-      <div className="mt-4 rounded-2xl border border-border/40 bg-card/25 p-3">
-        <p className="text-xs font-semibold">Add an office that isn't saved yet</p>
-        <div className="mt-2 grid gap-2">
-          <input
-            value={customName}
-            onChange={(event) => setCustomName(event.target.value)}
-            placeholder="Office name"
-            className="h-11 rounded-xl border border-border/50 bg-card/55 px-3 text-base outline-none focus:border-primary/30"
-          />
-          <input
-            value={customAddress}
-            onChange={(event) => setCustomAddress(event.target.value)}
-            placeholder="Full street address"
-            className="h-11 rounded-xl border border-border/50 bg-card/55 px-3 text-base outline-none focus:border-primary/30"
-          />
-          <div className="flex gap-2">
+      <button
+        type="button"
+        onClick={() => setShowCustomOffice((value) => !value)}
+        className="mt-3 min-h-11 w-full rounded-xl border border-border/40 px-3 text-left text-xs font-semibold text-muted-foreground"
+      >
+        {showCustomOffice ? "Hide custom office" : "Add an office that isn't saved"}
+      </button>
+      {showCustomOffice ? (
+        <div className="mt-2 rounded-2xl border border-border/40 bg-card/25 p-3">
+          <div className="mt-2 grid gap-2">
             <input
-              value={customCity}
-              onChange={(event) => setCustomCity(event.target.value)}
-              placeholder="City"
-              className="h-11 min-w-0 flex-1 rounded-xl border border-border/50 bg-card/55 px-3 text-base outline-none focus:border-primary/30"
+              value={customName}
+              onChange={(event) => setCustomName(event.target.value)}
+              placeholder="Office name"
+              className="h-11 rounded-xl border border-border/50 bg-card/55 px-3 text-base outline-none focus:border-primary/30"
             />
-            <button
-              type="button"
-              onClick={addCustom}
-              disabled={!customName.trim() || !customAddress.trim()}
-              className="emery-press min-h-11 rounded-xl border border-primary/20 bg-primary/[0.055] px-3 text-xs font-semibold text-primary disabled:opacity-40"
-            >
-              Add stop
-            </button>
+            <input
+              value={customAddress}
+              onChange={(event) => setCustomAddress(event.target.value)}
+              placeholder="Full street address"
+              className="h-11 rounded-xl border border-border/50 bg-card/55 px-3 text-base outline-none focus:border-primary/30"
+            />
+            <div className="flex gap-2">
+              <input
+                value={customCity}
+                onChange={(event) => setCustomCity(event.target.value)}
+                placeholder="City"
+                className="h-11 min-w-0 flex-1 rounded-xl border border-border/50 bg-card/55 px-3 text-base outline-none focus:border-primary/30"
+              />
+              <button
+                type="button"
+                onClick={addCustom}
+                disabled={!customName.trim() || !customAddress.trim()}
+                className="emery-press min-h-11 rounded-xl border border-primary/20 bg-primary/[0.055] px-3 text-xs font-semibold text-primary disabled:opacity-40"
+              >
+                Add stop
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
 
       <div className="mt-4">
         <p className="text-xs font-semibold">Planned stops · {selected.length}</p>
@@ -1960,7 +1971,11 @@ function RouteBuilder({
         onClick={() =>
           void onCreate({
             routeDate,
-            area,
+            area:
+              area.trim() ||
+              [...new Set(selected.map((stop) => stop.city).filter(Boolean))]
+                .slice(0, 2)
+                .join(" / "),
             startAddress,
             endAddress,
             startWindow,
@@ -1978,10 +1993,10 @@ function RouteBuilder({
             })),
           })
         }
-        className="emery-press mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-40"
+        className="emery-press sticky bottom-0 mt-4 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-[0_-8px_22px_rgba(0,0,0,0.18)] disabled:opacity-40"
       >
         <RouteIcon className="size-4" />
-        {working ? "Creating route…" : "Create Daily Route"}
+        {working ? "Optimizing route…" : "Optimize & Start Route"}
       </button>
     </section>
   );

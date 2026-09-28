@@ -778,8 +778,6 @@ export function HpoMapV2MapLibre({
   }
 
   const totalMapped = offices.filter((office) => office.mapped).length;
-  void onToggleRouteStop;
-  void onBuildRoute;
 
   return (
     <section className="hpo-map-v2 relative h-full min-h-0 w-full overflow-hidden bg-[#eef2f7] text-slate-950">
@@ -1030,31 +1028,61 @@ export function HpoMapV2MapLibre({
               {filtered.length} matching offices
             </p>
             <div className="space-y-2">
-              {filtered.map((office) => (
-                <button
-                  key={office.key}
-                  type="button"
-                  onClick={() => {
-                    onSelectOffice(office.key);
-                    setViewMode("map");
-                    setSheetExpanded(true);
-                  }}
-                  className="flex min-h-[64px] w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-left shadow-sm"
-                >
-                  <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-[#1769e8]">
-                    <MapPinned className="size-5" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-slate-900">
-                      {office.officeName}
-                    </span>
-                    <span className="mt-0.5 block truncate text-[11px] text-slate-500">
-                      {[office.address, office.city].filter(Boolean).join(", ")}
-                    </span>
-                  </span>
-                </button>
-              ))}
+              {filtered.map((office) => {
+                const selected = selectedSet.has(office.key);
+                return (
+                  <div
+                    key={office.key}
+                    className={`flex min-h-[64px] w-full items-center gap-2 rounded-2xl border bg-white px-2 py-2 shadow-sm ${
+                      selected ? "border-[#1769e8]" : "border-slate-200"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSelectOffice(office.key);
+                        setViewMode("map");
+                        setSheetExpanded(true);
+                      }}
+                      className="flex min-w-0 flex-1 items-center gap-3 px-1 text-left"
+                    >
+                      <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-[#1769e8]">
+                        <MapPinned className="size-5" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold text-slate-900">
+                          {office.officeName}
+                        </span>
+                        <span className="mt-0.5 block truncate text-[11px] text-slate-500">
+                          {[office.address, office.city].filter(Boolean).join(", ")}
+                        </span>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onToggleRouteStop(office)}
+                      className={`flex size-11 shrink-0 items-center justify-center rounded-xl text-lg font-semibold ${
+                        selected ? "bg-[#1769e8] text-white" : "bg-blue-50 text-[#1769e8]"
+                      }`}
+                      aria-label={`${selected ? "Remove" : "Add"} ${office.officeName} ${selected ? "from" : "to"} today's route`}
+                    >
+                      {selected ? "✓" : "+"}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
+            {selectedKeys.length ? (
+              <div className="sticky bottom-2 mt-3 rounded-2xl border border-blue-200 bg-white p-2 shadow-xl">
+                <button
+                  type="button"
+                  onClick={onBuildRoute}
+                  className="min-h-12 w-full rounded-xl bg-[#1769e8] px-4 text-sm font-semibold text-white"
+                >
+                  Review Route · {selectedKeys.length} selected
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -1138,22 +1166,33 @@ export function HpoMapV2MapLibre({
                 )}
                 <button
                   type="button"
-                  onClick={() =>
-                    openHpoEmery(
-                      `Add ${selectedOffice.officeName} at ${[
-                        selectedOffice.address,
-                        selectedOffice.city,
-                      ]
-                        .filter(Boolean)
-                        .join(
-                          ", ",
-                        )} to my current HPO route. If there isn't an active route, ask me the minimum question needed.`,
-                      selectedOffice.officeName,
-                    )
-                  }
-                  className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl bg-blue-50 text-[10px] font-semibold text-[#1769e8]"
+                  onClick={() => {
+                    if (route?.stops?.length) {
+                      openHpoEmery(
+                        `Add ${selectedOffice.officeName} at ${[
+                          selectedOffice.address,
+                          selectedOffice.city,
+                        ]
+                          .filter(Boolean)
+                          .join(", ")} to today's HPO route.`,
+                        selectedOffice.officeName,
+                      );
+                    } else {
+                      onToggleRouteStop(selectedOffice);
+                    }
+                  }}
+                  className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-semibold ${
+                    selectedSet.has(selectedOffice.key)
+                      ? "bg-[#1769e8] text-white"
+                      : "bg-blue-50 text-[#1769e8]"
+                  }`}
                 >
-                  <MapPinned className="size-4" /> Route
+                  <MapPinned className="size-4" />
+                  {route?.stops?.length
+                    ? "Route"
+                    : selectedSet.has(selectedOffice.key)
+                      ? "Selected"
+                      : "Select"}
                 </button>
                 <button
                   type="button"
@@ -1174,26 +1213,40 @@ export function HpoMapV2MapLibre({
               <div className="flex items-center gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-bold text-slate-950">
-                    {route?.stops?.length
-                      ? `${route.stops.length} stops on the active route`
-                      : `${totalMapped} HPO offices on the map`}
+                    {selectedKeys.length
+                      ? `${selectedKeys.length} selected for today's route`
+                      : route?.stops?.length
+                        ? `${route.stops.length} stops on today's route`
+                        : "No route yet today"}
                   </p>
                   <p className="mt-0.5 truncate text-[11px] text-slate-500">
-                    Tap a blue pin, search an office, or ask Emery to plan the field day.
+                    {selectedKeys.length
+                      ? "Choose more offices or review and optimize the route."
+                      : `Tap a blue pin or search ${totalMapped} mapped offices.`}
                   </p>
                 </div>
                 {!sheetExpanded ? (
                   <button
                     type="button"
-                    onClick={() =>
-                      openHpoEmery(
-                        "Help me with the HPO map. I can add offices, build or change my route, review nearby accounts, or log a visit.",
-                        "HPO Map",
-                      )
-                    }
+                    onClick={() => {
+                      if (selectedKeys.length) onBuildRoute();
+                      else
+                        openHpoEmery(
+                          "Help me with the HPO map. I can add offices, build or change my route, review nearby accounts, or log a visit.",
+                          "HPO Map",
+                        );
+                    }}
                     className="flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-[#1769e8] px-4 text-[12px] font-semibold text-white shadow-sm"
                   >
-                    <MessageCircle className="size-4" /> Emery
+                    {selectedKeys.length ? (
+                      <>
+                        <MapPinned className="size-4" /> Review
+                      </>
+                    ) : (
+                      <>
+                        <MessageCircle className="size-4" /> Emery
+                      </>
+                    )}
                   </button>
                 ) : null}
               </div>

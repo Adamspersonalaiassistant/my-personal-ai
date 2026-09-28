@@ -133,12 +133,26 @@ check(
   "Map route and relationship actions open Emery inside the map experience",
   v2.includes("openHpoEmery") &&
     v2.includes("Help me with the HPO map") &&
-    v2.includes("to my current HPO route"),
+    v2.includes("to today's HPO route") &&
+    v2.includes("onToggleRouteStop(selectedOffice)"),
+);
+check(
+  "Completed historical routes never masquerade as today's active route",
+  planner.includes("inactiveRouteStatuses") &&
+    planner.includes("currentRouteId") &&
+    !planner.includes("data?.routes[0] ?? null") &&
+    !planner.includes("result.routes[0]?.id"),
+);
+check(
+  "Route creation defaults to today and exposes one optimize-and-start action",
+  planner.includes("useState(data.today)") &&
+    planner.includes("Optimize & Start Route") &&
+    planner.includes('onNavigateHpo?.("today")'),
 );
 check(
   "Map V2 uses a reliable no-key full-detail street basemap and blue teardrop pins",
   v2.includes("https://tile.openstreetmap.org/{z}/{x}/{y}.png") &&
-    v2.includes('const PROFESSIONAL_MAP_STYLE: StyleSpecification') &&
+    v2.includes("const PROFESSIONAL_MAP_STYLE: StyleSpecification") &&
     v2.includes("maplibregl.setWorkerUrl") &&
     v2.includes("maplibre-gl-worker.mjs?worker&url") &&
     v2.includes("officeMarkersRef") &&

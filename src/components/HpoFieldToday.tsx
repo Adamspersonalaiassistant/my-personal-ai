@@ -163,7 +163,9 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
   const nextStop = data?.nextStop ?? null;
   const route = data?.route ?? null;
   const routeDays = routeWeek(route?.route_date);
-  const activeRouteDay = route?.route_date ? new Date(`${route.route_date}T12:00:00`).getDate() : null;
+  const activeRouteDay = route?.route_date
+    ? new Date(`${route.route_date}T12:00:00`).getDate()
+    : null;
 
   const progressPercent = Math.round(Number(data?.progress ?? 0) * 100);
   const accountContext = data?.accountContext ?? null;
@@ -899,7 +901,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
     return (
       <section className="emery-glass rounded-[1.6rem] p-6 text-center">
         <RouteIcon className="mx-auto size-7 text-primary" />
-        <h2 className="mt-3 text-base font-semibold">No active field route yet</h2>
+        <h2 className="mt-3 text-base font-semibold">No route yet today</h2>
         <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-muted-foreground">
           Build a route from the Map. Today will automatically become your field execution screen.
         </p>
@@ -908,7 +910,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
           onClick={onOpenMap}
           className="emery-press mt-4 min-h-11 rounded-xl bg-primary px-4 text-xs font-semibold text-primary-foreground"
         >
-          Open Map
+          Build Today's Route
         </button>
       </section>
     );
@@ -947,7 +949,9 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
         </div>
 
         <div className="border-b border-slate-200 px-3 py-3">
-          <p className="text-center text-sm font-semibold text-slate-800">{routeMonth(route.route_date)}</p>
+          <p className="text-center text-sm font-semibold text-slate-800">
+            {routeMonth(route.route_date)}
+          </p>
           <div className="mt-2 grid grid-cols-7 gap-1">
             {routeDays.map((day) => {
               const active = day.getDate() === activeRouteDay;
@@ -1010,7 +1014,8 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
           {pendingCount ? (
             <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
               <p className="text-[10px] text-amber-800">
-                {pendingCount} field update{pendingCount === 1 ? "" : "s"} saved on this phone · Pending sync
+                {pendingCount} field update{pendingCount === 1 ? "" : "s"} saved on this phone ·
+                Pending sync
               </p>
               {!offline ? (
                 <button
@@ -1057,7 +1062,9 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                     {stop.stop_order}.
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className={`break-words text-sm font-semibold ${done ? "text-slate-500" : "text-slate-900"}`}>
+                    <p
+                      className={`break-words text-sm font-semibold ${done ? "text-slate-500" : "text-slate-900"}`}
+                    >
                       {stop.office_name || "Route stop"}
                     </p>
                     <p className="mt-0.5 break-words text-[11px] text-slate-500">
@@ -1071,7 +1078,10 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                   </div>
                   <div className="flex shrink-0 items-center">
                     {done ? (
-                      <SquareCheckBig className="mr-1 size-5 text-[#10b981]" aria-label="Completed stop" />
+                      <SquareCheckBig
+                        className="mr-1 size-5 text-[#10b981]"
+                        aria-label="Completed stop"
+                      />
                     ) : null}
                     {!done && !offline && !pendingCount ? (
                       <>
@@ -1080,7 +1090,9 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                           variant="ghost"
                           className="size-11 text-slate-500"
                           disabled={
-                            working || index === 0 || TERMINAL.has(String(sorted[index - 1]?.status))
+                            working ||
+                            index === 0 ||
+                            TERMINAL.has(String(sorted[index - 1]?.status))
                           }
                           onClick={() => void moveQueuedStop(stop.id, -1)}
                           aria-label={`Move ${stop.office_name || "stop"} earlier`}
@@ -1121,7 +1133,6 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
             })}
         </div>
       </section>
-
 
       {nextStop ? (
         <>

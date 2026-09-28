@@ -93,7 +93,8 @@ function resolveDate(message: string, timeZone: string) {
   const weekday = Object.keys(weekdayIndex).find((day) => text.includes(day));
   if (weekday) {
     const currentParts = localDateParts(timeZone);
-    const current = weekdayIndex[String(currentParts["weekday"] ?? "").toLowerCase()] ?? new Date().getDay();
+    const current =
+      weekdayIndex[String(currentParts["weekday"] ?? "").toLowerCase()] ?? new Date().getDay();
     const target = weekdayIndex[weekday]!;
     let offset = (target - current + 7) % 7;
     if (offset === 0 || text.includes(`next ${weekday}`)) offset += 7;
@@ -118,7 +119,7 @@ function resolveWindow(message: string) {
     /\bfrom\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s+(?:to|until|-)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i,
   );
   if (!match) return { startWindow: null, endWindow: null };
-  let start = clockValue(match[1]!, match[2], match[3]);
+  const start = clockValue(match[1]!, match[2], match[3]);
   let end = clockValue(match[4]!, match[5], match[6]);
   if (start && end && !match[3] && !match[6]) {
     const startHour = Number(start.slice(0, 2));
@@ -156,9 +157,8 @@ async function activeRoute(db: any, userId: string, timeZone: string) {
   if (error) throw error;
   const rows = data ?? [];
   return (
-    rows.find((route: any) => ["active", "in_progress"].includes(String(route.status))) ??
     rows.find((route: any) => route.route_date === today) ??
-    rows[0] ??
+    rows.find((route: any) => ["active", "in_progress"].includes(String(route.status))) ??
     null
   );
 }
@@ -203,7 +203,9 @@ async function findOffice(db: any, userId: string, phrase: string) {
 
   const candidates = [
     ...(accounts.data ?? [])
-      .filter((row: any) => !(Array.isArray(row.tags) && row.tags.includes("exclude_from_adam_route")))
+      .filter(
+        (row: any) => !(Array.isArray(row.tags) && row.tags.includes("exclude_from_adam_route")),
+      )
       .filter((row: any) => !clean(row.owner_name) || normalize(row.owner_name) === "adam")
       .map((row: any) => ({
         score: nameScore(officeTargetPhrase(phrase) || phrase, row.name),
@@ -229,7 +231,10 @@ async function findOffice(db: any, userId: string, phrase: string) {
     })),
   ]
     .filter((row) => row.score >= 45)
-    .sort((left: { row: any; score: number }, right: { row: any; score: number }) => right.score - left.score);
+    .sort(
+      (left: { row: any; score: number }, right: { row: any; score: number }) =>
+        right.score - left.score,
+    );
 
   if (!candidates.length) return { match: null, ambiguous: false };
   if (candidates.length > 1 && candidates[0]!.score - candidates[1]!.score < 10) {
@@ -242,7 +247,9 @@ async function chooseRouteCandidates(db: any, userId: string, message: string, c
   const [accounts, prospects] = await Promise.all([
     db
       .from("hpo_accounts")
-      .select("id,name,address,city,latitude,longitude,priority,last_touch_at,next_action,next_action_due_at,tags,status,owner_name")
+      .select(
+        "id,name,address,city,latitude,longitude,priority,last_touch_at,next_action,next_action_due_at,tags,status,owner_name",
+      )
       .eq("user_id", userId)
       .eq("status", "active")
       .not("address", "is", null)
@@ -274,7 +281,9 @@ async function chooseRouteCandidates(db: any, userId: string, message: string, c
   const candidates = [
     ...(accounts.data ?? [])
       .filter((row: any) => citySet.has(normalize(row.city ?? "")))
-      .filter((row: any) => !(Array.isArray(row.tags) && row.tags.includes("exclude_from_adam_route")))
+      .filter(
+        (row: any) => !(Array.isArray(row.tags) && row.tags.includes("exclude_from_adam_route")),
+      )
       .filter((row: any) => !clean(row.owner_name) || normalize(row.owner_name) === "adam")
       .map((row: any) => {
         const overdue =
@@ -363,23 +372,38 @@ function requestedAction(message: string): HpoRouteCommandAction {
   if (
     /\b(copy|export)\b.*\b(today|todays|route|visits?|tracker|rows?)\b/.test(text) ||
     /\b(copy todays visits|copy today s visits|tracker rows)\b/.test(text)
-  ) return "hpo.route.export";
+  )
+    return "hpo.route.export";
   if (
     /\b(sync|put|add)\b.*\b(route|field route|marketing route)\b.*\bcalendar\b/.test(text) ||
     /\b(sync route to calendar|put route on calendar)\b/.test(text)
-  ) return "hpo.route.sync_calendar";
+  )
+    return "hpo.route.sync_calendar";
   if (/\b(build|create|make)\b.*\broute\b/.test(text)) return "hpo.route.create";
-  if (/\b(wrap up|wrap today|finish (?:the )?(?:route|day)|complete (?:the )?route|end (?:the )?route)\b/.test(text))
+  if (
+    /\b(wrap up|wrap today|finish (?:the )?(?:route|day)|complete (?:the )?route|end (?:the )?route)\b/.test(
+      text,
+    )
+  )
     return "hpo.route.complete";
-  if (/\b(another|backup|nearby|within \d{1,2} minutes?|where should i go|where can i go|i have \d{1,3} minutes? left)\b/.test(text))
+  if (
+    /\b(another|backup|nearby|within \d{1,2} minutes?|where should i go|where can i go|i have \d{1,3} minutes? left)\b/.test(
+      text,
+    )
+  )
     return "hpo.nearby.find";
-  if (/\b(reoptimize|re optimize|fix (?:the )?(?:rest|remaining)|optimize (?:the )?(?:rest|remaining))\b/.test(text))
+  if (
+    /\b(reoptimize|re optimize|fix (?:the )?(?:rest|remaining)|optimize (?:the )?(?:rest|remaining))\b/.test(
+      text,
+    )
+  )
     return "hpo.route.reoptimize";
   if (/\boptimize\b/.test(text)) return "hpo.route.optimize";
   if (
     /\b(?:put|move)\b.+\b(?:first|last|before|after)\b/.test(text) ||
     /\b(?:first|last)\s+(?:stop|office)\b/.test(text)
-  ) return "hpo.route.reorder";
+  )
+    return "hpo.route.reorder";
   if (/\b(add|put)\b.+\b(?:route|stop|office)\b/.test(text) || /^add\s+/.test(text))
     return "hpo.route.add_stops";
   if (/\b(remove|take)\b.+\b(?:route|stop|office|out|off)\b/.test(text))
@@ -488,6 +512,47 @@ export async function processHpoRouteCommand(input: {
 
     const route = await activeRoute(input.db, input.userId, input.timezone);
     if (!route) {
+      if (action === "hpo.route.add_stops") {
+        const match = await findOffice(input.db, input.userId, input.message);
+        if (match.ambiguous) {
+          return empty({
+            needsClarification: true,
+            question:
+              "I found more than one matching HPO office. Which one do you want to start today's route with?",
+            reply:
+              "I found more than one matching HPO office. Which one do you want to start today's route with?",
+          });
+        }
+        if (!match.match) {
+          return empty({
+            needsClarification: true,
+            question: "Which saved HPO office or prospect should start today's route?",
+            reply: "Which saved HPO office or prospect should start today's route?",
+          });
+        }
+        const routeDate = dateKey(input.timezone);
+        const created = await executeHpoRouteCreateCore({
+          db: input.db,
+          userId: input.userId,
+          payload: {
+            routeDate,
+            area: match.match.city ?? null,
+            syncToCalendar: false,
+            stops: [match.match],
+            idempotencyKey: requestPrefix
+              ? `${requestPrefix}:hpo.route.create_from_office`
+              : `hpo-route:${routeDate}:${match.match.accountId ?? match.match.prospectId}:create:${Date.now()}`,
+            sourceChannel: input.sourceChannel,
+            sourceMessageId: input.sourceMessageId ?? null,
+          },
+        });
+        return empty({
+          performed: true,
+          routeId: created.routeId,
+          executionRunId: created.executionRunId,
+          reply: `I started today's route with ${match.match.officeName}. Add the other offices you want, then tell me to optimize the route.`,
+        });
+      }
       return empty({
         needsClarification: true,
         question: "You don't have an active HPO route to change. Build or open a route first.",
@@ -538,7 +603,9 @@ export async function processHpoRouteCommand(input: {
 
     if (action === "hpo.nearby.find") {
       const withinMatch = input.message.match(/\bwithin\s+(\d{1,2})\s+minutes?\b/i);
-      const availableMatch = input.message.match(/\b(?:i have|got)\s+(\d{1,3})\s+minutes?(?:\s+left)?\b/i);
+      const availableMatch = input.message.match(
+        /\b(?:i have|got)\s+(\d{1,3})\s+minutes?(?:\s+left)?\b/i,
+      );
       const availableMinutes = availableMatch ? Number(availableMatch[1]) : null;
       const maxMinutes = withinMatch
         ? Number(withinMatch[1])
@@ -561,9 +628,10 @@ export async function processHpoRouteCommand(input: {
           reply: `I don't have an eligible backup office within ${maxMinutes} minutes right now.`,
         });
       }
-      const why = Array.isArray(recommendation.reasons) && recommendation.reasons.length
-        ? ` ${recommendation.reasons.join(" · ")}.`
-        : "";
+      const why =
+        Array.isArray(recommendation.reasons) && recommendation.reasons.length
+          ? ` ${recommendation.reasons.join(" · ")}.`
+          : "";
       return empty({
         performed: false,
         routeId: route.id,
@@ -598,7 +666,8 @@ export async function processHpoRouteCommand(input: {
         performed: true,
         routeId: route.id,
         executionRunId: result.executionRunId ?? null,
-        reply: "Today's HPO route is wrapped up. Every stop has a final outcome and the route is marked completed.",
+        reply:
+          "Today's HPO route is wrapped up. Every stop has a final outcome and the route is marked completed.",
       });
     }
 
@@ -677,7 +746,9 @@ export async function processHpoRouteCommand(input: {
         });
       }
 
-      const openIds = open.map((row: any) => row.id).filter((id: unknown): id is string => Boolean(id));
+      const openIds = open
+        .map((row: any) => row.id)
+        .filter((id: unknown): id is string => Boolean(id));
       const targetId = targetMatch.row.id as string;
       const withoutTarget = openIds.filter((id: string) => id !== targetId);
 
@@ -713,8 +784,10 @@ export async function processHpoRouteCommand(input: {
         return empty({
           needsClarification: true,
           routeId: route.id,
-          question: "Should I put that office first, last, before another office, or after another office?",
-          reply: "Should I put that office first, last, before another office, or after another office?",
+          question:
+            "Should I put that office first, last, before another office, or after another office?",
+          reply:
+            "Should I put that office first, last, before another office, or after another office?",
         });
       }
 
@@ -751,9 +824,18 @@ export async function processHpoRouteCommand(input: {
       } else {
         const ranked = stops
           .filter((row: any) => !TERMINAL.has(String(row.status)))
-          .map((row: any) => ({ row, score: nameScore(officeTargetPhrase(input.message) || input.message, row.office_name ?? "") }))
+          .map((row: any) => ({
+            row,
+            score: nameScore(
+              officeTargetPhrase(input.message) || input.message,
+              row.office_name ?? "",
+            ),
+          }))
           .filter((item: { row: any; score: number }) => item.score >= 45)
-          .sort((left: { row: any; score: number }, right: { row: any; score: number }) => right.score - left.score);
+          .sort(
+            (left: { row: any; score: number }, right: { row: any; score: number }) =>
+              right.score - left.score,
+          );
         if (ranked.length > 1 && ranked[0]!.score - ranked[1]!.score < 10) {
           return empty({
             needsClarification: true,

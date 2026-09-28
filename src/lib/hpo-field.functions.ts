@@ -227,7 +227,6 @@ export async function getHpoFieldTodayCore(input: { db: any; userId: string }) {
     ) ??
     routes.find((row: any) => row.route_date === today) ??
     routes.find((row: any) => ["active", "in_progress"].includes(row.status)) ??
-    routes[0] ??
     null;
 
   if (!route) {

@@ -34,11 +34,7 @@ function routeTitle(routeDate: string, area?: string | null) {
 }
 
 async function getTimezone(db: any, userId: string) {
-  const { data } = await db
-    .from("profiles")
-    .select("timezone")
-    .eq("user_id", userId)
-    .maybeSingle();
+  const { data } = await db.from("profiles").select("timezone").eq("user_id", userId).maybeSingle();
   return data?.timezone || "America/New_York";
 }
 
@@ -135,12 +131,20 @@ function extractNextAction(note: string) {
     .filter(Boolean);
   const action = [...sentences]
     .reverse()
-    .find((part) => /\b(follow\s*up|text|call|email|reach out|set up|schedule|confirm|lunch|meeting|revisit|go back)\b/i.test(part));
-  return action ? action.replace(/^((i|we)\s+(will|am going to|need to|plan to)\s+)/i, "").trim() : null;
+    .find((part) =>
+      /\b(follow\s*up|text|call|email|reach out|set up|schedule|confirm|lunch|meeting|revisit|go back)\b/i.test(
+        part,
+      ),
+    );
+  return action
+    ? action.replace(/^((i|we)\s+(will|am going to|need to|plan to)\s+)/i, "").trim()
+    : null;
 }
 
 function inferOutcome(note: string) {
-  if (/\b(side of (a )?house|not an office|bad address|wrong address|invalid address)\b/i.test(note))
+  if (
+    /\b(side of (a )?house|not an office|bad address|wrong address|invalid address)\b/i.test(note)
+  )
     return "Bad / unusable location";
   if (/\b(closed|office was closed|door was closed)\b/i.test(note)) return "Office closed";
   if (/\b(wasn['’]?t there|was not there|not present|out of office|in a deposition)\b/i.test(note))
@@ -152,7 +156,9 @@ function inferOutcome(note: string) {
 }
 
 function inferStatus(note: string) {
-  if (/\b(side of (a )?house|not an office|bad address|wrong address|invalid address)\b/i.test(note))
+  if (
+    /\b(side of (a )?house|not an office|bad address|wrong address|invalid address)\b/i.test(note)
+  )
     return "bad_address";
   if (/\b(closed|office was closed|door was closed)\b/i.test(note)) return "closed";
   if (/\b(skip|skipped|couldn['’]?t go|didn['’]?t visit)\b/i.test(note)) return "skipped";
@@ -161,7 +167,8 @@ function inferStatus(note: string) {
 
 function followupDueFromNote(note: string, timeZone: string) {
   const lower = note.toLowerCase();
-  if (!/\b(follow\s*up|call|email|text|reach out|revisit|go back|confirm)\b/i.test(lower)) return null;
+  if (!/\b(follow\s*up|call|email|text|reach out|revisit|go back|confirm)\b/i.test(lower))
+    return null;
 
   const now = new Date();
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -194,7 +201,9 @@ function followupDueFromNote(note: string, timeZone: string) {
       friday: 5,
       saturday: 6,
     };
-    const match = lower.match(/\b(?:next\s+|this\s+|on\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
+    const match = lower.match(
+      /\b(?:next\s+|this\s+|on\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/,
+    );
     if (match?.[1]) {
       const target = weekdays[match[1]];
       if (target == null) return null;
@@ -225,7 +234,11 @@ async function geocode(address: string) {
     },
   });
   if (!response.ok) throw new Error(`Could not geocode ${address}`);
-  const rows = (await response.json()) as Array<{ lat?: string; lon?: string; display_name?: string }>;
+  const rows = (await response.json()) as Array<{
+    lat?: string;
+    lon?: string;
+    display_name?: string;
+  }>;
   const first = rows[0];
   const lat = Number(first?.lat);
   const lon = Number(first?.lon);
@@ -265,7 +278,10 @@ async function roadRouteGeometry(points: Array<{ lat: number; lon: number }>) {
     const maxPoints = 260;
     const stride = Math.max(1, Math.ceil(rawCoordinates.length / maxPoints));
     return rawCoordinates
-      .filter((_point: unknown, index: number) => index % stride === 0 || index === rawCoordinates.length - 1)
+      .filter(
+        (_point: unknown, index: number) =>
+          index % stride === 0 || index === rawCoordinates.length - 1,
+      )
       .map((point: unknown) => {
         const pair = Array.isArray(point) ? point : [];
         return [Number(pair[0]), Number(pair[1])] as [number, number];
@@ -315,7 +331,8 @@ function optimizeSequence(
     let best: number | null = null;
     let bestCost = Number.POSITIVE_INFINITY;
     for (const candidate of remaining) {
-      const cost = current == null ? 0 : durations[current]?.[candidate] ?? Number.POSITIVE_INFINITY;
+      const cost =
+        current == null ? 0 : (durations[current]?.[candidate] ?? Number.POSITIVE_INFINITY);
       if (cost < bestCost) {
         best = candidate;
         bestCost = cost;
@@ -456,7 +473,6 @@ async function upsertInteractionForStop(
     .eq("user_id", userId);
 }
 
-
 export const getHpoRouteNextStop = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { routeId?: string | null } = {}) => ({
@@ -491,10 +507,11 @@ export const getHpoRouteNextStop = createServerFn({ method: "POST" })
       if (error) throw error;
       const rows = routes ?? [];
       route =
-        rows.find((row: any) => row.route_date === today && ["active", "in_progress"].includes(row.status)) ??
+        rows.find(
+          (row: any) => row.route_date === today && ["active", "in_progress"].includes(row.status),
+        ) ??
         rows.find((row: any) => row.route_date === today) ??
         rows.find((row: any) => ["active", "in_progress"].includes(row.status)) ??
-        rows[0] ??
         null;
     }
 
@@ -525,7 +542,9 @@ export const getHpoRouteNextStop = createServerFn({ method: "POST" })
       const [{ data: account }, { data: interaction }] = await Promise.all([
         db
           .from("hpo_accounts")
-          .select("id,name,account_type,specialty,address,city,priority,owner_name,relationship_stage,relationship_health,last_touch_at,next_action,next_action_due_at,notes")
+          .select(
+            "id,name,account_type,specialty,address,city,priority,owner_name,relationship_stage,relationship_health,last_touch_at,next_action,next_action_due_at,notes",
+          )
           .eq("id", nextStop.account_id)
           .eq("user_id", userId)
           .maybeSingle(),
@@ -617,8 +636,7 @@ export const prepareHpoOfficeMap = createServerFn({ method: "POST" })
         }),
       );
       void results;
-      if (start + chunkSize < work.length)
-        await new Promise((resolve) => setTimeout(resolve, 180));
+      if (start + chunkSize < work.length) await new Promise((resolve) => setTimeout(resolve, 180));
     }
 
     const [{ count: remainingAccounts }, { count: remainingProspects }] = await Promise.all([
@@ -674,7 +692,14 @@ export const getHpoRoutePlanner = createServerFn({ method: "GET" })
 
     const nowIso = new Date().toISOString();
     const horizonIso = new Date(today.getTime() + 45 * 24 * 60 * 60 * 1000).toISOString();
-    const [routesResult, accountsResult, prospectsResult, meetingsResult, tasksResult, configResult] = await Promise.all([
+    const [
+      routesResult,
+      accountsResult,
+      prospectsResult,
+      meetingsResult,
+      tasksResult,
+      configResult,
+    ] = await Promise.all([
       db
         .from("hpo_route_plans")
         .select(
@@ -687,7 +712,9 @@ export const getHpoRoutePlanner = createServerFn({ method: "GET" })
         .limit(90),
       db
         .from("hpo_accounts")
-        .select("id,name,account_type,specialty,city,address,latitude,longitude,geocoded_at,priority,relationship_stage,relationship_health,status,owner_name,last_touch_at,next_action,next_action_due_at")
+        .select(
+          "id,name,account_type,specialty,city,address,latitude,longitude,geocoded_at,priority,relationship_stage,relationship_health,status,owner_name,last_touch_at,next_action,next_action_due_at",
+        )
         .eq("user_id", userId)
         .eq("status", "active")
         .not("address", "is", null)
@@ -695,7 +722,9 @@ export const getHpoRoutePlanner = createServerFn({ method: "GET" })
         .limit(300),
       db
         .from("hpo_prospects")
-        .select("id,name,prospect_type,specialty,city,address,latitude,longitude,geocoded_at,fit_status,verification_status,metadata")
+        .select(
+          "id,name,prospect_type,specialty,city,address,latitude,longitude,geocoded_at,fit_status,verification_status,metadata",
+        )
         .eq("user_id", userId)
         .not("address", "is", null)
         .neq("fit_status", "rejected")
@@ -719,14 +748,17 @@ export const getHpoRoutePlanner = createServerFn({ method: "GET" })
         .lte("scheduled_start_at", horizonIso)
         .order("scheduled_start_at", { ascending: true })
         .limit(150),
-      db
-        .from("emery_config")
-        .select("hpo_map_v2")
-        .eq("user_id", userId)
-        .maybeSingle(),
+      db.from("emery_config").select("hpo_map_v2").eq("user_id", userId).maybeSingle(),
     ]);
 
-    for (const result of [routesResult, accountsResult, prospectsResult, meetingsResult, tasksResult, configResult]) {
+    for (const result of [
+      routesResult,
+      accountsResult,
+      prospectsResult,
+      meetingsResult,
+      tasksResult,
+      configResult,
+    ]) {
       if (result.error) throw result.error;
     }
 
@@ -894,9 +926,13 @@ export async function executeHpoRouteCreateCore(input: {
           address: clean(stop.address),
           city: clean(stop.city) || null,
           latitude:
-            typeof stop.latitude === "number" && Number.isFinite(stop.latitude) ? stop.latitude : null,
+            typeof stop.latitude === "number" && Number.isFinite(stop.latitude)
+              ? stop.latitude
+              : null,
           longitude:
-            typeof stop.longitude === "number" && Number.isFinite(stop.longitude) ? stop.longitude : null,
+            typeof stop.longitude === "number" && Number.isFinite(stop.longitude)
+              ? stop.longitude
+              : null,
           metadata: {
             non_phi: true,
             planner: "emery_native_v2",
@@ -1035,8 +1071,7 @@ export const createHpoRoute = createServerFn({ method: "POST" })
       userId: context.userId,
       payload: {
         ...data,
-        idempotencyKey:
-          data.idempotencyKey || `ui:${crypto.randomUUID()}:hpo.route.create`,
+        idempotencyKey: data.idempotencyKey || `ui:${crypto.randomUUID()}:hpo.route.create`,
         sourceChannel: data.sourceChannel,
       },
     }),
@@ -1123,8 +1158,7 @@ export async function executeHpoRouteOptimizeCore(input: {
         .eq("id", stop.id)
         .eq("user_id", userId);
       if (error) throw error;
-      if (index < unresolved.length - 1)
-        await new Promise((resolve) => setTimeout(resolve, 1050));
+      if (index < unresolved.length - 1) await new Promise((resolve) => setTimeout(resolve, 1050));
     }
 
     let startPoint: { lat: number; lon: number } | null = null;
@@ -1155,7 +1189,12 @@ export async function executeHpoRouteOptimizeCore(input: {
       }
     }
 
-    const points: Array<{ lat: number; lon: number; kind: "start" | "stop" | "end"; stopId?: string }> = [];
+    const points: Array<{
+      lat: number;
+      lon: number;
+      kind: "start" | "stop" | "end";
+      stopId?: string;
+    }> = [];
     if (startPoint) points.push({ ...startPoint, kind: "start" });
     for (const stop of stops) {
       points.push({
@@ -1285,11 +1324,17 @@ export async function executeHpoRouteOptimizeCore(input: {
 
 export const optimizeHpoRoute = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { routeId: string; idempotencyKey?: string | null; sourceChannel?: string | null }) => ({
-    routeId: clean(input.routeId),
-    idempotencyKey: clean(input.idempotencyKey) || null,
-    sourceChannel: clean(input.sourceChannel) || "ui",
-  }))
+  .inputValidator(
+    (input: {
+      routeId: string;
+      idempotencyKey?: string | null;
+      sourceChannel?: string | null;
+    }) => ({
+      routeId: clean(input.routeId),
+      idempotencyKey: clean(input.idempotencyKey) || null,
+      sourceChannel: clean(input.sourceChannel) || "ui",
+    }),
+  )
   .handler(async ({ data, context }) =>
     executeHpoRouteOptimizeCore({
       db: context.supabase as any,
@@ -1304,7 +1349,9 @@ export const reorderHpoRouteStops = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { routeId: string; stopIds: string[] }) => ({
     routeId: clean(input.routeId),
-    stopIds: Array.isArray(input.stopIds) ? input.stopIds.map(clean).filter(Boolean).slice(0, 30) : [],
+    stopIds: Array.isArray(input.stopIds)
+      ? input.stopIds.map(clean).filter(Boolean).slice(0, 30)
+      : [],
   }))
   .handler(async ({ data, context }) => {
     const db = context.supabase as any;
@@ -1337,7 +1384,8 @@ export const reorderHpoRouteStops = createServerFn({ method: "POST" })
 
 function routeOutcomeSummary(status: string) {
   if (status === "closed") return { note: "Office closed.", outcome: "Office closed" };
-  if (status === "bad_address") return { note: "Bad or unusable office address.", outcome: "Bad / unusable address" };
+  if (status === "bad_address")
+    return { note: "Bad or unusable office address.", outcome: "Bad / unusable address" };
   if (status === "skipped") return { note: "Route stop skipped.", outcome: "Skipped" };
   return { note: "Visit completed.", outcome: "Visit completed" };
 }
@@ -1415,7 +1463,9 @@ export async function executeHpoRouteStopOutcomeCore(input: {
       !Number.isNaN(Date.parse(stop.updated_at)) &&
       Date.parse(stop.updated_at) > Date.parse(input.baseUpdatedAt) + 1000
     ) {
-      throw new Error("offline_conflict: This stop changed after the offline snapshot. Refresh before retrying.");
+      throw new Error(
+        "offline_conflict: This stop changed after the offline snapshot. Refresh before retrying.",
+      );
     }
 
     const patch: Record<string, unknown> = {
@@ -1446,7 +1496,8 @@ export async function executeHpoRouteStopOutcomeCore(input: {
       .eq("user_id", input.userId)
       .select("*")
       .single();
-    if (updateError || !updated) throw updateError ?? new Error("Route stop update returned no record");
+    if (updateError || !updated)
+      throw updateError ?? new Error("Route stop update returned no record");
 
     const { data: verified, error: verifyError } = await input.db
       .from("hpo_route_stops")
@@ -1460,7 +1511,8 @@ export async function executeHpoRouteStopOutcomeCore(input: {
     const outcomeSummary = routeOutcomeSummary(input.status);
     await upsertInteractionForStop(input.db, input.userId, verified, {
       notes: input.notes?.trim() || verified.notes?.trim() || outcomeSummary.note,
-      visitOutcome: input.visitOutcome?.trim() || verified.visit_outcome?.trim() || outcomeSummary.outcome,
+      visitOutcome:
+        input.visitOutcome?.trim() || verified.visit_outcome?.trim() || outcomeSummary.outcome,
       nextAction: input.nextAction ?? verified.next_action,
       nextActionDueAt: input.nextActionDueAt ?? verified.next_action_due_at,
       status: input.status,
@@ -1579,7 +1631,9 @@ export async function executeHpoRouteStopFollowupCore(input: {
       !Number.isNaN(Date.parse(stop.updated_at)) &&
       Date.parse(stop.updated_at) > Date.parse(input.baseUpdatedAt) + 1000
     ) {
-      throw new Error("offline_conflict: This stop changed after the offline snapshot. Refresh before retrying.");
+      throw new Error(
+        "offline_conflict: This stop changed after the offline snapshot. Refresh before retrying.",
+      );
     }
 
     const dueAt = input.nextActionDueAt ?? null;
@@ -1594,7 +1648,8 @@ export async function executeHpoRouteStopFollowupCore(input: {
       .eq("user_id", input.userId)
       .select("id,account_id,next_action,next_action_due_at,metadata")
       .single();
-    if (updateError || !updated) throw updateError ?? new Error("Follow-up update returned no record");
+    if (updateError || !updated)
+      throw updateError ?? new Error("Follow-up update returned no record");
     if (updated.next_action !== nextAction) throw new Error("Follow-up verification failed");
 
     const metadata =
@@ -1645,7 +1700,8 @@ export async function executeHpoRouteStopFollowupCore(input: {
       if (accountVerifyError || !accountVerify) {
         throw accountVerifyError ?? new Error("Account follow-up verification failed");
       }
-      if (accountVerify.next_action !== nextAction) throw new Error("Account follow-up verification failed");
+      if (accountVerify.next_action !== nextAction)
+        throw new Error("Account follow-up verification failed");
     }
 
     let taskId: string | null = null;
@@ -1754,8 +1810,7 @@ export const setHpoRouteStopOutcome = createServerFn({ method: "POST" })
       userId: context.userId,
       stopId: data.stopId,
       status: data.status,
-      idempotencyKey:
-        data.idempotencyKey || `ui:${crypto.randomUUID()}:hpo.route_stop.set_outcome`,
+      idempotencyKey: data.idempotencyKey || `ui:${crypto.randomUUID()}:hpo.route_stop.set_outcome`,
       sourceChannel: data.sourceChannel,
       baseUpdatedAt: data.baseUpdatedAt,
     }),
@@ -1923,7 +1978,15 @@ export const updateHpoRouteStop = createServerFn({ method: "POST" })
       baseUpdatedAt?: string | null;
     }) => {
       const status = clean(input.status) || null;
-      const allowed = new Set(["planned", "arrived", "completed", "visited", "skipped", "closed", "bad_address"]);
+      const allowed = new Set([
+        "planned",
+        "arrived",
+        "completed",
+        "visited",
+        "skipped",
+        "closed",
+        "bad_address",
+      ]);
       if (status && !allowed.has(status)) throw new Error("Unsupported stop status");
       return {
         stopId: clean(input.stopId),
@@ -1993,13 +2056,16 @@ export const updateHpoRouteStop = createServerFn({ method: "POST" })
       !Number.isNaN(Date.parse(stop.updated_at)) &&
       Date.parse(stop.updated_at) > Date.parse(data.baseUpdatedAt) + 1000
     ) {
-      throw new Error("offline_conflict: This stop changed after the offline snapshot. Refresh before retrying.");
+      throw new Error(
+        "offline_conflict: This stop changed after the offline snapshot. Refresh before retrying.",
+      );
     }
 
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (data.status) {
       patch["status"] = data.status;
-      if (TERMINAL.has(data.status) && !stop.visited_at) patch["visited_at"] = new Date().toISOString();
+      if (TERMINAL.has(data.status) && !stop.visited_at)
+        patch["visited_at"] = new Date().toISOString();
     }
     if (data.notes !== undefined) {
       patch["notes"] = data.notes || null;
@@ -2137,9 +2203,11 @@ export async function captureHpoRouteNoteCore(input: {
     nineteenth: 19,
     twentieth: 20,
   };
-  const ordinalMatch = message.toLowerCase().match(
-    /\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth)\s+(?:stop|office)\b/,
-  );
+  const ordinalMatch = message
+    .toLowerCase()
+    .match(
+      /\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth)\s+(?:stop|office)\b/,
+    );
   const explicitOrder = numberMatch
     ? Number(numberMatch[1])
     : ordinalMatch
@@ -2214,7 +2282,9 @@ export async function captureHpoRouteNoteCore(input: {
     traceId: input.sourceMessageId ?? execution.id,
     createFollowupTask:
       Boolean(nextAction) &&
-      /\b(add it|add that|make (?:that|it) a task|create (?:a )?task|add (?:a )?task|put (?:that|it) (?:in|on) (?:my )?task)/i.test(message),
+      /\b(add it|add that|make (?:that|it) a task|create (?:a )?task|add (?:a )?task|put (?:that|it) (?:in|on) (?:my )?task)/i.test(
+        message,
+      ),
   });
   const updated = visitExecution.stop;
   const routeStatus = visitExecution.routeStatus;
@@ -2440,8 +2510,7 @@ export const syncHpoRouteToCalendar = createServerFn({ method: "POST" })
       db: context.supabase as any,
       userId: context.userId,
       routeId: data.routeId,
-      idempotencyKey:
-        data.idempotencyKey || `ui:${crypto.randomUUID()}:hpo.route.sync_calendar`,
+      idempotencyKey: data.idempotencyKey || `ui:${crypto.randomUUID()}:hpo.route.sync_calendar`,
       sourceChannel: data.sourceChannel,
     }),
   );
@@ -2465,7 +2534,9 @@ export const getHpoRouteScheduleAdvice = createServerFn({ method: "POST" })
 
     const { data: stops } = await db
       .from("hpo_route_stops")
-      .select("stop_order,office_name,address,city,status,visit_priority,drive_seconds_from_previous")
+      .select(
+        "stop_order,office_name,address,city,status,visit_priority,drive_seconds_from_previous",
+      )
       .eq("route_id", route.id)
       .eq("user_id", context.userId)
       .order("stop_order", { ascending: true });
