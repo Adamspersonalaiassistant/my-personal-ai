@@ -195,6 +195,7 @@ function followupDueFromNote(note: string, timeZone: string) {
     const match = lower.match(/\b(?:next\s+|this\s+|on\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
     if (match?.[1]) {
       const target = weekdays[match[1]];
+      if (target == null) return null;
       const current = base.getDay();
       let delta = (target - current + 7) % 7;
       if (delta === 0 || lower.includes(`next ${match[1]}`)) delta = delta || 7;
