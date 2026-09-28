@@ -8,6 +8,7 @@ import {
   completeExecution,
   failExecution,
 } from "@/lib/execution-ledger";
+import { executeCanonicalTaskCreate } from "@/lib/execution-kernel";
 
 type RouteStopInput = {
   accountId?: string | null;
@@ -1408,6 +1409,7 @@ export async function executeHpoRouteStopOutcomeCore(input: {
       sourceChannel: input.sourceChannel,
       traceId: input.traceId ?? null,
       baseUpdatedAt: input.baseUpdatedAt ?? null,
+      createTask: Boolean(input.createTask),
     },
   });
 
@@ -1543,6 +1545,7 @@ export async function executeHpoRouteStopFollowupCore(input: {
   parentRunId?: string | null;
   traceId?: string | null;
   baseUpdatedAt?: string | null;
+  createTask?: boolean;
 }) {
   const action = "hpo.route_stop.set_followup";
   const nextAction = clean(input.nextAction);
@@ -1584,6 +1587,7 @@ export async function executeHpoRouteStopFollowupCore(input: {
       accountId: string | null;
       nextAction: string;
       nextActionDueAt: string | null;
+      taskId: string | null;
       reused: boolean;
     };
   }
@@ -1671,6 +1675,47 @@ export async function executeHpoRouteStopFollowupCore(input: {
       if (accountVerify.next_action !== nextAction) throw new Error("Account follow-up verification failed");
     }
 
+    let taskId: string | null = null;
+    if (input.createTask) {
+      const taskReceipt = await executeCanonicalTaskCreate({
+        db: input.db,
+        userId: input.userId,
+        idempotencyKey: `${key}:task.create`,
+        title: `Follow up with ${stop.office_name || "HPO office"}`,
+        details: `HPO field follow-up from route stop ${stop.stop_order}: ${nextAction}`,
+        dueAt,
+        priority: 3,
+        sourceChannel: input.sourceChannel,
+        sourceMessageId: input.sourceMessageId ?? null,
+        parentRunId: execution.id,
+        source: "hpo-route-followup",
+      });
+      if (!taskReceipt.ok || taskReceipt.status !== "completed" || !taskReceipt.task?.id) {
+        throw new Error(taskReceipt.errorMessage || "Follow-up task creation failed");
+      }
+      taskId = taskReceipt.task.id;
+      const taskMetadata =
+        taskReceipt.task && typeof (taskReceipt.task as any).metadata === "object"
+          ? (taskReceipt.task as any).metadata
+          : {};
+      const { error: taskMetadataError } = await input.db
+        .from("tasks")
+        .update({
+          metadata: {
+            ...taskMetadata,
+            domain: "hpo",
+            hpo: true,
+            hpo_route_id: stop.route_id,
+            hpo_route_stop_id: stop.id,
+            hpo_account_id: stop.account_id ?? null,
+            execution_run_id: execution.id,
+          },
+        })
+        .eq("id", taskId)
+        .eq("user_id", input.userId);
+      if (taskMetadataError) throw taskMetadataError;
+    }
+
     const result = {
       ok: true as const,
       action,
@@ -1679,6 +1724,7 @@ export async function executeHpoRouteStopFollowupCore(input: {
       accountId: stop.account_id ?? null,
       nextAction,
       nextActionDueAt: dueAt,
+      taskId,
       reused: execution.reused,
     };
     await completeExecution({
@@ -1757,6 +1803,7 @@ export async function executeHpoRouteStopVisitCore(input: {
   parentRunId?: string | null;
   traceId?: string | null;
   baseUpdatedAt?: string | null;
+  createFollowupTask?: boolean;
 }) {
   const action = "hpo.route_stop.log_visit";
   const key = clean(input.idempotencyKey);
@@ -1783,6 +1830,7 @@ export async function executeHpoRouteStopVisitCore(input: {
       sourceChannel: input.sourceChannel,
       traceId: input.traceId ?? null,
       baseUpdatedAt: input.baseUpdatedAt ?? null,
+      createFollowupTask: Boolean(input.createFollowupTask),
     },
   });
 
@@ -1832,6 +1880,7 @@ export async function executeHpoRouteStopVisitCore(input: {
         sourceMessageId: input.sourceMessageId ?? null,
         parentRunId: execution.id,
         traceId: input.traceId ?? execution.id,
+        createTask: Boolean(input.createFollowupTask),
       });
     }
 
@@ -2168,6 +2217,9 @@ export async function captureHpoRouteNoteCore(input: {
     sourceChannel: "voice_or_route_note",
     parentRunId: execution.id,
     traceId: execution.id,
+    createFollowupTask:
+      Boolean(nextAction) &&
+      /\b(add it|add that|make (?:that|it) a task|create (?:a )?task|add (?:a )?task|put (?:that|it) (?:in|on) (?:my )?task)/i.test(message),
   });
   const updated = visitExecution.stop;
   const routeStatus = visitExecution.routeStatus;
@@ -2182,6 +2234,7 @@ export async function captureHpoRouteNoteCore(input: {
     visitOutcome,
     nextAction,
     nextActionDueAt: parsedNextActionDueAt ?? target.next_action_due_at ?? null,
+    followupTaskId: visitExecution.followupTaskId ?? null,
     routeStatus,
   } as const;
   await completeExecution({
