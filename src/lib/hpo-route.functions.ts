@@ -1329,6 +1329,38 @@ export async function executeHpoRouteStopFollowupCore(input: {
   }
 }
 
+export const setHpoRouteStopOutcome = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (input: {
+      stopId: string;
+      status: "completed" | "visited" | "closed" | "bad_address" | "skipped";
+      idempotencyKey?: string | null;
+      sourceChannel?: string | null;
+    }) => {
+      const status = clean(input.status);
+      const allowed = new Set(["completed", "visited", "closed", "bad_address", "skipped"]);
+      if (!allowed.has(status)) throw new Error("Unsupported route-stop outcome");
+      return {
+        stopId: clean(input.stopId),
+        status: status as "completed" | "visited" | "closed" | "bad_address" | "skipped",
+        idempotencyKey: clean(input.idempotencyKey) || null,
+        sourceChannel: clean(input.sourceChannel) || "ui",
+      };
+    },
+  )
+  .handler(async ({ data, context }) =>
+    executeHpoRouteStopOutcomeCore({
+      db: context.supabase as any,
+      userId: context.userId,
+      stopId: data.stopId,
+      status: data.status,
+      idempotencyKey:
+        data.idempotencyKey || `ui:${crypto.randomUUID()}:hpo.route_stop.set_outcome`,
+      sourceChannel: data.sourceChannel,
+    }),
+  );
+
 export async function executeHpoRouteStopVisitCore(input: {
   db: any;
   userId: string;
