@@ -36,7 +36,10 @@ const routeCommands = read("src/lib/hpo-route-command-controller.ts");
 const capabilities = read("src/lib/execution-capabilities.ts");
 
 check("Map V1 remains in Route Planner", planner.includes("function OfficePlanningMap("));
-check("Route Planner uses direct RepMove-style Map V2 renderer", planner.includes("<HpoMapV2MapLibre"));
+check(
+  "Route Planner uses direct RepMove-style Map V2 renderer",
+  planner.includes("<HpoMapV2MapLibre"),
+);
 check(
   "Legacy map is not rendered in the active HPO route planner",
   !planner.includes("<HpoMapAdapter") && planner.includes("<HpoMapV2MapLibre"),
@@ -134,9 +137,9 @@ check(
 );
 check(
   "Map V2 uses a reliable no-key full-detail street basemap and blue teardrop pins",
-  v2.includes('const PROFESSIONAL_MAP_STYLE: StyleSpecification') &&
-    v2.includes("tile.openstreetmap.org") &&
-    v2.includes('"raster-opacity": 1') &&
+  v2.includes("https://tiles.openfreemap.org/styles/liberty") &&
+    v2.includes("maplibregl.setWorkerUrl") &&
+    v2.includes("maplibre-gl-worker.mjs?worker&url") &&
     v2.includes("officeMarkersRef") &&
     v2.includes("new maplibregl.Marker") &&
     v2.includes("createOfficePinElement") &&
@@ -146,7 +149,7 @@ check(
 check(
   "Map V2 is map-first with floating search, quick chips, compact controls, and a bottom sheet",
   v2.includes("Search HPO accounts, offices or towns") &&
-    v2.includes("onNavigateHpo?.(\"today\")") &&
+    v2.includes('onNavigateHpo?.("today")') &&
     v2.includes("Follow-up Due") &&
     v2.includes("Center on my location") &&
     v2.includes("rounded-t-[1.7rem]") &&
@@ -333,9 +336,9 @@ check(
 );
 check(
   "Map is the territory command surface without a duplicate route map",
-  v2.includes("Territory Map") &&
-    v2.includes("max-h-56") &&
-    planner.includes("Saved route") &&
+  v2.includes("Search HPO accounts, offices or towns") &&
+    v2.includes("New Route") &&
+    v2.includes("rounded-t-[1.7rem]") &&
     !planner.includes("<RouteMap route="),
 );
 check(

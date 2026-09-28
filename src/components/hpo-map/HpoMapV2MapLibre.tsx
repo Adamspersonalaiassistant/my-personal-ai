@@ -6,10 +6,22 @@ import type {
   Map as MapLibreMap,
   MapMouseEvent,
   MapGeoJSONFeature,
-  StyleSpecification,
 } from "maplibre-gl";
+import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { Building2, ChevronDown, List, LocateFixed, MapPinned, MessageCircle, Navigation, Plus, Search, SlidersHorizontal, X } from "lucide-react";
+import {
+  Building2,
+  ChevronDown,
+  List,
+  LocateFixed,
+  MapPinned,
+  MessageCircle,
+  Navigation,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
 import type { HpoMapOffice, HpoMapRoute } from "@/components/hpo-map/types";
 import { openHpoEmery } from "@/components/HpoEmerySheet";
 import "@/components/hpo-map/hpo-map-v2.css";
@@ -19,34 +31,7 @@ const BLUE = "#1769e8";
 const BLUE_DARK = "#0f4fb8";
 const BLUE_LIGHT = "#dbeafe";
 
-const PROFESSIONAL_MAP_STYLE: StyleSpecification = {
-  version: 8,
-  sources: {
-    osm: {
-      type: "raster",
-      tiles: [
-        "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-      ],
-      tileSize: 256,
-      attribution: "© OpenStreetMap contributors",
-      maxzoom: 19,
-    },
-  },
-  layers: [
-    {
-      id: "hpo-street-basemap",
-      type: "raster",
-      source: "osm",
-      paint: {
-        "raster-opacity": 1,
-        "raster-saturation": -0.08,
-        "raster-contrast": 0.04,
-        "raster-brightness-min": 0,
-        "raster-brightness-max": 1,
-      },
-    },
-  ],
-};
+const PROFESSIONAL_MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 
 type Props = {
   offices: HpoMapOffice[];
@@ -60,7 +45,7 @@ type Props = {
   onBuildRoute: () => void;
   preparing: boolean;
   onRefreshPins: () => void;
-  onNavigateHpo?: (view: "today" | "map" | "accounts" | "activity") => void;
+  onNavigateHpo?: ((view: "today" | "map" | "accounts" | "activity") => void) | undefined;
   onFatalError?: (message: string) => void;
 };
 
@@ -518,6 +503,7 @@ export function HpoMapV2MapLibre({
     if (!containerRef.current || mapRef.current) return;
 
     try {
+      maplibregl.setWorkerUrl(maplibreWorkerUrl);
       const map = new maplibregl.Map({
         container: containerRef.current,
         style: PROFESSIONAL_MAP_STYLE,
@@ -812,7 +798,14 @@ export function HpoMapV2MapLibre({
               </button>
               <button
                 type="button"
-                onClick={() => (route?.stops?.length ? fitRoute() : openHpoEmery("Build my HPO route. Ask me only for the date or area if you need it.", "Route"))}
+                onClick={() => {
+                  if (route?.stops?.length) {
+                    fitRoute();
+                    setSheetExpanded(true);
+                  } else {
+                    onBuildRoute();
+                  }
+                }}
                 className="min-h-10 shrink-0 rounded-full border border-white/80 bg-white/96 px-4 text-[12px] font-semibold text-slate-700 shadow-[0_4px_14px_rgba(15,23,42,0.14)]"
               >
                 Route
@@ -833,7 +826,9 @@ export function HpoMapV2MapLibre({
               </button>
               <button
                 type="button"
-                onClick={() => setSignalFilter((current) => (current === "followup" ? "all" : "followup"))}
+                onClick={() =>
+                  setSignalFilter((current) => (current === "followup" ? "all" : "followup"))
+                }
                 className={`min-h-10 shrink-0 rounded-full border px-4 text-[12px] font-semibold shadow-[0_4px_14px_rgba(15,23,42,0.14)] ${
                   signalFilter === "followup"
                     ? "border-[#1769e8] bg-[#1769e8] text-white"
@@ -880,7 +875,9 @@ export function HpoMapV2MapLibre({
                       type="button"
                       onClick={() => setSignalFilter(value)}
                       className={`min-h-10 rounded-xl text-[11px] font-semibold ${
-                        signalFilter === value ? "bg-blue-50 text-[#1769e8]" : "bg-slate-50 text-slate-500"
+                        signalFilter === value
+                          ? "bg-blue-50 text-[#1769e8]"
+                          : "bg-slate-50 text-slate-500"
                       }`}
                     >
                       {label}
@@ -1095,7 +1092,12 @@ export function HpoMapV2MapLibre({
                 ) : (
                   <button
                     type="button"
-                    onClick={() => openHpoEmery(`Add ${selectedOffice.officeName} as an HPO account.`, selectedOffice.officeName)}
+                    onClick={() =>
+                      openHpoEmery(
+                        `Add ${selectedOffice.officeName} as an HPO account.`,
+                        selectedOffice.officeName,
+                      )
+                    }
                     className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl bg-slate-100 text-[10px] font-semibold text-slate-700"
                   >
                     <Plus className="size-4" /> Account
@@ -1105,9 +1107,14 @@ export function HpoMapV2MapLibre({
                   type="button"
                   onClick={() =>
                     openHpoEmery(
-                      `Add ${selectedOffice.officeName} at ${[selectedOffice.address, selectedOffice.city]
+                      `Add ${selectedOffice.officeName} at ${[
+                        selectedOffice.address,
+                        selectedOffice.city,
+                      ]
                         .filter(Boolean)
-                        .join(", ")} to my current HPO route. If there isn't an active route, ask me the minimum question needed.`,
+                        .join(
+                          ", ",
+                        )} to my current HPO route. If there isn't an active route, ask me the minimum question needed.`,
                       selectedOffice.officeName,
                     )
                   }
@@ -1130,30 +1137,63 @@ export function HpoMapV2MapLibre({
               </div>
             </div>
           ) : (
-            <div className="flex h-full items-center gap-3 px-4 pb-3 pt-5">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-bold text-slate-950">
-                  {route?.stops?.length
-                    ? `${route.stops.length} stops on the active route`
-                    : `${totalMapped} HPO offices on the map`}
-                </p>
-                <p className="mt-0.5 truncate text-[11px] text-slate-500">
-                  Tap a blue pin, search an office, or ask Emery to plan the field day.
-                </p>
+            <div className="flex h-full flex-col justify-center px-4 pb-3 pt-5">
+              <div className="flex items-center gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-slate-950">
+                    {route?.stops?.length
+                      ? `${route.stops.length} stops on the active route`
+                      : `${totalMapped} HPO offices on the map`}
+                  </p>
+                  <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                    Tap a blue pin, search an office, or ask Emery to plan the field day.
+                  </p>
+                </div>
+                {!sheetExpanded ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openHpoEmery(
+                        "Help me with the HPO map. I can add offices, build or change my route, review nearby accounts, or log a visit.",
+                        "HPO Map",
+                      )
+                    }
+                    className="flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-[#1769e8] px-4 text-[12px] font-semibold text-white shadow-sm"
+                  >
+                    <MessageCircle className="size-4" /> Emery
+                  </button>
+                ) : null}
               </div>
-              <button
-                type="button"
-                onClick={() =>
-                  openHpoEmery(
-                    "Help me with the HPO map. I can add offices, build or change my route, review nearby accounts, or log a visit.",
-                    "HPO Map",
-                  )
-                }
-                className="flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-[#1769e8] px-4 text-[12px] font-semibold text-white shadow-sm"
-              >
-                <MessageCircle className="size-4" />
-                Emery
-              </button>
+              {sheetExpanded ? (
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onNavigateHpo?.("today")}
+                    className="min-h-12 rounded-xl bg-slate-100 text-[11px] font-semibold text-slate-700"
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onBuildRoute}
+                    className="min-h-12 rounded-xl bg-blue-50 text-[11px] font-semibold text-[#1769e8]"
+                  >
+                    New Route
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openHpoEmery(
+                        "Help me with the HPO map. I can add offices, build or change my route, review nearby accounts, or log a visit.",
+                        "HPO Map",
+                      )
+                    }
+                    className="min-h-12 rounded-xl bg-[#1769e8] text-[11px] font-semibold text-white"
+                  >
+                    Emery
+                  </button>
+                </div>
+              ) : null}
             </div>
           )}
         </div>

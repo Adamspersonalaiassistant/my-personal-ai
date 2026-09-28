@@ -1067,7 +1067,7 @@ export function HpoRoutePlannerCompact({ onOpen }: { onOpen: () => void }) {
 export function HpoRoutePlanner({
   onNavigateHpo,
 }: {
-  onNavigateHpo?: (view: "today" | "map" | "accounts" | "activity") => void;
+  onNavigateHpo?: ((view: "today" | "map" | "accounts" | "activity") => void) | undefined;
 }) {
   const load = useServerFn(getHpoRoutePlanner);
   const createRoute = useServerFn(createHpoRoute);
@@ -1154,8 +1154,7 @@ export function HpoRoutePlanner({
     if (!data || mapPreparedOnce || mapPreparing) return;
     const needsPins = [...data.accounts, ...data.prospects].some(
       (office: any) =>
-        office.address &&
-        (!Number.isFinite(office.latitude) || !Number.isFinite(office.longitude)),
+        office.address && (!Number.isFinite(office.latitude) || !Number.isFinite(office.longitude)),
     );
     if (!needsPins) {
       setMapPreparedOnce(true);
@@ -1524,6 +1523,54 @@ export function HpoRoutePlanner({
           onNavigateHpo={onNavigateHpo}
           onFatalError={(message) => setError(`Map renderer error: ${message}`)}
         />
+      ) : null}
+
+      {showBuilder && data ? (
+        <div
+          className="fixed inset-0 z-[75] flex items-end bg-slate-950/50 backdrop-blur-[3px]"
+          onClick={() => !working && setShowBuilder(false)}
+          role="presentation"
+        >
+          <div
+            className="emery-sheet-in max-h-[90dvh] w-full overflow-y-auto rounded-t-[1.7rem] border-t border-border/55 bg-background px-3 pb-[max(0.85rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-24px_70px_rgba(0,0,0,0.42)] sm:mx-auto sm:max-w-2xl"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Build HPO daily route"
+          >
+            <div className="mx-auto mb-1 h-1 w-10 rounded-full bg-border/80" />
+            <RouteBuilder
+              data={data}
+              initialSelected={mapSeedStops}
+              onClose={() => setShowBuilder(false)}
+              onCreate={async (payload) => {
+                setWorking(true);
+                setError(null);
+                try {
+                  const result = await createRoute({ data: payload });
+                  setShowBuilder(false);
+                  setMapSelectedKeys([]);
+                  setMapSeedStops([]);
+                  try {
+                    await optimize({ data: { routeId: result.routeId } });
+                  } catch (optimizeCause) {
+                    setError(
+                      optimizeCause instanceof Error
+                        ? `Route saved. ${optimizeCause.message}`
+                        : "Route saved, but optimization needs attention.",
+                    );
+                  }
+                  await refresh(result.routeId);
+                } catch (cause) {
+                  setError(cause instanceof Error ? cause.message : "Couldn't create route.");
+                } finally {
+                  setWorking(false);
+                }
+              }}
+              working={working}
+            />
+          </div>
+        </div>
       ) : null}
 
       {error ? (
