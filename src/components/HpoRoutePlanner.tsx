@@ -35,7 +35,7 @@ import {
 import { EmeryVoiceControl } from "@/components/EmeryVoiceControl";
 import { HpoMapAdapter } from "@/components/hpo-map/HpoMapAdapter";
 import { HpoAccountFieldDetail } from "@/components/HpoAccountFieldDetail";
-import { saveHpoOfficeSnapshots } from "@/lib/hpo-field-offline";
+import { loadHpoOfficeSnapshots, saveHpoOfficeSnapshots } from "@/lib/hpo-field-offline";
 import {
   addHpoRouteStops,
   removeHpoRouteStop,
@@ -1076,6 +1076,7 @@ export function HpoRoutePlanner() {
   const [mapPreparing, setMapPreparing] = useState(false);
   const [mapPreparedOnce, setMapPreparedOnce] = useState(false);
   const [mapAccountDetailId, setMapAccountDetailId] = useState<string | null>(null);
+  const [offlineMapOffices, setOfflineMapOffices] = useState<MapOffice[]>([]);
 
   async function refresh(preferredRouteId?: string | null) {
     const result = (await load({})) as PlannerData;
@@ -1103,8 +1104,15 @@ export function HpoRoutePlanner() {
             null,
         );
       })
-      .catch((cause) => {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : "Couldn't load routes.");
+      .catch(async (cause) => {
+        if (cancelled) return;
+        const cached = await loadHpoOfficeSnapshots<MapOffice[]>().catch(() => null);
+        if (cached?.length) {
+          setOfflineMapOffices(cached);
+          setError("Offline territory snapshot loaded. Saved offices remain available; live route changes need a connection.");
+        } else {
+          setError(cause instanceof Error ? cause.message : "Couldn't load routes.");
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -1148,7 +1156,7 @@ export function HpoRoutePlanner() {
     : null;
 
   const mapOffices = useMemo<MapOffice[]>(() => {
-    if (!data) return [];
+    if (!data) return offlineMapOffices;
     const accounts = data.accounts.map((account: any) => ({
       key: `account:${account.id}`,
       accountId: account.id,
@@ -1197,7 +1205,7 @@ export function HpoRoutePlanner() {
       mapped: Number.isFinite(prospect.latitude) && Number.isFinite(prospect.longitude),
     }));
     return [...accounts, ...prospects];
-  }, [data]);
+  }, [data, offlineMapOffices]);
 
   const mapSelectedOffices = useMemo(
     () => mapSelectedKeys.map((key) => mapOffices.find((office) => office.key === key)).filter(Boolean) as MapOffice[],
@@ -1534,7 +1542,7 @@ export function HpoRoutePlanner() {
         </div>
       </section>
 
-      {data ? (
+      {data || mapOffices.length ? (
         <HpoMapAdapter
           enabled={Boolean(data.featureFlags?.hpoMapV2)}
           v1={
