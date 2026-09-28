@@ -1557,7 +1557,7 @@ export function HpoRoutePlanner() {
 
       {data || mapOffices.length ? (
         <HpoMapAdapter
-          enabled={Boolean(data?.featureFlags?.hpoMapV2)}
+          enabled={true}
           v1={
             <OfficePlanningMap
               offices={mapOffices}
