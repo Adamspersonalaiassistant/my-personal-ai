@@ -649,12 +649,9 @@ export function HpoMapV2MapLibre({
     map.fitBounds(bounds, { padding: 58, maxZoom: 14, duration: 420 });
   }
 
-  const totalWithAddress = offices.filter((office) => office.address).length;
   const totalMapped = offices.filter((office) => office.mapped).length;
-  const routeMiles =
-    Number.isFinite(route?.optimized_distance_meters) && Number(route?.optimized_distance_meters) > 0
-      ? (Number(route?.optimized_distance_meters) / 1609.344).toFixed(1)
-      : null;
+  void onToggleRouteStop;
+  void onBuildRoute;
 
   return (
     <section className="hpo-map-v2 overflow-hidden rounded-2xl border border-primary/15 bg-white shadow-[0_12px_32px_rgba(0,0,0,0.14)]">
