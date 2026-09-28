@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
   Activity,
@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { AppShell, EmptyState } from "@/components/AppShell";
 import { HpoRoutePlanner, HpoRoutePlannerCompact } from "@/components/HpoRoutePlanner";
+import { HpoFieldToday } from "@/components/HpoFieldToday";
 import {
   createHpoAccount,
   getHpoDashboard,
@@ -35,13 +36,14 @@ export const Route = createFileRoute("/_authenticated/hpo")({ component: HpoWork
 
 type DashboardData = Awaited<ReturnType<ReturnType<typeof useServerFn<typeof getHpoDashboard>>>>;
 type ViewKey =
-  | "dashboard"
+  | "map"
+  | "today"
   | "accounts"
+  | "notes"
+  | "dashboard"
   | "relationships"
-  | "routes"
   | "performance"
   | "events"
-  | "notes"
   | "tasks";
 
 const views: Array<{ key: ViewKey; label: string; icon: typeof BriefcaseBusiness }> = [
@@ -82,7 +84,9 @@ function HpoWorkspace() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<ViewKey>("dashboard");
+  const [view, setView] = useState<ViewKey>("map");
+  const [showSecondary, setShowSecondary] = useState(false);
+  const initialViewResolved = useRef(false);
   const [modal, setModal] = useState<"account" | "interaction" | "import" | null>(null);
 
   async function refresh(quiet = false) {
@@ -90,7 +94,29 @@ function HpoWorkspace() {
     else setLoading(true);
     setError(null);
     try {
-      setData(await loadDashboard({}));
+      const next = await loadDashboard({});
+      setData(next);
+      if (!initialViewResolved.current) {
+        const todayKey = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "America/New_York",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        })
+          .formatToParts(new Date())
+          .reduce((acc: Record<string, string>, part) => {
+            acc[part.type] = part.value;
+            return acc;
+          }, {});
+        const today = `${todayKey.year}-${todayKey.month}-${todayKey.day}`;
+        const hasActiveRoute = (next?.routes ?? []).some(
+          (route: any) =>
+            ["active", "in_progress"].includes(String(route.status)) ||
+            String(route.route_date) === today,
+        );
+        setView(hasActiveRoute ? "today" : "map");
+        initialViewResolved.current = true;
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Couldn't load HPO right now.");
     } finally {
@@ -110,47 +136,58 @@ function HpoWorkspace() {
   }, [data]);
 
   const askEmeryContext =
-    view === "routes"
-      ? "I’m in my HPO Route Planner. Help me build, optimize and fit my field route around my Calendar, then keep my marketing notes organized."
-      : view === "dashboard"
-        ? "I’m in my HPO dashboard. Help me decide the highest-leverage Hudson Pro sales/relationship action next."
-        : `I’m in HPO ${view}. Help me work through what matters here and decide the next action.`;
+    view === "map"
+      ? "I’m in my HPO territory map. Help me build or improve the field route using my real accounts, prospects and follow-ups."
+      : view === "today"
+        ? "I’m in HPO Today / Field Mode. Help me execute the active route, remember where I am, log visits and recover when the day changes."
+        : view === "dashboard"
+          ? "I’m in my HPO dashboard. Help me decide the highest-leverage Hudson Pro sales/relationship action next."
+          : `I’m in HPO ${view}. Help me work through what matters here and decide the next action.`;
 
   return (
     <AppShell title="HPO" askEmery={askEmeryContext}>
       <div className="space-y-5 pb-2">
-        <nav className="sticky top-0 z-20 -mx-1 rounded-[1.35rem] border border-border/45 bg-background/92 p-1 shadow-[0_10px_35px_rgba(0,0,0,0.2)] backdrop-blur-xl">
-          <div className="grid grid-cols-2 gap-1">
-            <button
-              type="button"
-              onClick={() => setView("dashboard")}
-              className={`emery-press flex min-h-11 items-center justify-center gap-2 rounded-2xl px-3 text-xs font-semibold transition ${
-                view === "routes"
-                  ? "text-muted-foreground"
-                  : "bg-primary/[0.09] text-primary shadow-[inset_0_0_0_1px_rgba(80,155,255,0.12)]"
-              }`}
-            >
-              <BriefcaseBusiness className="size-4" />
-              HPO Home
-            </button>
-            <button
-              type="button"
-              onClick={() => setView("routes")}
-              className={`emery-press flex min-h-11 items-center justify-center gap-2 rounded-2xl px-3 text-xs font-semibold transition ${
-                view === "routes"
-                  ? "bg-primary text-primary-foreground shadow-[0_8px_24px_rgba(35,105,255,0.24)]"
-                  : "text-muted-foreground"
-              }`}
-            >
-              <RouteIcon className="size-4" />
-              Route Planner
-            </button>
+        <nav className="sticky top-0 z-20 -mx-1 rounded-[1.35rem] border border-border/45 bg-background/94 p-1 shadow-[0_10px_35px_rgba(0,0,0,0.2)] backdrop-blur-xl">
+          <div className="grid grid-cols-4 gap-1">
+            {([
+              ["map", "Map", MapPinned],
+              ["today", "Today", RouteIcon],
+              ["accounts", "Accounts", UsersRound],
+              ["notes", "Activity", Activity],
+            ] as const).map(([key, label, Icon]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => {
+                  setView(key);
+                  setShowSecondary(false);
+                }}
+                className={`emery-press flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[10px] font-semibold transition ${
+                  view === key
+                    ? "bg-primary/[0.09] text-primary shadow-[inset_0_0_0_1px_rgba(80,155,255,0.12)]"
+                    : "text-muted-foreground"
+                }`}
+              >
+                <Icon className="size-4" />
+                {label}
+              </button>
+            ))}
           </div>
+          <button
+            type="button"
+            onClick={() => setShowSecondary((value) => !value)}
+            className="emery-press mt-1 flex min-h-9 w-full items-center justify-center gap-2 rounded-xl text-[10px] font-semibold text-muted-foreground hover:bg-white/[0.025] hover:text-foreground"
+          >
+            More HPO tools
+            <ArrowRight className={`size-3 transition-transform ${showSecondary ? "rotate-90" : ""}`} />
+          </button>
         </nav>
 
-        {view !== "routes" ? <HpoRoutePlannerCompact onOpen={() => setView("routes")} /> : null}
+        {["dashboard", "relationships", "performance", "events", "tasks"].includes(view) ? (
+          <HpoRoutePlannerCompact onOpen={() => setView("map")} />
+        ) : null}
 
-        {view !== "routes" ? (
+        {view === "dashboard" ? (
         <section className="emery-fade-up overflow-hidden rounded-[1.75rem] border border-primary/15 bg-[linear-gradient(150deg,oklch(0.18_0.04_158/0.92),oklch(0.115_0.022_160/0.96))] p-4 shadow-[0_24px_70px_rgba(0,0,0,0.28)] sm:p-5">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -194,24 +231,30 @@ function HpoWorkspace() {
         </section>
         ) : null}
 
-        {view !== "routes" ? (
-        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none]">
-          {views.map(({ key, label, icon: Icon }) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setView(key)}
-              className={`emery-press flex min-h-11 shrink-0 items-center gap-2 rounded-2xl border px-3 text-xs font-semibold transition ${
-                view === key
-                  ? "border-primary/25 bg-primary/[0.085] text-primary"
-                  : "border-border/55 bg-card/45 text-muted-foreground"
-              }`}
-            >
-              <Icon className="size-3.5" />
-              {label}
-            </button>
-          ))}
-        </div>
+        {view === "dashboard" ? (
+        {showSecondary || ["dashboard", "relationships", "performance", "events", "tasks"].includes(view) ? (
+          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none]">
+            {views
+              .filter(({ key }) => ["dashboard", "relationships", "performance", "events", "tasks"].includes(key))
+              .map(({ key, label, icon: Icon }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => {
+                    setView(key);
+                    setShowSecondary(true);
+                  }}
+                  className={`emery-press flex min-h-10 shrink-0 items-center gap-2 rounded-xl border px-3 text-[10px] font-semibold transition ${
+                    view === key
+                      ? "border-primary/25 bg-primary/[0.085] text-primary"
+                      : "border-border/55 bg-card/45 text-muted-foreground"
+                  }`}
+                >
+                  <Icon className="size-3.5" />
+                  {label}
+                </button>
+              ))}
+          </div>
         ) : null}
 
         {error ? (
@@ -223,8 +266,10 @@ function HpoWorkspace() {
           </div>
         ) : null}
 
-        {view === "routes" ? (
+        {view === "map" ? (
           <HpoRoutePlanner />
+        ) : view === "today" ? (
+          <HpoFieldToday onOpenMap={() => setView("map")} />
         ) : loading ? (
           <div className="emery-glass flex min-h-52 items-center justify-center rounded-[1.6rem] text-sm text-muted-foreground">
             Opening your HPO command center…
@@ -249,7 +294,7 @@ function HpoWorkspace() {
           </>
         )}
 
-        {view !== "routes" ? (
+        {view === "dashboard" ? (
         <section className="emery-glass rounded-[1.55rem] p-4">
           <div className="flex items-start gap-3">
             <div className="emery-icon-well flex size-10 shrink-0 items-center justify-center rounded-2xl text-primary">
