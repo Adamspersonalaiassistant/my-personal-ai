@@ -139,18 +139,6 @@ function HpoWorkspace() {
         : view === "accounts"
           ? "I'm in HPO Accounts. Help me add, update, research, or plan follow-up for an account."
           : "I'm in HPO Activity. Help me log a visit or touch, update follow-ups, or review recent account activity.";
-  const openLog = (accountId = "", kind = "visit") => {
-    setSelected(null);
-    setLogAccount(accountId);
-    setLogKind(kind);
-    setSheet("log");
-  };
-  const openFollowup = (accountId: string) => {
-    setSelected(null);
-    setLogAccount(accountId);
-    setSheet("followup");
-  };
-
   return (
     <AppShell
       title="HPO"
