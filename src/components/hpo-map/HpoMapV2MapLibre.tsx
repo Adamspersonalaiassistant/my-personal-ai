@@ -658,34 +658,13 @@ export function HpoMapV2MapLibre({
 
   return (
     <section className="hpo-map-v2 overflow-hidden rounded-2xl border border-primary/15 bg-white shadow-[0_12px_32px_rgba(0,0,0,0.14)]">
-      <div className="border-b border-slate-200 bg-white px-3 pb-3 pt-3 text-slate-950">
-        <div className="grid grid-cols-[44px_1fr_44px] items-center gap-2">
-          <div />
-          <div className="text-center">
-            <p className="text-[11px] font-semibold text-[#1769e8]">
-              {routeMiles ? `Today · ${routeMiles} Miles` : "HPO Territory"}
-            </p>
-            <h3 className="mt-0.5 text-[15px] font-bold tracking-tight text-[#1f3354]">
-              {viewMode === "map" ? "Field Map" : "Office List"}
-            </h3>
-          </div>
-          <button
-            type="button"
-            onClick={onRefreshPins}
-            disabled={preparing}
-            className="flex size-11 items-center justify-center rounded-xl bg-slate-50 text-[#1769e8] shadow-sm disabled:opacity-40"
-            aria-label="Refresh office map pins"
-          >
-            <RefreshCw className={`size-4 ${preparing ? "animate-spin" : ""}`} />
-          </button>
-        </div>
-
-        <div className="mt-3 grid grid-cols-2 rounded-xl bg-slate-100 p-1">
+      <div className="border-b border-slate-200 bg-white p-3 text-slate-950">
+        <div className="grid grid-cols-2 rounded-xl bg-slate-100 p-1">
           <button
             type="button"
             onClick={() => setViewMode("map")}
             className={`flex min-h-11 items-center justify-center gap-2 rounded-lg text-xs font-semibold transition ${
-              viewMode === "map" ? "bg-[#31486f] text-white shadow-sm" : "text-[#1769e8]"
+              viewMode === "map" ? "bg-[#1769e8] text-white shadow-sm" : "text-slate-600"
             }`}
           >
             <MapIcon className="size-4" /> Map
@@ -694,7 +673,7 @@ export function HpoMapV2MapLibre({
             type="button"
             onClick={() => setViewMode("list")}
             className={`flex min-h-11 items-center justify-center gap-2 rounded-lg text-xs font-semibold transition ${
-              viewMode === "list" ? "bg-[#31486f] text-white shadow-sm" : "text-[#1769e8]"
+              viewMode === "list" ? "bg-[#1769e8] text-white shadow-sm" : "text-slate-600"
             }`}
           >
             <List className="size-4" /> List
@@ -702,28 +681,39 @@ export function HpoMapV2MapLibre({
         </div>
 
         <div className="mt-2 flex items-center justify-between gap-2">
-          <p className="text-[10px] font-medium text-slate-500">
-            {totalMapped}/{totalWithAddress} offices mapped
-            {preparing ? " · preparing…" : ""}
+          <p className="text-[11px] font-medium text-slate-500">
+            {totalMapped} mapped · {offices.length} offices
+            {preparing ? " · updating…" : ""}
           </p>
-          <button
-            type="button"
-            onClick={() => setShowTools((value) => !value)}
-            className="flex min-h-10 items-center gap-1.5 rounded-xl bg-slate-50 px-3 text-[10px] font-semibold text-[#1769e8]"
-          >
-            <SlidersHorizontal className="size-3.5" />
-            {showTools ? "Hide tools" : "Search & filters"}
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setShowTools((value) => !value)}
+              className="flex min-h-10 items-center gap-1.5 rounded-lg px-2.5 text-[10px] font-semibold text-[#1769e8] hover:bg-blue-50"
+            >
+              <SlidersHorizontal className="size-3.5" />
+              {showTools ? "Close" : "Search"}
+            </button>
+            <button
+              type="button"
+              onClick={onRefreshPins}
+              disabled={preparing}
+              className="flex size-10 items-center justify-center rounded-lg text-[#1769e8] hover:bg-blue-50 disabled:opacity-40"
+              aria-label="Refresh office map points"
+            >
+              <RefreshCw className={`size-4 ${preparing ? "animate-spin" : ""}`} />
+            </button>
+          </div>
         </div>
 
         {showTools ? (
-          <div className="mt-2 rounded-xl bg-slate-50 p-2 shadow-sm">
+          <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search offices, cities, specialties"
+                placeholder="Search office, city or specialty"
                 className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-base text-slate-900 outline-none placeholder:text-slate-400"
               />
             </div>
@@ -740,7 +730,7 @@ export function HpoMapV2MapLibre({
                   type="button"
                   onClick={() => setFilter(value)}
                   className={`min-h-10 rounded-lg text-[10px] font-semibold ${
-                    filter === value ? "bg-[#31486f] text-white" : "bg-slate-100 text-slate-600"
+                    filter === value ? "bg-[#1769e8] text-white" : "bg-white text-slate-600"
                   }`}
                 >
                   {label}
@@ -774,7 +764,7 @@ export function HpoMapV2MapLibre({
                 startDraw();
                 setShowTools(false);
               }}
-              className="mt-2 min-h-10 w-full rounded-lg border border-[#1769e8]/25 bg-white text-[10px] font-semibold text-[#1769e8]"
+              className="mt-2 min-h-10 w-full rounded-lg border border-blue-200 bg-white text-[10px] font-semibold text-[#1769e8]"
             >
               Select offices by area
             </button>
