@@ -164,11 +164,18 @@ async function routeStops(db: any, userId: string, routeId: string) {
   return data ?? [];
 }
 
+function officeTargetPhrase(message: string) {
+  return normalize(message)
+    .replace(/\b(add|put|remove|take|route|stop|office|out|off|from|to|the|my|please)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 async function findOffice(db: any, userId: string, phrase: string) {
   const [accounts, prospects] = await Promise.all([
     db
       .from("hpo_accounts")
-      .select("id,name,address,city,latitude,longitude,priority,status,tags")
+      .select("id,name,address,city,latitude,longitude,priority,status,tags,owner_name")
       .eq("user_id", userId)
       .eq("status", "active")
       .not("address", "is", null)
@@ -187,8 +194,9 @@ async function findOffice(db: any, userId: string, phrase: string) {
   const candidates = [
     ...(accounts.data ?? [])
       .filter((row: any) => !(Array.isArray(row.tags) && row.tags.includes("exclude_from_adam_route")))
+      .filter((row: any) => !clean(row.owner_name) || normalize(row.owner_name) === "adam")
       .map((row: any) => ({
-        score: nameScore(phrase, row.name),
+        score: nameScore(officeTargetPhrase(phrase) || phrase, row.name),
         accountId: row.id,
         prospectId: null,
         officeName: row.name,
@@ -199,7 +207,7 @@ async function findOffice(db: any, userId: string, phrase: string) {
         visitPriority: Number(row.priority ?? 0) >= 4 ? "high" : null,
       })),
     ...(prospects.data ?? []).map((row: any) => ({
-      score: nameScore(phrase, row.name),
+      score: nameScore(officeTargetPhrase(phrase) || phrase, row.name),
       accountId: null,
       prospectId: row.id,
       officeName: row.name,
@@ -224,7 +232,7 @@ async function chooseRouteCandidates(db: any, userId: string, message: string, c
   const [accounts, prospects] = await Promise.all([
     db
       .from("hpo_accounts")
-      .select("id,name,address,city,latitude,longitude,priority,last_touch_at,next_action,next_action_due_at,tags,status")
+      .select("id,name,address,city,latitude,longitude,priority,last_touch_at,next_action,next_action_due_at,tags,status,owner_name")
       .eq("user_id", userId)
       .eq("status", "active")
       .not("address", "is", null)
@@ -257,6 +265,7 @@ async function chooseRouteCandidates(db: any, userId: string, message: string, c
     ...(accounts.data ?? [])
       .filter((row: any) => citySet.has(normalize(row.city ?? "")))
       .filter((row: any) => !(Array.isArray(row.tags) && row.tags.includes("exclude_from_adam_route")))
+      .filter((row: any) => !clean(row.owner_name) || normalize(row.owner_name) === "adam")
       .map((row: any) => {
         const overdue =
           row.next_action_due_at && !Number.isNaN(Date.parse(row.next_action_due_at))
@@ -477,7 +486,7 @@ export async function processHpoRouteCommand(input: {
       } else {
         const ranked = stops
           .filter((row: any) => !TERMINAL.has(String(row.status)))
-          .map((row: any) => ({ row, score: nameScore(input.message, row.office_name ?? "") }))
+          .map((row: any) => ({ row, score: nameScore(officeTargetPhrase(input.message) || input.message, row.office_name ?? "") }))
           .filter((item) => item.score >= 45)
           .sort((left, right) => right.score - left.score);
         if (ranked.length > 1 && ranked[0]!.score - ranked[1]!.score < 10) {
