@@ -5,6 +5,7 @@ export type HpoFieldReadAction =
   | "none"
   | "hpo.route.get_next_stop"
   | "hpo.route.resume_context"
+  | "hpo.route.day_summary"
   | "hpo.account.get_context";
 
 export type HpoFieldReadResult = {
@@ -48,6 +49,14 @@ function requestedReadAction(message: string): HpoFieldReadAction {
     )
   ) {
     return "hpo.route.get_next_stop";
+  }
+
+  if (
+    /\b(how did today go|how did my day go|how did the route go|today summary|day summary|summarize (?:today|the route)|route summary)\b/.test(
+      text,
+    )
+  ) {
+    return "hpo.route.day_summary";
   }
 
   if (
@@ -127,6 +136,27 @@ function formatReply(
       return `You finished all ${state.total} stops on this route. Nothing is left open.`;
     }
     return `${last ? `You last finished ${last}. ` : ""}You're at ${state.completed}/${state.total}. Next is ${next}.`;
+  }
+
+  if (action === "hpo.route.day_summary") {
+    const counts = (state.stops ?? []).reduce(
+      (acc: Record<string, number>, stop: any) => {
+        const key = String(stop.status ?? "planned");
+        acc[key] = (acc[key] ?? 0) + 1;
+        return acc;
+      },
+      {},
+    );
+    const outcomes = [
+      counts["completed"] || counts["visited"]
+        ? `${(counts["completed"] ?? 0) + (counts["visited"] ?? 0)} completed`
+        : null,
+      counts["closed"] ? `${counts["closed"]} closed` : null,
+      counts["bad_address"] ? `${counts["bad_address"]} bad address` : null,
+      counts["skipped"] ? `${counts["skipped"]} skipped` : null,
+    ].filter(Boolean);
+    const unfinished = Number(state.remaining ?? 0);
+    return `Today: ${state.completed}/${state.total} stops have outcomes${outcomes.length ? ` · ${outcomes.join(" · ")}` : ""}.${unfinished ? ` ${unfinished} stop${unfinished === 1 ? " is" : "s are"} still unfinished.` : " The route has no unfinished stops."}`;
   }
 
   if (action === "hpo.route.get_next_stop") {
