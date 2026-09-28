@@ -1,45 +1,45 @@
-# HPO Field-Sales Rebuild
+# HPO Field-Sales OS — Repository Audit and Implementation Map
 
-## Goal
-Replace the dashboard-centric HPO workspace with a focused, iPhone-first field-sales operating system inside Emery. Existing HPO records, route history, account/contact data, visit logs, offline queue, maps, optimization, and Emery command capabilities remain intact.
+## Product boundary
+Rebuild only HPO into **Today · Map · Accounts · Activity**. Keep Emery chat, Calendar, More, auth, branding, voice, notifications, global navigation, existing HPO data and policies untouched. The HPO home should be Today for a usable current route, Map otherwise. This document is an implementation map, not a code change.
 
-## Experience
-- Make HPO open to **Today** when a current route exists; otherwise open to **Map**.
-- Replace Dashboard, Relationships, Performance, Events, Tasks, and “More HPO tools” with four persistent HPO destinations: **Today, Map, Accounts, Activity**.
-- Keep the global Emery shell and bottom navigation unchanged.
-- Use compact professional rows, restrained surfaces, 44px touch targets, safe-area-aware sheets, readable addresses, and deliberate loading/error/offline states.
+## 1. Preserve the working infrastructure
+- **Data and security:** existing `hpo_accounts`, `hpo_contacts`, `hpo_prospects`, `hpo_interactions`, `hpo_route_plans`, `hpo_route_stops` and supporting metrics/imports; owner-scoped RLS, grants, and later single-owner guard migrations. Do not reset or duplicate records.
+- **Route engine:** `src/lib/hpo-route.functions.ts` and `src/lib/hpo-field.functions.ts` already provide authenticated route creation, optimization, stop outcomes, visit/follow-up logging, saved-route loading, add/remove/reorder, nearby backups, reoptimization, completion and calendar synchronization. Preserve the execution-ledger/idempotency and offline-conflict timestamps in those paths.
+- **Territory map:** `src/components/hpo-map/HpoMapAdapter.tsx`, `HpoMapV2MapLibre.tsx`, `types.ts`, and the fallback map in `HpoRoutePlanner.tsx`. The adapter preserves a fallback when MapLibre is disabled/fails; V2 has clusters, filters, area selection, current-location control, account preview, and route line. The `hpo_map_v2` flag defaults false; plan a safe rollout without silently assuming all users see V2.
+- **Field/offline:** `src/lib/hpo-field-offline.ts` saves route/office snapshots, visit drafts and an IndexedDB outbox; `HpoFieldToday.tsx` handles arrival, outcomes, visit notes, follow-ups, nearby stops and synchronization. Preserve queued idempotency keys and `baseUpdatedAt` conflict handling.
+- **Intelligence:** `src/lib/hpo-agent-context.ts`, `hpo-field-read-controller.ts`, `hpo-route-command-controller.ts`, `hpo-route-action-controller.ts`, `hpo-action-controller.ts`, and their Emery/Voice callers. Maintain the non-PHI boundary and canonical command/write paths. Do not wire in the presently unreferenced `hpo-chat-router.ts` as a second write path.
+- **Read models and validation:** `getHpoRoutePlanner`, `getHpoFieldToday`, `getHpoAccountFieldContext`, and the HPO functions in `src/lib/hpo.functions.ts`; preserve `scripts/validate-hpo-field-os.mjs` and `.github/workflows/validate-hpo.yml` while updating UI-architecture assertions that currently demand the obsolete “More HPO tools” menu.
 
-## Build
-1. **HPO workspace shell**
-   - Rebuild the HPO route as a thin field-workspace controller with four tabs and shared actions.
-   - Preserve view state during the session and route account/visit actions into focused sheets.
-   - Remove the old dashboard and secondary-tool architecture from the HPO experience.
+## 2. Replace the HPO product UI
+- Replace the current ~1,100-line `src/routes/_authenticated/hpo.tsx` orchestration, Dashboard, Relationships, Performance, Events, HPO Tasks, extra tool strip, oversized account cards and chat-redirect-only Activity logging with a thin four-area field workspace. Move relevant meetings, relationship and follow-up information into Today, Accounts and Activity, without deleting their records or global destinations.
+- Recompose `src/components/HpoRoutePlanner.tsx` around the territory map and a compact saved-route panel; keep its proven planner logic, map adapter/fallback, builder, optimization, manual stop actions, notes and route export. Remove explanatory copy, duplicate route-journal clutter and large decorative surfaces.
+- Recompose `src/components/HpoFieldToday.tsx` around route progress, next stop, one-handed field actions and a readable queue/history; retain its offline behavior, backup and recovery actions.
+- Expand `src/components/HpoAccountFieldDetail.tsx` from a read-mostly sheet into a compact account workspace: overview, contacts, relationship intelligence, opportunities/blockers, next action and dated interaction/route history, with safe fast actions.
+- Leave `src/components/AppShell.tsx`, its bottom navigation, and non-HPO routes visually and functionally unchanged.
 
-2. **Today**
-   - Reuse the existing active-route, next-stop, navigation, arrival, outcome, visit-note, follow-up, nearby-backup, reoptimization, offline-draft, offline-sync, and route-wrap logic.
-   - Recompose it into a faster field sequence: route status → next stop → primary actions → account brief → route queue.
+## 3. Verified gaps to close
+- `getHpoDashboard` returns only up to **100 active accounts** and **30 recent interactions**; it cannot by itself power an all-accounts CRM or complete chronological Activity. `getHpoRoutePlanner` limits mapped accounts and prospects to **300 each** and saved routes to a **75-day past / 45-day future** window. Add bounded, paginated user-scoped HPO reads for complete searchable/filterable history; make map coverage/route-history limits explicit rather than claiming all records appear.
+- `createHpoAccount` exists, but the current HPO UI has **no account edit form**; `logHpoInteraction` supports summary/outcome/next action but **does not accept a contact ID**. Add ownership-checked, validated edits and contact-linked touch logging using existing tables; keep route-stop visit writes on their canonical path.
+- Activity currently links “Log” to a chat prefill instead of a field form. Its old relationship form is mounted only on the secondary Relationships view. Replace with in-place Log Visit / Log Touch actions and refresh account/activity data after successful writes.
+- Today handles the next stop and has nearby/add/reoptimize controls, but **does not display a full ordered stop queue or completed-stop history**; manual reorder/remove live in Map’s route journal. Expose those existing actions in the field flow without duplicating their server logic. A dedicated reschedule action for a stop and a safe correction/reopen of an accidentally terminal stop are not present; design them against existing route semantics before adding mutations, and never overwrite completed history.
+- Route selection/reopen and manual reorder already exist in `HpoRoutePlanner.tsx`; the current horizontally scrolling route chips, deep journal and 32–40px stop controls impede narrow-screen use. Make saved-route selection, details and reorder accessible at ~44px targets.
+- Map V1 fallback lacks the full MapLibre route-line/current-location experience, while V2 is feature-flagged off by default. Validate the rollout/fallback against real records. Route builder and other editable fields include `text-sm` inputs, below the requested iPhone 16px minimum.
+- Account detail shows contacts and histories but not all relationship intelligence (health, opportunity, blockers), editing or direct visit logging. Existing dashboard data omits some of those fields; use an appropriate owner-scoped read model.
+- The existing static validator explicitly requires the legacy HPO tool menu, so its UI assertions must change with the redesign while its backend/offline/Emery invariants remain intact.
 
-3. **Map and route planning**
-   - Reuse the existing MapLibre/fallback map, account/prospect pins, location, filters, multi-select, route creation, optimization, route reopening, stop addition/removal, and manual reorder.
-   - Reorganize the current oversized route planner into map-first controls with route details shown only when selected.
+## 4. Coherent implementation sequence
+1. Establish HPO-only read contracts for paginated accounts, prospects/routes and interaction history; preserve owner scope and existing metadata links. Add only narrowly scoped HPO writes required for account editing, contact-aware touches and safe rescheduling/correction if existing canonical operations cannot cover them. No migration unless a demonstrated data-model blocker requires a small backward-compatible one.
+2. Replace `hpo.tsx` with four persistent internal views and a compact shared action model. Remove the obsolete secondary architecture rather than hiding it. Ensure the existing global HPO entry still opens the module and Emery stays one tap away.
+3. Build **Accounts** list/detail with fast filters, readable rows and address/contacts/relationship history. Carry selected account and offices into Map/route building without losing context; expose Add, Edit, Log and Follow-Up.
+4. Build **Map** as the full territory command surface from existing pins and map adapter; search/filter, nearby/current location, preview, multi-select, start/end/date builder, optimize, saved-route reopen, add/remove/reorder, route line and safe fallback.
+5. Recompose **Today** around next stop and ordered queue: Navigate, Arrived, Log Visit, Skip, note, follow-up, reschedule, nearby/add/reorder/reoptimize, offline pending status and preserved completed history. Keep visit writes canonical and immediately refresh account/activity.
+6. Build **Activity** as a chronological paginated stream with visit/touch filters, due follow-ups, upcoming relevant meetings and quick logging. No separate dashboard or task/calendar database.
+7. Update the HPO validator’s obsolete UI assertions, add behavioral tests for filtering, route order/terminal-stop protection, visit/follow-up refresh, offline queue/conflicts, and missing-data states. Record HPO-only module decisions in `AGENTS.md` when implementation begins.
 
-4. **Accounts**
-   - Build a compact searchable/filterable list for account type, relationship stage/health, city/territory, and priority using existing fields.
-   - Expand the account sheet to show contacts, relationship signals, opportunity/blockers, next action, interaction history, and route history.
-   - Keep add-account and quick-log-touch workflows; add editing only through existing owned-account fields and policies.
-
-5. **Activity**
-   - Build a chronological stream from existing HPO interactions and upcoming HPO meetings, with compact filtering and quick logging.
-   - Surface due follow-ups and relationship actions without creating another task system or dashboard.
-
-6. **Architecture and validation**
-   - Split HPO-only UI into focused components while keeping server functions authenticated and user-scoped.
-   - Record the new HPO module architecture in `AGENTS.md`; update `roadmap.md` for this multi-part rebuild.
-   - Run focused HPO tests/lint, TypeScript validation, and inspect mobile and desktop rendering with Playwright.
-   - Verify the old dashboard is gone and exercise map selection, route opening/reorder surfaces, Today visit actions, account detail, and activity logging where the available authenticated preview permits.
-
-## Technical boundaries
-- No schema migration, data reset, or new backend service is planned.
-- Existing Supabase HPO tables and RLS remain authoritative.
-- Shared Emery chat, Calendar, More, authentication, branding, and global navigation remain unchanged.
-- Physical iPhone/Safari checks will be reported separately when unavailable in the preview environment.
+## 5. Acceptance and validation
+- Inspect changed-file diff to confirm **no non-HPO shared UI, auth, chat, Calendar, More, voice or notification changes**, no data reset, and no accidental migration.
+- Run project type validation with `tsgo`, focused lint for every changed HPO file, `scripts/validate-hpo-field-os.mjs`, targeted behavior tests, and check the newest preview build diagnostics. Do not consider an erroring preview complete.
+- In an authenticated preview, drive the real `/hpo` flow at **320, 375, 390 and 430px** plus desktop: assert exactly four areas, no legacy dashboard/tools, no horizontal overflow/bottom-nav overlap, 44px actions, 16px inputs, safe keyboard/sheet behavior, and long-name/address wrapping.
+- Exercise account search/filter/detail/edit, account/prospect pin selection and preview, multi-select to date/start/end route builder, save/optimize/reopen/reorder/add/remove, Today arrival/visit/follow-up/skip/offline-retry, and Activity/account history refresh. Confirm previous records remain visible and completed route history is unchanged.
+- Confirm Emery/Calendar/More/auth/global navigation behavior is unchanged. Physical iPhone Safari, location permission, intermittent connectivity and background sync require separate device checks if browser automation cannot establish them.
