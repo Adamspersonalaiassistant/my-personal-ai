@@ -193,6 +193,32 @@ async function roadMatrix(points: Array<{ lat: number; lon: number }>) {
   };
 }
 
+async function roadRouteGeometry(points: Array<{ lat: number; lon: number }>) {
+  if (points.length < 2) return null;
+  const coordinates = points.map((point) => `${point.lon},${point.lat}`).join(";");
+  try {
+    const response = await fetch(
+      `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&steps=false`,
+      { headers: { "User-Agent": "EmeryPersonalAI/1.0 personal-route-planner" } },
+    );
+    if (!response.ok) return null;
+    const payload = await response.json();
+    const rawCoordinates = payload?.routes?.[0]?.geometry?.coordinates;
+    if (!Array.isArray(rawCoordinates) || rawCoordinates.length < 2) return null;
+    const maxPoints = 260;
+    const stride = Math.max(1, Math.ceil(rawCoordinates.length / maxPoints));
+    return rawCoordinates
+      .filter((_point: unknown, index: number) => index % stride === 0 || index === rawCoordinates.length - 1)
+      .map((point: unknown) => {
+        const pair = Array.isArray(point) ? point : [];
+        return [Number(pair[0]), Number(pair[1])] as [number, number];
+      })
+      .filter((point: [number, number]) => Number.isFinite(point[0]) && Number.isFinite(point[1]));
+  } catch {
+    return null;
+  }
+}
+
 function routeCost(
   sequence: number[],
   durations: Array<Array<number | null>>,
