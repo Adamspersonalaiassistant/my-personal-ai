@@ -11,6 +11,7 @@ import type {
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Check, List, LocateFixed, Map as MapIcon, MapPinned, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
 import type { HpoMapOffice, HpoMapRoute } from "@/components/hpo-map/types";
+import { openHpoEmery } from "@/components/HpoEmerySheet";
 import "@/components/hpo-map/hpo-map-v2.css";
 
 const TERMINAL = new Set(["completed", "visited", "skipped", "closed", "bad_address"]);
@@ -235,49 +236,11 @@ function boundsForOffices(offices: HpoMapOffice[]) {
   return bounds;
 }
 
-function createPinImage(fill: string, stroke = "#ffffff") {
-  const scale = 2;
-  const canvas = document.createElement("canvas");
-  canvas.width = 44 * scale;
-  canvas.height = 54 * scale;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-  ctx.scale(scale, scale);
-  ctx.beginPath();
-  ctx.moveTo(22, 52);
-  ctx.bezierCurveTo(18, 44, 7, 34, 7, 22);
-  ctx.bezierCurveTo(7, 10, 13, 3, 22, 3);
-  ctx.bezierCurveTo(31, 3, 37, 10, 37, 22);
-  ctx.bezierCurveTo(37, 34, 26, 44, 22, 52);
-  ctx.closePath();
-  ctx.fillStyle = fill;
-  ctx.fill();
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = stroke;
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(22, 21, 6.5, 0, Math.PI * 2);
-  ctx.fillStyle = "#ffffff";
-  ctx.fill();
-  return ctx.getImageData(0, 0, canvas.width, canvas.height);
-}
-
 function setupSourcesAndLayers(map: MapLibreMap) {
-  if (!map.hasImage("hpo-blue-pin")) {
-    const image = createPinImage(BLUE);
-    if (image) map.addImage("hpo-blue-pin", image, { pixelRatio: 2 });
-  }
-  if (!map.hasImage("hpo-blue-active-pin")) {
-    const image = createPinImage(BLUE_DARK);
-    if (image) map.addImage("hpo-blue-active-pin", image, { pixelRatio: 2 });
-  }
   if (!map.getSource("hpo-offices")) {
     map.addSource("hpo-offices", {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
-      cluster: true,
-      clusterRadius: 46,
-      clusterMaxZoom: 13,
     });
   }
   if (!map.getSource("hpo-route-line")) {
@@ -307,7 +270,7 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       paint: {
         "line-color": "#ffffff",
         "line-width": 7,
-        "line-opacity": 0.95,
+        "line-opacity": 0.98,
       },
       layout: { "line-cap": "round", "line-join": "round" },
     });
@@ -320,7 +283,7 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       paint: {
         "line-color": BLUE,
         "line-width": 4,
-        "line-opacity": 0.9,
+        "line-opacity": 0.95,
       },
       layout: { "line-cap": "round", "line-join": "round" },
     });
@@ -333,7 +296,7 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       source: "hpo-selection-area",
       paint: {
         "fill-color": BLUE,
-        "fill-opacity": 0.1,
+        "fill-opacity": 0.08,
       },
     });
   }
@@ -351,134 +314,38 @@ function setupSourcesAndLayers(map: MapLibreMap) {
     });
   }
 
-  if (!map.getLayer("hpo-office-clusters")) {
-    map.addLayer({
-      id: "hpo-office-clusters",
-      type: "circle",
-      source: "hpo-offices",
-      filter: ["has", "point_count"],
-      paint: {
-        "circle-color": BLUE,
-        "circle-radius": ["step", ["get", "point_count"], 17, 10, 20, 30, 23, 75, 27],
-        "circle-stroke-color": "#ffffff",
-        "circle-stroke-width": 3,
-        "circle-opacity": 0.94,
-      },
-    });
-  }
-  if (!map.getLayer("hpo-office-cluster-count")) {
-    map.addLayer({
-      id: "hpo-office-cluster-count",
-      type: "symbol",
-      source: "hpo-offices",
-      filter: ["has", "point_count"],
-      layout: {
-        "text-field": ["get", "point_count_abbreviated"],
-        "text-size": 12,
-        "text-font": ["Noto Sans Regular"],
-      },
-      paint: {
-        "text-color": [
-          "case",
-          ["in", ["get", "status"], ["literal", ["closed", "bad_address", "skipped"]]],
-          "#334155",
-          "#ffffff",
-        ],
-      },
-    });
-  }
-
   if (!map.getLayer("hpo-office-points")) {
     map.addLayer({
       id: "hpo-office-points",
       type: "circle",
       source: "hpo-offices",
-      filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "kind"], "account"]],
       paint: {
-        "circle-radius": ["case", ["==", ["get", "selected"], 1], 14, 11],
+        "circle-radius": [
+          "case",
+          ["==", ["get", "selected"], 1],
+          10,
+          ["==", ["get", "focused"], 1],
+          9,
+          7,
+        ],
         "circle-color": BLUE,
         "circle-stroke-color": "#ffffff",
-        "circle-stroke-width": 3,
-        "circle-opacity": 0.92,
+        "circle-stroke-width": 2.5,
+        "circle-opacity": 0.98,
       },
     });
   }
-  if (!map.getLayer("hpo-prospect-points")) {
-    map.addLayer({
-      id: "hpo-prospect-points",
-      type: "circle",
-      source: "hpo-offices",
-      filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "kind"], "prospect"]],
-      paint: {
-        "circle-radius": ["case", ["==", ["get", "selected"], 1], 14, 11],
-        "circle-color": BLUE,
-        "circle-stroke-color": BLUE,
-        "circle-stroke-width": 3,
-        "circle-opacity": 0.92,
-        "circle-stroke-opacity": 1,
-      },
-    });
-  }
-  if (!map.getLayer("hpo-office-centers")) {
-    map.addLayer({
-      id: "hpo-office-centers",
-      type: "circle",
-      source: "hpo-offices",
-      filter: ["!", ["has", "point_count"]],
-      paint: {
-        "circle-radius": 3.6,
-        "circle-color": "#ffffff",
-        "circle-opacity": 0.92,
-      },
-    });
-  }
-
-  if (!map.getLayer("hpo-office-pin-symbols")) {
-    map.addLayer({
-      id: "hpo-office-pin-symbols",
-      type: "symbol",
-      source: "hpo-offices",
-      filter: ["!", ["has", "point_count"]],
-      layout: {
-        "icon-image": "hpo-blue-pin",
-        "icon-size": ["case", ["==", ["get", "selected"], 1], 1.12, 0.96],
-        "icon-anchor": "bottom",
-        "icon-allow-overlap": true,
-      },
-    });
-  }
-
-  if (!map.getLayer("hpo-office-priority-ring")) {
-    map.addLayer({
-      id: "hpo-office-priority-ring",
-      type: "circle",
-      source: "hpo-offices",
-      filter: [
-        "all",
-        ["!", ["has", "point_count"]],
-        [">=", ["coalesce", ["get", "priority"], 0], 4],
-      ],
-      paint: {
-        "circle-radius": 11,
-        "circle-color": "rgba(23,105,232,0)",
-        "circle-stroke-color": BLUE_DARK,
-        "circle-stroke-width": 1.5,
-        "circle-stroke-opacity": 0.45,
-      },
-    });
-  }
-
   if (!map.getLayer("hpo-office-selected-ring")) {
     map.addLayer({
       id: "hpo-office-selected-ring",
       type: "circle",
       source: "hpo-offices",
-      filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "selected"], 1]],
+      filter: ["==", ["get", "selected"], 1],
       paint: {
-        "circle-radius": 13,
-        "circle-color": "rgba(23,105,232,0.08)",
-        "circle-stroke-color": BLUE,
-        "circle-stroke-width": 2,
+        "circle-radius": 14,
+        "circle-color": "rgba(23,105,232,0.10)",
+        "circle-stroke-color": BLUE_DARK,
+        "circle-stroke-width": 2.5,
       },
     });
   }
@@ -487,13 +354,13 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       id: "hpo-office-focused-ring",
       type: "circle",
       source: "hpo-offices",
-      filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "focused"], 1]],
+      filter: ["==", ["get", "focused"], 1],
       paint: {
-        "circle-radius": 16,
-        "circle-color": "rgba(23,105,232,0.04)",
+        "circle-radius": 17,
+        "circle-color": "rgba(23,105,232,0.05)",
         "circle-stroke-color": BLUE_DARK,
         "circle-stroke-width": 3,
-        "circle-stroke-opacity": 0.55,
+        "circle-stroke-opacity": 0.6,
       },
     });
   }
@@ -505,9 +372,9 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       source: "hpo-route-stops",
       filter: ["==", ["get", "current"], 1],
       paint: {
-        "circle-radius": 18,
-        "circle-color": "#ffe1e4",
-        "circle-opacity": 0.7,
+        "circle-radius": 17,
+        "circle-color": BLUE_LIGHT,
+        "circle-opacity": 0.65,
         "circle-stroke-color": BLUE_DARK,
         "circle-stroke-width": 2,
       },
@@ -519,64 +386,19 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       type: "circle",
       source: "hpo-route-stops",
       paint: {
-        "circle-radius": ["case", ["==", ["get", "current"], 1], 12, 10],
+        "circle-radius": ["case", ["==", ["get", "current"], 1], 11, 9],
         "circle-color": [
           "case",
           ["==", ["get", "current"], 1],
           BLUE_DARK,
-          ["==", ["get", "status"], "closed"],
-          "#ffffff",
-          ["==", ["get", "status"], "bad_address"],
-          "#fff7ed",
-          ["==", ["get", "status"], "skipped"],
-          "#e2e8f0",
           ["==", ["get", "completed"], 1],
-          BLUE_LIGHT,
+          "#8ab8f5",
           BLUE,
         ],
-        "circle-stroke-color": [
-          "case",
-          ["==", ["get", "status"], "bad_address"],
-          "#f97316",
-          ["==", ["get", "status"], "closed"],
-          "#64748b",
-          ["==", ["get", "status"], "skipped"],
-          "#94a3b8",
-          "#ffffff",
-        ],
+        "circle-stroke-color": "#ffffff",
         "circle-stroke-width": 2.5,
-        "circle-opacity": ["case", ["==", ["get", "status"], "skipped"], 0.65, 1],
+        "circle-opacity": ["case", ["==", ["get", "status"], "skipped"], 0.5, 1],
       },
-    });
-  }
-  if (!map.getLayer("hpo-route-stop-pin-symbols")) {
-    map.addLayer({
-      id: "hpo-route-stop-pin-symbols",
-      type: "symbol",
-      source: "hpo-route-stops",
-      layout: {
-        "icon-image": ["case", ["==", ["get", "current"], 1], "hpo-blue-active-pin", "hpo-blue-pin"],
-        "icon-size": ["case", ["==", ["get", "current"], 1], 1.16, 1],
-        "icon-anchor": "bottom",
-        "icon-allow-overlap": true,
-      },
-      paint: {
-        "icon-opacity": ["case", ["==", ["get", "status"], "skipped"], 0.55, 1],
-      },
-    });
-  }
-
-  if (!map.getLayer("hpo-route-stop-numbers")) {
-    map.addLayer({
-      id: "hpo-route-stop-numbers",
-      type: "symbol",
-      source: "hpo-route-stops",
-      layout: {
-        "text-field": ["to-string", ["get", "order"]],
-        "text-size": 11,
-        "text-font": ["Noto Sans Regular"],
-      },
-      paint: { "text-color": "#ffffff" },
     });
   }
 }
@@ -738,23 +560,11 @@ export function HpoMapV2MapLibre({
       if (!drawMode) return;
       setDrawPoints((current) => [...current, [event.lngLat.lng, event.lngLat.lat]]);
     };
-    const clusterClick = async (event: MapMouseEvent & { features?: MapGeoJSONFeature[] }) => {
-      const feature = event.features?.[0];
-      const clusterId = Number(feature?.properties?.["cluster_id"]);
-      if (!Number.isFinite(clusterId)) return;
-      const source = map.getSource("hpo-offices") as GeoJSONSource;
-      const zoom = await source.getClusterExpansionZoom(clusterId);
-      const coordinates = (feature?.geometry as any)?.coordinates;
-      if (Array.isArray(coordinates)) {
-        map.easeTo({ center: [Number(coordinates[0]), Number(coordinates[1])], zoom });
-      }
-    };
 
     for (const layer of [
       "hpo-office-points",
-      "hpo-prospect-points",
       "hpo-office-selected-ring",
-      "hpo-office-pin-symbols",
+      "hpo-office-focused-ring",
     ]) {
       map.on("click", layer, officeClick);
       map.on("mouseenter", layer, () => {
@@ -765,25 +575,16 @@ export function HpoMapV2MapLibre({
       });
     }
     map.on("click", drawClick);
-    map.on("click", "hpo-office-clusters", clusterClick);
-    map.on("mouseenter", "hpo-office-clusters", () => {
-      map.getCanvas().style.cursor = "pointer";
-    });
-    map.on("mouseleave", "hpo-office-clusters", () => {
-      map.getCanvas().style.cursor = "";
-    });
 
     return () => {
       for (const layer of [
         "hpo-office-points",
-        "hpo-prospect-points",
         "hpo-office-selected-ring",
-        "hpo-office-pin-symbols",
+        "hpo-office-focused-ring",
       ]) {
         map.off("click", layer, officeClick);
       }
       map.off("click", drawClick);
-      map.off("click", "hpo-office-clusters", clusterClick);
     };
   }, [drawMode, onSelectOffice, ready]);
 
