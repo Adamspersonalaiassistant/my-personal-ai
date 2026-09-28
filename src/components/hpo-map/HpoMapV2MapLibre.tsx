@@ -239,7 +239,42 @@ function boundsForOffices(offices: HpoMapOffice[]) {
   return bounds;
 }
 
+function createPinImage(fill: string, stroke = "#ffffff") {
+  const scale = 2;
+  const canvas = document.createElement("canvas");
+  canvas.width = 44 * scale;
+  canvas.height = 54 * scale;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.scale(scale, scale);
+  ctx.beginPath();
+  ctx.moveTo(22, 52);
+  ctx.bezierCurveTo(18, 44, 7, 34, 7, 22);
+  ctx.bezierCurveTo(7, 10, 13, 3, 22, 3);
+  ctx.bezierCurveTo(31, 3, 37, 10, 37, 22);
+  ctx.bezierCurveTo(37, 34, 26, 44, 22, 52);
+  ctx.closePath();
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = stroke;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(22, 21, 6.5, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  return ctx.getImageData(0, 0, canvas.width, canvas.height);
+}
+
 function setupSourcesAndLayers(map: MapLibreMap) {
+  if (!map.hasImage("hpo-green-pin")) {
+    const image = createPinImage(GREEN);
+    if (image) map.addImage("hpo-green-pin", image, { pixelRatio: 2 });
+  }
+  if (!map.hasImage("hpo-red-pin")) {
+    const image = createPinImage(CURRENT_RED);
+    if (image) map.addImage("hpo-red-pin", image, { pixelRatio: 2 });
+  }
   if (!map.getSource("hpo-offices")) {
     map.addSource("hpo-offices", {
       type: "geojson",
@@ -368,7 +403,7 @@ function setupSourcesAndLayers(map: MapLibreMap) {
         "circle-color": GREEN,
         "circle-stroke-color": "#ffffff",
         "circle-stroke-width": 3,
-        "circle-opacity": 0.98,
+        "circle-opacity": 0.01,
       },
     });
   }
@@ -383,6 +418,8 @@ function setupSourcesAndLayers(map: MapLibreMap) {
         "circle-color": GREEN,
         "circle-stroke-color": GREEN,
         "circle-stroke-width": 3,
+        "circle-opacity": 0.01,
+        "circle-stroke-opacity": 0.01,
       },
     });
   }
@@ -395,7 +432,22 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       paint: {
         "circle-radius": 3.6,
         "circle-color": "#ffffff",
-        "circle-opacity": 1,
+        "circle-opacity": 0,
+      },
+    });
+  }
+
+  if (!map.getLayer("hpo-office-pin-symbols")) {
+    map.addLayer({
+      id: "hpo-office-pin-symbols",
+      type: "symbol",
+      source: "hpo-offices",
+      filter: ["!", ["has", "point_count"]],
+      layout: {
+        "icon-image": "hpo-green-pin",
+        "icon-size": ["case", ["==", ["get", "selected"], 1], 1.12, 0.96],
+        "icon-anchor": "bottom",
+        "icon-allow-overlap": true,
       },
     });
   }
@@ -501,6 +553,23 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       },
     });
   }
+  if (!map.getLayer("hpo-route-stop-pin-symbols")) {
+    map.addLayer({
+      id: "hpo-route-stop-pin-symbols",
+      type: "symbol",
+      source: "hpo-route-stops",
+      layout: {
+        "icon-image": ["case", ["==", ["get", "current"], 1], "hpo-red-pin", "hpo-green-pin"],
+        "icon-size": ["case", ["==", ["get", "current"], 1], 1.16, 1],
+        "icon-anchor": "bottom",
+        "icon-allow-overlap": true,
+      },
+      paint: {
+        "icon-opacity": ["case", ["==", ["get", "status"], "skipped"], 0.55, 1],
+      },
+    });
+  }
+
   if (!map.getLayer("hpo-route-stop-numbers")) {
     map.addLayer({
       id: "hpo-route-stop-numbers",
@@ -685,7 +754,12 @@ export function HpoMapV2MapLibre({
       }
     };
 
-    for (const layer of ["hpo-office-points", "hpo-prospect-points", "hpo-office-selected-ring"]) {
+    for (const layer of [
+      "hpo-office-points",
+      "hpo-prospect-points",
+      "hpo-office-selected-ring",
+      "hpo-office-pin-symbols",
+    ]) {
       map.on("click", layer, officeClick);
       map.on("mouseenter", layer, () => {
         map.getCanvas().style.cursor = "pointer";
@@ -708,6 +782,7 @@ export function HpoMapV2MapLibre({
         "hpo-office-points",
         "hpo-prospect-points",
         "hpo-office-selected-ring",
+        "hpo-office-pin-symbols",
       ]) {
         map.off("click", layer, officeClick);
       }
