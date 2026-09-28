@@ -1227,7 +1227,7 @@ export async function getHpoNearbyBackupsCore(input: {
         "id,name,prospect_type,specialty,address,city,latitude,longitude,fit_status,verification_status,metadata",
       )
       .eq("user_id", input.userId)
-      .neq("fit_status", "rejected")
+      .in("fit_status", ["undecided", "qualified"])
       .not("latitude", "is", null)
       .not("longitude", "is", null),
   ]);
