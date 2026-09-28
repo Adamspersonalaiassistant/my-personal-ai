@@ -895,6 +895,8 @@ export const executeVoiceHpoRouteCommand = createServerFn({ method: "POST" })
       message: data.request,
       timezone: profile?.timezone ?? "America/New_York",
       requestId: data.requestId,
+      latitude: data.latitude,
+      longitude: data.longitude,
       sourceChannel: "voice",
     });
     await recordRuntimeEvent(db, context.userId, {
@@ -916,9 +918,16 @@ export const executeVoiceHpoRouteCommand = createServerFn({ method: "POST" })
 
 export const executeVoiceHpoRouteCommand = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { request: string; requestId?: string | null }) => ({
+  .inputValidator((input: {
+    request: string;
+    requestId?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+  }) => ({
     request: String(input?.request ?? "").trim().slice(0, 4000),
     requestId: input?.requestId ? String(input.requestId).trim().slice(0, 240) : null,
+    latitude: Number.isFinite(input?.latitude) ? Number(input.latitude) : null,
+    longitude: Number.isFinite(input?.longitude) ? Number(input.longitude) : null,
   }))
   .handler(async ({ data, context }) => {
     if (!data.request) {
