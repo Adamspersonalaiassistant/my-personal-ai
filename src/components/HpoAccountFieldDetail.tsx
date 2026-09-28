@@ -6,6 +6,9 @@ import {
   CalendarClock,
   History,
   MapPin,
+  MapPinned,
+  MessageCircle,
+  Navigation,
   Mail,
   Phone,
   UserRound,
@@ -15,6 +18,7 @@ import {
 import { getHpoAccountFieldContext } from "@/lib/hpo-field.functions";
 import { addHpoFieldContact, updateHpoFieldAccount } from "@/lib/hpo-workspace.functions";
 import { Button } from "@/components/ui/button";
+import { openHpoEmery } from "@/components/HpoEmerySheet";
 
 function dateLabel(value: string | null | undefined) {
   if (!value) return "Not recorded";
@@ -108,27 +112,86 @@ export function HpoAccountFieldDetail({
           </div>
         ) : (
           <div className="space-y-3 pb-2">
-            <div
-              className={`grid gap-2 ${onLog && onFollowup ? "grid-cols-3" : onLog || onFollowup ? "grid-cols-2" : "grid-cols-1"}`}
-            >
-              {onLog && (
-                <Button className="min-h-11 px-2 text-xs" onClick={onLog}>
-                  Log visit
-                </Button>
-              )}
-              {onFollowup && (
-                <Button variant="outline" className="min-h-11 px-2 text-xs" onClick={onFollowup}>
-                  Follow-up
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                className="min-h-11 px-2 text-xs"
-                onClick={() => setEditing((value) => !value)}
+            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {account.address ? (
+                <a
+                  href={`https://maps.apple.com/?daddr=${encodeURIComponent(
+                    [account.address, account.city].filter(Boolean).join(", "),
+                  )}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex min-h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-xl border border-border/50 bg-card/45 px-2 text-[10px] font-semibold text-foreground"
+                >
+                  <Navigation className="size-4 text-primary" />
+                  Navigate
+                </a>
+              ) : null}
+              <button
+                type="button"
+                onClick={() =>
+                  openHpoEmery(
+                    `Add ${account.name} at ${[account.address, account.city]
+                      .filter(Boolean)
+                      .join(", ")} to today's HPO route.`,
+                    account.name,
+                  )
+                }
+                className="flex min-h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-xl border border-primary/20 bg-primary/[0.055] px-2 text-[10px] font-semibold text-primary"
               >
-                <Pencil className="size-4" /> Edit
-              </Button>
+                <MapPinned className="size-4" />
+                Route
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  onLog
+                    ? onLog()
+                    : openHpoEmery(
+                        `Log an office visit for ${account.name}. Ask me what happened and who I spoke with, then save it to this HPO account.`,
+                        account.name,
+                      )
+                }
+                className="flex min-h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-xl border border-border/50 bg-card/45 px-2 text-[10px] font-semibold text-foreground"
+              >
+                <History className="size-4 text-primary" />
+                Log Visit
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  onFollowup
+                    ? onFollowup()
+                    : openHpoEmery(
+                        `Set or update the next follow-up for ${account.name}.`,
+                        account.name,
+                      )
+                }
+                className="flex min-h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-xl border border-border/50 bg-card/45 px-2 text-[10px] font-semibold text-foreground"
+              >
+                <CalendarClock className="size-4 text-primary" />
+                Follow-Up
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  openHpoEmery(
+                    `I'm working with ${account.name} in HPO. Use this account's live relationship history, route context, contacts, visits and follow-ups to help me with the next action.`,
+                    account.name,
+                  )
+                }
+                className="flex min-h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-xl bg-primary px-2 text-[10px] font-semibold text-primary-foreground"
+              >
+                <MessageCircle className="size-4" />
+                Emery
+              </button>
             </div>
+            <Button
+              variant="ghost"
+              className="min-h-11 w-full justify-start px-1 text-xs text-muted-foreground"
+              onClick={() => setEditing((value) => !value)}
+            >
+              <Pencil className="size-4" /> {editing ? "Close edit" : "Edit account details"}
+            </Button>
             {editing && (
               <form
                 className="space-y-2 border-y border-border/60 py-3"
