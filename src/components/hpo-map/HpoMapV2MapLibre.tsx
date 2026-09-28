@@ -761,21 +761,6 @@ export function HpoMapV2MapLibre({
     setDrawPoints([]);
   }
 
-  function fitOffices() {
-    const map = mapRef.current;
-    const bounds = boundsForOffices(filtered);
-    if (!map || !bounds || bounds.isEmpty()) return;
-    map.fitBounds(bounds, { padding: 52, maxZoom: 13.2, duration: 420 });
-  }
-
-  function fitSelected() {
-    const map = mapRef.current;
-    const selected = offices.filter((office) => selectedSet.has(office.key));
-    const bounds = boundsForOffices(selected);
-    if (!map || !bounds || bounds.isEmpty()) return;
-    map.fitBounds(bounds, { padding: 58, maxZoom: 14, duration: 420 });
-  }
-
   function fitRoute() {
     const map = mapRef.current;
     if (!map || !route) return;
@@ -953,19 +938,7 @@ export function HpoMapV2MapLibre({
             </button>
           </div>
         ) : null}
-        <div className="absolute bottom-3 right-3 z-10 flex gap-1">
-          <button
-            type="button"
-            onClick={fitOffices}
-            className="flex size-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-[#1769e8] shadow-md"
-            aria-label="Fit offices"
-          >
-            <Maximize2 className="size-3.5" />
-          </button>
-          {selectedKeys.length ? (
-            <button
-              type="button"
-              onClick={fitSelected}        <div className="absolute bottom-4 right-4 z-10 flex items-center gap-2">
+        <div className="absolute bottom-4 right-4 z-10 flex items-center gap-2">
           {route?.stops?.length ? (
             <button
               type="button"
