@@ -45,6 +45,10 @@ check(
 );
 check("Route Planner loads Map V2 feature flag", routeFns.includes('select("hpo_map_v2")'));
 check(
+  "RepMove-style Map V2 is the default HPO field renderer with V1 fallback",
+  planner.includes("enabled={true}") && planner.includes("v1={") && planner.includes("<OfficePlanningMap"),
+);
+check(
   "Map V2 uses GeoJSON clustering",
   v2.includes("cluster: true") && v2.includes("hpo-office-clusters"),
 );
@@ -89,8 +93,21 @@ check(
   routeFns.includes("router.project-osrm.org/table/v1/driving"),
 );
 check(
-  "Map V2 is light/blue rather than dark-filter V1",
-  v2.includes('const BLUE = "#1769e8"') && v2.includes("bg-white"),
+  "Map V2 uses the light RepMove-style green-pin and blue-route visual system",
+  v2.includes('const GREEN = "#10b981"') &&
+    v2.includes('const CURRENT_RED = "#ff4d57"') &&
+    v2.includes('const BLUE = "#1769e8"') &&
+    v2.includes('viewMode') &&
+    v2.includes('MapIcon') &&
+    v2.includes('> List'),
+);
+check(
+  "Today uses a RepMove-style Daily Route date strip and ordered route list",
+  fieldToday.includes("routeWeek") &&
+    fieldToday.includes("routeMonth") &&
+    fieldToday.includes("Daily Route") &&
+    fieldToday.includes("GripVertical") &&
+    fieldToday.includes("SquareCheckBig"),
 );
 check(
   "route-stop outcome has one canonical execution core",
