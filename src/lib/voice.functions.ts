@@ -512,6 +512,23 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
         },
         {
           type: "function",
+          name: "execute_hpo_route_command",
+          description:
+            "Execute a verified HPO route command when Adam explicitly asks to build a route from saved HPO offices in named cities, add/remove a saved office, optimize the active route, or reoptimize its unfinished remainder. Uses deterministic HPO data and routing after interpreting the command.",
+          parameters: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              request: {
+                type: "string",
+                description: "Adam's exact HPO route command from the active voice turn.",
+              },
+            },
+            required: ["request"],
+          },
+        },
+        {
+          type: "function",
           name: "execute_hpo_route_note",
           description:
             "Use Emery's HPO Route Planner note capture when Adam explicitly reports what happened at a field stop or asks to save a marketing-route note. Examples: 'Stop 3, spoke with Amanda and follow up next week' or 'I just left Weiner Mazzei; Jenni will pass the information to the attorney.' The active route from the app is preferred when available. This is non-PHI field marketing only.",
@@ -892,6 +909,55 @@ export const executeVoiceHpoRouteCommand = createServerFn({ method: "POST" })
         routeId: result.routeId,
         executionRunId: result.executionRunId,
         deterministic: true,
+      },
+    });
+    return result;
+  });
+
+export const executeVoiceHpoRouteCommand = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { request: string; requestId?: string | null }) => ({
+    request: String(input?.request ?? "").trim().slice(0, 4000),
+    requestId: input?.requestId ? String(input.requestId).trim().slice(0, 240) : null,
+  }))
+  .handler(async ({ data, context }) => {
+    if (!data.request) {
+      return {
+        recognized: false,
+        performed: false,
+        needsClarification: true,
+        question: "What should I change about the HPO route?",
+        action: "none",
+      } as const;
+    }
+    const db = context.supabase as any;
+    const { data: profile } = await db
+      .from("profiles")
+      .select("timezone")
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    const startedAt = Date.now();
+    const result = await processHpoRouteCommand({
+      db,
+      userId: context.userId,
+      message: data.request,
+      timezone: profile?.timezone ?? "America/New_York",
+      requestId: data.requestId,
+      sourceChannel: "voice",
+    });
+    await recordRuntimeEvent(db, context.userId, {
+      channel: "voice",
+      eventType: "hpo_route_command",
+      domain: "hpo",
+      action: result.action,
+      status: result.needsClarification ? "clarification" : result.performed ? "ok" : result.error ? "error" : "skipped",
+      durationMs: Date.now() - startedAt,
+      model: null,
+      metadata: {
+        routeId: result.routeId,
+        executionRunId: result.executionRunId,
+        performed: result.performed,
+        deterministicAfterIntent: true,
       },
     });
     return result;
