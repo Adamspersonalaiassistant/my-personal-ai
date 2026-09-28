@@ -719,7 +719,7 @@ export const getHpoRoutePlanner = createServerFn({ method: "GET" })
         .eq("status", "active")
         .not("address", "is", null)
         .order("priority", { ascending: false })
-        .limit(300),
+        .limit(1000),
       db
         .from("hpo_prospects")
         .select(
