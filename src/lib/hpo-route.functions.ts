@@ -2235,6 +2235,7 @@ export async function captureHpoRouteNoteCore(input: {
     nextAction,
     nextActionDueAt: parsedNextActionDueAt ?? target.next_action_due_at ?? null,
     followupTaskId: visitExecution.followupTaskId ?? null,
+    executionRunId: execution.id,
     routeStatus,
   } as const;
   await completeExecution({
