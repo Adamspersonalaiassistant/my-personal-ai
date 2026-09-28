@@ -1,1113 +1,172 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import {
-  Activity,
-  ArrowRight,
-  BarChart3,
-  BriefcaseBusiness,
-  CalendarDays,
-  CheckCircle2,
-  ClipboardPlus,
-  Compass,
-  FileUp,
-  Handshake,
-  ListTodo,
-  MapPinned,
-  MessageCircle,
-  Plus,
-  RefreshCw,
-  Route as RouteIcon,
-  Sparkles,
-  Target,
-  UsersRound,
-} from "lucide-react";
-import { AppShell, EmptyState } from "@/components/AppShell";
-import { HpoRoutePlanner, HpoRoutePlannerCompact } from "@/components/HpoRoutePlanner";
+import { Activity, CalendarDays, ChevronRight, Clock3, MapPinned, Plus, Search, UsersRound, X } from "lucide-react";
+import { AppShell } from "@/components/AppShell";
+import { Button } from "@/components/ui/button";
+import { HpoRoutePlanner } from "@/components/HpoRoutePlanner";
 import { HpoFieldToday } from "@/components/HpoFieldToday";
 import { HpoAccountFieldDetail } from "@/components/HpoAccountFieldDetail";
-import {
-  createHpoAccount,
-  getHpoDashboard,
-  logHpoInteraction,
-  stageHpoImport,
-} from "@/lib/hpo.functions";
+import { createHpoAccount, logHpoInteraction } from "@/lib/hpo.functions";
+import { getHpoWorkspace, setHpoFieldAccountFollowup } from "@/lib/hpo-workspace.functions";
+import { getHpoFieldToday } from "@/lib/hpo-field.functions";
 
-export const Route = createFileRoute("/_authenticated/hpo")({ component: HpoWorkspace });
-
-type DashboardData = Awaited<ReturnType<ReturnType<typeof useServerFn<typeof getHpoDashboard>>>>;
-type ViewKey =
-  | "map"
-  | "today"
-  | "accounts"
-  | "notes"
-  | "dashboard"
-  | "relationships"
-  | "performance"
-  | "events"
-  | "tasks";
-
-const views: Array<{ key: ViewKey; label: string; icon: typeof BriefcaseBusiness }> = [
-  { key: "dashboard", label: "Dashboard", icon: BriefcaseBusiness },
+type View = "today" | "map" | "accounts" | "activity";
+type Workspace = Awaited<ReturnType<ReturnType<typeof useServerFn<typeof getHpoWorkspace>>>>;
+type Account = Workspace["accounts"][number];
+type Touch = Workspace["interactions"][number];
+const tabs = [
+  { key: "today", label: "Today", icon: Clock3 },
+  { key: "map", label: "Map", icon: MapPinned },
   { key: "accounts", label: "Accounts", icon: UsersRound },
-  { key: "relationships", label: "Relationships", icon: Handshake },
-  { key: "performance", label: "Performance", icon: BarChart3 },
-  { key: "events", label: "Events", icon: CalendarDays },
-  { key: "notes", label: "Activity", icon: Activity },
-  { key: "tasks", label: "HPO Tasks", icon: ListTodo },
-];
+  { key: "activity", label: "Activity", icon: Activity },
+] as const;
+const field = "min-h-12 w-full rounded-md border border-border/70 bg-card/60 px-3 text-base text-foreground outline-none focus:border-primary";
+const date = (value: string | null | undefined) => value ? new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—";
 
-function dateLabel(value: string | null | undefined) {
-  if (!value) return "No date";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "No date";
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
-function dateTimeLabel(value: string | null | undefined) {
-  if (!value) return "No time set";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "No time set";
-  return date.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
+export const Route = createFileRoute("/_authenticated/hpo")({
+  head: () => ({ meta: [
+    { title: "HPO Field — Emery" },
+    { name: "description", content: "Hudson Pro field routes, territory, accounts, and relationship activity." },
+    { property: "og:title", content: "HPO Field — Emery" },
+    { property: "og:description", content: "Hudson Pro field routes, territory, accounts, and relationship activity." },
+    { property: "og:type", content: "website" },
+    { name: "twitter:card", content: "summary" },
+  ] }),
+  component: HpoWorkspace,
+});
 
 function HpoWorkspace() {
-  const loadDashboard = useServerFn(getHpoDashboard);
-  const addAccount = useServerFn(createHpoAccount);
-  const addInteraction = useServerFn(logHpoInteraction);
-  const stageImport = useServerFn(stageHpoImport);
-  const [data, setData] = useState<any>(null);
+  const read = useServerFn(getHpoWorkspace);
+  const readToday = useServerFn(getHpoFieldToday);
+  const createAccount = useServerFn(createHpoAccount);
+  const logTouch = useServerFn(logHpoInteraction);
+  const setFollowup = useServerFn(setHpoFieldAccountFollowup);
+  const [view, setView] = useState<View>("map");
+  const [data, setData] = useState<Workspace | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<ViewKey>("map");
-  const [showSecondary, setShowSecondary] = useState(false);
-  const initialViewResolved = useRef(false);
-  const [modal, setModal] = useState<"account" | "interaction" | "import" | null>(null);
+  const [error, setError] = useState("");
+  const [selected, setSelected] = useState<string | null>(null);
+  const [sheet, setSheet] = useState<"add" | "log" | "followup" | null>(null);
+  const [logAccount, setLogAccount] = useState("");
+  const [page, setPage] = useState(0);
+  const [moreLoading, setMoreLoading] = useState(false);
+  const [revision, setRevision] = useState(0);
+  const [initialResolved, setInitialResolved] = useState(false);
 
-  async function refresh(quiet = false) {
-    if (quiet) setRefreshing(true);
-    else setLoading(true);
-    setError(null);
-    try {
-      const next = await loadDashboard({});
-      setData(next);
-      if (!initialViewResolved.current) {
-        const todayKey = new Intl.DateTimeFormat("en-CA", {
-          timeZone: "America/New_York",
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-        })
-          .formatToParts(new Date())
-          .reduce((acc: Record<string, string>, part) => {
-            acc[part.type] = part.value;
-            return acc;
-          }, {});
-        const today = `${todayKey["year"]}-${todayKey["month"]}-${todayKey["day"]}`;
-        const hasActiveRoute = (next?.routes ?? []).some(
-          (route: any) =>
-            ["active", "in_progress"].includes(String(route.status)) ||
-            String(route.route_date) === today,
-        );
-        setView(hasActiveRoute ? "today" : "map");
-        initialViewResolved.current = true;
-      }
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Couldn't load HPO right now.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+  async function refresh() {
+    try { setData(await read({ data: { page: 0 } })); setPage(0); setRevision((n) => n + 1); setError(""); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load HPO."); }
+    finally { setLoading(false); }
   }
-
+  useEffect(() => { void refresh(); }, []);
   useEffect(() => {
-    void refresh();
-  }, []);
+    if (initialResolved) return;
+    let cancelled = false;
+    void readToday({}).then((result) => {
+      if (cancelled) return;
+      if (result.route && result.route.route_date === result.today) setView("today");
+      setInitialResolved(true);
+    }).catch(() => setInitialResolved(true));
+    return () => { cancelled = true; };
+  }, [readToday, initialResolved]);
 
-  const accountsById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const account of data?.accounts ?? []) map.set(account.id, account.name);
-    return map;
-  }, [data]);
+  async function loadMore() {
+    if (!data || moreLoading || !data.hasMore) return;
+    setMoreLoading(true);
+    try {
+      const next = await read({ data: { page: page + 1 } });
+      setData({ ...data, interactions: [...data.interactions, ...next.interactions], hasMore: next.hasMore });
+      setPage(page + 1);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load more activity."); }
+    finally { setMoreLoading(false); }
+  }
+  const account = data?.accounts.find((item) => item.id === selected) ?? null;
+  const openLog = (accountId = "") => { setSelected(null); setLogAccount(accountId); setSheet("log"); };
+  const openFollowup = (accountId: string) => { setSelected(null); setLogAccount(accountId); setSheet("followup"); };
 
-  const askEmeryContext =
-    view === "map"
-      ? "I’m in my HPO territory map. Help me build or improve the field route using my real accounts, prospects and follow-ups."
-      : view === "today"
-        ? "I’m in HPO Today / Field Mode. Help me execute the active route, remember where I am, log visits and recover when the day changes."
-        : view === "dashboard"
-          ? "I’m in my HPO dashboard. Help me decide the highest-leverage Hudson Pro sales/relationship action next."
-          : `I’m in HPO ${view}. Help me work through what matters here and decide the next action.`;
-
-  return (
-    <AppShell title="HPO" askEmery={askEmeryContext}>
-      <div className="space-y-5 pb-2">
-        <nav className="sticky top-0 z-20 -mx-1 rounded-[1.35rem] border border-border/45 bg-background/94 p-1 shadow-[0_10px_35px_rgba(0,0,0,0.2)] backdrop-blur-xl">
-          <div className="grid grid-cols-4 gap-1">
-            {([
-              ["map", "Map", MapPinned],
-              ["today", "Today", RouteIcon],
-              ["accounts", "Accounts", UsersRound],
-              ["notes", "Activity", Activity],
-            ] as const).map(([key, label, Icon]) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => {
-                  setView(key);
-                  setShowSecondary(false);
-                }}
-                className={`emery-press flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[10px] font-semibold transition ${
-                  view === key
-                    ? "bg-primary/[0.09] text-primary shadow-[inset_0_0_0_1px_rgba(80,155,255,0.12)]"
-                    : "text-muted-foreground"
-                }`}
-              >
-                <Icon className="size-4" />
-                {label}
-              </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowSecondary((value) => !value)}
-            className="emery-press mt-1 flex min-h-9 w-full items-center justify-center gap-2 rounded-xl text-[10px] font-semibold text-muted-foreground hover:bg-white/[0.025] hover:text-foreground"
-          >
-            More HPO tools
-            <ArrowRight className={`size-3 transition-transform ${showSecondary ? "rotate-90" : ""}`} />
-          </button>
-        </nav>
-
-        {["dashboard", "relationships", "performance", "events", "tasks"].includes(view) ? (
-          <HpoRoutePlannerCompact onOpen={() => setView("map")} />
-        ) : null}
-
-        {view === "dashboard" ? (
-        <section className="emery-fade-up overflow-hidden rounded-[1.75rem] border border-primary/15 bg-[linear-gradient(150deg,oklch(0.18_0.04_158/0.92),oklch(0.115_0.022_160/0.96))] p-4 shadow-[0_24px_70px_rgba(0,0,0,0.28)] sm:p-5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 text-primary">
-                <BriefcaseBusiness className="size-4" />
-                <span className="emery-kicker">Hudson Pro · Work OS</span>
-              </div>
-              <h1 className="mt-2 text-[1.45rem] font-semibold tracking-[-0.035em] sm:text-[1.65rem]">
-                Run the relationship, not the spreadsheet.
-              </h1>
-              <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-                Accounts, field activity, follow-ups and sales signals in one place. Tell Emery what
-                happened — she should handle where it belongs.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => void refresh(true)}
-              aria-label="Refresh HPO dashboard"
-              disabled={refreshing}
-              className="emery-press emery-surface flex size-11 shrink-0 items-center justify-center rounded-2xl text-muted-foreground hover:text-primary disabled:opacity-50"
-            >
-              <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
-            </button>
-          </div>
-
-          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <QuickAction icon={MessageCircle} label="Capture update" href="/capture?context=hpo" />
-            <QuickAction
-              icon={Sparkles}
-              label="What’s next?"
-              href="/capture?context=hpo&text=What%20is%20the%20highest-leverage%20HPO%20action%20I%20should%20do%20next%3F&autosend=1"
-            />
-            <QuickAction icon={Plus} label="Add account" onClick={() => setModal("account")} />
-            <QuickAction
-              icon={ClipboardPlus}
-              label="Log touch"
-              onClick={() => setModal("interaction")}
-            />
-          </div>
-        </section>
-        ) : null}
-
-        {showSecondary || ["dashboard", "relationships", "performance", "events", "tasks"].includes(view) ? (
-          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none]">
-            {views
-              .filter(({ key }) => ["dashboard", "relationships", "performance", "events", "tasks"].includes(key))
-              .map(({ key, label, icon: Icon }) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => {
-                    setView(key);
-                    setShowSecondary(true);
-                  }}
-                  className={`emery-press flex min-h-10 shrink-0 items-center gap-2 rounded-xl border px-3 text-[10px] font-semibold transition ${
-                    view === key
-                      ? "border-primary/25 bg-primary/[0.085] text-primary"
-                      : "border-border/55 bg-card/45 text-muted-foreground"
-                  }`}
-                >
-                  <Icon className="size-3.5" />
-                  {label}
-                </button>
-              ))}
-          </div>
-        ) : null}
-
-        {error ? (
-          <div
-            className="rounded-2xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-            role="alert"
-          >
-            {error}
-          </div>
-        ) : null}
-
-        {view === "map" ? (
-          <HpoRoutePlanner />
-        ) : view === "today" ? (
-          <HpoFieldToday onOpenMap={() => setView("map")} />
-        ) : loading ? (
-          <div className="emery-glass flex min-h-52 items-center justify-center rounded-[1.6rem] text-sm text-muted-foreground">
-            Opening your HPO command center…
-          </div>
-        ) : (
-          <>
-            {view === "dashboard" ? <Dashboard data={data} accountsById={accountsById} /> : null}
-            {view === "accounts" ? (
-              <AccountsView data={data} onAdd={() => setModal("account")} />
-            ) : null}
-            {view === "relationships" ? (
-              <RelationshipsView
-                data={data}
-                accountsById={accountsById}
-                onLog={() => setModal("interaction")}
-              />
-            ) : null}
-            {view === "performance" ? <PerformanceView data={data} /> : null}
-            {view === "events" ? <EventsView data={data} /> : null}
-            {view === "notes" ? <ActivityView data={data} accountsById={accountsById} /> : null}
-            {view === "tasks" ? <TasksView data={data} /> : null}
-          </>
-        )}
-
-        {view === "dashboard" ? (
-        <section className="emery-glass rounded-[1.55rem] p-4">
-          <div className="flex items-start gap-3">
-            <div className="emery-icon-well flex size-10 shrink-0 items-center justify-center rounded-2xl text-primary">
-              <FileUp className="size-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">Ready for your real HPO history</p>
-              <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                The data layer is prepared for accounts, contacts, visits, lunches, route history
-                and aggregate referral metrics. Import provenance stays attached so we can correct
-                or replace bad data later.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setModal("import")}
-                  className="emery-press min-h-11 rounded-2xl border border-primary/20 bg-primary/[0.055] px-3.5 text-xs font-semibold text-primary"
-                >
-                  Stage an import source
-                </button>
-                <a
-                  href="/chat?prefill=Help%20me%20prepare%20my%20HPO%20data%20for%20import%20into%20Emery.%20"
-                  className="emery-press flex min-h-11 items-center rounded-2xl border border-border/60 px-3.5 text-xs font-semibold text-muted-foreground hover:text-foreground"
-                >
-                  Ask Emery to prep data
-                </a>
-              </div>
-            </div>
-          </div>
-        </section>
-        ) : null}
-      </div>
-
-      {modal === "account" ? (
-        <AccountModal
-          onClose={() => setModal(null)}
-          onSave={async (payload) => {
-            await addAccount({ data: payload });
-            setModal(null);
-            await refresh(true);
-          }}
-        />
-      ) : null}
-      {modal === "interaction" ? (
-        <InteractionModal
-          accounts={data?.accounts ?? []}
-          onClose={() => setModal(null)}
-          onSave={async (payload) => {
-            await addInteraction({ data: payload });
-            setModal(null);
-            await refresh(true);
-          }}
-        />
-      ) : null}
-      {modal === "import" ? (
-        <ImportModal
-          onClose={() => setModal(null)}
-          onSave={async (payload) => {
-            await stageImport({ data: payload });
-            setModal(null);
-            await refresh(true);
-          }}
-        />
-      ) : null}
-    </AppShell>
-  );
-}
-
-function QuickAction({
-  icon: Icon,
-  label,
-  href,
-  onClick,
-}: {
-  icon: typeof BriefcaseBusiness;
-  label: string;
-  href?: string;
-  onClick?: () => void;
-}) {
-  const content = (
-    <>
-      <Icon className="size-4" />
-      <span>{label}</span>
-    </>
-  );
-  const className =
-    "emery-press flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-white/8 bg-white/[0.035] px-3 text-center text-xs font-semibold text-muted-foreground hover:border-primary/20 hover:bg-primary/[0.055] hover:text-foreground";
-  return href ? (
-    <a href={href} className={className}>
-      {content}
-    </a>
-  ) : (
-    <button type="button" onClick={onClick} className={className}>
-      {content}
-    </button>
-  );
-}
-
-function Dashboard({ data, accountsById }: { data: any; accountsById: Map<string, string> }) {
-  const signalCards = [
-    {
-      label: "Active accounts",
-      value: data?.signals?.activeAccounts ?? 0,
-      hint: "loaded into HPO",
-    },
-    {
-      label: "Follow-ups due",
-      value: data?.signals?.overdueFollowups ?? 0,
-      hint: "need attention",
-    },
-    {
-      label: "Cold accounts",
-      value: data?.signals?.coldAccounts ?? 0,
-      hint: "30+ days since touch",
-    },
-    { label: "Untapped", value: data?.signals?.untappedAccounts ?? 0, hint: "no touch recorded" },
-  ];
-
-  return (
-    <div className="space-y-4">
-      <section className="emery-glass rounded-[1.6rem] p-4 sm:p-5">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="emery-kicker">Highest-leverage move</p>
-            <h2 className="mt-1.5 text-lg font-semibold tracking-tight">
-              {data?.workFocus?.title ?? "Load your first HPO account"}
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {data?.workFocus?.detail ??
-                "Once your real work data is in, Emery will prioritize the next relationship action here."}
-            </p>
-          </div>
-          <Target className="size-5 shrink-0 text-primary" />
-        </div>
-      </section>
-
-      <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {signalCards.map((card) => (
-          <div key={card.label} className="emery-surface rounded-2xl p-3.5">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              {card.label}
-            </p>
-            <p className="mt-2 text-2xl font-semibold tracking-tight">{card.value}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">{card.hint}</p>
-          </div>
-        ))}
-      </section>
-
-      <section className="grid gap-3 sm:grid-cols-2">
-        <DashboardList
-          title="Follow-ups & tasks"
-          icon={ListTodo}
-          empty="No HPO follow-ups are due yet."
-          rows={(data?.hpoTasks ?? []).slice(0, 5).map((task: any) => ({
-            title: task.title,
-            meta: task.due_at ? `Due ${dateLabel(task.due_at)}` : "No due date",
-          }))}
-        />
-        <DashboardList
-          title="Upcoming HPO events"
-          icon={CalendarDays}
-          empty="No HPO meetings or lunches linked yet."
-          rows={(data?.hpoMeetings ?? []).slice(0, 5).map((meeting: any) => ({
-            title: meeting.title || "Untitled event",
-            meta: dateTimeLabel(meeting.meeting_at),
-          }))}
-        />
-        <DashboardList
-          title="Recent relationship touches"
-          icon={Handshake}
-          empty="No visits or relationship touches logged yet."
-          rows={(data?.recentInteractions ?? []).slice(0, 5).map((touch: any) => ({
-            title: accountsById.get(touch.account_id) ?? "HPO account",
-            meta: `${touch.interaction_type} · ${dateLabel(touch.occurred_at)}`,
-            detail: touch.summary,
-          }))}
-        />
-        <DashboardList
-          title="Route prep"
-          icon={MapPinned}
-          empty="No upcoming route is loaded yet."
-          rows={(data?.routes ?? []).slice(0, 5).map((route: any) => ({
-            title: route.area || "HPO route",
-            meta: `${dateLabel(route.route_date)} · ${route.status}`,
-          }))}
-        />
-      </section>
-
-      <PerformanceSnapshot data={data} />
+  return <AppShell title="HPO" askEmery={`I'm working in HPO ${view}. Help me with my field accounts and route.`}>
+    <div className="mx-auto max-w-5xl space-y-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+      <nav aria-label="HPO field areas" className="sticky top-0 z-20 grid grid-cols-4 gap-1 border-b border-border/60 bg-background/95 p-1 backdrop-blur-md">
+        {tabs.map(({ key, label, icon: Icon }) => <Button key={key} type="button" variant="ghost" onClick={() => setView(key)} aria-current={view === key ? "page" : undefined}
+          className={`h-12 min-w-0 flex-col gap-0.5 rounded-md px-0 text-[11px] ${view === key ? "bg-primary/12 font-semibold text-primary" : "text-muted-foreground"}`}>
+          <Icon className="size-4" /><span>{label}</span>
+        </Button>)}
+      </nav>
+      {error && <div role="alert" className="rounded-md border border-destructive/40 p-3 text-sm text-destructive">{error} <Button variant="ghost" className="ml-2 min-h-11" onClick={() => void refresh()}>Retry</Button></div>}
+      {view === "today" ? <HpoFieldToday key={`today-${revision}`} onOpenMap={() => setView("map")} /> : null}
+      {view === "map" ? <HpoRoutePlanner key={`map-${revision}`} /> : null}
+      {(view === "accounts" || view === "activity") && loading ? <p className="py-12 text-center text-sm text-muted-foreground">Opening HPO records…</p> : null}
+      {view === "accounts" && data ? <Accounts accounts={data.accounts} limited={data.accountLimitReached} onAdd={() => setSheet("add")} onOpen={setSelected} /> : null}
+      {view === "activity" && data ? <ActivityView data={data} onOpen={setSelected} onLog={openLog} onFollowup={openFollowup} onMore={() => void loadMore()} loading={moreLoading} /> : null}
+      {selected && <HpoAccountFieldDetail accountId={selected} onClose={() => setSelected(null)} onChanged={() => void refresh()} onLog={() => openLog(selected)} onFollowup={() => openFollowup(selected)} />}
+      {sheet === "add" && <AccountSheet onClose={() => setSheet(null)} onSave={async (values) => { await createAccount({ data: values }); setSheet(null); await refresh(); }} />}
+      {sheet === "log" && <TouchSheet accounts={data?.accounts ?? []} initialAccount={logAccount} onClose={() => setSheet(null)} onSave={async (values) => { await logTouch({ data: values }); setSheet(null); await refresh(); }} />}
+      {sheet === "followup" && <FollowupSheet account={data?.accounts.find((item) => item.id === logAccount)} onClose={() => setSheet(null)} onSave={async (values) => { await setFollowup({ data: values }); setSheet(null); await refresh(); }} />}
     </div>
-  );
+  </AppShell>;
 }
 
-function DashboardList({
-  title,
-  icon: Icon,
-  rows,
-  empty,
-}: {
-  title: string;
-  icon: typeof BriefcaseBusiness;
-  rows: Array<{ title: string; meta: string; detail?: string }>;
-  empty: string;
-}) {
-  return (
-    <section className="emery-glass rounded-[1.55rem] p-4">
-      <div className="flex items-center gap-2">
-        <Icon className="size-4 text-primary" />
-        <h3 className="text-sm font-semibold">{title}</h3>
-      </div>
-      {rows.length ? (
-        <div className="mt-3 space-y-2">
-          {rows.map((row, index) => (
-            <div key={`${row.title}-${index}`} className="emery-surface rounded-2xl px-3.5 py-3">
-              <div className="flex items-start justify-between gap-3">
-                <p className="text-sm font-medium">{row.title}</p>
-                <span className="shrink-0 text-[10px] text-muted-foreground">{row.meta}</span>
-              </div>
-              {row.detail ? (
-                <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
-                  {row.detail}
-                </p>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="mt-3 text-sm leading-6 text-muted-foreground">{empty}</p>
-      )}
-    </section>
-  );
-}
-
-function PerformanceSnapshot({ data }: { data: any }) {
-  const metrics = data?.metrics;
-  const items = [
-    ["Referrals", metrics?.referrals ?? 0],
-    ["Entered care", metrics?.enteredCare ?? 0],
-    ["Progressing", metrics?.progressing ?? 0],
-    ["Blocked / exception", metrics?.blocked ?? 0],
-    ["Relationship impact", metrics?.relationshipImpact ?? 0],
-  ];
-  return (
-    <section className="emery-glass rounded-[1.55rem] p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <BarChart3 className="size-4 text-primary" />
-            <h3 className="text-sm font-semibold">Sales & referral signals</h3>
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {metrics?.hasData
-              ? `Latest period ending ${dateLabel(metrics.periodEnd)}`
-              : "Ready for aggregate sales/referral data — no patient-level PHI."}
-          </p>
-        </div>
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
-        {items.map(([label, value]) => (
-          <div key={String(label)} className="emery-surface rounded-2xl p-3">
-            <p className="text-[10px] leading-4 text-muted-foreground">{label}</p>
-            <p className="mt-1 text-xl font-semibold">{value}</p>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function AccountsView({ data, onAdd }: { data: any; onAdd: () => void }) {
-  const accounts = data?.accounts ?? [];
-  const [search, setSearch] = useState("");
-  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
-  const filtered = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (!query) return accounts;
-    return accounts.filter((account: any) =>
-      [account.name, account.account_type, account.specialty, account.city, account.owner_name]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(query),
-    );
-  }, [accounts, search]);
-
-  if (!accounts.length)
-    return (
-      <div className="emery-glass rounded-[1.6rem]">
-        <EmptyState
-          icon={UsersRound}
-          title="Ready for your account list"
-          description="Add the first account now, or stage your existing NJ account data for import later."
-        />
-        <div className="flex justify-center pb-6">
-          <button
-            type="button"
-            onClick={onAdd}
-            className="emery-press min-h-11 rounded-2xl bg-primary px-4 text-xs font-semibold text-primary-foreground"
-          >
-            Add first account
-          </button>
-        </div>
-      </div>
-    );
-
-  return (
-    <>
-      <div className="space-y-3">
-        <section className="emery-glass rounded-[1.45rem] p-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold">Accounts</p>
-              <p className="text-[11px] text-muted-foreground">
-                {filtered.length} of {accounts.length} active relationship records
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={onAdd}
-              className="emery-press flex min-h-10 items-center gap-2 rounded-xl border border-primary/20 bg-primary/[0.055] px-3 text-[11px] font-semibold text-primary"
-            >
-              <Plus className="size-3.5" /> Add
-            </button>
-          </div>
-          <div className="relative mt-3">
-            <Compass className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search office, city, specialty, owner"
-              className="h-11 w-full rounded-xl border border-border/50 bg-card/45 pl-9 pr-3 text-[16px] outline-none focus:border-primary/30"
-            />
-          </div>
-        </section>
-
-        <div className="space-y-2">
-          {filtered.map((account: any) => (
-            <button
-              key={account.id}
-              type="button"
-              onClick={() => setSelectedAccountId(account.id)}
-              className="emery-glass emery-press block w-full rounded-[1.45rem] p-4 text-left"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold">{account.name}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {[account.account_type, account.specialty, account.city]
-                      .filter(Boolean)
-                      .join(" · ") || "Relationship account"}
-                  </p>
-                </div>
-                <span className="emery-chip shrink-0">P{account.priority}</span>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                <div className="emery-surface rounded-xl p-2.5">
-                  <span className="text-muted-foreground">Stage</span>
-                  <p className="mt-1 font-medium capitalize">{account.relationship_stage}</p>
-                </div>
-                <div className="emery-surface rounded-xl p-2.5">
-                  <span className="text-muted-foreground">Last touch</span>
-                  <p className="mt-1 font-medium">
-                    {account.last_touch_at ? dateLabel(account.last_touch_at) : "Not yet"}
-                  </p>
-                </div>
-              </div>
-              <div className="mt-3 flex items-center gap-3 rounded-xl border border-border/45 px-3 py-2.5">
-                <div className="min-w-0 flex-1">
-                  <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    Next relationship action
-                  </p>
-                  <p className="mt-1 truncate text-xs">{account.next_action || "Not set yet"}</p>
-                </div>
-                <ArrowRight className="size-4 shrink-0 text-primary" />
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {selectedAccountId ? (
-        <HpoAccountFieldDetail
-          accountId={selectedAccountId}
-          onClose={() => setSelectedAccountId(null)}
-        />
-      ) : null}
-    </>
-  );
-}
-function RelationshipsView({
-  data,
-  accountsById,
-  onLog,
-}: {
-  data: any;
-  accountsById: Map<string, string>;
-  onLog: () => void;
-}) {
-  const interactions = data?.recentInteractions ?? [];
-  return (
-    <section className="emery-glass rounded-[1.6rem] p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold">Relationship timeline</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Visits, calls, lunches and meaningful touches feed the next relationship action.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onLog}
-          className="emery-press flex min-h-11 shrink-0 items-center gap-2 rounded-2xl border border-primary/20 bg-primary/[0.055] px-3 text-xs font-semibold text-primary"
-        >
-          <Plus className="size-3.5" /> Log
-        </button>
-      </div>
-      {interactions.length ? (
-        <div className="mt-4 space-y-2">
-          {interactions.map((item: any) => (
-            <div key={item.id} className="emery-surface rounded-2xl p-3.5">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold">
-                    {accountsById.get(item.account_id) ?? "HPO account"}
-                  </p>
-                  <p className="mt-0.5 text-[11px] capitalize text-primary">
-                    {item.interaction_type}
-                  </p>
-                </div>
-                <span className="text-[10px] text-muted-foreground">
-                  {dateLabel(item.occurred_at)}
-                </span>
-              </div>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">{item.summary}</p>
-              {item.next_action ? (
-                <p className="mt-2 text-xs">
-                  <span className="text-muted-foreground">Next:</span> {item.next_action}
-                </p>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="mt-4 text-sm leading-6 text-muted-foreground">
-          No relationship touches have been logged yet. Once your marketing history is imported,
-          this becomes the relationship timeline.
-        </p>
-      )}
-    </section>
-  );
-}
-
-function RoutesView({ data }: { data: any }) {
-  const routes = data?.routes ?? [];
-  return routes.length ? (
-    <div className="space-y-2">
-      {routes.map((route: any) => (
-        <div key={route.id} className="emery-glass rounded-[1.45rem] p-4">
-          <div className="flex items-center gap-3">
-            <div className="emery-icon-well flex size-10 items-center justify-center rounded-2xl text-primary">
-              <Compass className="size-4" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold">{route.area || "HPO field route"}</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {dateLabel(route.route_date)} · {route.status}
-              </p>
-            </div>
-          </div>
-        </div>
-      ))}
+function Accounts({ accounts, limited, onAdd, onOpen }: { accounts: Account[]; limited: boolean; onAdd: () => void; onOpen: (id: string) => void }) {
+  const [query, setQuery] = useState("");
+  const [type, setType] = useState("all");
+  const [stage, setStage] = useState("all");
+  const [city, setCity] = useState("all");
+  const types = useMemo(() => [...new Set(accounts.map((a) => a.account_type).filter(Boolean))].sort() as string[], [accounts]);
+  const stages = useMemo(() => [...new Set(accounts.map((a) => a.relationship_stage).filter(Boolean))].sort(), [accounts]);
+  const cities = useMemo(() => [...new Set(accounts.map((a) => a.city).filter(Boolean))].sort() as string[], [accounts]);
+  const shown = accounts.filter((a) => {
+    const text = [a.name, a.account_type, a.specialty, a.city, a.territory, a.address].join(" ").toLowerCase();
+    return (!query || text.includes(query.toLowerCase())) && (type === "all" || a.account_type === type) && (stage === "all" || a.relationship_stage === stage) && (city === "all" || a.city === city);
+  });
+  return <section className="space-y-3">
+    <div className="flex items-center justify-between gap-2"><div><h1 className="text-lg font-semibold">Accounts</h1><p className="text-xs text-muted-foreground">{shown.length} offices</p></div><Button onClick={onAdd} className="h-11 px-3"><Plus /> Add</Button></div>
+    <label className="relative block"><Search className="pointer-events-none absolute left-3 top-3.5 size-4 text-muted-foreground" /><span className="sr-only">Search accounts</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search office, city or address" className={`${field} pl-10`} /></label>
+    <div className="grid grid-cols-3 gap-1.5">
+      <Filter value={type} onChange={setType} label="Type" options={types} />
+      <Filter value={stage} onChange={setStage} label="Stage" options={stages} />
+      <Filter value={city} onChange={setCity} label="City" options={cities} />
     </div>
-  ) : (
-    <EmptyState
-      icon={MapPinned}
-      title="Routes are ready"
-      description="Your existing route history can be imported here, then Route Agent can work from verified account addresses and priorities."
-    />
-  );
-}
-
-function PerformanceView({ data }: { data: any }) {
-  return <PerformanceSnapshot data={data} />;
-}
-
-function EventsView({ data }: { data: any }) {
-  const events = data?.hpoMeetings ?? [];
-  return events.length ? (
-    <div className="space-y-2">
-      {events.map((event: any) => (
-        <div key={event.id} className="emery-glass rounded-[1.45rem] p-4">
-          <p className="text-sm font-semibold">{event.title || "HPO event"}</p>
-          <p className="mt-1 text-xs text-muted-foreground">{dateTimeLabel(event.meeting_at)}</p>
-        </div>
-      ))}
+    {limited && <p className="text-xs text-muted-foreground">Showing the first 1,000 accounts.</p>}
+    <div className="divide-y divide-border/55 border-y border-border/55">
+      {shown.map((a) => <Button key={a.id} variant="ghost" onClick={() => onOpen(a.id)} className="h-auto min-h-[76px] w-full justify-between gap-2 rounded-none px-1.5 py-2 text-left hover:bg-card/60">
+        <span className="min-w-0 flex-1 whitespace-normal"><span className="block break-words text-sm font-semibold">{a.name}</span><span className="mt-1 block break-words text-xs font-normal text-muted-foreground">{[a.account_type, a.city, a.relationship_stage].filter(Boolean).join(" · ") || "Account"}</span><span className="mt-1 block break-words text-[11px] font-normal text-muted-foreground">{a.next_action ? `Next: ${a.next_action}${a.next_action_due_at ? ` · ${date(a.next_action_due_at)}` : ""}` : `Last touch: ${date(a.last_touch_at)}`}</span></span><span className="flex shrink-0 items-center gap-1 text-xs text-primary">P{a.priority}<ChevronRight className="size-4" /></span>
+      </Button>)}
+      {!shown.length && <p className="py-12 text-center text-sm text-muted-foreground">{accounts.length ? "No accounts match these filters." : "No accounts yet. Add your first office."}</p>}
     </div>
-  ) : (
-    <EmptyState
-      icon={CalendarDays}
-      title="No HPO events linked yet"
-      description="Work lunches, dinners and meetings stay in Emery’s meeting system and appear here when tagged to HPO."
-    />
-  );
+  </section>;
+}
+function Filter({ value, onChange, label, options }: { value: string; onChange: (value: string) => void; label: string; options: string[] }) {
+  return <label className="min-w-0"><span className="sr-only">{label}</span><select value={value} onChange={(e) => onChange(e.target.value)} className="h-11 w-full min-w-0 rounded-md border border-border/70 bg-card/60 px-1.5 text-xs text-foreground"><option value="all">{label}: All</option>{options.map((o) => <option key={o} value={o}>{o}</option>)}</select></label>;
+}
+function ActivityView({ data, onOpen, onLog, onFollowup, onMore, loading }: { data: Workspace; onOpen: (id: string) => void; onLog: (id?: string) => void; onFollowup: (id: string) => void; onMore: () => void; loading: boolean }) {
+  const [filter, setFilter] = useState("all");
+  const names = new Map(data.accounts.map((a) => [a.id, a.name]));
+  const today = Date.now();
+  const due = data.accounts.filter((a) => a.next_action && a.next_action_due_at && Date.parse(a.next_action_due_at) <= today).sort((a, b) => Date.parse(a.next_action_due_at || "") - Date.parse(b.next_action_due_at || ""));
+  const items = data.interactions.filter((i) => filter === "all" || (filter === "visit" ? i.interaction_type === "visit" : i.interaction_type !== "visit"));
+  return <section className="space-y-4">
+    <div className="flex items-center justify-between gap-2"><h1 className="text-lg font-semibold">Activity</h1><Button className="h-11 px-3" onClick={() => onLog()}><Plus /> Log</Button></div>
+    {due.length > 0 && <div className="border-y border-border/60 py-2"><h2 className="mb-1 text-xs font-semibold uppercase text-primary">Follow-ups due · {due.length}</h2>{due.slice(0, 8).map((a) => <div key={a.id} className="flex min-h-14 items-center gap-2 border-b border-border/35 py-2 last:border-0"><Button variant="ghost" onClick={() => onOpen(a.id)} className="h-auto min-h-11 min-w-0 flex-1 justify-start whitespace-normal text-left"><span className="min-w-0 break-words"><strong className="block text-xs">{a.name}</strong><span className="text-xs font-normal text-muted-foreground">{a.next_action}</span></span></Button><Button variant="outline" className="h-11 shrink-0 px-2 text-xs" onClick={() => onFollowup(a.id)}>Update</Button></div>)}</div>}
+    {data.meetings.length > 0 && <div className="border-b border-border/60 pb-3"><h2 className="mb-2 text-xs font-semibold uppercase text-primary">Upcoming</h2>{data.meetings.slice(0, 5).map((meeting) => <div key={meeting.id} className="flex gap-2 py-1.5 text-xs"><CalendarDays className="size-4 shrink-0 text-primary" /><span className="min-w-0 break-words">{meeting.title || "HPO event"}</span><time className="ml-auto shrink-0 text-muted-foreground">{date(meeting.meeting_at)}</time></div>)}</div>}
+    <div className="flex gap-1 border-b border-border/60 pb-2">{[["all", "All"], ["visit", "Visits"], ["touch", "Other touches"]].map(([key, label]) => <Button key={key} variant="ghost" className={`h-11 px-3 text-xs ${filter === key ? "bg-primary/12 text-primary" : "text-muted-foreground"}`} onClick={() => setFilter(key)}>{label}</Button>)}</div>
+    <div className="divide-y divide-border/50">{items.map((i: Touch) => <Button key={i.id} variant="ghost" onClick={() => onOpen(i.account_id)} className="h-auto min-h-[76px] w-full justify-start rounded-none px-1 py-2.5 text-left hover:bg-card/50"><span className="min-w-0 whitespace-normal"><span className="block text-sm font-semibold">{names.get(i.account_id) || "Account"} <span className="font-normal capitalize text-primary">· {i.interaction_type}</span></span><span className="block break-words text-xs font-normal leading-5 text-muted-foreground">{i.summary}</span><span className="block text-[11px] font-normal text-muted-foreground">{date(i.occurred_at)}{i.next_action ? ` · Next: ${i.next_action}` : ""}</span></span></Button>)}{!items.length && <p className="py-10 text-center text-sm text-muted-foreground">No activity in this view yet.</p>}</div>
+    {data.hasMore && <Button variant="outline" className="h-11 w-full" onClick={onMore} disabled={loading}>{loading ? "Loading…" : "Earlier activity"}</Button>}
+  </section>;
 }
 
-function ActivityView({ data, accountsById }: { data: any; accountsById: Map<string, string> }) {
-  return (
-    <RelationshipsView
-      data={data}
-      accountsById={accountsById}
-      onLog={() => {
-        window.location.href =
-          "/chat?prefill=I%20need%20to%20log%20an%20HPO%20relationship%20update%3A%20";
-      }}
-    />
-  );
+function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return <div className="fixed inset-0 z-[82] flex items-end justify-center bg-background/75 sm:items-center sm:p-4" role="presentation" onClick={onClose}><section role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()} className="flex max-h-[min(92dvh,calc(100dvh-1rem))] w-full max-w-lg flex-col rounded-t-lg border border-border bg-background sm:rounded-lg"><div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-2"><h2 className="text-base font-semibold">{title}</h2><Button variant="ghost" size="icon" className="size-11" aria-label="Close" onClick={onClose}><X /></Button></div><div className="min-h-0 overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 [-webkit-overflow-scrolling:touch]">{children}</div></section></div>;
 }
-
-function TasksView({ data }: { data: any }) {
-  const tasks = data?.hpoTasks ?? [];
-  return tasks.length ? (
-    <div className="space-y-2">
-      {tasks.map((task: any) => (
-        <Link
-          key={task.id}
-          to="/tasks"
-          className="emery-glass emery-press block rounded-[1.45rem] p-4"
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold">{task.title}</p>
-              {task.details ? (
-                <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
-                  {task.details}
-                </p>
-              ) : null}
-            </div>
-            <ArrowRight className="size-4 shrink-0 text-muted-foreground" />
-          </div>
-          <p className="mt-2 text-[11px] text-muted-foreground">
-            Priority {task.priority} ·{" "}
-            {task.due_at ? `due ${dateLabel(task.due_at)}` : "no due date"}
-          </p>
-        </Link>
-      ))}
-    </div>
-  ) : (
-    <EmptyState
-      icon={CheckCircle2}
-      title="No HPO tasks yet"
-      description="HPO does not create a second task system. Work tasks stay in your global Tasks and surface here when linked to HPO."
-    />
-  );
+function AccountSheet({ onClose, onSave }: { onClose: () => void; onSave: (values: { name: string; accountType: string; address: string; city: string; notes: string }) => Promise<void> }) {
+  const [name, setName] = useState(""); const [accountType, setType] = useState(""); const [address, setAddress] = useState(""); const [city, setCity] = useState(""); const [notes, setNotes] = useState(""); const [saving, setSaving] = useState(false); const [error, setError] = useState("");
+  return <Sheet title="Add account" onClose={onClose}><form className="space-y-3" onSubmit={async (e) => { e.preventDefault(); setSaving(true); setError(""); try { await onSave({ name, accountType, address, city, notes }); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save account."); } finally { setSaving(false); } }}><label className="block text-xs text-muted-foreground">Office name<input required value={name} onChange={(e) => setName(e.target.value)} className={`mt-1 ${field}`} /></label><label className="block text-xs text-muted-foreground">Type<input value={accountType} onChange={(e) => setType(e.target.value)} placeholder="Attorney, provider…" className={`mt-1 ${field}`} /></label><label className="block text-xs text-muted-foreground">Address<input value={address} onChange={(e) => setAddress(e.target.value)} className={`mt-1 ${field}`} /></label><label className="block text-xs text-muted-foreground">City<input value={city} onChange={(e) => setCity(e.target.value)} className={`mt-1 ${field}`} /></label><label className="block text-xs text-muted-foreground">Relationship notes<textarea value={notes} onChange={(e) => setNotes(e.target.value)} className={`mt-1 min-h-24 py-3 ${field}`} /></label>{error && <p role="alert" className="text-xs text-destructive">{error}</p>}<Button className="h-12 w-full" disabled={saving || !name.trim()}>{saving ? "Saving…" : "Save account"}</Button></form></Sheet>;
 }
-
-function ModalShell({
-  title,
-  onClose,
-  children,
-}: {
-  title: string;
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/65 p-0 backdrop-blur-sm sm:items-center sm:p-4">
-      <div className="emery-glass-strong max-h-[88dvh] w-full max-w-lg overflow-y-auto rounded-t-[2rem] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:rounded-[2rem] sm:p-5">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="emery-press min-h-11 rounded-2xl px-3 text-xs font-semibold text-muted-foreground"
-          >
-            Cancel
-          </button>
-        </div>
-        <div className="mt-4">{children}</div>
-      </div>
-    </div>
-  );
+function TouchSheet({ accounts, initialAccount, onClose, onSave }: { accounts: Account[]; initialAccount: string; onClose: () => void; onSave: (values: { accountId: string; interactionType: string; summary: string; outcome: string; nextAction: string; nextActionDueAt: string | null }) => Promise<void> }) {
+  const [accountId, setAccount] = useState(initialAccount || accounts[0]?.id || ""); const [kind, setKind] = useState("visit"); const [summary, setSummary] = useState(""); const [outcome, setOutcome] = useState(""); const [nextAction, setNext] = useState(""); const [due, setDue] = useState(""); const [saving, setSaving] = useState(false); const [error, setError] = useState("");
+  return <Sheet title="Log field activity" onClose={onClose}><form className="space-y-3" onSubmit={async (e) => { e.preventDefault(); setSaving(true); setError(""); try { await onSave({ accountId, interactionType: kind, summary, outcome, nextAction, nextActionDueAt: due ? new Date(`${due}T12:00:00`).toISOString() : null }); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not log activity."); } finally { setSaving(false); } }}><label className="block text-xs text-muted-foreground">Account<select required value={accountId} onChange={(e) => setAccount(e.target.value)} className={`mt-1 ${field}`}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label><label className="block text-xs text-muted-foreground">Activity<select value={kind} onChange={(e) => setKind(e.target.value)} className={`mt-1 ${field}`}><option value="visit">Office visit</option><option value="call">Call</option><option value="text">Text</option><option value="email">Email</option><option value="lunch">Lunch</option><option value="other">Other touch</option></select></label><label className="block text-xs text-muted-foreground">Notes<textarea required value={summary} onChange={(e) => setSummary(e.target.value)} placeholder="Who did you speak with? What happened?" className={`mt-1 min-h-32 py-3 ${field}`} /></label><label className="block text-xs text-muted-foreground">Result<input value={outcome} onChange={(e) => setOutcome(e.target.value)} className={`mt-1 ${field}`} /></label><label className="block text-xs text-muted-foreground">Follow-up<input value={nextAction} onChange={(e) => setNext(e.target.value)} className={`mt-1 ${field}`} /></label><label className="block text-xs text-muted-foreground">Follow-up date<input type="date" value={due} onChange={(e) => setDue(e.target.value)} className={`mt-1 ${field}`} /></label>{error && <p role="alert" className="text-xs text-destructive">{error}</p>}<Button className="h-12 w-full" disabled={saving || !accountId || !summary.trim()}>{saving ? "Saving…" : "Save activity"}</Button></form></Sheet>;
 }
-
-const fieldClass =
-  "min-h-12 w-full rounded-2xl border border-border/60 bg-card/65 px-3.5 text-[16px] outline-none transition focus:border-primary/35 sm:text-sm";
-const textareaClass =
-  "min-h-24 w-full rounded-2xl border border-border/60 bg-card/65 px-3.5 py-3 text-[16px] outline-none transition focus:border-primary/35 sm:text-sm";
-
-function AccountModal({
-  onClose,
-  onSave,
-}: {
-  onClose: () => void;
-  onSave: (payload: any) => Promise<void>;
-}) {
-  const [name, setName] = useState("");
-  const [type, setType] = useState("");
-  const [city, setCity] = useState("");
-  const [notes, setNotes] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <ModalShell title="Add HPO account" onClose={onClose}>
-      <form
-        onSubmit={async (e) => {
-          e.preventDefault();
-          if (!name.trim()) return;
-          setSaving(true);
-          setError(null);
-          try {
-            await onSave({ name, accountType: type, city, notes });
-          } catch (caught) {
-            setError(caught instanceof Error ? caught.message : "Couldn't save account.");
-            setSaving(false);
-          }
-        }}
-        className="space-y-3"
-      >
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Account / office name"
-          className={fieldClass}
-          autoFocus
-        />
-        <input
-          value={type}
-          onChange={(e) => setType(e.target.value)}
-          placeholder="Type — PCP, attorney, OB/GYN…"
-          className={fieldClass}
-        />
-        <input
-          value={city}
-          onChange={(e) => setCity(e.target.value)}
-          placeholder="City"
-          className={fieldClass}
-        />
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Relationship context or notes"
-          className={textareaClass}
-        />
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        <button
-          disabled={saving || !name.trim()}
-          className="emery-press min-h-12 w-full rounded-2xl bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-40"
-        >
-          {saving ? "Saving…" : "Save account"}
-        </button>
-      </form>
-    </ModalShell>
-  );
-}
-
-function InteractionModal({
-  accounts,
-  onClose,
-  onSave,
-}: {
-  accounts: any[];
-  onClose: () => void;
-  onSave: (payload: any) => Promise<void>;
-}) {
-  const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
-  const [type, setType] = useState("visit");
-  const [summary, setSummary] = useState("");
-  const [outcome, setOutcome] = useState("");
-  const [nextAction, setNextAction] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <ModalShell title="Log HPO relationship touch" onClose={onClose}>
-      {accounts.length ? (
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault();
-            if (!accountId || !summary.trim()) return;
-            setSaving(true);
-            setError(null);
-            try {
-              await onSave({ accountId, interactionType: type, summary, outcome, nextAction });
-            } catch (caught) {
-              setError(caught instanceof Error ? caught.message : "Couldn't log touch.");
-              setSaving(false);
-            }
-          }}
-          className="space-y-3"
-        >
-          <select
-            value={accountId}
-            onChange={(e) => setAccountId(e.target.value)}
-            className={fieldClass}
-          >
-            {accounts.map((account) => (
-              <option key={account.id} value={account.id}>
-                {account.name}
-              </option>
-            ))}
-          </select>
-          <select value={type} onChange={(e) => setType(e.target.value)} className={fieldClass}>
-            <option value="visit">Office visit</option>
-            <option value="call">Call</option>
-            <option value="text">Text</option>
-            <option value="email">Email</option>
-            <option value="lunch">Lunch</option>
-            <option value="dinner">Dinner</option>
-            <option value="event">Event</option>
-            <option value="other">Other</option>
-          </select>
-          <textarea
-            value={summary}
-            onChange={(e) => setSummary(e.target.value)}
-            placeholder="What happened?"
-            className={textareaClass}
-          />
-          <input
-            value={outcome}
-            onChange={(e) => setOutcome(e.target.value)}
-            placeholder="Outcome / opportunity"
-            className={fieldClass}
-          />
-          <input
-            value={nextAction}
-            onChange={(e) => setNextAction(e.target.value)}
-            placeholder="Next relationship action"
-            className={fieldClass}
-          />
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          <button
-            disabled={saving || !summary.trim()}
-            className="emery-press min-h-12 w-full rounded-2xl bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-40"
-          >
-            {saving ? "Saving…" : "Log relationship touch"}
-          </button>
-        </form>
-      ) : (
-        <div>
-          <p className="text-sm leading-6 text-muted-foreground">
-            Add or import an account before logging a relationship touch.
-          </p>
-          <button
-            type="button"
-            onClick={onClose}
-            className="mt-4 min-h-11 rounded-2xl border border-border/60 px-4 text-sm"
-          >
-            Close
-          </button>
-        </div>
-      )}
-    </ModalShell>
-  );
-}
-
-function ImportModal({
-  onClose,
-  onSave,
-}: {
-  onClose: () => void;
-  onSave: (payload: any) => Promise<void>;
-}) {
-  const [sourceType, setSourceType] = useState("spreadsheet");
-  const [sourceName, setSourceName] = useState("");
-  const [notes, setNotes] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <ModalShell title="Stage HPO data source" onClose={onClose}>
-      <form
-        onSubmit={async (e) => {
-          e.preventDefault();
-          setSaving(true);
-          setError(null);
-          try {
-            await onSave({ sourceType, sourceName, notes });
-          } catch (caught) {
-            setError(caught instanceof Error ? caught.message : "Couldn't stage import.");
-            setSaving(false);
-          }
-        }}
-        className="space-y-3"
-      >
-        <select
-          value={sourceType}
-          onChange={(e) => setSourceType(e.target.value)}
-          className={fieldClass}
-        >
-          <option value="spreadsheet">Spreadsheet / CSV</option>
-          <option value="chatgpt_history">ChatGPT marketing history</option>
-          <option value="marketing_notes">Marketing notes</option>
-          <option value="route_history">Route history</option>
-          <option value="manual">Manual source</option>
-        </select>
-        <input
-          value={sourceName}
-          onChange={(e) => setSourceName(e.target.value)}
-          placeholder="Source name or file name"
-          className={fieldClass}
-        />
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="What data will this source contain?"
-          className={textareaClass}
-        />
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        <button
-          disabled={saving}
-          className="emery-press min-h-12 w-full rounded-2xl bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-40"
-        >
-          {saving ? "Staging…" : "Stage source"}
-        </button>
-      </form>
-    </ModalShell>
-  );
+function FollowupSheet({ account, onClose, onSave }: { account: Account | undefined; onClose: () => void; onSave: (values: { accountId: string; nextAction: string; dueAt: string | null }) => Promise<void> }) {
+  const [action, setAction] = useState(account?.next_action || ""); const [due, setDue] = useState(account?.next_action_due_at?.slice(0, 10) || ""); const [saving, setSaving] = useState(false); const [error, setError] = useState("");
+  return <Sheet title={`Follow-up · ${account?.name || "Account"}`} onClose={onClose}><form className="space-y-3" onSubmit={async (e) => { e.preventDefault(); if (!account) return; setSaving(true); setError(""); try { await onSave({ accountId: account.id, nextAction: action, dueAt: due ? new Date(`${due}T12:00:00`).toISOString() : null }); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save follow-up."); } finally { setSaving(false); } }}><label className="block text-xs text-muted-foreground">Next action<textarea required value={action} onChange={(e) => setAction(e.target.value)} className={`mt-1 min-h-24 py-3 ${field}`} /></label><label className="block text-xs text-muted-foreground">Due date<input type="date" value={due} onChange={(e) => setDue(e.target.value)} className={`mt-1 ${field}`} /></label>{error && <p role="alert" className="text-xs text-destructive">{error}</p>}<Button className="h-12 w-full" disabled={saving || !action.trim()}>{saving ? "Saving…" : "Save follow-up"}</Button></form></Sheet>;
 }
