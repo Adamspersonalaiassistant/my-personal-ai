@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- Existing HPO payloads include dynamic metadata and legacy records. */
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { geocodeHpoOfficeAddress } from "@/lib/hpo-geocode";
 
 type Json = Record<string, unknown>;
 
@@ -244,6 +245,9 @@ export const createHpoAccount = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }) => {
     const db = context.supabase as any;
+    const point = data.address
+      ? await geocodeHpoOfficeAddress(data.address, data.city).catch(() => null)
+      : null;
     const { data: account, error } = await db
       .from("hpo_accounts")
       .insert({
@@ -254,13 +258,16 @@ export const createHpoAccount = createServerFn({ method: "POST" })
         territory: data.territory,
         city: data.city,
         address: data.address,
+        latitude: point?.lat ?? null,
+        longitude: point?.lon ?? null,
+        geocoded_at: data.address ? new Date().toISOString() : null,
         priority: data.priority,
         owner_name: data.ownerName,
         relationship_stage: data.relationshipStage,
         notes: data.notes,
         source_origin: "manual",
       })
-      .select("id, name")
+      .select("id, name, latitude, longitude")
       .single();
     if (error) throw error;
     return account;
