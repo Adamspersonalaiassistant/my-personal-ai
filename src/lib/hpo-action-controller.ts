@@ -6,13 +6,14 @@ import {
   completeExecution,
   failExecution,
 } from "@/lib/execution-ledger";
+import { geocodeHpoOfficeAddress } from "@/lib/hpo-geocode";
 
 export type HpoActionResult = {
   recognized: boolean;
   performed: boolean;
   needsClarification: boolean;
   question: string | null;
-  action: "none" | "log_touch" | "set_followup";
+  action: "none" | "log_touch" | "set_followup" | "create_account";
   accountId: string | null;
   accountName: string | null;
   recordId: string | null;
@@ -103,7 +104,8 @@ Discussion, brainstorming, route questions, or statements such as "I might follo
 Allowed actions:
 1. log_touch — log a non-PHI relationship interaction for one exact current HPO account.
 2. set_followup — set a next relationship action for one exact current HPO account.
-3. none — no write.
+3. create_account — create a new HPO account only when Adam explicitly tells Emery to add/create that office as an HPO account. Require an account name and a physical street address so the account can be plotted on the HPO map.
+4. none — no write.
 
 PRIVACY BOUNDARY:
 Never put patient names, DOBs, diagnoses, claims/case numbers, treatment details, medical records, or other PHI into HPO account intelligence. If Adam's request contains patient-identifying material, do not write it; ask him to restate only the relationship-level/non-PHI part.
@@ -118,6 +120,7 @@ TARGETING:
 
 For log_touch, summary must contain only the relationship-level facts Adam actually supplied. next_action may be captured if he supplied one.
 For set_followup, next_action is required.
+For create_account, target_account_id must be null. Extract account_name, account_type, specialty, city, address, and priority only from Adam's request or recent conversation. If account_name or address is missing, set needs_clarification=true and ask only for the missing information.
 Return strict JSON only.`,
         },
         { role: "system", content: `CURRENT LOCAL TIME: ${localNow} (${timezone})` },
@@ -134,7 +137,7 @@ Return strict JSON only.`,
             additionalProperties: false,
             properties: {
               recognized: { type: "boolean" },
-              action: { type: "string", enum: ["none", "log_touch", "set_followup"] },
+              action: { type: "string", enum: ["none", "log_touch", "set_followup", "create_account"] },
               needs_clarification: { type: "boolean" },
               clarification_question: { type: ["string", "null"] },
               target_account_id: { type: ["string", "null"] },
@@ -144,9 +147,15 @@ Return strict JSON only.`,
               relationship_signal: { type: "string" },
               next_action: { type: "string" },
               due_at: { type: ["string", "null"] },
+              account_name: { type: "string" },
+              account_type: { type: "string" },
+              specialty: { type: "string" },
+              city: { type: "string" },
+              address: { type: "string" },
+              priority: { type: ["integer", "null"], minimum: 1, maximum: 5 },
               contains_phi: { type: "boolean" },
             },
-            required: ["recognized","action","needs_clarification","clarification_question","target_account_id","interaction_type","summary","outcome","relationship_signal","next_action","due_at","contains_phi"],
+            required: ["recognized","action","needs_clarification","clarification_question","target_account_id","interaction_type","summary","outcome","relationship_signal","next_action","due_at","account_name","account_type","specialty","city","address","priority","contains_phi"],
           },
         },
       },
@@ -156,7 +165,7 @@ Return strict JSON only.`,
   if (!resp.ok) throw new Error(`HPO action model failed: ${resp.status}`);
   const raw = responseText(await resp.json());
   const parsed = JSON.parse(raw || "{}");
-  const action = ["log_touch", "set_followup"].includes(parsed.action) ? parsed.action : "none";
+  const action = ["log_touch", "set_followup", "create_account"].includes(parsed.action) ? parsed.action : "none";
 
   if (!parsed.recognized || action === "none") {
     return { recognized: false, performed: false, needsClarification: false, question: null, action: "none", accountId: null, accountName: null, recordId: null, nextAction: null, dueAt: null };
@@ -180,6 +189,8 @@ Return strict JSON only.`,
       targetAccountId: parsed.target_account_id ?? null,
       nextAction: parsed.next_action ?? null,
       dueAt: parsed.due_at ?? null,
+      accountName: parsed.account_name ?? null,
+      address: parsed.address ?? null,
     },
   });
 
@@ -222,6 +233,124 @@ Return strict JSON only.`,
       runId: execution.id,
       question: result.question ?? "Which HPO account do you mean?",
       resultPayload: { hpoResult: result as unknown as Record<string, unknown> },
+    });
+    return result;
+  }
+
+  if (action === "create_account") {
+    const accountName = String(parsed.account_name ?? "").trim();
+    const address = String(parsed.address ?? "").trim();
+    if (!accountName || !address) {
+      const question = !accountName
+        ? "What account name should I use?"
+        : "What is the office street address so I can add it and plot it on the HPO map?";
+      const result: HpoActionResult = {
+        recognized: true,
+        performed: false,
+        needsClarification: true,
+        question,
+        action,
+        accountId: null,
+        accountName: accountName || null,
+        recordId: null,
+        nextAction: null,
+        dueAt: null,
+      };
+      await clarifyExecution({
+        db,
+        userId,
+        runId: execution.id,
+        question,
+        resultPayload: { hpoResult: result as unknown as Record<string, unknown> },
+      });
+      return result;
+    }
+
+    const existing = accountRows.find(
+      (row: any) => String(row.name ?? "").trim().toLowerCase() === accountName.toLowerCase(),
+    );
+    if (existing) {
+      const result: HpoActionResult = {
+        recognized: true,
+        performed: false,
+        needsClarification: false,
+        question: null,
+        action,
+        accountId: existing.id,
+        accountName: existing.name,
+        recordId: existing.id,
+        nextAction: null,
+        dueAt: null,
+      };
+      await completeExecution({
+        db,
+        userId,
+        runId: execution.id,
+        resultPayload: { hpoResult: result as unknown as Record<string, unknown> },
+        targetType: "hpo_account",
+        targetId: existing.id,
+      });
+      return result;
+    }
+
+    const city = String(parsed.city ?? "").trim() || null;
+    const point = await geocodeHpoOfficeAddress(address, city).catch(() => null);
+    const inserted = await db
+      .from("hpo_accounts")
+      .insert({
+        user_id: userId,
+        name: accountName,
+        account_type: String(parsed.account_type ?? "").trim() || null,
+        specialty: String(parsed.specialty ?? "").trim() || null,
+        city,
+        address,
+        latitude: point?.lat ?? null,
+        longitude: point?.lon ?? null,
+        geocoded_at: new Date().toISOString(),
+        priority:
+          Number.isFinite(Number(parsed.priority))
+            ? Math.max(1, Math.min(5, Math.round(Number(parsed.priority))))
+            : 3,
+        relationship_stage: "active",
+        source_origin: "emery_voice_account_create",
+        metadata: {
+          source_message_id: input.sourceMessageId ?? null,
+          map_ready: Boolean(point),
+        },
+      })
+      .select("id,name,latitude,longitude")
+      .single();
+    if (inserted.error || !inserted.data) {
+      await failExecution({
+        db,
+        userId,
+        runId: execution.id,
+        errorCode: "hpo_account_create_failed",
+        errorMessage: String(inserted.error?.message ?? inserted.error ?? "Account creation failed"),
+        retryable: true,
+      });
+      throw inserted.error ?? new Error("HPO account creation failed");
+    }
+
+    const result: HpoActionResult = {
+      recognized: true,
+      performed: true,
+      needsClarification: false,
+      question: null,
+      action,
+      accountId: inserted.data.id,
+      accountName: inserted.data.name,
+      recordId: inserted.data.id,
+      nextAction: null,
+      dueAt: null,
+    };
+    await completeExecution({
+      db,
+      userId,
+      runId: execution.id,
+      resultPayload: { hpoResult: result as unknown as Record<string, unknown> },
+      targetType: "hpo_account",
+      targetId: inserted.data.id,
     });
     return result;
   }
