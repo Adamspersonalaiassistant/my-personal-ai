@@ -2,6 +2,7 @@
 import {
   executeHpoRouteCreateCore,
   executeHpoRouteOptimizeCore,
+  executeHpoRouteSyncCalendarCore,
 } from "@/lib/hpo-route.functions";
 import {
   executeHpoRouteAddStopsCore,
@@ -10,6 +11,7 @@ import {
   executeHpoRouteReorderCore,
   executeHpoRouteReoptimizeCore,
   getHpoNearbyBackupsCore,
+  getHpoRouteTrackerExportCore,
 } from "@/lib/hpo-field.functions";
 
 export type HpoRouteCommandAction =
@@ -21,6 +23,8 @@ export type HpoRouteCommandAction =
   | "hpo.route.optimize"
   | "hpo.route.reoptimize"
   | "hpo.nearby.find"
+  | "hpo.route.export"
+  | "hpo.route.sync_calendar"
   | "hpo.route.complete";
 
 export type HpoRouteCommandResult = {
@@ -356,6 +360,14 @@ function reorderPreservingTerminalSlots(stops: any[], openIds: string[]) {
 
 function requestedAction(message: string): HpoRouteCommandAction {
   const text = normalize(message);
+  if (
+    /\b(copy|export)\b.*\b(today|todays|route|visits?|tracker|rows?)\b/.test(text) ||
+    /\b(copy todays visits|copy today s visits|tracker rows)\b/.test(text)
+  ) return "hpo.route.export";
+  if (
+    /\b(sync|put|add)\b.*\b(route|field route|marketing route)\b.*\bcalendar\b/.test(text) ||
+    /\b(sync route to calendar|put route on calendar)\b/.test(text)
+  ) return "hpo.route.sync_calendar";
   if (/\b(build|create|make)\b.*\broute\b/.test(text)) return "hpo.route.create";
   if (/\b(wrap up|wrap today|finish (?:the )?(?:route|day)|complete (?:the )?route|end (?:the )?route)\b/.test(text))
     return "hpo.route.complete";
@@ -480,6 +492,47 @@ export async function processHpoRouteCommand(input: {
         needsClarification: true,
         question: "You don't have an active HPO route to change. Build or open a route first.",
         reply: "You don't have an active HPO route to change. Build or open a route first.",
+      });
+    }
+
+    if (action === "hpo.route.export") {
+      const exported = await getHpoRouteTrackerExportCore({
+        db: input.db,
+        userId: input.userId,
+        routeId: route.id,
+      });
+      const reply =
+        input.sourceChannel === "voice"
+          ? `I prepared ${exported.completedCount} completed visit row${exported.completedCount === 1 ? "" : "s"} for today's HPO tracker. Open the route in HPO to copy them.`
+          : exported.completedCount
+            ? `Here are the completed route visits in tracker-ready tab-separated format:\n\n${exported.tsv}`
+            : "There are no completed route visits to export yet.";
+      return empty({
+        performed: true,
+        routeId: route.id,
+        reply,
+      });
+    }
+
+    if (action === "hpo.route.sync_calendar") {
+      const result = await executeHpoRouteSyncCalendarCore({
+        db: input.db,
+        userId: input.userId,
+        routeId: route.id,
+        idempotencyKey: requestPrefix
+          ? `${requestPrefix}:hpo.route.sync_calendar`
+          : `route:${route.id}:sync-calendar:${Date.now()}`,
+        sourceChannel: input.sourceChannel,
+        sourceMessageId: input.sourceMessageId ?? null,
+      });
+      return empty({
+        performed: true,
+        routeId: route.id,
+        executionRunId: result.executionRunId,
+        reply:
+          result.calendarAction === "created"
+            ? "The HPO field-route block is saved on Emery Calendar."
+            : "The HPO field-route block is updated on Emery Calendar.",
       });
     }
 
