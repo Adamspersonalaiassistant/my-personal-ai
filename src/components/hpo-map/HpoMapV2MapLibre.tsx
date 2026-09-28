@@ -17,10 +17,6 @@ const TERMINAL = new Set(["completed", "visited", "skipped", "closed", "bad_addr
 const BLUE = "#1769e8";
 const BLUE_DARK = "#0f4fb8";
 const BLUE_LIGHT = "#dbeafe";
-const GREEN = "#10b981";
-const GREEN_DARK = "#047857";
-const GREEN_LIGHT = "#d1fae5";
-const CURRENT_RED = "#ff4d57";
 
 const LIGHT_EMERY_STYLE: StyleSpecification = {
   version: 8,
@@ -40,11 +36,11 @@ const LIGHT_EMERY_STYLE: StyleSpecification = {
       type: "raster",
       source: "osm",
       paint: {
-        "raster-saturation": -0.55,
-        "raster-contrast": 0.04,
-        "raster-brightness-min": 0,
+        "raster-saturation": -1,
+        "raster-contrast": -0.16,
+        "raster-brightness-min": 0.62,
         "raster-brightness-max": 1,
-        "raster-opacity": 1,
+        "raster-opacity": 0.92,
       },
     },
   ],
@@ -267,13 +263,13 @@ function createPinImage(fill: string, stroke = "#ffffff") {
 }
 
 function setupSourcesAndLayers(map: MapLibreMap) {
-  if (!map.hasImage("hpo-green-pin")) {
-    const image = createPinImage(GREEN);
-    if (image) map.addImage("hpo-green-pin", image, { pixelRatio: 2 });
+  if (!map.hasImage("hpo-blue-pin")) {
+    const image = createPinImage(BLUE);
+    if (image) map.addImage("hpo-blue-pin", image, { pixelRatio: 2 });
   }
-  if (!map.hasImage("hpo-red-pin")) {
-    const image = createPinImage(CURRENT_RED);
-    if (image) map.addImage("hpo-red-pin", image, { pixelRatio: 2 });
+  if (!map.hasImage("hpo-blue-active-pin")) {
+    const image = createPinImage(BLUE_DARK);
+    if (image) map.addImage("hpo-blue-active-pin", image, { pixelRatio: 2 });
   }
   if (!map.getSource("hpo-offices")) {
     map.addSource("hpo-offices", {
@@ -362,7 +358,7 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       source: "hpo-offices",
       filter: ["has", "point_count"],
       paint: {
-        "circle-color": GREEN,
+        "circle-color": BLUE,
         "circle-radius": ["step", ["get", "point_count"], 17, 10, 20, 30, 23, 75, 27],
         "circle-stroke-color": "#ffffff",
         "circle-stroke-width": 3,
@@ -400,10 +396,10 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "kind"], "account"]],
       paint: {
         "circle-radius": ["case", ["==", ["get", "selected"], 1], 14, 11],
-        "circle-color": GREEN,
+        "circle-color": BLUE,
         "circle-stroke-color": "#ffffff",
         "circle-stroke-width": 3,
-        "circle-opacity": 0.01,
+        "circle-opacity": 0.92,
       },
     });
   }
@@ -415,11 +411,11 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "kind"], "prospect"]],
       paint: {
         "circle-radius": ["case", ["==", ["get", "selected"], 1], 14, 11],
-        "circle-color": GREEN,
-        "circle-stroke-color": GREEN,
+        "circle-color": BLUE,
+        "circle-stroke-color": BLUE,
         "circle-stroke-width": 3,
-        "circle-opacity": 0.01,
-        "circle-stroke-opacity": 0.01,
+        "circle-opacity": 0.92,
+        "circle-stroke-opacity": 1,
       },
     });
   }
@@ -432,7 +428,7 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       paint: {
         "circle-radius": 3.6,
         "circle-color": "#ffffff",
-        "circle-opacity": 0,
+        "circle-opacity": 0.92,
       },
     });
   }
@@ -444,7 +440,7 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       source: "hpo-offices",
       filter: ["!", ["has", "point_count"]],
       layout: {
-        "icon-image": "hpo-green-pin",
+        "icon-image": "hpo-blue-pin",
         "icon-size": ["case", ["==", ["get", "selected"], 1], 1.12, 0.96],
         "icon-anchor": "bottom",
         "icon-allow-overlap": true,
@@ -465,7 +461,7 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       paint: {
         "circle-radius": 11,
         "circle-color": "rgba(23,105,232,0)",
-        "circle-stroke-color": GREEN_DARK,
+        "circle-stroke-color": BLUE_DARK,
         "circle-stroke-width": 1.5,
         "circle-stroke-opacity": 0.45,
       },
@@ -512,7 +508,7 @@ function setupSourcesAndLayers(map: MapLibreMap) {
         "circle-radius": 18,
         "circle-color": "#ffe1e4",
         "circle-opacity": 0.7,
-        "circle-stroke-color": CURRENT_RED,
+        "circle-stroke-color": BLUE_DARK,
         "circle-stroke-width": 2,
       },
     });
@@ -527,7 +523,7 @@ function setupSourcesAndLayers(map: MapLibreMap) {
         "circle-color": [
           "case",
           ["==", ["get", "current"], 1],
-          CURRENT_RED,
+          BLUE_DARK,
           ["==", ["get", "status"], "closed"],
           "#ffffff",
           ["==", ["get", "status"], "bad_address"],
@@ -535,8 +531,8 @@ function setupSourcesAndLayers(map: MapLibreMap) {
           ["==", ["get", "status"], "skipped"],
           "#e2e8f0",
           ["==", ["get", "completed"], 1],
-          "#6fbf9a",
-          GREEN,
+          BLUE_LIGHT,
+          BLUE,
         ],
         "circle-stroke-color": [
           "case",
@@ -559,7 +555,7 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       type: "symbol",
       source: "hpo-route-stops",
       layout: {
-        "icon-image": ["case", ["==", ["get", "current"], 1], "hpo-red-pin", "hpo-green-pin"],
+        "icon-image": ["case", ["==", ["get", "current"], 1], "hpo-blue-active-pin", "hpo-blue-pin"],
         "icon-size": ["case", ["==", ["get", "current"], 1], 1.16, 1],
         "icon-anchor": "bottom",
         "icon-allow-overlap": true,
@@ -809,7 +805,7 @@ export function HpoMapV2MapLibre({
     const bounds = boundsForOffices(filtered);
     if (!bounds || bounds.isEmpty()) return;
     map.fitBounds(bounds, { padding: 50, maxZoom: 13.2, duration: 350 });
-  }, [filter, query, ready, signalFilter]);
+  }, [filtered, ready]);
 
   function startDraw() {
     setDrawPoints([]);
@@ -861,11 +857,11 @@ export function HpoMapV2MapLibre({
 
   return (
     <section className="hpo-map-v2 overflow-hidden rounded-2xl border border-primary/15 bg-white shadow-[0_12px_32px_rgba(0,0,0,0.14)]">
-      <div className="bg-[#bcebdc] px-3 pb-3 pt-3 text-slate-950">
+      <div className="border-b border-slate-200 bg-white px-3 pb-3 pt-3 text-slate-950">
         <div className="grid grid-cols-[44px_1fr_44px] items-center gap-2">
           <div />
           <div className="text-center">
-            <p className="text-[11px] font-semibold text-[#31486f]">
+            <p className="text-[11px] font-semibold text-[#1769e8]">
               {routeMiles ? `Today · ${routeMiles} Miles` : "HPO Territory"}
             </p>
             <h3 className="mt-0.5 text-[15px] font-bold tracking-tight text-[#1f3354]">
@@ -876,19 +872,19 @@ export function HpoMapV2MapLibre({
             type="button"
             onClick={onRefreshPins}
             disabled={preparing}
-            className="flex size-11 items-center justify-center rounded-xl bg-white/75 text-[#31486f] shadow-sm disabled:opacity-40"
+            className="flex size-11 items-center justify-center rounded-xl bg-slate-50 text-[#1769e8] shadow-sm disabled:opacity-40"
             aria-label="Refresh office map pins"
           >
             <RefreshCw className={`size-4 ${preparing ? "animate-spin" : ""}`} />
           </button>
         </div>
 
-        <div className="mt-3 grid grid-cols-2 rounded-xl bg-white/45 p-1">
+        <div className="mt-3 grid grid-cols-2 rounded-xl bg-slate-100 p-1">
           <button
             type="button"
             onClick={() => setViewMode("map")}
             className={`flex min-h-11 items-center justify-center gap-2 rounded-lg text-xs font-semibold transition ${
-              viewMode === "map" ? "bg-[#31486f] text-white shadow-sm" : "text-[#31486f]"
+              viewMode === "map" ? "bg-[#31486f] text-white shadow-sm" : "text-[#1769e8]"
             }`}
           >
             <MapIcon className="size-4" /> Map
@@ -897,7 +893,7 @@ export function HpoMapV2MapLibre({
             type="button"
             onClick={() => setViewMode("list")}
             className={`flex min-h-11 items-center justify-center gap-2 rounded-lg text-xs font-semibold transition ${
-              viewMode === "list" ? "bg-[#31486f] text-white shadow-sm" : "text-[#31486f]"
+              viewMode === "list" ? "bg-[#31486f] text-white shadow-sm" : "text-[#1769e8]"
             }`}
           >
             <List className="size-4" /> List
@@ -905,14 +901,14 @@ export function HpoMapV2MapLibre({
         </div>
 
         <div className="mt-2 flex items-center justify-between gap-2">
-          <p className="text-[10px] font-medium text-[#36516f]">
+          <p className="text-[10px] font-medium text-slate-500">
             {totalMapped}/{totalWithAddress} offices mapped
             {preparing ? " · preparing…" : ""}
           </p>
           <button
             type="button"
             onClick={() => setShowTools((value) => !value)}
-            className="flex min-h-10 items-center gap-1.5 rounded-xl bg-white/65 px-3 text-[10px] font-semibold text-[#31486f]"
+            className="flex min-h-10 items-center gap-1.5 rounded-xl bg-slate-50 px-3 text-[10px] font-semibold text-[#1769e8]"
           >
             <SlidersHorizontal className="size-3.5" />
             {showTools ? "Hide tools" : "Search & filters"}
@@ -920,7 +916,7 @@ export function HpoMapV2MapLibre({
         </div>
 
         {showTools ? (
-          <div className="mt-2 rounded-xl bg-white/72 p-2 shadow-sm">
+          <div className="mt-2 rounded-xl bg-slate-50 p-2 shadow-sm">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
               <input
@@ -964,7 +960,7 @@ export function HpoMapV2MapLibre({
                   type="button"
                   onClick={() => setSignalFilter(value)}
                   className={`min-h-10 rounded-lg text-[10px] font-semibold ${
-                    signalFilter === value ? "bg-[#d9f4e9] text-[#047857]" : "bg-white text-slate-500"
+                    signalFilter === value ? "bg-blue-50 text-[#1769e8]" : "bg-white text-slate-500"
                   }`}
                 >
                   {label}
@@ -977,7 +973,7 @@ export function HpoMapV2MapLibre({
                 startDraw();
                 setShowTools(false);
               }}
-              className="mt-2 min-h-10 w-full rounded-lg border border-[#10b981]/25 bg-white text-[10px] font-semibold text-[#047857]"
+              className="mt-2 min-h-10 w-full rounded-lg border border-[#1769e8]/25 bg-white text-[10px] font-semibold text-[#1769e8]"
             >
               Select offices by area
             </button>
@@ -999,7 +995,7 @@ export function HpoMapV2MapLibre({
               type="button"
               onClick={finishDraw}
               disabled={drawPoints.length < 3}
-              className="min-h-10 rounded-lg bg-[#10b981] px-3 text-[10px] font-semibold text-white disabled:opacity-40"
+              className="min-h-10 rounded-lg bg-[#1769e8] px-3 text-[10px] font-semibold text-white disabled:opacity-40"
             >
               Select {drawPoints.length >= 3 ? "area" : `${3 - drawPoints.length} more`}
             </button>
@@ -1018,7 +1014,7 @@ export function HpoMapV2MapLibre({
             <button
               type="button"
               onClick={fitRoute}
-              className="min-h-11 rounded-xl border border-slate-200 bg-white/96 px-3 text-[11px] font-semibold text-[#31486f] shadow-lg"
+              className="min-h-11 rounded-xl border border-slate-200 bg-white/96 px-3 text-[11px] font-semibold text-[#1769e8] shadow-lg"
             >
               Fit route
             </button>
@@ -1053,8 +1049,8 @@ export function HpoMapV2MapLibre({
                   <span
                     className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border text-[9px] font-bold ${
                       office.kind === "account"
-                        ? "border-[#10b981] bg-[#10b981] text-white"
-                        : "border-[#10b981] bg-white text-[#047857]"
+                        ? "border-[#1769e8] bg-[#1769e8] text-white"
+                        : "border-[#1769e8] bg-white text-[#1769e8]"
                     }`}
                   >
                     {office.kind === "account" ? "A" : "P"}
@@ -1082,8 +1078,8 @@ export function HpoMapV2MapLibre({
             <span
               className={`flex size-10 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold ${
                 selectedOffice.kind === "account"
-                  ? "border-[#10b981] bg-[#10b981] text-white"
-                  : "border-[#10b981] bg-white text-[#047857]"
+                  ? "border-[#1769e8] bg-[#1769e8] text-white"
+                  : "border-[#1769e8] bg-white text-[#1769e8]"
               }`}
             >
               {selectedOffice.kind === "account" ? "A" : "P"}
@@ -1091,7 +1087,7 @@ export function HpoMapV2MapLibre({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <h4 className="break-words text-sm font-semibold">{selectedOffice.officeName}</h4>
-                <span className="rounded-full bg-[#d9f4e9] px-2 py-0.5 text-[9px] font-semibold capitalize text-[#047857]">
+                <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[9px] font-semibold capitalize text-[#1769e8]">
                   {selectedOffice.kind}
                 </span>
               </div>
