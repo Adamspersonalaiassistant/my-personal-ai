@@ -35,6 +35,7 @@ import {
 import { EmeryVoiceControl } from "@/components/EmeryVoiceControl";
 import { HpoMapAdapter } from "@/components/hpo-map/HpoMapAdapter";
 import { HpoAccountFieldDetail } from "@/components/HpoAccountFieldDetail";
+import { saveHpoOfficeSnapshots } from "@/lib/hpo-field-offline";
 import {
   addHpoRouteStops,
   removeHpoRouteStop,
@@ -1202,6 +1203,11 @@ export function HpoRoutePlanner() {
     () => mapSelectedKeys.map((key) => mapOffices.find((office) => office.key === key)).filter(Boolean) as MapOffice[],
     [mapOffices, mapSelectedKeys],
   );
+
+  useEffect(() => {
+    if (!mapOffices.length) return;
+    void saveHpoOfficeSnapshots(mapOffices).catch(() => undefined);
+  }, [mapOffices]);
 
   function toggleMapRouteStop(office: MapOffice) {
     setSelectedMapOfficeKey(office.key);
