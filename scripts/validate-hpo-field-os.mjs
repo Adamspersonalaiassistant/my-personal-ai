@@ -137,7 +137,8 @@ check(
 );
 check(
   "Map V2 uses a reliable no-key full-detail street basemap and blue teardrop pins",
-  v2.includes("https://tiles.openfreemap.org/styles/liberty") &&
+  v2.includes("https://tile.openstreetmap.org/{z}/{x}/{y}.png") &&
+    v2.includes('const PROFESSIONAL_MAP_STYLE: StyleSpecification') &&
     v2.includes("maplibregl.setWorkerUrl") &&
     v2.includes("maplibre-gl-worker.mjs?worker&url") &&
     v2.includes("officeMarkersRef") &&

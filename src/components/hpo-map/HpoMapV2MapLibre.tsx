@@ -6,6 +6,7 @@ import type {
   Map as MapLibreMap,
   MapMouseEvent,
   MapGeoJSONFeature,
+  StyleSpecification,
 } from "maplibre-gl";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -31,7 +32,39 @@ const BLUE = "#1769e8";
 const BLUE_DARK = "#0f4fb8";
 const BLUE_LIGHT = "#dbeafe";
 
-const PROFESSIONAL_MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
+// Keep the production basemap self-contained. Loading a remote style document
+// caused blank maps in privacy-restricted mobile browsers even when the tile
+// provider itself was healthy. The standard OSM raster endpoint is no-key,
+// renders the complete street/town context, and is requested directly here.
+const PROFESSIONAL_MAP_STYLE: StyleSpecification = {
+  version: 8,
+  sources: {
+    osm: {
+      type: "raster",
+      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+      tileSize: 256,
+      maxzoom: 19,
+      attribution: "© OpenStreetMap contributors",
+    },
+  },
+  layers: [
+    {
+      id: "hpo-map-background",
+      type: "background",
+      paint: { "background-color": "#e8edf3" },
+    },
+    {
+      id: "hpo-street-basemap",
+      type: "raster",
+      source: "osm",
+      paint: {
+        "raster-opacity": 1,
+        "raster-saturation": -0.04,
+        "raster-contrast": 0.02,
+      },
+    },
+  ],
+};
 
 type Props = {
   offices: HpoMapOffice[];
