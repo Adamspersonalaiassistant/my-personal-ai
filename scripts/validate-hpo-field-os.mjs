@@ -89,6 +89,8 @@ check("natural visit capture returns execution trace", routeFns.includes("execut
 check("field summary is deterministic", fieldRead.includes('"hpo.route.day_summary"') && fieldRead.includes("Today:"));
 check("arrival is canonical across Today text and Voice", fieldFns.includes("executeHpoRouteStopArriveCore") && routeActions.includes('"hpo.route_stop.arrive"') && routeActions.includes("executeHpoRouteStopArriveCore") && voice.includes('name: "execute_hpo_route_stop_action"') && voiceControl.includes('name === "execute_hpo_route_stop_action"'));
 check("natural route-stop actions use stable request ids in Voice", routeActions.includes("requestId?: string") && voiceControl.includes('requestId: `voice:'));
+check("explicit Voice route notes are retry-safe", voice.includes("requestId?: string | null") && voice.includes("hpo.route_stop.log_visit") && voiceControl.includes("executeHpoRouteNote") && voiceControl.includes("routeId: hpoRouteId"));
+
 
 
 
