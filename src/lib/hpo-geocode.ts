@@ -1,13 +1,13 @@
-const NJ_BOUNDS = { minLat: 38.7, maxLat: 41.5, minLon: -75.7, maxLon: -73.7 };
+const HPO_METRO_BOUNDS = { minLat: 38.5, maxLat: 42.3, minLon: -75.9, maxLon: -72.4 };
 
 function validPoint(lat: number, lon: number) {
   return (
     Number.isFinite(lat) &&
     Number.isFinite(lon) &&
-    lat >= NJ_BOUNDS.minLat &&
-    lat <= NJ_BOUNDS.maxLat &&
-    lon >= NJ_BOUNDS.minLon &&
-    lon <= NJ_BOUNDS.maxLon
+    lat >= HPO_METRO_BOUNDS.minLat &&
+    lat <= HPO_METRO_BOUNDS.maxLat &&
+    lon >= HPO_METRO_BOUNDS.minLon &&
+    lon <= HPO_METRO_BOUNDS.maxLon
   );
 }
 
