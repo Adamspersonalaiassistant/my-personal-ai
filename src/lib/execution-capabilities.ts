@@ -27,7 +27,7 @@ export const EMERY_EXECUTION_CAPABILITIES = {
   },
   hpo_relationships: {
     canExecute: true,
-    actions: ["log non-PHI account touch", "set account follow-up"],
+    actions: ["create/map explicit HPO account", "log non-PHI account touch", "set account follow-up"],
   },
   hpo_routes: {
     canExecute: true,
@@ -55,6 +55,7 @@ export const EMERY_EXECUTION_CAPABILITIES = {
     canExecute: true,
     actions: [
       "Calendar actions",
+      "HPO account creation/mapping",
       "HPO relationship actions",
       "HPO route notes",
       "read HPO next stop / resume context / account brief",
