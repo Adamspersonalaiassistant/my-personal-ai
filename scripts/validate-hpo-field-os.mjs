@@ -26,6 +26,8 @@ const fieldToday = read("src/components/HpoFieldToday.tsx");
 const fieldFns = read("src/lib/hpo-field.functions.ts");
 const offline = read("src/lib/hpo-field-offline.ts");
 const accountDetail = read("src/components/HpoAccountFieldDetail.tsx");
+const fieldRead = read("src/lib/hpo-field-read-controller.ts");
+const voiceControl = read("src/components/EmeryVoiceControl.tsx");
 
 check("Map V1 remains in Route Planner", planner.includes("function OfficePlanningMap("));
 check("Route Planner uses renderer adapter", planner.includes("<HpoMapAdapter"));
@@ -70,6 +72,10 @@ check("field account detail preserves contacts interactions and route history", 
 check("route builder runs as an over-map mobile sheet", planner.includes('role="dialog"') && planner.includes("Build HPO daily route") && planner.includes("max-h-[90dvh]"));
 check("active route supports add remove manual reorder and remainder reoptimize", planner.includes("addSelectedToActiveRoute") && planner.includes("removeOpenStop") && planner.includes("reorderHpoRouteStopsCanonical") && planner.includes("reoptimizeActiveRemaining"));
 check("reoptimized route geometry is rendered when available", v2.includes("route_geometry_remaining") && v2.includes("route_geometry"));
+check("HPO Today state has a reusable deterministic core", fieldFns.includes("getHpoFieldTodayCore") && fieldFns.includes("getHpoFieldToday = createServerFn"));
+check("text Emery has deterministic field-state commands", emery.includes("processHpoFieldReadCommand") && fieldRead.includes('"hpo.route.get_next_stop"') && fieldRead.includes('"hpo.route.resume_context"') && fieldRead.includes('"hpo.account.get_context"'));
+check("Realtime Voice exposes the same deterministic field-state commands", voice.includes('name: "get_hpo_field_state"') && voice.includes("processHpoFieldReadCommand") && voiceControl.includes('name === "get_hpo_field_state"') && voiceControl.includes("executeVoiceHpoFieldRead"));
+
 
 
 if (process.exitCode) process.exit(process.exitCode);
