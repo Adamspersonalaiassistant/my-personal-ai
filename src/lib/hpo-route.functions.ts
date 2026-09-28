@@ -713,7 +713,7 @@ export const getHpoRoutePlanner = createServerFn({ method: "GET" })
       db
         .from("hpo_accounts")
         .select(
-          "id,name,account_type,specialty,city,address,latitude,longitude,geocoded_at,priority,relationship_stage,relationship_health,status,owner_name,last_touch_at,next_action,next_action_due_at",
+          "id,name,account_type,specialty,city,address,latitude,longitude,geocoded_at,priority,relationship_stage,relationship_health,status,owner_name,last_touch_at,next_action,next_action_due_at,tags,source_origin",
         )
         .eq("user_id", userId)
         .eq("status", "active")
@@ -723,7 +723,7 @@ export const getHpoRoutePlanner = createServerFn({ method: "GET" })
       db
         .from("hpo_prospects")
         .select(
-          "id,name,prospect_type,specialty,city,address,latitude,longitude,geocoded_at,fit_status,verification_status,metadata",
+          "id,name,prospect_type,specialty,city,address,latitude,longitude,geocoded_at,fit_status,verification_status,promoted_account_id,metadata",
         )
         .eq("user_id", userId)
         .not("address", "is", null)
@@ -810,14 +810,30 @@ export const getHpoRoutePlanner = createServerFn({ method: "GET" })
       })),
     ].sort((a: any, b: any) => Date.parse(a.at) - Date.parse(b.at));
 
+    const routeAccounts = (accountsResult.data ?? []).filter((account: any) => {
+      const tags = Array.isArray(account.tags) ? account.tags : [];
+      if (tags.includes("exclude_from_adam_route")) return false;
+      const owner = clean(account.owner_name).toLowerCase();
+      return !owner || owner === "adam";
+    });
+    const routeProspects = (prospectsResult.data ?? []).filter((prospect: any) => {
+      const metadata =
+        prospect.metadata && typeof prospect.metadata === "object" && !Array.isArray(prospect.metadata)
+          ? prospect.metadata
+          : {};
+      if (metadata["exclude_from_adam_route"] === true) return false;
+      if (!prospect.promoted_account_id) return true;
+      return metadata["map_as_location"] === true;
+    });
+
     return {
       routes: (routesResult.data ?? []).map((route: any) => ({
         ...route,
         stops: byRoute.get(route.id) ?? [],
         title: routeTitle(route.route_date, route.area),
       })),
-      accounts: accountsResult.data ?? [],
-      prospects: prospectsResult.data ?? [],
+      accounts: routeAccounts,
+      prospects: routeProspects,
       calendar,
       timezone,
       today: localDate(today),
