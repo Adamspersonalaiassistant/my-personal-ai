@@ -919,14 +919,17 @@ export function HpoMapV2MapLibre({
             ) : null}
             <button
               type="button"
-              onClick={() => onToggleRouteStop(selectedOffice)}
-              className={`min-h-11 rounded-xl px-2 text-[11px] font-semibold ${
-                selectedSet.has(selectedOffice.key)
-                  ? "border border-[#1769e8]/25 bg-blue-50 text-[#1769e8]"
-                  : "bg-[#1769e8] text-white"
-              }`}
+              onClick={() =>
+                openHpoEmery(
+                  `Add ${selectedOffice.officeName} at ${[selectedOffice.address, selectedOffice.city]
+                    .filter(Boolean)
+                    .join(", ")} to my current HPO route. If there isn't an active route, ask me the minimum question needed to create one.`,
+                  selectedOffice.officeName,
+                )
+              }
+              className="min-h-11 rounded-xl bg-[#1769e8] px-2 text-[11px] font-semibold text-white"
             >
-              {selectedSet.has(selectedOffice.key) ? "Remove" : "Add to route"}
+              Add with Emery
             </button>
           </div>
         </div>
@@ -940,16 +943,25 @@ export function HpoMapV2MapLibre({
               : "Tap a pin or list row"}
           </p>
           <p className="mt-0.5 truncate text-[10px] text-slate-500">
-            Selected offices become the route builder stop list.
+            Use Emery to add stops, build the route, or change the plan.
           </p>
         </div>
         <button
           type="button"
-          onClick={onBuildRoute}
-          disabled={!selectedKeys.length}
-          className="min-h-11 shrink-0 rounded-xl bg-[#1769e8] px-3 text-xs font-semibold text-white disabled:opacity-35"
+          onClick={() => {
+            const names = selectedKeys
+              .map((key) => offices.find((office) => office.key === key)?.officeName)
+              .filter(Boolean);
+            openHpoEmery(
+              names.length
+                ? `Build or update my HPO route using these selected offices: ${names.join(", ")}.`
+                : "Help me build my HPO route from the offices on this map. Ask me only for the date or area if you actually need it.",
+              "Map route",
+            );
+          }}
+          className="min-h-11 shrink-0 rounded-xl bg-[#1769e8] px-3 text-xs font-semibold text-white"
         >
-          Build Route
+          Ask Emery
         </button>
       </div>
     </section>
