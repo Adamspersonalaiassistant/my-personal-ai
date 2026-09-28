@@ -8,6 +8,7 @@ import { inferEmeryDomain, domainPrompt } from "@/lib/emery-domain";
 import { selectRelevantMemories, buildExecutiveFocus, readConversationState } from "@/lib/emery-intelligence";
 import { processCalendarAction } from "@/lib/calendar-agent";
 import { processHpoAction } from "@/lib/hpo-action-controller";
+import { processHpoFieldReadCommand } from "@/lib/hpo-field-read-controller";
 import { captureHpoRouteNoteCore } from "@/lib/hpo-route.functions";
 import { MODEL_POLICY } from "@/lib/model-policy";
 import { recordRuntimeEvent } from "@/lib/runtime-telemetry";
@@ -290,6 +291,7 @@ LIVE VOICE OPERATING CONTRACT:
 - Use refresh_emery_context when Adam asks about a task, project, appointment, HPO item, memory, or other app state that may have changed since this voice session began.
 - Use execute_calendar_action whenever Adam explicitly asks to add/create/schedule/complete/move a task or internal Calendar event. Never claim a write unless the tool reports performed=true.
 - Use execute_hpo_action whenever Adam explicitly asks to log a non-PHI HPO relationship touch or set an HPO account follow-up. Never put patient names, medical/case details, or other PHI into HPO relationship records.
+- Use get_hpo_field_state whenever Adam asks what's next, where he left off, asks for a brief on the current/next office, asks what happened last time, or asks who he spoke to. This is a deterministic HPO read and should be preferred over guessing from session context.
 - Use execute_hpo_route_note whenever Adam is on a field route and explicitly tells you what happened at a numbered stop or office, or asks you to save a route/marketing note. Preserve his wording and let the server identify the route stop. If the tool asks which stop, ask exactly that question.
 - Casual planning is not write permission. If the calendar tool asks a clarification question, ask exactly that concise question and do not invent missing details.
 - Tool results are private working context. Answer Adam naturally rather than narrating tool mechanics.
@@ -467,6 +469,23 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
               request: {
                 type: "string",
                 description: "Adam's exact HPO relationship-action request from the active voice turn.",
+              },
+            },
+            required: ["request"],
+          },
+        },
+        {
+          type: "function",
+          name: "get_hpo_field_state",
+          description:
+            "Read the live HPO field-day state deterministically when Adam asks what is next, where he left off, what happened at the next/current office last time, who he spoke to, or asks for a field account brief. This tool does not write data.",
+          parameters: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              request: {
+                type: "string",
+                description: "Adam's exact HPO field-state question from the active voice turn.",
               },
             },
             required: ["request"],
@@ -767,6 +786,45 @@ export const executeVoiceHpoAction = createServerFn({ method: "POST" })
         recordId: result.recordId,
         accountId: result.accountId,
         nonPhiController: true,
+      },
+    });
+    return result;
+  });
+
+export const executeVoiceHpoFieldRead = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { request: string }) => ({
+    request: String(input?.request ?? "").trim().slice(0, 2000),
+  }))
+  .handler(async ({ data, context }) => {
+    if (!data.request) {
+      return {
+        recognized: false,
+        action: "none",
+        reply: "What do you want to know about the current HPO field route?",
+      } as const;
+    }
+    const startedAt = Date.now();
+    const db = context.supabase as any;
+    const result = await processHpoFieldReadCommand({
+      db,
+      userId: context.userId,
+      message: data.request,
+    });
+    await recordRuntimeEvent(db, context.userId, {
+      channel: "voice",
+      eventType: "hpo_field_read",
+      domain: "hpo",
+      action: result.action,
+      status: result.recognized ? "ok" : "skipped",
+      durationMs: Date.now() - startedAt,
+      model: null,
+      metadata: {
+        routeId: result.routeId,
+        nextStopId: result.nextStop?.id ?? null,
+        completed: result.completed,
+        total: result.total,
+        deterministic: true,
       },
     });
     return result;
