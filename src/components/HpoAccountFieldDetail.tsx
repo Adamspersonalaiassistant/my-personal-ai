@@ -70,6 +70,18 @@ export function HpoAccountFieldDetail({
   const contacts = data?.contacts ?? [];
   const interactions = data?.interactions ?? [];
   const routeStops = data?.routeStops ?? [];
+  const officeLocations = (data?.officeLocations ?? []).filter(
+    (location: any, index: number, rows: any[]) =>
+      location?.address &&
+      rows.findIndex(
+        (candidate: any) =>
+          String(candidate?.address ?? "").trim().toLowerCase() ===
+          String(location.address).trim().toLowerCase(),
+      ) === index,
+  );
+  const singleLinkedLocation = officeLocations.length === 1 ? officeLocations[0] : null;
+  const routeAddress = account?.address || singleLinkedLocation?.address || "";
+  const routeCity = account?.city || singleLinkedLocation?.city || "";
 
   return (
     <div
@@ -113,10 +125,10 @@ export function HpoAccountFieldDetail({
         ) : (
           <div className="space-y-3 pb-2">
             <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {account.address ? (
+              {routeAddress ? (
                 <a
                   href={`https://maps.apple.com/?daddr=${encodeURIComponent(
-                    [account.address, account.city].filter(Boolean).join(", "),
+                    [routeAddress, routeCity].filter(Boolean).join(", "),
                   )}`}
                   target="_blank"
                   rel="noreferrer"
@@ -130,9 +142,15 @@ export function HpoAccountFieldDetail({
                 type="button"
                 onClick={() =>
                   openHpoEmery(
-                    `Add ${account.name} at ${[account.address, account.city]
-                      .filter(Boolean)
-                      .join(", ")} to today's HPO route.`,
+                    routeAddress
+                      ? `Add ${account.name} at ${[routeAddress, routeCity]
+                          .filter(Boolean)
+                          .join(", ")} to today's HPO route.`
+                      : `Add ${account.name} to today's HPO route. This relationship has multiple office locations: ${officeLocations
+                          .map((location: any) =>
+                            [location.address, location.city].filter(Boolean).join(", "),
+                          )
+                          .join(" | ")}. Ask me which office only if I did not specify one.`,
                     account.name,
                   )
                 }
@@ -357,6 +375,67 @@ export function HpoAccountFieldDetail({
               </div>
             </section>
 
+            {officeLocations.length > 1 || (!account.address && officeLocations.length) ? (
+              <section className="border-b border-border/50 pb-3">
+                <div className="flex items-center gap-2">
+                  <MapPinned className="size-4 text-primary" />
+                  <p className="text-sm font-semibold">Office locations</p>
+                  <span className="ml-auto text-[10px] text-muted-foreground">
+                    {officeLocations.length} saved
+                  </span>
+                </div>
+                <div className="mt-2 space-y-2">
+                  {officeLocations.map((location: any) => (
+                    <div key={location.id} className="emery-surface rounded-xl p-3">
+                      <div className="flex items-start gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold">
+                            {location.city || account.name}
+                          </p>
+                          <p className="mt-1 break-words text-[11px] leading-4 text-muted-foreground">
+                            {location.address}
+                          </p>
+                          {location.verification_status === "verified" ? (
+                            <p className="mt-1 text-[9px] font-medium text-primary">
+                              Verified office location
+                            </p>
+                          ) : null}
+                        </div>
+                        <div className="flex shrink-0 gap-1">
+                          <a
+                            href={`https://maps.apple.com/?daddr=${encodeURIComponent(
+                              [location.address, location.city].filter(Boolean).join(", "),
+                            )}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="emery-press flex min-h-11 items-center gap-1 rounded-xl border border-border/55 px-2.5 text-[10px] font-semibold text-foreground"
+                          >
+                            <Navigation className="size-3.5 text-primary" />
+                            Go
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openHpoEmery(
+                                `Add ${account.name} — ${[location.address, location.city]
+                                  .filter(Boolean)
+                                  .join(", ")} — to today's HPO route. Use this exact office location.`,
+                                account.name,
+                              )
+                            }
+                            className="emery-press flex min-h-11 items-center gap-1 rounded-xl bg-primary px-2.5 text-[10px] font-semibold text-primary-foreground"
+                          >
+                            <MapPinned className="size-3.5" />
+                            Route
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
             <section className="border-b border-border/50 pb-3">
               <div className="flex items-center gap-2">
                 <UserRound className="size-4 text-primary" />
@@ -545,10 +624,10 @@ export function HpoAccountFieldDetail({
               )}
             </section>
 
-            {account.address ? (
+            {routeAddress ? (
               <a
                 href={`https://maps.apple.com/?q=${encodeURIComponent(
-                  [account.name, account.address, account.city].filter(Boolean).join(", "),
+                  [account.name, routeAddress, routeCity].filter(Boolean).join(", "),
                 )}`}
                 target="_blank"
                 rel="noreferrer"
