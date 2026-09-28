@@ -16,6 +16,8 @@ const planner = read("src/components/HpoRoutePlanner.tsx");
 const adapter = read("src/components/hpo-map/HpoMapAdapter.tsx");
 const v2 = read("src/components/hpo-map/HpoMapV2MapLibre.tsx");
 const routeFns = read("src/lib/hpo-route.functions.ts");
+const geocode = read("src/lib/hpo-geocode.ts");
+const hpoChatRouter = read("src/lib/hpo-chat-router.ts");
 const packageJson = JSON.parse(read("package.json"));
 const migration = read("supabase/migrations/20260927234500_hpo_map_v2_feature_flag.sql");
 const routeActions = read("src/lib/hpo-route-action-controller.ts");
@@ -95,12 +97,29 @@ check(
   routeFns.includes("router.project-osrm.org/table/v1/driving"),
 );
 check(
-  "Map V2 uses the RepMove-style green/red pins, blue route, and Map/List workflow",
-  v2.includes('const GREEN = "#10b981"') &&
-    v2.includes('const CURRENT_RED = "#ff4d57"') &&
-    v2.includes('const BLUE = "#1769e8"') &&
-    v2.includes('hpo-green-pin') &&
-    v2.includes('hpo-red-pin') &&
+  "Existing unmapped HPO offices are retried regardless of prior geocode attempt",
+  routeFns.includes('.or("latitude.is.null,longitude.is.null")') &&
+    !routeFns.includes('.is("geocoded_at", null)'),
+);
+check(
+  "HPO geocoding strips suite/floor detail and has multiple providers",
+  geocode.includes("withoutUnit") &&
+    geocode.includes("photon.komoot.io") &&
+    geocode.includes("geocoding.geo.census.gov") &&
+    geocode.includes("nominatim.openstreetmap.org"),
+);
+check(
+  "Emery-created HPO accounts are geocoded into the canonical account row",
+  hpoChatRouter.includes("geocodeHpoOfficeAddress") &&
+    hpoChatRouter.includes("latitude:point?.lat") &&
+    hpoChatRouter.includes("plotted on the HPO map"),
+);
+check(
+  "Map V2 uses the white/light blue-point theme and Map/List workflow",
+  v2.includes('const BLUE = "#1769e8"') &&
+    v2.includes('hpo-blue-pin') &&
+    v2.includes('hpo-blue-active-pin') &&
+    v2.includes('"raster-saturation": -1') &&
     v2.includes('viewMode') &&
     v2.includes('MapIcon') &&
     v2.includes('> List'),
