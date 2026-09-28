@@ -793,7 +793,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                 className="mt-3 min-h-28 w-full resize-none rounded-xl border border-border/50 bg-card/50 px-3 py-3 text-[16px] leading-6 outline-none focus:border-primary/30"
               />
               <div className="mt-2 flex gap-1 overflow-x-auto [scrollbar-width:none]">
-                {[
+                {([
                   ["completed", "Completed"],
                   ["closed", "Closed"],
                   ["bad_address", "Bad address"],
