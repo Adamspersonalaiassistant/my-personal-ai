@@ -5,3 +5,9 @@
 - [x] Improve Calendar readability and touch targets without changing scheduling logic.
 - [x] Tone down shared glow and surface treatment.
 - [x] Verify automated build, focused lint, and signed-out preview; private-screen review needs an authenticated session and iPhone checks need a device.
+
+# HPO field-sales OS rebuild
+- [x] Replace HPO secondary dashboard architecture with Today, Map, Accounts, Activity.
+- [x] Build compact account and activity workflows with safe existing-data writes.
+- [x] Recompose map/route and Today field execution while preserving offline and canonical mutations.
+- [x] Update HPO validator and verify type, focused lint, preview build, and signed-out mobile layout. Authenticated HPO and physical iPhone testing remain blocked by external unmanaged sign-in.
