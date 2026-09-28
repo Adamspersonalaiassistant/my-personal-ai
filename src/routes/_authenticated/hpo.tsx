@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Activity, CalendarDays, ChevronRight, Clock3, MapPinned, Plus, Search, UsersRound, X } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
@@ -12,7 +12,7 @@ import { getHpoWorkspace, setHpoFieldAccountFollowup } from "@/lib/hpo-workspace
 import { getHpoFieldToday } from "@/lib/hpo-field.functions";
 
 type View = "today" | "map" | "accounts" | "activity";
-type Workspace = Awaited<ReturnType<ReturnType<typeof useServerFn<typeof getHpoWorkspace>>>>;
+type Workspace = Awaited<ReturnType<typeof getHpoWorkspace>>;
 type Account = Workspace["accounts"][number];
 type Touch = Workspace["interactions"][number];
 const tabs = [
@@ -155,7 +155,7 @@ function ActivityView({ data, onOpen, onLog, onFollowup, onMore, loading }: { da
   </section>;
 }
 
-function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return <div className="fixed inset-0 z-[82] flex items-end justify-center bg-background/75 sm:items-center sm:p-4" role="presentation" onClick={onClose}><section role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()} className="flex max-h-[min(92dvh,calc(100dvh-1rem))] w-full max-w-lg flex-col rounded-t-lg border border-border bg-background sm:rounded-lg"><div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-2"><h2 className="text-base font-semibold">{title}</h2><Button variant="ghost" size="icon" className="size-11" aria-label="Close" onClick={onClose}><X /></Button></div><div className="min-h-0 overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 [-webkit-overflow-scrolling:touch]">{children}</div></section></div>;
 }
 function AccountSheet({ onClose, onSave }: { onClose: () => void; onSave: (values: { name: string; accountType: string; address: string; city: string; notes: string }) => Promise<void> }) {

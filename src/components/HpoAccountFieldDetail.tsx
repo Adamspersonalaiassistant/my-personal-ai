@@ -8,8 +8,11 @@ import {
   Phone,
   UserRound,
   X,
+  Pencil,
 } from "lucide-react";
 import { getHpoAccountFieldContext } from "@/lib/hpo-field.functions";
+import { updateHpoFieldAccount } from "@/lib/hpo-workspace.functions";
+import { Button } from "@/components/ui/button";
 
 function dateLabel(value: string | null | undefined) {
   if (!value) return "Not recorded";
@@ -21,11 +24,21 @@ function dateLabel(value: string | null | undefined) {
 export function HpoAccountFieldDetail({
   accountId,
   onClose,
+  onChanged,
+  onLog,
+  onFollowup,
 }: {
   accountId: string;
   onClose: () => void;
+  onChanged?: () => void;
+  onLog?: () => void;
+  onFollowup?: () => void;
 }) {
   const load = useServerFn(getHpoAccountFieldContext);
+  const update = useServerFn(updateHpoFieldAccount);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState("");
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,7 +69,7 @@ export function HpoAccountFieldDetail({
       role="presentation"
     >
       <section
-        className="emery-sheet-in max-h-[90dvh] w-full overflow-y-auto rounded-t-[1.8rem] border-t border-border/55 bg-background px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-24px_70px_rgba(0,0,0,0.42)] sm:max-w-xl sm:rounded-[1.8rem] sm:border"
+        className="emery-sheet-in max-h-[92dvh] w-full overflow-y-auto rounded-t-lg border-t border-border/55 bg-background px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-24px_70px_rgba(0,0,0,0.42)] sm:max-w-xl sm:rounded-lg sm:border"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -66,12 +79,12 @@ export function HpoAccountFieldDetail({
         <div className="sticky top-0 z-10 -mx-1 flex items-center justify-between gap-3 bg-background/95 px-1 pb-3 pt-3 backdrop-blur">
           <div className="min-w-0">
             <p className="emery-kicker">Field Account</p>
-            <h2 className="mt-1 truncate text-lg font-semibold">{account?.name ?? "Loading account…"}</h2>
+            <h2 className="mt-1 break-words text-lg font-semibold">{account?.name ?? "Loading account…"}</h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="emery-press flex size-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground"
+            className="emery-press flex size-11 shrink-0 items-center justify-center rounded-xl text-muted-foreground"
             aria-label="Close account"
           >
             <X className="size-4" />
@@ -86,7 +99,40 @@ export function HpoAccountFieldDetail({
           <div className="py-14 text-center text-sm text-muted-foreground">Loading relationship context…</div>
         ) : (
           <div className="space-y-3 pb-2">
-            <section className="emery-glass rounded-[1.45rem] p-4">
+            <div className="grid grid-cols-3 gap-2">
+              {onLog && <Button className="min-h-11 px-2 text-xs" onClick={onLog}>Log visit</Button>}
+              {onFollowup && <Button variant="outline" className="min-h-11 px-2 text-xs" onClick={onFollowup}>Follow-up</Button>}
+              <Button variant="outline" className="min-h-11 px-2 text-xs" onClick={() => setEditing((value) => !value)}><Pencil className="size-4" /> Edit</Button>
+            </div>
+            {editing && <form className="space-y-2 border-y border-border/60 py-3" onSubmit={async (event) => {
+              event.preventDefault();
+              const form = new FormData(event.currentTarget);
+              setSaving(true); setEditError("");
+              try {
+                await update({ data: {
+                  accountId, name: String(form.get("name") || ""), accountType: String(form.get("type") || "") || null,
+                  specialty: String(form.get("specialty") || "") || null, city: String(form.get("city") || "") || null,
+                  territory: String(form.get("territory") || "") || null, address: String(form.get("address") || "") || null,
+                  priority: Number(form.get("priority")), relationshipStage: String(form.get("stage") || "prospect"),
+                  relationshipHealth: String(form.get("health") || "") || null, opportunity: String(form.get("opportunity") || "") || null,
+                  blockers: String(form.get("blockers") || "") || null, notes: String(form.get("notes") || "") || null,
+                } });
+                setData(await load({ data: { accountId } })); setEditing(false); onChanged?.();
+              } catch (cause) { setEditError(cause instanceof Error ? cause.message : "Could not save account."); }
+              finally { setSaving(false); }
+            }}>
+              {([["name", "Office name", account.name], ["type", "Type", account.account_type], ["specialty", "Specialty", account.specialty], ["address", "Address", account.address], ["city", "City", account.city], ["territory", "Territory", account.territory], ["priority", "Priority (1–5)", account.priority], ["stage", "Relationship stage", account.relationship_stage], ["health", "Relationship health", account.relationship_health], ["opportunity", "Opportunity", account.opportunity], ["blockers", "Blockers", account.blockers]] as const).map(([key, label, value]) => <label key={key} className="block text-xs text-muted-foreground">{label}<input name={key} type={key === "priority" ? "number" : "text"} min={key === "priority" ? 1 : undefined} max={key === "priority" ? 5 : undefined} required={key === "name"} defaultValue={value ?? ""} className="mt-1 min-h-11 w-full rounded-md border border-border bg-card px-3 text-base text-foreground" /></label>)}
+              <label className="block text-xs text-muted-foreground">Notes<textarea name="notes" defaultValue={account.notes ?? ""} className="mt-1 min-h-24 w-full rounded-md border border-border bg-card p-3 text-base text-foreground" /></label>
+              {editError && <p role="alert" className="text-sm text-destructive">{editError}</p>}
+              <Button disabled={saving} className="min-h-12 w-full">{saving ? "Saving…" : "Save account"}</Button>
+            </form>}
+            {(account.relationship_health || account.opportunity || account.blockers || account.notes) && <div className="space-y-1 border-y border-border/50 py-3 text-xs leading-5">
+              {account.relationship_health && <p><strong>Relationship:</strong> {account.relationship_health}</p>}
+              {account.opportunity && <p><strong>Opportunity:</strong> {account.opportunity}</p>}
+              {account.blockers && <p><strong>Blockers:</strong> {account.blockers}</p>}
+              {account.notes && <p className="whitespace-pre-wrap break-words">{account.notes}</p>}
+            </div>}
+            <section className="border-b border-border/50 pb-3">
               <div className="flex items-start gap-3">
                 <div className="emery-icon-well flex size-10 shrink-0 items-center justify-center rounded-xl text-primary">
                   <MapPin className="size-4" />
@@ -149,7 +195,7 @@ export function HpoAccountFieldDetail({
                         {contact.phone ? (
                           <a
                             href={`tel:${contact.phone}`}
-                            className="emery-press flex size-9 shrink-0 items-center justify-center rounded-xl border border-primary/15 text-primary"
+                            className="emery-press flex size-11 shrink-0 items-center justify-center rounded-xl border border-primary/15 text-primary"
                             aria-label={`Call ${contact.name}`}
                           >
                             <Phone className="size-3.5" />
