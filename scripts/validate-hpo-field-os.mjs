@@ -128,11 +128,12 @@ check(
     v2.includes("Ask Emery"),
 );
 check(
-  "Map V2 uses a true light basemap, visible blue points, and Map/List workflow",
+  "Map V2 uses a no-key light basemap, reliable blue DOM markers, and Map/List workflow",
   v2.includes('const BLUE = "#1769e8"') &&
-    v2.includes("basemaps.cartocdn.com/light_all") &&
-    v2.includes('circle-color": BLUE') &&
-    v2.includes('circle-opacity": 0.98') &&
+    v2.includes("tile.openstreetmap.org") &&
+    v2.includes("officeMarkersRef") &&
+    v2.includes("new maplibregl.Marker") &&
+    v2.includes("element.style.background = focused ? BLUE_DARK : BLUE") &&
     v2.includes('viewMode') &&
     v2.includes('MapIcon') &&
     v2.includes('> List'),
