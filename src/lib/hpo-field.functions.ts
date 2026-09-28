@@ -209,110 +209,117 @@ async function clearRouteOptimization(db: any, userId: string, routeId: string) 
   if (error) throw error;
 }
 
-export const getHpoFieldToday = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const db = context.supabase as any;
-    const userId = context.userId;
-    const timezone = await timezoneFor(db, userId);
-    const today = localDate(timezone);
-    const { data: routeRows, error: routeError } = await db
-      .from("hpo_route_plans")
-      .select("*")
-      .eq("user_id", userId)
-      .in("status", ["draft", "planned", "active", "in_progress"])
-      .gte("route_date", today)
-      .order("route_date", { ascending: true })
-      .order("updated_at", { ascending: false })
-      .limit(12);
-    if (routeError) throw routeError;
+export async function getHpoFieldTodayCore(input: { db: any; userId: string }) {
+  const db = input.db;
+  const userId = input.userId;
+  const timezone = await timezoneFor(db, userId);
+  const today = localDate(timezone);
+  const { data: routeRows, error: routeError } = await db
+    .from("hpo_route_plans")
+    .select("*")
+    .eq("user_id", userId)
+    .in("status", ["draft", "planned", "active", "in_progress"])
+    .gte("route_date", today)
+    .order("route_date", { ascending: true })
+    .order("updated_at", { ascending: false })
+    .limit(12);
+  if (routeError) throw routeError;
 
-    const routes = routeRows ?? [];
-    const route =
-      routes.find((row: any) => row.route_date === today && ["active", "in_progress"].includes(row.status)) ??
-      routes.find((row: any) => row.route_date === today) ??
-      routes.find((row: any) => ["active", "in_progress"].includes(row.status)) ??
-      routes[0] ??
-      null;
+  const routes = routeRows ?? [];
+  const route =
+    routes.find((row: any) => row.route_date === today && ["active", "in_progress"].includes(row.status)) ??
+    routes.find((row: any) => row.route_date === today) ??
+    routes.find((row: any) => ["active", "in_progress"].includes(row.status)) ??
+    routes[0] ??
+    null;
 
-    if (!route) {
-      return {
-        timezone,
-        today,
-        route: null,
-        stops: [],
-        nextStop: null,
-        lastCompletedStop: null,
-        completed: 0,
-        total: 0,
-        remaining: 0,
-        progress: 0,
-        accountContext: null,
-      };
-    }
-
-    const stops = await loadStops(db, userId, route.id);
-    const completedStops = stops.filter((stop: any) => TERMINAL.has(String(stop.status)));
-    const nextStop = stops.find((stop: any) => !TERMINAL.has(String(stop.status))) ?? null;
-    const lastCompletedStop = [...completedStops]
-      .sort((a: any, b: any) => Date.parse(b.visited_at ?? b.updated_at) - Date.parse(a.visited_at ?? a.updated_at))[0] ?? null;
-
-    let accountContext: any = null;
-    if (nextStop?.account_id) {
-      const [accountResult, contactsResult, interactionsResult, historyResult] = await Promise.all([
-        db
-          .from("hpo_accounts")
-          .select("*")
-          .eq("id", nextStop.account_id)
-          .eq("user_id", userId)
-          .maybeSingle(),
-        db
-          .from("hpo_contacts")
-          .select("id,name,role_title,email,phone,relationship_notes,is_primary")
-          .eq("account_id", nextStop.account_id)
-          .eq("user_id", userId)
-          .order("is_primary", { ascending: false })
-          .limit(8),
-        db
-          .from("hpo_interactions")
-          .select("id,occurred_at,interaction_type,summary,outcome,next_action,next_action_due_at,source_type,source_ref,metadata")
-          .eq("account_id", nextStop.account_id)
-          .eq("user_id", userId)
-          .order("occurred_at", { ascending: false })
-          .limit(8),
-        db
-          .from("hpo_route_stops")
-          .select("id,route_id,visited_at,status,visit_summary,visit_outcome,next_action,next_action_due_at")
-          .eq("account_id", nextStop.account_id)
-          .eq("user_id", userId)
-          .neq("id", nextStop.id)
-          .order("visited_at", { ascending: false, nullsFirst: false })
-          .limit(6),
-      ]);
-      accountContext = accountResult.data
-        ? {
-            account: accountResult.data,
-            contacts: contactsResult.data ?? [],
-            interactions: interactionsResult.data ?? [],
-            priorRouteStops: historyResult.data ?? [],
-          }
-        : null;
-    }
-
+  if (!route) {
     return {
       timezone,
       today,
-      route,
-      stops,
-      nextStop,
-      lastCompletedStop,
-      completed: completedStops.length,
-      total: stops.length,
-      remaining: Math.max(0, stops.length - completedStops.length),
-      progress: stops.length ? completedStops.length / stops.length : 0,
-      accountContext,
+      route: null,
+      stops: [],
+      nextStop: null,
+      lastCompletedStop: null,
+      completed: 0,
+      total: 0,
+      remaining: 0,
+      progress: 0,
+      accountContext: null,
     };
-  });
+  }
+
+  const stops = await loadStops(db, userId, route.id);
+  const completedStops = stops.filter((stop: any) => TERMINAL.has(String(stop.status)));
+  const nextStop = stops.find((stop: any) => !TERMINAL.has(String(stop.status))) ?? null;
+  const lastCompletedStop = [...completedStops]
+    .sort((a: any, b: any) => Date.parse(b.visited_at ?? b.updated_at) - Date.parse(a.visited_at ?? a.updated_at))[0] ?? null;
+
+  let accountContext: any = null;
+  if (nextStop?.account_id) {
+    const [accountResult, contactsResult, interactionsResult, historyResult] = await Promise.all([
+      db
+        .from("hpo_accounts")
+        .select("*")
+        .eq("id", nextStop.account_id)
+        .eq("user_id", userId)
+        .maybeSingle(),
+      db
+        .from("hpo_contacts")
+        .select("id,name,role_title,email,phone,relationship_notes,is_primary")
+        .eq("account_id", nextStop.account_id)
+        .eq("user_id", userId)
+        .order("is_primary", { ascending: false })
+        .limit(8),
+      db
+        .from("hpo_interactions")
+        .select("id,occurred_at,interaction_type,summary,outcome,next_action,next_action_due_at,source_type,source_ref,metadata")
+        .eq("account_id", nextStop.account_id)
+        .eq("user_id", userId)
+        .order("occurred_at", { ascending: false })
+        .limit(8),
+      db
+        .from("hpo_route_stops")
+        .select("id,route_id,visited_at,status,visit_summary,visit_outcome,next_action,next_action_due_at")
+        .eq("account_id", nextStop.account_id)
+        .eq("user_id", userId)
+        .neq("id", nextStop.id)
+        .order("visited_at", { ascending: false, nullsFirst: false })
+        .limit(6),
+    ]);
+    accountContext = accountResult.data
+      ? {
+          account: accountResult.data,
+          contacts: contactsResult.data ?? [],
+          interactions: interactionsResult.data ?? [],
+          priorRouteStops: historyResult.data ?? [],
+        }
+      : null;
+  }
+
+  return {
+    timezone,
+    today,
+    route,
+    stops,
+    nextStop,
+    lastCompletedStop,
+    completed: completedStops.length,
+    total: stops.length,
+    remaining: Math.max(0, stops.length - completedStops.length),
+    progress: stops.length ? completedStops.length / stops.length : 0,
+    accountContext,
+  };
+}
+
+export const getHpoFieldToday = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) =>
+    getHpoFieldTodayCore({
+      db: context.supabase as any,
+      userId: context.userId,
+    }),
+  );
 
 export const arriveHpoRouteStop = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
