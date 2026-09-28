@@ -15,6 +15,8 @@ type Props = {
   selectedOfficeKey: string | null;
   route?: HpoMapRoute | null;
   onSelectOffice: (key: string) => void;
+  onSelectMany?: (keys: string[]) => void;
+  onOpenAccount?: (accountId: string) => void;
   onToggleRouteStop: (office: HpoMapOffice) => void;
   onBuildRoute: () => void;
   preparing: boolean;
