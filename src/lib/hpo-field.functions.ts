@@ -1026,6 +1026,169 @@ export const reoptimizeHpoRouteRemaining = createServerFn({ method: "POST" })
     }),
   );
 
+export async function getHpoNearbyBackupsCore(input: {
+  db: any;
+  userId: string;
+  routeId?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  maxMinutes?: number;
+}) {
+  const db = input.db;
+  const routeId = clean(input.routeId) || null;
+  const latitude = Number.isFinite(input.latitude) ? Number(input.latitude) : null;
+  const longitude = Number.isFinite(input.longitude) ? Number(input.longitude) : null;
+  const maxMinutes = Math.max(5, Math.min(30, Number(input.maxMinutes ?? 10) || 10));
+
+  let route: any = null;
+  let routeStops: any[] = [];
+  if (routeId) {
+    route = await loadRoute(db, input.userId, routeId);
+    routeStops = await loadStops(db, input.userId, routeId);
+  }
+
+  let origin =
+    latitude != null && longitude != null
+      ? { lat: latitude, lon: longitude }
+      : null;
+  if (!origin && routeStops.length) {
+    const lastVisited = [...routeStops]
+      .filter(
+        (stop: any) =>
+          TERMINAL.has(String(stop.status)) &&
+          Number.isFinite(stop.latitude) &&
+          Number.isFinite(stop.longitude),
+      )
+      .sort(
+        (a: any, b: any) =>
+          Date.parse(b.visited_at ?? b.updated_at) - Date.parse(a.visited_at ?? a.updated_at),
+      )[0];
+    const next = routeStops.find(
+      (stop: any) =>
+        !TERMINAL.has(String(stop.status)) &&
+        Number.isFinite(stop.latitude) &&
+        Number.isFinite(stop.longitude),
+    );
+    const row = lastVisited ?? next;
+    if (row) origin = { lat: Number(row.latitude), lon: Number(row.longitude) };
+  }
+  if (!origin) throw new Error("Current location is needed to find nearby backup offices");
+
+  const existingAccounts = new Set(routeStops.map((stop: any) => stop.account_id).filter(Boolean));
+  const existingProspects = new Set(routeStops.map((stop: any) => stop.prospect_id).filter(Boolean));
+  const [accountsResult, prospectsResult] = await Promise.all([
+    db
+      .from("hpo_accounts")
+      .select("id,name,account_type,specialty,address,city,latitude,longitude,priority,owner_name,last_touch_at,next_action,next_action_due_at,tags,status")
+      .eq("user_id", input.userId)
+      .eq("status", "active")
+      .not("latitude", "is", null)
+      .not("longitude", "is", null),
+    db
+      .from("hpo_prospects")
+      .select("id,name,prospect_type,specialty,address,city,latitude,longitude,fit_status,verification_status,metadata")
+      .eq("user_id", input.userId)
+      .neq("fit_status", "rejected")
+      .not("latitude", "is", null)
+      .not("longitude", "is", null),
+  ]);
+  if (accountsResult.error) throw accountsResult.error;
+  if (prospectsResult.error) throw prospectsResult.error;
+
+  const now = Date.now();
+  const rough = [
+    ...(accountsResult.data ?? [])
+      .filter((row: any) => !existingAccounts.has(row.id))
+      .filter((row: any) => !(Array.isArray(row.tags) && row.tags.includes("exclude_from_adam_route")))
+      .filter((row: any) => !clean(row.owner_name) || String(row.owner_name).trim().toLowerCase() === "adam")
+      .map((row: any) => ({
+        key: `account:${row.id}`,
+        kind: "account" as const,
+        accountId: row.id,
+        prospectId: null,
+        officeName: row.name,
+        address: row.address,
+        city: row.city,
+        latitude: Number(row.latitude),
+        longitude: Number(row.longitude),
+        priority: Number(row.priority ?? 3),
+        lastTouchAt: row.last_touch_at,
+        nextAction: row.next_action,
+        nextActionDueAt: row.next_action_due_at,
+        detail: [row.account_type, row.specialty].filter(Boolean).join(" · "),
+        directMiles: haversineMiles(origin.lat, origin.lon, Number(row.latitude), Number(row.longitude)),
+      })),
+    ...(prospectsResult.data ?? [])
+      .filter((row: any) => !existingProspects.has(row.id))
+      .map((row: any) => ({
+        key: `prospect:${row.id}`,
+        kind: "prospect" as const,
+        accountId: null,
+        prospectId: row.id,
+        officeName: row.name,
+        address: row.address,
+        city: row.city,
+        latitude: Number(row.latitude),
+        longitude: Number(row.longitude),
+        priority: Number(row.metadata?.internal_priority ?? 2),
+        lastTouchAt: null,
+        nextAction: null,
+        nextActionDueAt: null,
+        detail: [row.prospect_type, row.specialty, row.verification_status].filter(Boolean).join(" · "),
+        directMiles: haversineMiles(origin.lat, origin.lon, Number(row.latitude), Number(row.longitude)),
+        prospectFit: row.fit_status,
+        verified: row.verification_status === "verified",
+      })),
+  ]
+    .sort((a, b) => a.directMiles - b.directMiles)
+    .slice(0, 18);
+
+  if (!rough.length) return { origin, options: [], recommended: null };
+  const { durations, distances } = await roadMatrix([
+    origin,
+    ...rough.map((row) => ({ lat: row.latitude, lon: row.longitude })),
+  ]);
+
+  const options = rough
+    .map((row, index) => {
+      const seconds = Number(durations[0]?.[index + 1] ?? Number.POSITIVE_INFINITY);
+      const meters = Number(distances[0]?.[index + 1] ?? Number.POSITIVE_INFINITY);
+      const driveMinutes = Math.round(seconds / 60);
+      const overdue =
+        row.nextActionDueAt && Date.parse(row.nextActionDueAt) < now ? 1 : 0;
+      const daysSinceTouch = row.lastTouchAt
+        ? Math.max(0, Math.floor((now - Date.parse(row.lastTouchAt)) / 86400000))
+        : row.kind === "account"
+          ? 120
+          : 0;
+      const score =
+        row.priority * 12 +
+        overdue * 35 +
+        (row.kind === "account" ? 14 : 0) +
+        Math.min(24, Math.floor(daysSinceTouch / 10) * 3) +
+        (row.kind === "prospect" && (row as any).verified ? 6 : 0) +
+        (row.kind === "prospect" && (row as any).prospectFit === "accepted" ? 8 : 0) -
+        driveMinutes * 2;
+      return {
+        ...row,
+        driveMinutes,
+        distanceMiles: Number((meters / 1609.344).toFixed(1)),
+        score,
+        reasons: [
+          overdue ? "follow-up overdue" : null,
+          row.kind === "account" && daysSinceTouch >= 30 ? `${daysSinceTouch} days since touch` : null,
+          row.priority >= 4 ? "high priority" : null,
+          `${driveMinutes} min away`,
+        ].filter(Boolean),
+      };
+    })
+    .filter((row) => Number.isFinite(row.driveMinutes) && row.driveMinutes <= maxMinutes)
+    .sort((a, b) => b.score - a.score || a.driveMinutes - b.driveMinutes)
+    .slice(0, 5);
+
+  return { origin, options, recommended: options[0] ?? null };
+}
+
 export const getHpoNearbyBackups = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: {
@@ -1039,144 +1202,16 @@ export const getHpoNearbyBackups = createServerFn({ method: "POST" })
     longitude: Number.isFinite(input.longitude) ? Number(input.longitude) : null,
     maxMinutes: Math.max(5, Math.min(30, Number(input.maxMinutes ?? 10) || 10)),
   }))
-  .handler(async ({ data, context }) => {
-    const db = context.supabase as any;
-    let route: any = null;
-    let routeStops: any[] = [];
-    if (data.routeId) {
-      route = await loadRoute(db, context.userId, data.routeId);
-      routeStops = await loadStops(db, context.userId, data.routeId);
-    }
-
-    let origin =
-      data.latitude != null && data.longitude != null
-        ? { lat: data.latitude, lon: data.longitude }
-        : null;
-    if (!origin && routeStops.length) {
-      const lastVisited = [...routeStops]
-        .filter((stop: any) => TERMINAL.has(String(stop.status)) && Number.isFinite(stop.latitude) && Number.isFinite(stop.longitude))
-        .sort((a: any, b: any) => Date.parse(b.visited_at ?? b.updated_at) - Date.parse(a.visited_at ?? a.updated_at))[0];
-      const next = routeStops.find(
-        (stop: any) => !TERMINAL.has(String(stop.status)) && Number.isFinite(stop.latitude) && Number.isFinite(stop.longitude),
-      );
-      const row = lastVisited ?? next;
-      if (row) origin = { lat: Number(row.latitude), lon: Number(row.longitude) };
-    }
-    if (!origin) throw new Error("Current location is needed to find nearby backup offices");
-
-    const existingAccounts = new Set(routeStops.map((stop: any) => stop.account_id).filter(Boolean));
-    const existingProspects = new Set(routeStops.map((stop: any) => stop.prospect_id).filter(Boolean));
-    const [accountsResult, prospectsResult] = await Promise.all([
-      db
-        .from("hpo_accounts")
-        .select("id,name,account_type,specialty,address,city,latitude,longitude,priority,owner_name,last_touch_at,next_action,next_action_due_at,tags,status")
-        .eq("user_id", context.userId)
-        .eq("status", "active")
-        .not("latitude", "is", null)
-        .not("longitude", "is", null),
-      db
-        .from("hpo_prospects")
-        .select("id,name,prospect_type,specialty,address,city,latitude,longitude,fit_status,verification_status,metadata")
-        .eq("user_id", context.userId)
-        .neq("fit_status", "rejected")
-        .not("latitude", "is", null)
-        .not("longitude", "is", null),
-    ]);
-    if (accountsResult.error) throw accountsResult.error;
-    if (prospectsResult.error) throw prospectsResult.error;
-
-    const now = Date.now();
-    const rough = [
-      ...(accountsResult.data ?? [])
-        .filter((row: any) => !existingAccounts.has(row.id))
-        .filter((row: any) => !(Array.isArray(row.tags) && row.tags.includes("exclude_from_adam_route")))
-        .map((row: any) => ({
-          key: `account:${row.id}`,
-          kind: "account" as const,
-          accountId: row.id,
-          prospectId: null,
-          officeName: row.name,
-          address: row.address,
-          city: row.city,
-          latitude: Number(row.latitude),
-          longitude: Number(row.longitude),
-          priority: Number(row.priority ?? 3),
-          lastTouchAt: row.last_touch_at,
-          nextAction: row.next_action,
-          nextActionDueAt: row.next_action_due_at,
-          detail: [row.account_type, row.specialty].filter(Boolean).join(" · "),
-          directMiles: haversineMiles(origin.lat, origin.lon, Number(row.latitude), Number(row.longitude)),
-        })),
-      ...(prospectsResult.data ?? [])
-        .filter((row: any) => !existingProspects.has(row.id))
-        .map((row: any) => ({
-          key: `prospect:${row.id}`,
-          kind: "prospect" as const,
-          accountId: null,
-          prospectId: row.id,
-          officeName: row.name,
-          address: row.address,
-          city: row.city,
-          latitude: Number(row.latitude),
-          longitude: Number(row.longitude),
-          priority: Number(row.metadata?.internal_priority ?? 2),
-          lastTouchAt: null,
-          nextAction: null,
-          nextActionDueAt: null,
-          detail: [row.prospect_type, row.specialty, row.verification_status].filter(Boolean).join(" · "),
-          directMiles: haversineMiles(origin.lat, origin.lon, Number(row.latitude), Number(row.longitude)),
-          prospectFit: row.fit_status,
-          verified: row.verification_status === "verified",
-        })),
-    ]
-      .sort((a, b) => a.directMiles - b.directMiles)
-      .slice(0, 18);
-
-    if (!rough.length) return { origin, options: [], recommended: null };
-    const { durations, distances } = await roadMatrix([
-      origin,
-      ...rough.map((row) => ({ lat: row.latitude, lon: row.longitude })),
-    ]);
-
-    const options = rough
-      .map((row, index) => {
-        const seconds = Number(durations[0]?.[index + 1] ?? Number.POSITIVE_INFINITY);
-        const meters = Number(distances[0]?.[index + 1] ?? Number.POSITIVE_INFINITY);
-        const driveMinutes = Math.round(seconds / 60);
-        const overdue =
-          row.nextActionDueAt && Date.parse(row.nextActionDueAt) < now ? 1 : 0;
-        const daysSinceTouch = row.lastTouchAt
-          ? Math.max(0, Math.floor((now - Date.parse(row.lastTouchAt)) / 86400000))
-          : row.kind === "account"
-            ? 120
-            : 0;
-        const score =
-          row.priority * 12 +
-          overdue * 35 +
-          (row.kind === "account" ? 14 : 0) +
-          Math.min(24, Math.floor(daysSinceTouch / 10) * 3) +
-          (row.kind === "prospect" && (row as any).verified ? 6 : 0) +
-          (row.kind === "prospect" && (row as any).prospectFit === "accepted" ? 8 : 0) -
-          driveMinutes * 2;
-        return {
-          ...row,
-          driveMinutes,
-          distanceMiles: Number((meters / 1609.344).toFixed(1)),
-          score,
-          reasons: [
-            overdue ? "follow-up overdue" : null,
-            row.kind === "account" && daysSinceTouch >= 30 ? `${daysSinceTouch} days since touch` : null,
-            row.priority >= 4 ? "high priority" : null,
-            `${driveMinutes} min away`,
-          ].filter(Boolean),
-        };
-      })
-      .filter((row) => Number.isFinite(row.driveMinutes) && row.driveMinutes <= data.maxMinutes)
-      .sort((a, b) => b.score - a.score || a.driveMinutes - b.driveMinutes)
-      .slice(0, 5);
-
-    return { origin, options, recommended: options[0] ?? null };
-  });
+  .handler(async ({ data, context }) =>
+    getHpoNearbyBackupsCore({
+      db: context.supabase as any,
+      userId: context.userId,
+      routeId: data.routeId,
+      latitude: data.latitude,
+      longitude: data.longitude,
+      maxMinutes: data.maxMinutes,
+    }),
+  );
 
 export const completeHpoRoute = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
