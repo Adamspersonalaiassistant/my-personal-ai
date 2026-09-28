@@ -19,14 +19,14 @@ const BLUE = "#1769e8";
 const BLUE_DARK = "#0f4fb8";
 const BLUE_LIGHT = "#dbeafe";
 
-const PROFESSIONAL_MAP_STYLE = "https://tiles.openfreemap.org/styles/bright";
-
-const FALLBACK_LIGHT_STYLE: StyleSpecification = {
+const PROFESSIONAL_MAP_STYLE: StyleSpecification = {
   version: 8,
   sources: {
     osm: {
       type: "raster",
-      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+      tiles: [
+        "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      ],
       tileSize: 256,
       attribution: "© OpenStreetMap contributors",
       maxzoom: 19,
@@ -34,15 +34,15 @@ const FALLBACK_LIGHT_STYLE: StyleSpecification = {
   },
   layers: [
     {
-      id: "emery-fallback-basemap",
+      id: "hpo-street-basemap",
       type: "raster",
       source: "osm",
       paint: {
-        "raster-saturation": -0.2,
-        "raster-contrast": -0.04,
-        "raster-brightness-min": 0.2,
-        "raster-brightness-max": 1,
         "raster-opacity": 1,
+        "raster-saturation": -0.08,
+        "raster-contrast": 0.04,
+        "raster-brightness-min": 0,
+        "raster-brightness-max": 1,
       },
     },
   ],
@@ -479,8 +479,6 @@ export function HpoMapV2MapLibre({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const officeMarkersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
-  const fallbackStyleUsedRef = useRef(false);
-  const styleLoadedRef = useRef(false);
   const [ready, setReady] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
   const [signalFilter, setSignalFilter] = useState<SignalFilter>("all");
@@ -532,21 +530,15 @@ export function HpoMapV2MapLibre({
       });
       mapRef.current = map;
 
-      map.on("style.load", () => {
-        styleLoadedRef.current = true;
+      map.on("load", () => {
         setupSourcesAndLayers(map);
         setReady(true);
       });
       map.on("error", (event: any) => {
         const message = String(event?.error?.message ?? "");
-        const styleLoadProblem = /style|source|sprite|glyph|fetch|network|http/i.test(message);
-        if (!styleLoadedRef.current && styleLoadProblem && !fallbackStyleUsedRef.current) {
-          fallbackStyleUsedRef.current = true;
-          map.setStyle(FALLBACK_LIGHT_STYLE);
-          return;
-        }
-        if (/webgl|context|initial/i.test(message))
+        if (/webgl|context|initial/i.test(message)) {
           onFatalError?.(message || "MapLibre could not initialize.");
+        }
       });
 
       const resizeObserver = new ResizeObserver(() => map.resize());
@@ -557,7 +549,6 @@ export function HpoMapV2MapLibre({
         officeMarkersRef.current.clear();
         map.remove();
         mapRef.current = null;
-        styleLoadedRef.current = false;
       };
     } catch (error) {
       onFatalError?.(error instanceof Error ? error.message : "MapLibre could not initialize.");
