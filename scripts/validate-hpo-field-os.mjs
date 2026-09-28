@@ -37,6 +37,9 @@ check("Map V2 uses GeoJSON clustering", v2.includes("cluster: true") && v2.inclu
 check("Map V2 preserves account/prospect filters", v2.includes('"account"') && v2.includes('"prospect"'));
 check("Map V2 distinguishes account and prospect points", v2.includes("hpo-office-points") && v2.includes("hpo-prospect-points"));
 check("Map V2 supports synchronized office focus", v2.includes("selectedOfficeKey") && v2.includes("onSelectOffice"));
+check("Map V2 supports deterministic polygon area selection", v2.includes("pointInPolygon") && v2.includes("hpo-selection-area") && v2.includes("Draw select") && planner.includes("onSelectMany={selectManyMapOffices}"));
+check("Map V2 supports relationship-signal filters", v2.includes('"followup"') && v2.includes('"stale"') && v2.includes('"priority"') && v2.includes("Stale 60d+"));
+check("Map V2 opens field account context from the territory map", v2.includes("onOpenAccount") && planner.includes("HpoAccountFieldDetail"));
 check("Map V2 preserves route line", v2.includes("hpo-route-line") && v2.includes("route_geometry"));
 check("Map V2 preserves numbered route stops", v2.includes("hpo-route-stop-numbers"));
 check("Map V2 exposes current location control", v2.includes("GeolocateControl"));
@@ -58,6 +61,7 @@ check("Today field mode exposes next-stop field controls", fieldToday.includes("
 check("Today field mode uses canonical route mutations", fieldToday.includes("setHpoRouteStopOutcome") && fieldToday.includes("addHpoRouteStops") && fieldToday.includes("reoptimizeHpoRouteRemaining") && fieldToday.includes("completeHpoRoute"));
 check("HPO field OS has IndexedDB route note and outbox stores", offline.includes('"hpo_route_snapshots"') && offline.includes('"hpo_draft_notes"') && offline.includes('"hpo_outbox"') && offline.includes("indexedDB.open"));
 check("offline HPO mutations preserve idempotency", offline.includes("idempotencyKey") && fieldToday.includes("offline_sync"));
+check("offline HPO mutations detect stale-server conflicts", routeFns.includes("offline_conflict") && fieldFns.includes("offline_conflict") && fieldToday.includes("baseUpdatedAt: mutation.baseUpdatedAt"));
 check("route add/remove/reorder actions use execution ledger", fieldFns.includes('"hpo.route.add_stops"') && fieldFns.includes('"hpo.route.remove_stop"') && fieldFns.includes('"hpo.route.reorder"') && fieldFns.includes("beginExecution"));
 check("remaining route reoptimization preserves terminal history", fieldFns.includes('"hpo.route.reoptimize"') && fieldFns.includes("const open = stops.filter") && fieldFns.includes("openSlots"));
 check("nearby backup ranking is deterministic", fieldFns.includes("getHpoNearbyBackups") && fieldFns.includes("driveMinutes * 2") && !fieldFns.includes("MODEL_POLICY"));
