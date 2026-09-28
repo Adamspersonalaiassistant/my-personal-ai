@@ -295,6 +295,34 @@ function createOfficePinElement({
   return button;
 }
 
+function createOfficeClusterElement(count: number, onOpen: () => void) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.setAttribute("aria-label", `${count} HPO offices in this area`);
+  button.title = `${count} offices`;
+  const size = count >= 50 ? 46 : count >= 20 ? 42 : count >= 8 ? 38 : 34;
+  button.style.width = `${size}px`;
+  button.style.height = `${size}px`;
+  button.style.borderRadius = "9999px";
+  button.style.border = "3px solid white";
+  button.style.background = BLUE;
+  button.style.color = "#ffffff";
+  button.style.fontSize = count >= 100 ? "10px" : "11px";
+  button.style.fontWeight = "800";
+  button.style.fontFamily = "system-ui, -apple-system, BlinkMacSystemFont, sans-serif";
+  button.style.boxShadow = "0 4px 12px rgba(15,23,42,.28)";
+  button.style.cursor = "pointer";
+  button.style.padding = "0";
+  button.style.display = "grid";
+  button.style.placeItems = "center";
+  button.textContent = String(count);
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    onOpen();
+  });
+  return button;
+}
+
 function boundsForOffices(offices: HpoMapOffice[]) {
   const points = offices.filter(
     (office) =>
@@ -623,12 +651,12 @@ export function HpoMapV2MapLibre({
     const map = mapRef.current;
     if (!map || !ready) return;
 
-    for (const marker of officeMarkersRef.current.values()) marker.remove();
-    officeMarkersRef.current.clear();
+    const clearMarkers = () => {
+      for (const marker of officeMarkersRef.current.values()) marker.remove();
+      officeMarkersRef.current.clear();
+    };
 
-    for (const office of filtered) {
-      if (!Number.isFinite(office.longitude) || !Number.isFinite(office.latitude)) continue;
-
+    const addOfficeMarker = (office: HpoMapOffice) => {
       const selected = selectedSet.has(office.key);
       const focused = office.key === selectedOfficeKey;
       const element = createOfficePinElement({
@@ -637,7 +665,6 @@ export function HpoMapV2MapLibre({
         focused,
         onSelect: () => onSelectOffice(office.key),
       });
-
       const marker = new maplibregl.Marker({
         element,
         anchor: "bottom",
@@ -645,13 +672,76 @@ export function HpoMapV2MapLibre({
       })
         .setLngLat([Number(office.longitude), Number(office.latitude)])
         .addTo(map);
-
       officeMarkersRef.current.set(office.key, marker);
-    }
+    };
+
+    const renderMarkers = () => {
+      clearMarkers();
+      const valid = filtered.filter(
+        (office) =>
+          Number.isFinite(office.longitude) && Number.isFinite(office.latitude),
+      );
+      const zoom = map.getZoom();
+      const cluster = valid.length > 70 && zoom < 11.25;
+
+      if (!cluster) {
+        for (const office of valid) addOfficeMarker(office);
+        return;
+      }
+
+      const pinned: HpoMapOffice[] = [];
+      const ordinary: HpoMapOffice[] = [];
+      for (const office of valid) {
+        if (selectedSet.has(office.key) || office.key === selectedOfficeKey) pinned.push(office);
+        else ordinary.push(office);
+      }
+
+      const cellSize = zoom < 8 ? 76 : zoom < 9.5 ? 62 : 50;
+      const buckets = new Map<string, HpoMapOffice[]>();
+      for (const office of ordinary) {
+        const point = map.project([
+          Number(office.longitude),
+          Number(office.latitude),
+        ]);
+        const key = `${Math.floor(point.x / cellSize)}:${Math.floor(point.y / cellSize)}`;
+        const current = buckets.get(key) ?? [];
+        current.push(office);
+        buckets.set(key, current);
+      }
+
+      for (const [key, bucket] of buckets) {
+        if (bucket.length === 1) {
+          addOfficeMarker(bucket[0]!);
+          continue;
+        }
+        const longitude =
+          bucket.reduce((sum, office) => sum + Number(office.longitude), 0) / bucket.length;
+        const latitude =
+          bucket.reduce((sum, office) => sum + Number(office.latitude), 0) / bucket.length;
+        const element = createOfficeClusterElement(bucket.length, () => {
+          map.easeTo({
+            center: [longitude, latitude],
+            zoom: Math.min(15, map.getZoom() + 2.4),
+            duration: 360,
+          });
+        });
+        const marker = new maplibregl.Marker({ element, anchor: "center" })
+          .setLngLat([longitude, latitude])
+          .addTo(map);
+        officeMarkersRef.current.set(`cluster:${key}`, marker);
+      }
+
+      for (const office of pinned) addOfficeMarker(office);
+    };
+
+    renderMarkers();
+    map.on("moveend", renderMarkers);
+    map.on("zoomend", renderMarkers);
 
     return () => {
-      for (const marker of officeMarkersRef.current.values()) marker.remove();
-      officeMarkersRef.current.clear();
+      map.off("moveend", renderMarkers);
+      map.off("zoomend", renderMarkers);
+      clearMarkers();
     };
   }, [filtered, onSelectOffice, ready, selectedOfficeKey, selectedSet]);
 
