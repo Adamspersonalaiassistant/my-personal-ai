@@ -45,8 +45,10 @@ check(
 );
 check("Route Planner loads Map V2 feature flag", routeFns.includes('select("hpo_map_v2")'));
 check(
-  "RepMove-style Map V2 is the default HPO field renderer with V1 fallback",
-  planner.includes("enabled={true}") && planner.includes("v1={") && planner.includes("<OfficePlanningMap"),
+  "RepMove-style Map V2 is the direct HPO field renderer",
+  planner.includes("<HpoMapV2MapLibre") &&
+    planner.includes("onFatalError") &&
+    !planner.includes("<HpoMapAdapter"),
 );
 check(
   "Map V2 uses GeoJSON clustering",
