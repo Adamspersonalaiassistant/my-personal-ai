@@ -2287,26 +2287,67 @@ export const captureHpoRouteNote = createServerFn({ method: "POST" })
     }),
   );
 
-export const syncHpoRouteToCalendar = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((input: { routeId: string }) => ({ routeId: clean(input.routeId) }))
-  .handler(async ({ data, context }) => {
-    const db = context.supabase as any;
+export async function executeHpoRouteSyncCalendarCore(input: {
+  db: any;
+  userId: string;
+  routeId: string;
+  idempotencyKey: string;
+  sourceChannel: string;
+  sourceMessageId?: string | null;
+}) {
+  const action = "hpo.route.sync_calendar";
+  const execution = await beginExecution({
+    db: input.db,
+    userId: input.userId,
+    domain: "hpo_route",
+    action,
+    sourceMessageId: input.sourceMessageId ?? null,
+    idempotencyKey: input.idempotencyKey,
+    targetType: "hpo_route",
+    targetId: input.routeId,
+    requestPayload: {
+      capability: action,
+      routeId: input.routeId,
+      sourceChannel: input.sourceChannel,
+    },
+  });
+  if (
+    execution.reused &&
+    execution.status === "completed" &&
+    execution.resultPayload["routeCalendarSync"]
+  ) {
+    return execution.resultPayload["routeCalendarSync"] as {
+      ok: true;
+      action: string;
+      executionRunId: string;
+      routeId: string;
+      eventId: string;
+      calendarAction: "created" | "updated";
+      start: string;
+      end: string;
+      reused: boolean;
+    };
+  }
+
+  try {
+    const db = input.db;
     const { data: route, error } = await db
       .from("hpo_route_plans")
       .select("id,route_date,area,start_window,end_window")
-      .eq("id", data.routeId)
-      .eq("user_id", context.userId)
+      .eq("id", input.routeId)
+      .eq("user_id", input.userId)
       .single();
     if (error || !route) throw error ?? new Error("Route not found");
-    if (!route.start_window || !route.end_window)
+    if (!route.start_window || !route.end_window) {
       throw new Error("Set a route start and end time first.");
+    }
 
-    const timezone = await getTimezone(db, context.userId);
+    const timezone = await getTimezone(db, input.userId);
     const start = zonedDateTimeToUtc(route.route_date, route.start_window, timezone);
     const end = zonedDateTimeToUtc(route.route_date, route.end_window, timezone);
-    if (Date.parse(end) <= Date.parse(start))
+    if (Date.parse(end) <= Date.parse(start)) {
       throw new Error("Route end time must be after the start time.");
+    }
 
     const title = `HPO Marketing Route — ${route.area || "Field Marketing"}`;
     const metadata = {
@@ -2315,40 +2356,121 @@ export const syncHpoRouteToCalendar = createServerFn({ method: "POST" })
       event_type: "field_route",
       hpo_route_id: route.id,
       source_type: "route_planner",
+      execution_run_id: execution.id,
+      source_channel: input.sourceChannel,
     };
 
-    const { data: existing } = await db
+    const { data: existing, error: existingError } = await db
       .from("meetings")
       .select("id")
-      .eq("user_id", context.userId)
+      .eq("user_id", input.userId)
       .contains("metadata", { hpo_route_id: route.id })
       .maybeSingle();
+    if (existingError) throw existingError;
 
+    let eventId: string;
+    let calendarAction: "created" | "updated";
     if (existing?.id) {
-      const { error: updateError } = await db
+      const { data: updated, error: updateError } = await db
         .from("meetings")
         .update({ title, meeting_at: start, end_at: end, metadata })
         .eq("id", existing.id)
-        .eq("user_id", context.userId);
-      if (updateError) throw updateError;
-      return { id: existing.id, action: "updated" as const };
+        .eq("user_id", input.userId)
+        .select("id,meeting_at,end_at,metadata")
+        .single();
+      if (
+        updateError ||
+        !updated ||
+        updated.meeting_at !== start ||
+        updated.end_at !== end ||
+        updated.metadata?.hpo_route_id !== route.id
+      ) {
+        throw updateError ?? new Error("Route Calendar update verification failed");
+      }
+      eventId = updated.id;
+      calendarAction = "updated";
+    } else {
+      const { data: meeting, error: insertError } = await db
+        .from("meetings")
+        .insert({
+          user_id: input.userId,
+          title,
+          meeting_at: start,
+          end_at: end,
+          participants: [],
+          metadata,
+        })
+        .select("id,meeting_at,end_at,metadata")
+        .single();
+      if (
+        insertError ||
+        !meeting ||
+        meeting.meeting_at !== start ||
+        meeting.end_at !== end ||
+        meeting.metadata?.hpo_route_id !== route.id
+      ) {
+        throw insertError ?? new Error("Route Calendar creation verification failed");
+      }
+      eventId = meeting.id;
+      calendarAction = "created";
     }
 
-    const { data: meeting, error: insertError } = await db
-      .from("meetings")
-      .insert({
-        user_id: context.userId,
-        title,
-        meeting_at: start,
-        end_at: end,
-        participants: [],
-        metadata,
-      })
-      .select("id")
-      .single();
-    if (insertError) throw insertError;
-    return { id: meeting.id, action: "created" as const };
-  });
+    const result = {
+      ok: true as const,
+      action,
+      executionRunId: execution.id,
+      routeId: route.id,
+      eventId,
+      calendarAction,
+      start,
+      end,
+      reused: execution.reused,
+    };
+    await completeExecution({
+      db,
+      userId: input.userId,
+      runId: execution.id,
+      resultPayload: { routeCalendarSync: result as unknown as Record<string, unknown> },
+      targetType: "meeting",
+      targetId: eventId,
+    });
+    return result;
+  } catch (error) {
+    await failExecution({
+      db: input.db,
+      userId: input.userId,
+      runId: execution.id,
+      errorCode: "hpo_route_sync_calendar_failed",
+      errorMessage: error instanceof Error ? error.message : String(error),
+      retryable: true,
+    }).catch(() => undefined);
+    throw error;
+  }
+}
+
+export const syncHpoRouteToCalendar = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (input: {
+      routeId: string;
+      idempotencyKey?: string | null;
+      sourceChannel?: string | null;
+    }) => ({
+      routeId: clean(input.routeId),
+      idempotencyKey: clean(input.idempotencyKey) || null,
+      sourceChannel: clean(input.sourceChannel) || "ui",
+    }),
+  )
+  .handler(async ({ data, context }) =>
+    executeHpoRouteSyncCalendarCore({
+      db: context.supabase as any,
+      userId: context.userId,
+      routeId: data.routeId,
+      idempotencyKey:
+        data.idempotencyKey || `ui:${crypto.randomUUID()}:hpo.route.sync_calendar`,
+      sourceChannel: data.sourceChannel,
+    }),
+  );
 
 export const getHpoRouteScheduleAdvice = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
