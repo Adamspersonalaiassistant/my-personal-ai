@@ -10,6 +10,7 @@ import { processCalendarAction } from "@/lib/calendar-agent";
 import { processHpoAction } from "@/lib/hpo-action-controller";
 import { processHpoFieldReadCommand } from "@/lib/hpo-field-read-controller";
 import { processHpoRouteCommand } from "@/lib/hpo-route-command-controller";
+import { processHpoRouteStopAction } from "@/lib/hpo-route-action-controller";
 import { captureHpoRouteNoteCore } from "@/lib/hpo-route.functions";
 import { MODEL_POLICY } from "@/lib/model-policy";
 import { recordRuntimeEvent } from "@/lib/runtime-telemetry";
@@ -529,6 +530,23 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
         },
         {
           type: "function",
+          name: "execute_hpo_route_stop_action",
+          description:
+            "Execute the same canonical HPO field-stop action as the manual Today controls. Use for arrival, completed/closed/bad-address/skipped outcomes, and natural visit updates while Adam is on a route.",
+          parameters: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              request: {
+                type: "string",
+                description: "Adam's exact current-stop field update.",
+              },
+            },
+            required: ["request"],
+          },
+        },
+        {
+          type: "function",
           name: "execute_hpo_route_note",
           description:
             "Use Emery's HPO Route Planner note capture when Adam explicitly reports what happened at a field stop or asks to save a marketing-route note. Examples: 'Stop 3, spoke with Amanda and follow up next week' or 'I just left Weiner Mazzei; Jenni will pass the information to the attorney.' The active route from the app is preferred when available. This is non-PHI field marketing only.",
@@ -918,6 +936,56 @@ export const executeVoiceHpoRouteCommand = createServerFn({ method: "POST" })
         routeId: result.routeId,
         executionRunId: result.executionRunId,
         performed: result.performed,
+        deterministicAfterIntent: true,
+      },
+    });
+    return result;
+  });
+
+export const executeVoiceHpoRouteStopAction = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { request: string; requestId?: string | null }) => ({
+    request: String(input?.request ?? "").trim().slice(0, 5000),
+    requestId: input?.requestId ? String(input.requestId).trim().slice(0, 240) : null,
+  }))
+  .handler(async ({ data, context }) => {
+    if (!data.request) {
+      return {
+        recognized: false,
+        performed: false,
+        needsClarification: true,
+        question: "What happened at the current HPO stop?",
+        action: "none",
+      } as const;
+    }
+    const db = context.supabase as any;
+    const { data: profile } = await db
+      .from("profiles")
+      .select("timezone")
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    const startedAt = Date.now();
+    const result = await processHpoRouteStopAction({
+      db,
+      userId: context.userId,
+      message: data.request,
+      timezone: profile?.timezone ?? "America/New_York",
+      requestId: data.requestId,
+      sourceChannel: "voice",
+    });
+    await recordRuntimeEvent(db, context.userId, {
+      channel: "voice",
+      eventType: "hpo_route_stop_action",
+      domain: "hpo",
+      action: result.action,
+      status: result.needsClarification ? "clarification" : result.performed ? "ok" : result.error ? "error" : "skipped",
+      durationMs: Date.now() - startedAt,
+      model: null,
+      metadata: {
+        routeId: result.routeId,
+        stopId: result.stopId,
+        executionRunId: result.executionRunId,
+        status: result.status,
         deterministicAfterIntent: true,
       },
     });
