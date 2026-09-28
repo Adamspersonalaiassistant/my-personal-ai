@@ -95,10 +95,12 @@ check(
   routeFns.includes("router.project-osrm.org/table/v1/driving"),
 );
 check(
-  "Map V2 uses the light RepMove-style green-pin and blue-route visual system",
+  "Map V2 uses the RepMove-style green/red pins, blue route, and Map/List workflow",
   v2.includes('const GREEN = "#10b981"') &&
     v2.includes('const CURRENT_RED = "#ff4d57"') &&
     v2.includes('const BLUE = "#1769e8"') &&
+    v2.includes('hpo-green-pin') &&
+    v2.includes('hpo-red-pin') &&
     v2.includes('viewMode') &&
     v2.includes('MapIcon') &&
     v2.includes('> List'),
