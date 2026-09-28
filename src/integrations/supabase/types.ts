@@ -997,6 +997,21 @@ export type Database = {
         }
         Relationships: []
       }
+      hpo_import_payload_staging: {
+        Row: {
+          chunk: string
+          id: number
+        }
+        Insert: {
+          chunk: string
+          id: number
+        }
+        Update: {
+          chunk?: string
+          id?: number
+        }
+        Relationships: []
+      }
       hpo_import_rows: {
         Row: {
           created_at: string
