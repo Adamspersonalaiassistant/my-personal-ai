@@ -148,7 +148,7 @@ function HpoWorkspace() {
       <div className="mx-auto max-w-5xl min-w-0 space-y-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         <nav
           aria-label="HPO field areas"
-          className="sticky top-0 z-20 grid grid-cols-4 gap-1 border-b border-border/60 bg-background/95 p-1 backdrop-blur-md"
+          className="sticky top-0 z-20 grid grid-cols-4 gap-1 rounded-xl border border-slate-200 bg-white/96 p-1 shadow-sm backdrop-blur-md"
         >
           {tabs.map(({ key, label, icon: Icon }) => (
             <Button
@@ -157,10 +157,10 @@ function HpoWorkspace() {
               variant="ghost"
               onClick={() => setView(key)}
               aria-current={view === key ? "page" : undefined}
-              className={`h-12 min-w-0 flex-col gap-0.5 rounded-md px-0 text-[11px] ${view === key ? "bg-primary/12 font-semibold text-primary" : "text-muted-foreground"}`}
+              className={`h-11 min-w-0 flex-row gap-1 rounded-lg px-1 text-[10px] font-semibold ${view === key ? "bg-[#31486f] text-white hover:bg-[#31486f] hover:text-white" : "text-slate-500 hover:bg-[#d9f4e9] hover:text-[#31486f]"}`}
             >
-              <Icon className="size-4" />
-              <span>{label}</span>
+              <Icon className="size-3.5" />
+              <span className="truncate">{label}</span>
             </Button>
           ))}
         </nav>
