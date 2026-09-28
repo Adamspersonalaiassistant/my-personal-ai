@@ -1027,6 +1027,102 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
         </div>
       </section>
 
+      <section
+        aria-label="Ordered route stops"
+        className="overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-[0_10px_28px_rgba(15,23,42,0.1)]"
+      >
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2.5">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#31486f]">
+              Daily Route
+            </p>
+            <h3 className="text-sm font-semibold">{data.total} scheduled stops</h3>
+          </div>
+          <span className="rounded-full bg-[#d9f4e9] px-2.5 py-1 text-[10px] font-semibold text-[#047857]">
+            {data.remaining} remaining
+          </span>
+        </div>
+        <div className="divide-y divide-slate-200">
+          {[...(data.stops ?? [])]
+            .sort((a: any, b: any) => a.stop_order - b.stop_order)
+            .map((stop: any, index: number, sorted: any[]) => {
+              const done = TERMINAL.has(String(stop.status));
+              return (
+                <div
+                  key={stop.id}
+                  className={`flex min-h-[72px] items-center gap-2 px-2 py-2 ${done ? "bg-slate-50/80" : "bg-white"}`}
+                >
+                  <GripVertical className="size-5 shrink-0 text-slate-300" />
+                  <span className="w-7 shrink-0 text-right text-sm font-bold text-[#31486f]">
+                    {stop.stop_order}.
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className={`break-words text-sm font-semibold ${done ? "text-slate-500" : "text-slate-900"}`}>
+                      {stop.office_name || "Route stop"}
+                    </p>
+                    <p className="mt-0.5 break-words text-[11px] text-slate-500">
+                      {[stop.address, stop.city].filter(Boolean).join(", ") || "Address not saved"}
+                    </p>
+                    {done && stop.visit_summary ? (
+                      <p className="mt-0.5 break-words text-[10px] text-slate-400">
+                        {stop.visit_summary}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex shrink-0 items-center">
+                    {done ? (
+                      <SquareCheckBig className="mr-1 size-5 text-[#10b981]" aria-label="Completed stop" />
+                    ) : null}
+                    {!done && !offline && !pendingCount ? (
+                      <>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-11 text-slate-500"
+                          disabled={
+                            working || index === 0 || TERMINAL.has(String(sorted[index - 1]?.status))
+                          }
+                          onClick={() => void moveQueuedStop(stop.id, -1)}
+                          aria-label={`Move ${stop.office_name || "stop"} earlier`}
+                        >
+                          <ArrowUp className="size-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-11 text-slate-500"
+                          disabled={
+                            working ||
+                            index === sorted.length - 1 ||
+                            TERMINAL.has(String(sorted[index + 1]?.status))
+                          }
+                          onClick={() => void moveQueuedStop(stop.id, 1)}
+                          aria-label={`Move ${stop.office_name || "stop"} later`}
+                        >
+                          <ArrowDown className="size-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-11 text-rose-500"
+                          disabled={working}
+                          onClick={() =>
+                            void removeQueuedStop(stop.id, stop.office_name || "this stop")
+                          }
+                          aria-label={`Remove ${stop.office_name || "stop"} from route`}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+        </div>
+      </section>
+
+
       {nextStop ? (
         <>
           <section className="border-b border-border/60 pb-3">
@@ -1342,101 +1438,6 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
           </div>
         </section>
       ) : null}
-
-      <section
-        aria-label="Ordered route stops"
-        className="overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-[0_10px_28px_rgba(15,23,42,0.1)]"
-      >
-        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2.5">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#31486f]">
-              Daily Route
-            </p>
-            <h3 className="text-sm font-semibold">{data.total} scheduled stops</h3>
-          </div>
-          <span className="rounded-full bg-[#d9f4e9] px-2.5 py-1 text-[10px] font-semibold text-[#047857]">
-            {data.remaining} remaining
-          </span>
-        </div>
-        <div className="divide-y divide-slate-200">
-          {[...(data.stops ?? [])]
-            .sort((a: any, b: any) => a.stop_order - b.stop_order)
-            .map((stop: any, index: number, sorted: any[]) => {
-              const done = TERMINAL.has(String(stop.status));
-              return (
-                <div
-                  key={stop.id}
-                  className={`flex min-h-[72px] items-center gap-2 px-2 py-2 ${done ? "bg-slate-50/80" : "bg-white"}`}
-                >
-                  <GripVertical className="size-5 shrink-0 text-slate-300" />
-                  <span className="w-7 shrink-0 text-right text-sm font-bold text-[#31486f]">
-                    {stop.stop_order}.
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className={`break-words text-sm font-semibold ${done ? "text-slate-500" : "text-slate-900"}`}>
-                      {stop.office_name || "Route stop"}
-                    </p>
-                    <p className="mt-0.5 break-words text-[11px] text-slate-500">
-                      {[stop.address, stop.city].filter(Boolean).join(", ") || "Address not saved"}
-                    </p>
-                    {done && stop.visit_summary ? (
-                      <p className="mt-0.5 break-words text-[10px] text-slate-400">
-                        {stop.visit_summary}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="flex shrink-0 items-center">
-                    {done ? (
-                      <SquareCheckBig className="mr-1 size-5 text-[#10b981]" aria-label="Completed stop" />
-                    ) : null}
-                    {!done && !offline && !pendingCount ? (
-                      <>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="size-11 text-slate-500"
-                          disabled={
-                            working || index === 0 || TERMINAL.has(String(sorted[index - 1]?.status))
-                          }
-                          onClick={() => void moveQueuedStop(stop.id, -1)}
-                          aria-label={`Move ${stop.office_name || "stop"} earlier`}
-                        >
-                          <ArrowUp className="size-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="size-11 text-slate-500"
-                          disabled={
-                            working ||
-                            index === sorted.length - 1 ||
-                            TERMINAL.has(String(sorted[index + 1]?.status))
-                          }
-                          onClick={() => void moveQueuedStop(stop.id, 1)}
-                          aria-label={`Move ${stop.office_name || "stop"} later`}
-                        >
-                          <ArrowDown className="size-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="size-11 text-rose-500"
-                          disabled={working}
-                          onClick={() =>
-                            void removeQueuedStop(stop.id, stop.office_name || "this stop")
-                          }
-                          aria-label={`Remove ${stop.office_name || "stop"} from route`}
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })}
-        </div>
-      </section>
 
       <section className="grid grid-cols-2 gap-2">
         <button
