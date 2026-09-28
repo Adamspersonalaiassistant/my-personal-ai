@@ -1175,7 +1175,7 @@ export function HpoRoutePlanner({
     }
     setMapPreparing(true);
     setMapPreparedOnce(true);
-    void prepareOfficeMap({ data: { limit: 100 } })
+    void prepareOfficeMap({ data: { limit: 500 } })
       .then(() => refresh(activeRouteId))
       .catch((cause) => {
         setError(cause instanceof Error ? cause.message : "Couldn't prepare all office map pins.");
@@ -1295,7 +1295,7 @@ export function HpoRoutePlanner({
     setMapPreparing(true);
     setError(null);
     try {
-      await prepareOfficeMap({ data: { limit: 100 } });
+      await prepareOfficeMap({ data: { limit: 500 } });
       await refresh(activeRouteId);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Couldn't refresh office map pins.");
