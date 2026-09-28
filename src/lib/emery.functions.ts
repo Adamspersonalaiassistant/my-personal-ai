@@ -58,9 +58,12 @@ function hpoRouteStopConfirmation(result:any){
   }
   const label=String(result.status??"updated").replaceAll("_"," ");
   const office=result.officeName||"That stop";
+  const saved = result.action==="hpo.route_stop.log_visit"
+    ? `Saved the visit for ${office}${result.followupTaskId?" and added the authorized follow-up task":""}.`
+    : `${office} marked ${label}.`;
   return result.nextStopName
-    ? `${office} marked ${label}. Next: ${result.nextStopName}.`
-    : `${office} marked ${label}. There are no unfinished stops left on this route.`;
+    ? `${saved} Next: ${result.nextStopName}.`
+    : `${saved} There are no unfinished stops left on this route.`;
 }
 function hpoFieldReadConfirmation(result:any){
   if(!result?.recognized)return null;
