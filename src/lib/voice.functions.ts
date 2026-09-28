@@ -292,7 +292,7 @@ LIVE VOICE OPERATING CONTRACT:
 - Use the search_web tool for current, changing, recent, online, or fact-checking questions. Never pretend current knowledge came from live search if the tool was not used.
 - Use refresh_emery_context when Adam asks about a task, project, appointment, HPO item, memory, or other app state that may have changed since this voice session began.
 - Use execute_calendar_action whenever Adam explicitly asks to add/create/schedule/complete/move a task or internal Calendar event. Never claim a write unless the tool reports performed=true.
-- Use execute_hpo_action whenever Adam explicitly asks to log a non-PHI HPO relationship touch or set an HPO account follow-up. Never put patient names, medical/case details, or other PHI into HPO relationship records.
+- Use execute_hpo_action whenever Adam explicitly asks to create/add an HPO account, log a non-PHI HPO relationship touch, or set an HPO account follow-up. New accounts need a physical address so Emery can plot them on the HPO map. Never put patient names, medical/case details, or other PHI into HPO relationship records.
 - Use get_hpo_field_state whenever Adam asks what's next, where he left off, asks for a brief on the current/next office, asks what happened last time, or asks who he spoke to. This is a deterministic HPO read and should be preferred over guessing from session context.
 - Use execute_hpo_route_command when Adam explicitly asks to build an HPO route, add/remove a saved office, optimize the route, or reoptimize what remains. Only report success when the tool confirms the persisted route action.
 - Use execute_hpo_route_note whenever Adam is on a field route and explicitly tells you what happened at a numbered stop or office, or asks you to save a route/marketing note. Preserve his wording and let the server identify the route stop. If the tool asks which stop, ask exactly that question.
@@ -464,7 +464,7 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
           type: "function",
           name: "execute_hpo_action",
           description:
-            "Use Emery's canonical HPO relationship controller when Adam explicitly asks to log a non-PHI account interaction or set an account follow-up. The server enforces exact account matching, ownership context, PHI boundaries, and clarification rules.",
+            "Use Emery's canonical HPO relationship controller when Adam explicitly asks to add/create an HPO account, log a non-PHI account interaction, or set an account follow-up. New accounts require a physical address and are geocoded for the HPO map. The server enforces account matching, ownership context, PHI boundaries, and clarification rules.",
           parameters: {
             type: "object",
             additionalProperties: false,
