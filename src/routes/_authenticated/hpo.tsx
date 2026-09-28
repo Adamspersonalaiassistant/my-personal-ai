@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
   Activity,
@@ -74,7 +74,7 @@ function HpoWorkspace() {
   const [revision, setRevision] = useState(0);
   const [initialResolved, setInitialResolved] = useState(false);
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     try {
       setData(await read({ data: { page: 0 } }));
       setPage(0);
@@ -85,10 +85,10 @@ function HpoWorkspace() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [read]);
   useEffect(() => {
     void refresh();
-  }, []);
+  }, [refresh]);
   useEffect(() => {
     if (initialResolved) return;
     let cancelled = false;
