@@ -2098,6 +2098,9 @@ export async function captureHpoRouteNoteCore(input: {
   userId: string;
   routeId: string;
   message: string;
+  idempotencyKey?: string | null;
+  sourceChannel?: string | null;
+  sourceMessageId?: string | null;
 }) {
   const message = clean(input.message);
   if (!message) throw new Error("Tell Emery what happened at the stop");
@@ -2106,10 +2109,23 @@ export async function captureHpoRouteNoteCore(input: {
     userId: input.userId,
     domain: "hpo_route",
     action: "capture_route_note",
+    sourceMessageId: input.sourceMessageId ?? null,
+    idempotencyKey: input.idempotencyKey ?? null,
     targetType: "hpo_route",
     targetId: input.routeId,
-    requestPayload: { routeId: input.routeId, message },
+    requestPayload: {
+      routeId: input.routeId,
+      message,
+      sourceChannel: input.sourceChannel ?? "route_note",
+    },
   });
+  if (
+    execution.reused &&
+    execution.status === "completed" &&
+    execution.resultPayload["routeNoteResult"]
+  ) {
+    return execution.resultPayload["routeNoteResult"] as any;
+  }
   const { data: stops, error } = await input.db
     .from("hpo_route_stops")
     .select("*")
@@ -2214,9 +2230,10 @@ export async function captureHpoRouteNoteCore(input: {
     nextAction,
     nextActionDueAt: parsedNextActionDueAt ?? target.next_action_due_at ?? null,
     idempotencyKey: `route-note:${execution.id}:${target.id}:hpo.route_stop.log_visit`,
-    sourceChannel: "voice_or_route_note",
+    sourceChannel: input.sourceChannel ?? "voice_or_route_note",
+    sourceMessageId: input.sourceMessageId ?? null,
     parentRunId: execution.id,
-    traceId: execution.id,
+    traceId: input.sourceMessageId ?? execution.id,
     createFollowupTask:
       Boolean(nextAction) &&
       /\b(add it|add that|make (?:that|it) a task|create (?:a )?task|add (?:a )?task|put (?:that|it) (?:in|on) (?:my )?task)/i.test(message),
@@ -2261,6 +2278,8 @@ export const captureHpoRouteNote = createServerFn({ method: "POST" })
       userId: context.userId,
       routeId: data.routeId,
       message: data.message,
+      idempotencyKey: `ui:${crypto.randomUUID()}:hpo.route_stop.log_visit`,
+      sourceChannel: "ui",
     }),
   );
 
