@@ -155,7 +155,8 @@ check(
   hpoRoute.includes("createHpoAccount") &&
     hpoRoute.includes("logHpoInteraction") &&
     hpoRoute.includes("setHpoFieldAccountFollowup") &&
-    accountDetail.includes("updateHpoFieldAccount"),
+    accountDetail.includes("updateHpoFieldAccount") &&
+    accountDetail.includes("addHpoFieldContact"),
 );
 check(
   "HPO workspace reads and updates are authenticated owner-scoped",
