@@ -175,6 +175,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
           stopId: mutation.targetId,
           idempotencyKey: mutation.idempotencyKey,
           sourceChannel: "offline_sync",
+          baseUpdatedAt: mutation.baseUpdatedAt ?? null,
         },
       });
     } else if (mutation.action === "hpo.route_stop.set_outcome") {
@@ -184,6 +185,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
           status: payload.status,
           idempotencyKey: mutation.idempotencyKey,
           sourceChannel: "offline_sync",
+          baseUpdatedAt: mutation.baseUpdatedAt ?? null,
         },
       });
     } else if (mutation.action === "hpo.route_stop.log_visit") {
@@ -197,6 +199,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
           nextActionDueAt: payload.nextActionDueAt ?? null,
           idempotencyKey: mutation.idempotencyKey,
           sourceChannel: "offline_sync",
+          baseUpdatedAt: mutation.baseUpdatedAt ?? null,
         },
       });
     } else if (mutation.action === "hpo.route_stop.set_followup") {
@@ -207,6 +210,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
           nextActionDueAt: payload.nextActionDueAt ?? null,
           idempotencyKey: mutation.idempotencyKey,
           sourceChannel: "offline_sync",
+          baseUpdatedAt: mutation.baseUpdatedAt ?? null,
         },
       });
     }
@@ -226,11 +230,17 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
         try {
           await syncOne(mutation);
         } catch (caught) {
+          const detail = caught instanceof Error ? caught.message : String(caught);
           await updateHpoOutboxMutation(mutation, {
             status: "failed",
             attempts: mutation.attempts + 1,
-            lastError: caught instanceof Error ? caught.message : String(caught),
+            lastError: detail,
           });
+          if (detail.includes("offline_conflict")) {
+            setError("An offline field update needs review because this stop changed on the server. Your local mutation is still saved and was not overwritten.");
+          } else {
+            setError("A pending field update could not sync yet. It is still saved on this phone and can retry safely.");
+          }
           break;
         }
       }
