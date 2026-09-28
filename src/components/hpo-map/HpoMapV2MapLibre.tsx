@@ -9,7 +9,7 @@ import type {
   StyleSpecification,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { Check, LocateFixed, MapPinned, Maximize2, RefreshCw, Search, X } from "lucide-react";
+import { Check, List, LocateFixed, Map as MapIcon, MapPinned, Maximize2, RefreshCw, Search, X } from "lucide-react";
 import type { HpoMapOffice, HpoMapRoute } from "@/components/hpo-map/types";
 import "@/components/hpo-map/hpo-map-v2.css";
 
@@ -17,6 +17,10 @@ const TERMINAL = new Set(["completed", "visited", "skipped", "closed", "bad_addr
 const BLUE = "#1769e8";
 const BLUE_DARK = "#0f4fb8";
 const BLUE_LIGHT = "#dbeafe";
+const GREEN = "#10b981";
+const GREEN_DARK = "#047857";
+const GREEN_LIGHT = "#d1fae5";
+const CURRENT_RED = "#ff4d57";
 
 const LIGHT_EMERY_STYLE: StyleSpecification = {
   version: 8,
@@ -36,11 +40,11 @@ const LIGHT_EMERY_STYLE: StyleSpecification = {
       type: "raster",
       source: "osm",
       paint: {
-        "raster-saturation": -0.75,
-        "raster-contrast": -0.1,
-        "raster-brightness-min": 0.68,
+        "raster-saturation": -1,
+        "raster-contrast": -0.18,
+        "raster-brightness-min": 0.78,
         "raster-brightness-max": 1,
-        "raster-opacity": 0.94,
+        "raster-opacity": 0.9,
       },
     },
   ],
@@ -323,7 +327,7 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       source: "hpo-offices",
       filter: ["has", "point_count"],
       paint: {
-        "circle-color": BLUE,
+        "circle-color": GREEN,
         "circle-radius": ["step", ["get", "point_count"], 17, 10, 20, 30, 23, 75, 27],
         "circle-stroke-color": "#ffffff",
         "circle-stroke-width": 3,
@@ -361,10 +365,10 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "kind"], "account"]],
       paint: {
         "circle-radius": ["case", ["==", ["get", "selected"], 1], 9, 7],
-        "circle-color": BLUE,
+        "circle-color": GREEN,
         "circle-stroke-color": "#ffffff",
-        "circle-stroke-width": 2.5,
-        "circle-opacity": 0.96,
+        "circle-stroke-width": 3,
+        "circle-opacity": 0.98,
       },
     });
   }
@@ -377,8 +381,8 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       paint: {
         "circle-radius": ["case", ["==", ["get", "selected"], 1], 9, 7],
         "circle-color": "#ffffff",
-        "circle-stroke-color": BLUE,
-        "circle-stroke-width": 2.5,
+        "circle-stroke-color": GREEN,
+        "circle-stroke-width": 3,
       },
     });
   }
@@ -395,7 +399,7 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       paint: {
         "circle-radius": 11,
         "circle-color": "rgba(23,105,232,0)",
-        "circle-stroke-color": BLUE_DARK,
+        "circle-stroke-color": GREEN_DARK,
         "circle-stroke-width": 1.5,
         "circle-stroke-opacity": 0.45,
       },
@@ -440,9 +444,9 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       filter: ["==", ["get", "current"], 1],
       paint: {
         "circle-radius": 18,
-        "circle-color": BLUE_LIGHT,
-        "circle-opacity": 0.55,
-        "circle-stroke-color": BLUE,
+        "circle-color": "#ffe1e4",
+        "circle-opacity": 0.7,
+        "circle-stroke-color": CURRENT_RED,
         "circle-stroke-width": 2,
       },
     });
@@ -456,6 +460,8 @@ function setupSourcesAndLayers(map: MapLibreMap) {
         "circle-radius": ["case", ["==", ["get", "current"], 1], 12, 10],
         "circle-color": [
           "case",
+          ["==", ["get", "current"], 1],
+          CURRENT_RED,
           ["==", ["get", "status"], "closed"],
           "#ffffff",
           ["==", ["get", "status"], "bad_address"],
@@ -463,8 +469,8 @@ function setupSourcesAndLayers(map: MapLibreMap) {
           ["==", ["get", "status"], "skipped"],
           "#e2e8f0",
           ["==", ["get", "completed"], 1],
-          "#94a3b8",
-          BLUE,
+          "#6fbf9a",
+          GREEN,
         ],
         "circle-stroke-color": [
           "case",
@@ -523,6 +529,7 @@ export function HpoMapV2MapLibre({
   const [query, setQuery] = useState("");
   const [drawMode, setDrawMode] = useState(false);
   const [drawPoints, setDrawPoints] = useState<Array<[number, number]>>([]);
+  const [viewMode, setViewMode] = useState<"map" | "list">("map");
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -595,6 +602,12 @@ export function HpoMapV2MapLibre({
       return undefined;
     }
   }, [onFatalError]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || viewMode !== "map") return;
+    requestAnimationFrame(() => map.resize());
+  }, [ready, viewMode]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -766,16 +779,20 @@ export function HpoMapV2MapLibre({
 
   const totalWithAddress = offices.filter((office) => office.address).length;
   const totalMapped = offices.filter((office) => office.mapped).length;
+  const routeMiles =
+    Number.isFinite(route?.optimized_distance_meters) && Number(route?.optimized_distance_meters) > 0
+      ? (Number(route?.optimized_distance_meters) / 1609.344).toFixed(1)
+      : null;
 
   return (
     <section className="hpo-map-v2 overflow-hidden rounded-2xl border border-primary/15 bg-white shadow-[0_12px_32px_rgba(0,0,0,0.14)]">
       <div className="border-b border-slate-200 bg-white p-3 text-slate-950">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#1769e8]">
-              Territory Map
+              {routeMiles ? `Today · ${routeMiles} miles` : "Territory Map"}
             </p>
-            <h3 className="mt-1 text-base font-semibold">Find offices and build the route.</h3>
+            <h3 className="mt-1 text-base font-semibold">Field territory</h3>
           </div>
           <button
             type="button"
@@ -785,6 +802,27 @@ export function HpoMapV2MapLibre({
             aria-label="Refresh office map pins"
           >
             <RefreshCw className={`size-3.5 ${preparing ? "animate-spin" : ""}`} />
+          </button>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 rounded-xl bg-[#d9f4e9] p-1">
+          <button
+            type="button"
+            onClick={() => setViewMode("map")}
+            className={`flex min-h-11 items-center justify-center gap-2 rounded-lg text-xs font-semibold transition ${
+              viewMode === "map" ? "bg-[#31486f] text-white shadow-sm" : "text-slate-600"
+            }`}
+          >
+            <MapIcon className="size-4" /> Map
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("list")}
+            className={`flex min-h-11 items-center justify-center gap-2 rounded-lg text-xs font-semibold transition ${
+              viewMode === "list" ? "bg-[#31486f] text-white shadow-sm" : "text-slate-600"
+            }`}
+          >
+            <List className="size-4" /> List
           </button>
         </div>
 
@@ -854,10 +892,10 @@ export function HpoMapV2MapLibre({
         </div>
       </div>
 
-      <div className="relative">
+      <div className={viewMode === "map" ? "relative" : "hidden"}>
         <div
           ref={containerRef}
-          className="h-[min(52dvh,480px)] min-h-[360px] w-full bg-[#f8fafc]"
+          className="h-[min(58dvh,540px)] min-h-[390px] w-full bg-[#f8fafc]"
         />
         <div className="absolute left-2 top-2 z-10 flex items-center gap-1">
           <div className="pointer-events-none rounded-lg border border-slate-200/80 bg-white/92 px-2 py-1 text-[9px] font-medium text-slate-500 shadow-sm backdrop-blur">
@@ -930,8 +968,9 @@ export function HpoMapV2MapLibre({
         </div>
       </div>
 
+      {viewMode === "list" ? (
       <div className="border-t border-slate-200 bg-white p-3">
-        <div className="max-h-56 space-y-1 overflow-y-auto overscroll-contain">
+        <div className="max-h-[56dvh] space-y-1 overflow-y-auto overscroll-contain">
           {filtered.slice(0, 40).map((office) => {
             const selected = selectedSet.has(office.key);
             const focused = office.key === selectedOfficeKey;
@@ -948,8 +987,8 @@ export function HpoMapV2MapLibre({
                   <span
                     className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border text-[9px] font-bold ${
                       office.kind === "account"
-                        ? "border-[#1769e8] bg-[#1769e8] text-white"
-                        : "border-[#1769e8] bg-white text-[#1769e8]"
+                        ? "border-[#10b981] bg-[#10b981] text-white"
+                        : "border-[#10b981] bg-white text-[#047857]"
                     }`}
                   >
                     {office.kind === "account" ? "A" : "P"}
@@ -969,15 +1008,16 @@ export function HpoMapV2MapLibre({
           })}
         </div>
       </div>
+      ) : null}
 
       {selectedOffice ? (
-        <div className="border-t border-slate-200 bg-white p-4 text-slate-950">
+        <div className={`${viewMode === "map" ? "relative z-20 mx-3 -mt-16 rounded-2xl border border-slate-200 shadow-[0_18px_40px_rgba(15,23,42,0.18)]" : "border-t border-slate-200"} bg-white p-4 text-slate-950`}>
           <div className="flex items-start gap-3">
             <span
               className={`flex size-10 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold ${
                 selectedOffice.kind === "account"
-                  ? "border-[#1769e8] bg-[#1769e8] text-white"
-                  : "border-[#1769e8] bg-white text-[#1769e8]"
+                  ? "border-[#10b981] bg-[#10b981] text-white"
+                  : "border-[#10b981] bg-white text-[#047857]"
               }`}
             >
               {selectedOffice.kind === "account" ? "A" : "P"}
@@ -985,7 +1025,7 @@ export function HpoMapV2MapLibre({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <h4 className="break-words text-sm font-semibold">{selectedOffice.officeName}</h4>
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-semibold capitalize text-slate-500">
+                <span className="rounded-full bg-[#d9f4e9] px-2 py-0.5 text-[9px] font-semibold capitalize text-[#047857]">
                   {selectedOffice.kind}
                 </span>
               </div>
