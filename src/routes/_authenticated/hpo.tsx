@@ -95,7 +95,12 @@ function HpoWorkspace() {
     void readToday({})
       .then((result) => {
         if (cancelled) return;
-        if (result.route && result.route.route_date === result.today) setView("today");
+        if (
+          result.route &&
+          (result.route.route_date === result.today ||
+            ["active", "in_progress"].includes(result.route.status))
+        )
+          setView("today");
         setInitialResolved(true);
       })
       .catch(() => setInitialResolved(true));
