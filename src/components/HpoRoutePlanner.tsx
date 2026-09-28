@@ -33,7 +33,7 @@ import {
   syncHpoRouteToCalendar,
   updateHpoRouteStop,
 } from "@/lib/hpo-route.functions";
-import { HpoMapAdapter } from "@/components/hpo-map/HpoMapAdapter";
+import { HpoMapV2MapLibre } from "@/components/hpo-map/HpoMapV2MapLibre";
 import { HpoAccountFieldDetail } from "@/components/HpoAccountFieldDetail";
 import { loadHpoOfficeSnapshots, saveHpoOfficeSnapshots } from "@/lib/hpo-field-offline";
 import {
@@ -1556,20 +1556,7 @@ export function HpoRoutePlanner() {
       </section>
 
       {data || mapOffices.length ? (
-        <HpoMapAdapter
-          enabled={true}
-          v1={
-            <OfficePlanningMap
-              offices={mapOffices}
-              selectedKeys={mapSelectedKeys}
-              selectedOfficeKey={selectedMapOfficeKey}
-              onSelectOffice={setSelectedMapOfficeKey}
-              onToggleRouteStop={toggleMapRouteStop}
-              onBuildRoute={startRouteFromMap}
-              preparing={mapPreparing}
-              onRefreshPins={() => void refreshOfficePins()}
-            />
-          }
+        <HpoMapV2MapLibre
           offices={mapOffices}
           selectedKeys={mapSelectedKeys}
           selectedOfficeKey={selectedMapOfficeKey}
@@ -1581,6 +1568,7 @@ export function HpoRoutePlanner() {
           onBuildRoute={startRouteFromMap}
           preparing={mapPreparing}
           onRefreshPins={() => void refreshOfficePins()}
+          onFatalError={(message) => setError(`Map renderer error: ${message}`)}
         />
       ) : null}
 
