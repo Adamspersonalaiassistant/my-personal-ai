@@ -70,6 +70,12 @@ function dateOnly(value: string | null | undefined) {
   return date.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
+function isNetworkFailure(error: unknown) {
+  if (typeof navigator !== "undefined" && !navigator.onLine) return true;
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return error instanceof TypeError || /network|failed to fetch|load failed|offline|connection/i.test(message);
+}
+
 async function currentPosition(): Promise<{ latitude: number; longitude: number } | null> {
   if (typeof navigator === "undefined" || !navigator.geolocation) return null;
   return new Promise((resolve) => {
@@ -244,6 +250,9 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
       }
       if (!cancelled) {
         await refreshPendingCount();
+        if (typeof navigator !== "undefined" && navigator.onLine) {
+          void syncOutbox();
+        }
         setLoading(false);
       }
     })();
@@ -352,7 +361,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
       await clearHpoDraftNote(nextStop.id).catch(() => undefined);
       await load();
     } catch (caught) {
-      if (typeof navigator !== "undefined" && !navigator.onLine) {
+      if (isNetworkFailure(caught)) {
         await queueMutation("hpo.route_stop.set_outcome", nextStop.id, { status }, key);
         optimisticFinalStatus(status);
       } else {
@@ -385,7 +394,18 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
       setMessage("Arrival recorded.");
       await load();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Couldn't record arrival.");
+      if (isNetworkFailure(caught)) {
+        await queueMutation("hpo.route_stop.arrive", nextStop.id, {}, key);
+        setData((current: any) => ({
+          ...current,
+          nextStop: current?.nextStop ? { ...current.nextStop, status: "arrived" } : null,
+          stops: (current?.stops ?? []).map((stop: any) =>
+            stop.id === nextStop.id ? { ...stop, status: "arrived" } : stop,
+          ),
+        }));
+      } else {
+        setError(caught instanceof Error ? caught.message : "Couldn't record arrival.");
+      }
     } finally {
       setWorking(false);
     }
@@ -432,7 +452,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
       setShowNote(false);
       await load();
     } catch (caught) {
-      if (typeof navigator !== "undefined" && !navigator.onLine) {
+      if (isNetworkFailure(caught)) {
         await queueMutation("hpo.route_stop.log_visit", nextStop.id, payload, key);
         optimisticFinalStatus(visitStatus);
         setShowNote(false);
@@ -526,6 +546,30 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
     } finally {
       setWorking(false);
     }
+  }
+
+  async function copyTodayVisits() {
+    if (!route) return;
+    const completed = (data?.stops ?? [])
+      .filter((stop: any) => TERMINAL.has(String(stop.status)))
+      .sort((a: any, b: any) => Number(a.stop_order) - Number(b.stop_order));
+    const rows = [
+      ["Date", "Stop Number", "Office", "Visit Status", "Visit Notes", "Follow-Up", "Account Status"],
+      ...completed.map((stop: any) => [
+        route.route_date,
+        String(stop.stop_order ?? ""),
+        stop.office_name ?? "",
+        String(stop.status ?? "").replaceAll("_", " "),
+        stop.notes ?? stop.visit_summary ?? "",
+        stop.next_action ?? "",
+        stop.visit_outcome ?? "",
+      ]),
+    ];
+    const tsv = rows
+      .map((row) => row.map((cell) => String(cell).replace(/[\t\n\r]+/g, " ")).join("\t"))
+      .join("\n");
+    await navigator.clipboard.writeText(tsv);
+    setMessage(`${completed.length} completed visit${completed.length === 1 ? "" : "s"} copied for your HPO tracker.`);
   }
 
   async function wrapUp() {
@@ -896,6 +940,13 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
           className="emery-press flex min-h-12 items-center justify-center gap-2 rounded-xl border border-primary/18 bg-primary/[0.04] px-3 text-xs font-semibold text-primary disabled:opacity-40"
         >
           <LocateFixed className="size-4" /> Fix remaining route
+        </button>
+        <button
+          type="button"
+          onClick={() => void copyTodayVisits()}
+          className="emery-press flex min-h-12 items-center justify-center gap-2 rounded-xl border border-border/45 px-3 text-xs font-semibold text-muted-foreground"
+        >
+          <CheckCircle2 className="size-4" /> Copy Visits
         </button>
         <button
           type="button"
