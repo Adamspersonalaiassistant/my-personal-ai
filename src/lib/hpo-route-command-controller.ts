@@ -496,8 +496,8 @@ export async function processHpoRouteCommand(input: {
         db: input.db,
         userId: input.userId,
         routeId: route.id,
-        latitude: input.latitude,
-        longitude: input.longitude,
+        latitude: Number.isFinite(input.latitude) ? Number(input.latitude) : null,
+        longitude: Number.isFinite(input.longitude) ? Number(input.longitude) : null,
         maxMinutes,
       });
       const recommendation = nearby.recommended;
@@ -700,7 +700,7 @@ export async function processHpoRouteCommand(input: {
           .filter((row: any) => !TERMINAL.has(String(row.status)))
           .map((row: any) => ({ row, score: nameScore(officeTargetPhrase(input.message) || input.message, row.office_name ?? "") }))
           .filter((item: { row: any; score: number }) => item.score >= 45)
-          .sort((left, right) => right.score - left.score);
+          .sort((left: { row: any; score: number }, right: { row: any; score: number }) => right.score - left.score);
         if (ranked.length > 1 && ranked[0]!.score - ranked[1]!.score < 10) {
           return empty({
             needsClarification: true,
