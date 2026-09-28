@@ -8,6 +8,7 @@ import {
   executeVoiceHpoAction,
   executeVoiceHpoFieldRead,
   executeVoiceHpoRouteCommand,
+  executeVoiceHpoRouteStopAction,
   executeVoiceHpoRouteNote,
   getVoiceReadiness,
   persistVoiceTranscript,
@@ -70,6 +71,7 @@ export function EmeryVoiceControl({
   const executeHpoAction = useServerFn(executeVoiceHpoAction);
   const executeHpoFieldRead = useServerFn(executeVoiceHpoFieldRead);
   const executeHpoRouteCommand = useServerFn(executeVoiceHpoRouteCommand);
+  const executeHpoRouteStopAction = useServerFn(executeVoiceHpoRouteStopAction);
   const executeHpoRouteNote = useServerFn(executeVoiceHpoRouteNote);
   const searchWeb = useServerFn(searchWebForVoice);
   const refreshContext = useServerFn(refreshVoiceContext);
@@ -254,6 +256,18 @@ export function EmeryVoiceControl({
           return;
         }
 
+        if (name === "execute_hpo_route_stop_action") {
+          const result = await executeHpoRouteStopAction({
+            data: {
+              request: String(args.request ?? ""),
+              requestId: `voice:${sessionIdRef.current ?? "session"}:${callId}`,
+            },
+          });
+          sendToolOutput(callId, JSON.stringify(result));
+          onConversationChanged?.();
+          return;
+        }
+
         if (name === "execute_hpo_route_note") {
           const result = await executeHpoRouteNote({
             data: {
@@ -356,7 +370,7 @@ export function EmeryVoiceControl({
         sendToolOutput(callId, "That tool is temporarily unavailable. Answer without inventing its result.");
       }
     },
-    [executeCalendarAction, executeHpoAction, executeHpoFieldRead, executeHpoRouteCommand, executeHpoRouteNote, hpoRouteId, onConversationChanged, refreshContext, searchWeb, sendToolOutput, updateVoiceDelivery],
+    [executeCalendarAction, executeHpoAction, executeHpoFieldRead, executeHpoRouteCommand, executeHpoRouteStopAction, executeHpoRouteNote, hpoRouteId, onConversationChanged, refreshContext, searchWeb, sendToolOutput, updateVoiceDelivery],
   );
 
   const handleRealtimeEvent = useCallback(
