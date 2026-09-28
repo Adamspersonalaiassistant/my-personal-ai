@@ -445,6 +445,83 @@ export type Database = {
         }
         Relationships: []
       }
+      emery_execution_runs: {
+        Row: {
+          action: string
+          completed_at: string | null
+          created_at: string
+          domain: string
+          error_code: string | null
+          error_message: string | null
+          id: string
+          idempotency_key: string | null
+          parent_run_id: string | null
+          request_payload: Json
+          result_payload: Json
+          retry_count: number
+          retryable: boolean
+          source_message_id: string | null
+          started_at: string | null
+          status: string
+          target_id: string | null
+          target_type: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          completed_at?: string | null
+          created_at?: string
+          domain: string
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          idempotency_key?: string | null
+          parent_run_id?: string | null
+          request_payload?: Json
+          result_payload?: Json
+          retry_count?: number
+          retryable?: boolean
+          source_message_id?: string | null
+          started_at?: string | null
+          status?: string
+          target_id?: string | null
+          target_type?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          completed_at?: string | null
+          created_at?: string
+          domain?: string
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          idempotency_key?: string | null
+          parent_run_id?: string | null
+          request_payload?: Json
+          result_payload?: Json
+          retry_count?: number
+          retryable?: boolean
+          source_message_id?: string | null
+          started_at?: string | null
+          status?: string
+          target_id?: string | null
+          target_type?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "emery_execution_runs_parent_run_id_fkey"
+            columns: ["parent_run_id"]
+            isOneToOne: false
+            referencedRelation: "emery_execution_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       emery_improvement_backlog: {
         Row: {
           area: string
@@ -722,8 +799,11 @@ export type Database = {
           city: string | null
           created_at: string
           dedupe_key: string | null
+          geocoded_at: string | null
           id: string
           last_touch_at: string | null
+          latitude: number | null
+          longitude: number | null
           metadata: Json
           name: string
           next_action: string | null
@@ -751,8 +831,11 @@ export type Database = {
           city?: string | null
           created_at?: string
           dedupe_key?: string | null
+          geocoded_at?: string | null
           id?: string
           last_touch_at?: string | null
+          latitude?: number | null
+          longitude?: number | null
           metadata?: Json
           name: string
           next_action?: string | null
@@ -780,8 +863,11 @@ export type Database = {
           city?: string | null
           created_at?: string
           dedupe_key?: string | null
+          geocoded_at?: string | null
           id?: string
           last_touch_at?: string | null
+          latitude?: number | null
+          longitude?: number | null
           metadata?: Json
           name?: string
           next_action?: string | null
@@ -1043,7 +1129,10 @@ export type Database = {
           created_at: string
           disposition_reason: string | null
           fit_status: string
+          geocoded_at: string | null
           id: string
+          latitude: number | null
+          longitude: number | null
           metadata: Json
           name: string
           normalized_name: string
@@ -1068,7 +1157,10 @@ export type Database = {
           created_at?: string
           disposition_reason?: string | null
           fit_status?: string
+          geocoded_at?: string | null
           id?: string
+          latitude?: number | null
+          longitude?: number | null
           metadata?: Json
           name: string
           normalized_name: string
@@ -1093,7 +1185,10 @@ export type Database = {
           created_at?: string
           disposition_reason?: string | null
           fit_status?: string
+          geocoded_at?: string | null
           id?: string
+          latitude?: number | null
+          longitude?: number | null
           metadata?: Json
           name?: string
           normalized_name?: string
@@ -1126,13 +1221,22 @@ export type Database = {
         Row: {
           area: string | null
           created_at: string
+          end_address: string | null
+          end_latitude: number | null
+          end_longitude: number | null
           end_window: string | null
           id: string
           metadata: Json
           notes: string | null
+          optimized_at: string | null
+          optimized_distance_meters: number | null
+          optimized_duration_seconds: number | null
           route_date: string
           source_ref: string | null
           source_type: string
+          start_address: string | null
+          start_latitude: number | null
+          start_longitude: number | null
           start_window: string | null
           status: string
           updated_at: string
@@ -1141,13 +1245,22 @@ export type Database = {
         Insert: {
           area?: string | null
           created_at?: string
+          end_address?: string | null
+          end_latitude?: number | null
+          end_longitude?: number | null
           end_window?: string | null
           id?: string
           metadata?: Json
           notes?: string | null
+          optimized_at?: string | null
+          optimized_distance_meters?: number | null
+          optimized_duration_seconds?: number | null
           route_date: string
           source_ref?: string | null
           source_type?: string
+          start_address?: string | null
+          start_latitude?: number | null
+          start_longitude?: number | null
           start_window?: string | null
           status?: string
           updated_at?: string
@@ -1156,13 +1269,22 @@ export type Database = {
         Update: {
           area?: string | null
           created_at?: string
+          end_address?: string | null
+          end_latitude?: number | null
+          end_longitude?: number | null
           end_window?: string | null
           id?: string
           metadata?: Json
           notes?: string | null
+          optimized_at?: string | null
+          optimized_distance_meters?: number | null
+          optimized_duration_seconds?: number | null
           route_date?: string
           source_ref?: string | null
           source_type?: string
+          start_address?: string | null
+          start_latitude?: number | null
+          start_longitude?: number | null
           start_window?: string | null
           status?: string
           updated_at?: string
@@ -1173,8 +1295,14 @@ export type Database = {
       hpo_route_stops: {
         Row: {
           account_id: string | null
+          address: string | null
+          city: string | null
           created_at: string
+          distance_meters_from_previous: number | null
+          drive_seconds_from_previous: number | null
           id: string
+          latitude: number | null
+          longitude: number | null
           metadata: Json
           next_action: string | null
           next_action_due_at: string | null
@@ -1194,8 +1322,14 @@ export type Database = {
         }
         Insert: {
           account_id?: string | null
+          address?: string | null
+          city?: string | null
           created_at?: string
+          distance_meters_from_previous?: number | null
+          drive_seconds_from_previous?: number | null
           id?: string
+          latitude?: number | null
+          longitude?: number | null
           metadata?: Json
           next_action?: string | null
           next_action_due_at?: string | null
@@ -1215,8 +1349,14 @@ export type Database = {
         }
         Update: {
           account_id?: string | null
+          address?: string | null
+          city?: string | null
           created_at?: string
+          distance_meters_from_previous?: number | null
+          drive_seconds_from_previous?: number | null
           id?: string
+          latitude?: number | null
+          longitude?: number | null
           metadata?: Json
           next_action?: string | null
           next_action_due_at?: string | null
@@ -1647,11 +1787,15 @@ export type Database = {
           created_at: string
           details: string | null
           due_at: string | null
+          estimated_minutes: number | null
           id: string
           metadata: Json
           person_id: string | null
           priority: number
           project_id: string | null
+          reminder_at: string | null
+          scheduled_end_at: string | null
+          scheduled_start_at: string | null
           source_ref: string | null
           source_type: string | null
           status: string
@@ -1664,11 +1808,15 @@ export type Database = {
           created_at?: string
           details?: string | null
           due_at?: string | null
+          estimated_minutes?: number | null
           id?: string
           metadata?: Json
           person_id?: string | null
           priority?: number
           project_id?: string | null
+          reminder_at?: string | null
+          scheduled_end_at?: string | null
+          scheduled_start_at?: string | null
           source_ref?: string | null
           source_type?: string | null
           status?: string
@@ -1681,11 +1829,15 @@ export type Database = {
           created_at?: string
           details?: string | null
           due_at?: string | null
+          estimated_minutes?: number | null
           id?: string
           metadata?: Json
           person_id?: string | null
           priority?: number
           project_id?: string | null
+          reminder_at?: string | null
+          scheduled_end_at?: string | null
+          scheduled_start_at?: string | null
           source_ref?: string | null
           source_type?: string | null
           status?: string
@@ -1809,11 +1961,15 @@ export type Database = {
           created_at: string
           details: string | null
           due_at: string | null
+          estimated_minutes: number | null
           id: string
           metadata: Json
           person_id: string | null
           priority: number
           project_id: string | null
+          reminder_at: string | null
+          scheduled_end_at: string | null
+          scheduled_start_at: string | null
           source_ref: string | null
           source_type: string | null
           status: string
@@ -1875,11 +2031,55 @@ export type Database = {
           created_at: string
           details: string | null
           due_at: string | null
+          estimated_minutes: number | null
           id: string
           metadata: Json
           person_id: string | null
           priority: number
           project_id: string | null
+          reminder_at: string | null
+          scheduled_end_at: string | null
+          scheduled_start_at: string | null
+          source_ref: string | null
+          source_type: string | null
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tasks"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      emery_action_create_task_v2: {
+        Args: {
+          p_details?: string
+          p_due_at?: string
+          p_priority?: number
+          p_reminder_at?: string
+          p_scheduled_end_at?: string
+          p_scheduled_start_at?: string
+          p_source?: string
+          p_title: string
+          p_user_id: string
+        }
+        Returns: {
+          completed_at: string | null
+          created_at: string
+          details: string | null
+          due_at: string | null
+          estimated_minutes: number | null
+          id: string
+          metadata: Json
+          person_id: string | null
+          priority: number
+          project_id: string | null
+          reminder_at: string | null
+          scheduled_end_at: string | null
+          scheduled_start_at: string | null
           source_ref: string | null
           source_type: string | null
           status: string
@@ -1931,11 +2131,111 @@ export type Database = {
           created_at: string
           details: string | null
           due_at: string | null
+          estimated_minutes: number | null
           id: string
           metadata: Json
           person_id: string | null
           priority: number
           project_id: string | null
+          reminder_at: string | null
+          scheduled_end_at: string | null
+          scheduled_start_at: string | null
+          source_ref: string | null
+          source_type: string | null
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tasks"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      emery_action_schedule_task_v2: {
+        Args: {
+          p_end_at?: string
+          p_reminder_at?: string
+          p_start_at: string
+          p_task_id: string
+          p_user_id: string
+        }
+        Returns: {
+          completed_at: string | null
+          created_at: string
+          details: string | null
+          due_at: string | null
+          estimated_minutes: number | null
+          id: string
+          metadata: Json
+          person_id: string | null
+          priority: number
+          project_id: string | null
+          reminder_at: string | null
+          scheduled_end_at: string | null
+          scheduled_start_at: string | null
+          source_ref: string | null
+          source_type: string | null
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tasks"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      emery_action_set_task_deadline: {
+        Args: { p_due_at: string; p_task_id: string; p_user_id: string }
+        Returns: {
+          completed_at: string | null
+          created_at: string
+          details: string | null
+          due_at: string | null
+          estimated_minutes: number | null
+          id: string
+          metadata: Json
+          person_id: string | null
+          priority: number
+          project_id: string | null
+          reminder_at: string | null
+          scheduled_end_at: string | null
+          scheduled_start_at: string | null
+          source_ref: string | null
+          source_type: string | null
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tasks"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      emery_action_unschedule_task: {
+        Args: { p_task_id: string; p_user_id: string }
+        Returns: {
+          completed_at: string | null
+          created_at: string
+          details: string | null
+          due_at: string | null
+          estimated_minutes: number | null
+          id: string
+          metadata: Json
+          person_id: string | null
+          priority: number
+          project_id: string | null
+          reminder_at: string | null
+          scheduled_end_at: string | null
+          scheduled_start_at: string | null
           source_ref: string | null
           source_type: string | null
           status: string
@@ -2001,8 +2301,11 @@ export type Database = {
           city: string | null
           created_at: string
           dedupe_key: string | null
+          geocoded_at: string | null
           id: string
           last_touch_at: string | null
+          latitude: number | null
+          longitude: number | null
           metadata: Json
           name: string
           next_action: string | null
@@ -2029,6 +2332,26 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      emery_kernel_task_create: {
+        Args: {
+          p_details?: string
+          p_due_at?: string
+          p_execution_run_id?: string
+          p_idempotency_key: string
+          p_parent_run_id?: string
+          p_priority?: number
+          p_project_id?: string
+          p_reminder_at?: string
+          p_scheduled_end_at?: string
+          p_scheduled_start_at?: string
+          p_source?: string
+          p_source_channel?: string
+          p_source_message_id?: string
+          p_title: string
+          p_user_id: string
+        }
+        Returns: Json
       }
       get_hpo_route_candidates: {
         Args: { p_limit?: number; p_territory?: string; p_user_id: string }
