@@ -15,6 +15,8 @@ import {
   ArrowDown,
   CalendarPlus,
   FilePenLine,
+  GripVertical,
+  SquareCheckBig,
   Trash2,
 } from "lucide-react";
 import { EmeryVoiceControl } from "@/components/EmeryVoiceControl";
@@ -83,6 +85,26 @@ function dateOnly(value: string | null | undefined) {
   return date.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
+function routeWeek(value: string | null | undefined) {
+  if (!value) return [];
+  const base = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(base.getTime())) return [];
+  const start = new Date(base);
+  start.setDate(base.getDate() - base.getDay());
+  return Array.from({ length: 7 }, (_, index) => {
+    const day = new Date(start);
+    day.setDate(start.getDate() + index);
+    return day;
+  });
+}
+
+function routeMonth(value: string | null | undefined) {
+  if (!value) return "Daily Route";
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return "Daily Route";
+  return date.toLocaleDateString([], { month: "long", year: "numeric" });
+}
+
 function isNetworkFailure(error: unknown) {
   if (typeof navigator !== "undefined" && !navigator.onLine) return true;
   const message = error instanceof Error ? error.message : String(error ?? "");
@@ -140,6 +162,8 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
 
   const nextStop = data?.nextStop ?? null;
   const route = data?.route ?? null;
+  const routeDays = routeWeek(route?.route_date);
+  const activeRouteDay = route?.route_date ? new Date(`${route.route_date}T12:00:00`).getDate() : null;
 
   const progressPercent = Math.round(Number(data?.progress ?? 0) * 100);
   const accountContext = data?.accountContext ?? null;
@@ -892,78 +916,115 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
 
   return (
     <div className="space-y-3">
-      <section className="border-b border-border/60 pb-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="emery-kicker">Today · Field Mode</p>
-            <h2 className="mt-1.5 text-lg font-semibold">{route.area || "HPO Marketing Route"}</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {data.completed}/{data.total} stops complete · {data.remaining} remaining
-            </p>
-          </div>
-          <div className="flex items-center gap-1.5">
+      <section className="overflow-hidden rounded-2xl border border-emerald-200/80 bg-white text-slate-900 shadow-[0_12px_32px_rgba(15,23,42,0.12)]">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 bg-[#c8f2e2] px-3 py-3">
+          <div className="min-w-0">
             <span
-              className={`flex min-h-8 items-center gap-1.5 rounded-full border px-2.5 text-[9px] font-semibold ${
+              className={`inline-flex min-h-8 items-center gap-1.5 rounded-full border px-2.5 text-[9px] font-semibold ${
                 offline
-                  ? "border-amber-400/30 bg-amber-400/10 text-amber-300"
-                  : "border-primary/20 bg-primary/[0.06] text-primary"
+                  ? "border-amber-500/25 bg-amber-50 text-amber-700"
+                  : "border-emerald-500/20 bg-white/65 text-emerald-700"
               }`}
             >
               {offline ? <WifiOff className="size-3" /> : <Wifi className="size-3" />}
               {offline ? "Offline" : syncing ? "Syncing" : "Online"}
             </span>
-            <button
-              type="button"
-              onClick={() => void load()}
-              className="emery-press flex size-11 items-center justify-center rounded-xl border border-border/45 text-muted-foreground"
-              aria-label="Refresh today's route"
-            >
-              <RefreshCw className="size-3.5" />
-            </button>
+          </div>
+          <div className="text-center">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#31486f]">
+              HPO Field
+            </p>
+            <h2 className="mt-0.5 text-lg font-bold tracking-tight text-[#1f3354]">Daily Route</h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="ml-auto flex size-11 items-center justify-center rounded-xl border border-white/70 bg-white/70 text-[#31486f] shadow-sm"
+            aria-label="Refresh today's route"
+          >
+            <RefreshCw className="size-3.5" />
+          </button>
+        </div>
+
+        <div className="border-b border-slate-200 px-3 py-3">
+          <p className="text-center text-sm font-semibold text-slate-800">{routeMonth(route.route_date)}</p>
+          <div className="mt-2 grid grid-cols-7 gap-1">
+            {routeDays.map((day) => {
+              const active = day.getDate() === activeRouteDay;
+              return (
+                <div key={day.toISOString()} className="text-center">
+                  <p className="text-[9px] font-semibold uppercase text-slate-400">
+                    {day.toLocaleDateString([], { weekday: "short" }).slice(0, 2)}
+                  </p>
+                  <span
+                    className={`mx-auto mt-1 flex size-9 items-center justify-center rounded-full text-xs font-semibold ${
+                      active ? "bg-[#10b981] text-white shadow-sm" : "text-slate-700"
+                    }`}
+                  >
+                    {day.getDate()}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/8">
-          <div
-            className="h-full rounded-full bg-primary transition-[width]"
-            style={{ width: `${progressPercent}%` }}
-          />
+        <div className="px-3 pb-3 pt-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-slate-900">
+                {route.area || "HPO Marketing Route"}
+              </p>
+              <p className="mt-0.5 text-[11px] text-slate-500">
+                {data.completed}/{data.total} stops complete · {data.remaining} remaining
+              </p>
+            </div>
+            <span className="shrink-0 rounded-full bg-[#d9f4e9] px-2.5 py-1 text-[10px] font-semibold text-[#047857]">
+              {progressPercent}%
+            </span>
+          </div>
+
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full bg-[#10b981] transition-[width]"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+
+          {data.lastCompletedStop || nextStop ? (
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-[#31486f]">
+                Route context
+              </p>
+              <p className="mt-1 text-[11px] leading-5 text-slate-600">
+                {data.lastCompletedStop
+                  ? `Last: Stop ${data.lastCompletedStop.stop_order} · ${data.lastCompletedStop.office_name || "completed"}.`
+                  : "No completed stops yet."}{" "}
+                {nextStop
+                  ? `Next: Stop ${nextStop.stop_order} · ${nextStop.office_name || "route stop"}.`
+                  : "No unfinished stops remain."}
+              </p>
+            </div>
+          ) : null}
+
+          {pendingCount ? (
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+              <p className="text-[10px] text-amber-800">
+                {pendingCount} field update{pendingCount === 1 ? "" : "s"} saved on this phone · Pending sync
+              </p>
+              {!offline ? (
+                <button
+                  type="button"
+                  onClick={() => void syncOutbox()}
+                  disabled={syncing}
+                  className="text-[10px] font-semibold text-amber-800"
+                >
+                  Sync now
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
-
-        {data.lastCompletedStop || nextStop ? (
-          <div className="mt-3 rounded-xl border border-primary/15 bg-primary/[0.035] px-3 py-2.5">
-            <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-primary">
-              Resume context
-            </p>
-            <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
-              {data.lastCompletedStop
-                ? `Last: Stop ${data.lastCompletedStop.stop_order} · ${data.lastCompletedStop.office_name || "completed"}.`
-                : "No completed stops yet."}{" "}
-              {nextStop
-                ? `Next: Stop ${nextStop.stop_order} · ${nextStop.office_name || "route stop"}.`
-                : "No unfinished stops remain."}
-            </p>
-          </div>
-        ) : null}
-
-        {pendingCount ? (
-          <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2">
-            <p className="text-[10px] text-amber-200">
-              {pendingCount} field update{pendingCount === 1 ? "" : "s"} saved on this phone ·
-              Pending sync
-            </p>
-            {!offline ? (
-              <button
-                type="button"
-                onClick={() => void syncOutbox()}
-                disabled={syncing}
-                className="text-[10px] font-semibold text-amber-200"
-              >
-                Sync now
-              </button>
-            ) : null}
-          </div>
-        ) : null}
       </section>
 
       {nextStop ? (
@@ -1282,9 +1343,22 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
         </section>
       ) : null}
 
-      <section aria-label="Ordered route stops" className="border-y border-border/60 py-3">
-        <h3 className="mb-2 text-sm font-semibold">Route queue · {data.total} stops</h3>
-        <div className="divide-y divide-border/50">
+      <section
+        aria-label="Ordered route stops"
+        className="overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-[0_10px_28px_rgba(15,23,42,0.1)]"
+      >
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2.5">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#31486f]">
+              Daily Route
+            </p>
+            <h3 className="text-sm font-semibold">{data.total} scheduled stops</h3>
+          </div>
+          <span className="rounded-full bg-[#d9f4e9] px-2.5 py-1 text-[10px] font-semibold text-[#047857]">
+            {data.remaining} remaining
+          </span>
+        </div>
+        <div className="divide-y divide-slate-200">
           {[...(data.stops ?? [])]
             .sort((a: any, b: any) => a.stop_order - b.stop_order)
             .map((stop: any, index: number, sorted: any[]) => {
@@ -1292,69 +1366,72 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
               return (
                 <div
                   key={stop.id}
-                  className={`flex min-h-16 items-center gap-2 py-2 ${done ? "opacity-65" : ""}`}
+                  className={`flex min-h-[72px] items-center gap-2 px-2 py-2 ${done ? "bg-slate-50/80" : "bg-white"}`}
                 >
-                  <span
-                    className={`flex size-8 shrink-0 items-center justify-center rounded-md text-xs font-semibold ${done ? "bg-muted text-muted-foreground" : "bg-primary/12 text-primary"}`}
-                  >
-                    {stop.stop_order}
+                  <GripVertical className="size-5 shrink-0 text-slate-300" />
+                  <span className="w-7 shrink-0 text-right text-sm font-bold text-[#31486f]">
+                    {stop.stop_order}.
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="break-words text-sm font-medium">
+                    <p className={`break-words text-sm font-semibold ${done ? "text-slate-500" : "text-slate-900"}`}>
                       {stop.office_name || "Route stop"}
                     </p>
-                    <p className="break-words text-xs text-muted-foreground">
-                      {[stop.address, stop.city].filter(Boolean).join(", ") || "Address not saved"}{" "}
-                      · {String(stop.status).replaceAll("_", " ")}
+                    <p className="mt-0.5 break-words text-[11px] text-slate-500">
+                      {[stop.address, stop.city].filter(Boolean).join(", ") || "Address not saved"}
                     </p>
-                    {done && stop.visit_summary && (
-                      <p className="break-words text-xs text-muted-foreground">
+                    {done && stop.visit_summary ? (
+                      <p className="mt-0.5 break-words text-[10px] text-slate-400">
                         {stop.visit_summary}
                       </p>
-                    )}
+                    ) : null}
                   </div>
-                  {!done && !offline && !pendingCount && (
-                    <div className="flex shrink-0 gap-0.5">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="size-11"
-                        disabled={
-                          working || index === 0 || TERMINAL.has(String(sorted[index - 1]?.status))
-                        }
-                        onClick={() => void moveQueuedStop(stop.id, -1)}
-                        aria-label={`Move ${stop.office_name || "stop"} earlier`}
-                      >
-                        <ArrowUp />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="size-11"
-                        disabled={
-                          working ||
-                          index === sorted.length - 1 ||
-                          TERMINAL.has(String(sorted[index + 1]?.status))
-                        }
-                        onClick={() => void moveQueuedStop(stop.id, 1)}
-                        aria-label={`Move ${stop.office_name || "stop"} later`}
-                      >
-                        <ArrowDown />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="size-11 text-destructive"
-                        disabled={working}
-                        onClick={() =>
-                          void removeQueuedStop(stop.id, stop.office_name || "this stop")
-                        }
-                        aria-label={`Remove ${stop.office_name || "stop"} from route`}
-                      >
-                        <Trash2 />
-                      </Button>
-                    </div>
-                  )}
+                  <div className="flex shrink-0 items-center">
+                    {done ? (
+                      <SquareCheckBig className="mr-1 size-5 text-[#10b981]" aria-label="Completed stop" />
+                    ) : null}
+                    {!done && !offline && !pendingCount ? (
+                      <>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-11 text-slate-500"
+                          disabled={
+                            working || index === 0 || TERMINAL.has(String(sorted[index - 1]?.status))
+                          }
+                          onClick={() => void moveQueuedStop(stop.id, -1)}
+                          aria-label={`Move ${stop.office_name || "stop"} earlier`}
+                        >
+                          <ArrowUp className="size-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-11 text-slate-500"
+                          disabled={
+                            working ||
+                            index === sorted.length - 1 ||
+                            TERMINAL.has(String(sorted[index + 1]?.status))
+                          }
+                          onClick={() => void moveQueuedStop(stop.id, 1)}
+                          aria-label={`Move ${stop.office_name || "stop"} later`}
+                        >
+                          <ArrowDown className="size-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-11 text-rose-500"
+                          disabled={working}
+                          onClick={() =>
+                            void removeQueuedStop(stop.id, stop.office_name || "this stop")
+                          }
+                          aria-label={`Remove ${stop.office_name || "stop"} from route`}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </>
+                    ) : null}
+                  </div>
                 </div>
               );
             })}
