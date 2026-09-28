@@ -329,9 +329,15 @@ export async function processHpoRouteCommand(input: {
   message: string;
   timezone: string;
   sourceMessageId?: string | null;
+  requestId?: string | null;
   sourceChannel: string;
 }): Promise<HpoRouteCommandResult> {
   const action = requestedAction(input.message);
+  const requestPrefix = input.sourceMessageId
+    ? `message:${input.sourceMessageId}`
+    : input.requestId
+      ? `request:${input.requestId}`
+      : null;
   const empty = (overrides: Partial<HpoRouteCommandResult> = {}): HpoRouteCommandResult => ({
     recognized: action !== "none",
     performed: false,
@@ -389,9 +395,9 @@ export async function processHpoRouteCommand(input: {
           endWindow: window.endWindow,
           syncToCalendar: /\b(calendar|schedule it|put .* calendar)\b/i.test(input.message),
           stops: selected.candidates,
-          idempotencyKey: input.sourceMessageId
-            ? `message:${input.sourceMessageId}:hpo.route.create`
-            : `hpo-route:${routeDate}:${normalize(selected.area)}:create`,
+          idempotencyKey: requestPrefix
+            ? `${requestPrefix}:hpo.route.create`
+            : `hpo-route:${routeDate}:${normalize(selected.area)}:create:${Date.now()}`,
           sourceChannel: input.sourceChannel,
           sourceMessageId: input.sourceMessageId ?? null,
         },
@@ -400,8 +406,8 @@ export async function processHpoRouteCommand(input: {
         db: input.db,
         userId: input.userId,
         routeId: created.routeId,
-        idempotencyKey: input.sourceMessageId
-          ? `message:${input.sourceMessageId}:hpo.route.optimize`
+        idempotencyKey: requestPrefix
+          ? `${requestPrefix}:hpo.route.optimize`
           : `route:${created.routeId}:initial-optimize`,
         sourceChannel: input.sourceChannel,
         sourceMessageId: input.sourceMessageId ?? null,
@@ -428,8 +434,8 @@ export async function processHpoRouteCommand(input: {
         db: input.db,
         userId: input.userId,
         routeId: route.id,
-        idempotencyKey: input.sourceMessageId
-          ? `message:${input.sourceMessageId}:hpo.route.optimize`
+        idempotencyKey: requestPrefix
+          ? `${requestPrefix}:hpo.route.optimize`
           : `route:${route.id}:optimize:${Date.now()}`,
         sourceChannel: input.sourceChannel,
         sourceMessageId: input.sourceMessageId ?? null,
@@ -447,8 +453,8 @@ export async function processHpoRouteCommand(input: {
         db: input.db,
         userId: input.userId,
         routeId: route.id,
-        idempotencyKey: input.sourceMessageId
-          ? `message:${input.sourceMessageId}:hpo.route.reoptimize`
+        idempotencyKey: requestPrefix
+          ? `${requestPrefix}:hpo.route.reoptimize`
           : `route:${route.id}:reoptimize:${Date.now()}`,
         sourceChannel: input.sourceChannel,
         sourceMessageId: input.sourceMessageId ?? null,
@@ -495,9 +501,9 @@ export async function processHpoRouteCommand(input: {
         userId: input.userId,
         routeId: route.id,
         stopId: stop.id,
-        idempotencyKey: input.sourceMessageId
-          ? `message:${input.sourceMessageId}:hpo.route.remove_stop:${stop.id}`
-          : `route:${route.id}:remove:${stop.id}`,
+        idempotencyKey: requestPrefix
+          ? `${requestPrefix}:hpo.route.remove_stop:${stop.id}`
+          : `route:${route.id}:remove:${stop.id}:${Date.now()}`,
         sourceChannel: input.sourceChannel,
         sourceMessageId: input.sourceMessageId ?? null,
       });
@@ -530,9 +536,9 @@ export async function processHpoRouteCommand(input: {
         userId: input.userId,
         routeId: route.id,
         stops: [match.match],
-        idempotencyKey: input.sourceMessageId
-          ? `message:${input.sourceMessageId}:hpo.route.add_stops:${match.match.accountId ?? match.match.prospectId}`
-          : `route:${route.id}:add:${match.match.accountId ?? match.match.prospectId}`,
+        idempotencyKey: requestPrefix
+          ? `${requestPrefix}:hpo.route.add_stops:${match.match.accountId ?? match.match.prospectId}`
+          : `route:${route.id}:add:${match.match.accountId ?? match.match.prospectId}:${Date.now()}`,
         sourceChannel: input.sourceChannel,
         sourceMessageId: input.sourceMessageId ?? null,
       });
