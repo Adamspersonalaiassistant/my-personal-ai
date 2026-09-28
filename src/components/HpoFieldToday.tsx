@@ -566,7 +566,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
       ]),
     ];
     const tsv = rows
-      .map((row) => row.map((cell) => String(cell).replace(/[\t\n\r]+/g, " ")).join("\t"))
+      .map((row: unknown[]) => row.map((cell: unknown) => String(cell).replace(/[\t\n\r]+/g, " ")).join("\t"))
       .join("\n");
     await navigator.clipboard.writeText(tsv);
     setMessage(`${completed.length} completed visit${completed.length === 1 ? "" : "s"} copied for your HPO tracker.`);
