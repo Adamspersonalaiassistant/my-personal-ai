@@ -20,6 +20,7 @@ function normalizedAddress(value: string) {
 
 function withoutUnit(value: string) {
   return normalizedAddress(value)
+    .replace(/,?\s*\d+(?:st|nd|rd|th)\s+floor/gi, "")
     .replace(/,?\s*(?:suite|ste\.?|unit|floor|fl\.?|room|rm\.?|#)\s*[A-Za-z0-9-]+(?:\s*(?:floor|fl\.?)?)?/gi, "")
     .replace(/,\s*,/g, ",")
     .replace(/\s+,/g, ",")
@@ -59,6 +60,27 @@ async function photon(query: string) {
   return validPoint(lat, lon) ? { lat, lon, provider: "photon" as const } : null;
 }
 
+async function census(query: string) {
+  const response = await fetch(
+    "https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?benchmark=Public_AR_Current&format=json&address=" +
+      encodeURIComponent(query),
+    {
+      headers: {
+        "User-Agent": "EmeryPersonalAI/1.0 HPO-office-map",
+        Accept: "application/json",
+      },
+    },
+  );
+  if (!response.ok) return null;
+  const payload = (await response.json()) as {
+    result?: { addressMatches?: Array<{ coordinates?: { x?: number; y?: number } }> };
+  };
+  const coordinates = payload.result?.addressMatches?.[0]?.coordinates;
+  const lon = Number(coordinates?.x);
+  const lat = Number(coordinates?.y);
+  return validPoint(lat, lon) ? { lat, lon, provider: "census" as const } : null;
+}
+
 async function nominatim(query: string) {
   const response = await fetch(
     "https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=us&limit=1&q=" +
@@ -85,6 +107,15 @@ export async function geocodeHpoOfficeAddress(address: string, city?: string | n
       if (point) return point;
     } catch {
       // Try the next normalized address before using the fallback provider.
+    }
+  }
+
+  for (const query of candidates.slice().reverse()) {
+    try {
+      const point = await census(query);
+      if (point) return point;
+    } catch {
+      // Try the final fallback provider.
     }
   }
 
