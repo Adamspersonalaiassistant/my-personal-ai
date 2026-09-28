@@ -549,9 +549,10 @@ export function HpoMapV2MapLibre({
       });
       mapRef.current = map;
 
-      map.on("load", () => {
+      map.on("style.load", () => {
         setupSourcesAndLayers(map);
         setReady(true);
+        requestAnimationFrame(() => map.resize());
       });
       map.on("error", (event: any) => {
         const message = String(event?.error?.message ?? "");
