@@ -28,6 +28,7 @@ const offline = read("src/lib/hpo-field-offline.ts");
 const accountDetail = read("src/components/HpoAccountFieldDetail.tsx");
 const fieldRead = read("src/lib/hpo-field-read-controller.ts");
 const voiceControl = read("src/components/EmeryVoiceControl.tsx");
+const routeCommands = read("src/lib/hpo-route-command-controller.ts");
 
 check("Map V1 remains in Route Planner", planner.includes("function OfficePlanningMap("));
 check("Route Planner uses renderer adapter", planner.includes("<HpoMapAdapter"));
@@ -75,6 +76,13 @@ check("reoptimized route geometry is rendered when available", v2.includes("rout
 check("HPO Today state has a reusable deterministic core", fieldFns.includes("getHpoFieldTodayCore") && fieldFns.includes("getHpoFieldToday = createServerFn"));
 check("text Emery has deterministic field-state commands", emery.includes("processHpoFieldReadCommand") && fieldRead.includes('"hpo.route.get_next_stop"') && fieldRead.includes('"hpo.route.resume_context"') && fieldRead.includes('"hpo.account.get_context"'));
 check("Realtime Voice exposes the same deterministic field-state commands", voice.includes('name: "get_hpo_field_state"') && voice.includes("processHpoFieldReadCommand") && voiceControl.includes('name === "get_hpo_field_state"') && voiceControl.includes("executeVoiceHpoFieldRead"));
+check("text Emery exposes verified HPO route creation/editing commands", emery.includes("processHpoRouteCommand") && routeCommands.includes('"hpo.route.create"') && routeCommands.includes('"hpo.route.add_stops"') && routeCommands.includes('"hpo.route.remove_stop"') && routeCommands.includes('"hpo.route.optimize"') && routeCommands.includes('"hpo.route.reoptimize"'));
+check("Realtime Voice uses the same HPO route command controller", voice.includes('name: "execute_hpo_route_command"') && voice.includes("processHpoRouteCommand") && voiceControl.includes('name === "execute_hpo_route_command"') && voiceControl.includes("executeVoiceHpoRouteCommand"));
+check("conversational route selection respects Adam ownership/exclusion guards", routeCommands.includes('normalize(row.owner_name) === "adam"') && routeCommands.includes("exclude_from_adam_route"));
+check("route command office matching removes command filler", routeCommands.includes("officeTargetPhrase"));
+check("Route Planner caches and can reopen territory records offline", planner.includes("saveHpoOfficeSnapshots") && planner.includes("loadHpoOfficeSnapshots"));
+check("natural field-note follow-up dates are parsed deterministically", routeFns.includes("followupDueFromNote") && routeFns.includes("parsedNextActionDueAt"));
+
 
 
 
