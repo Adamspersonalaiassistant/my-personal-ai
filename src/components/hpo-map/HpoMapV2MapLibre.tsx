@@ -90,9 +90,13 @@ function officeCollection(offices: HpoMapOffice[], selected: Set<string>, focuse
 }
 
 function routeCollection(route?: HpoMapRoute | null) {
-  const raw = Array.isArray(route?.metadata?.["route_geometry"])
+  const remaining = Array.isArray(route?.metadata?.["route_geometry_remaining"])
+    ? (route?.metadata?.["route_geometry_remaining"] as unknown[])
+    : null;
+  const full = Array.isArray(route?.metadata?.["route_geometry"])
     ? (route?.metadata?.["route_geometry"] as unknown[])
-    : [];
+    : null;
+  const raw = remaining && remaining.length >= 2 ? remaining : full ?? [];
   let coordinates = raw
     .map((entry) => (Array.isArray(entry) && entry.length >= 2 ? [Number(entry[0]), Number(entry[1])] : null))
     .filter(
