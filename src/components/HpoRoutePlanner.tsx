@@ -38,6 +38,7 @@ import { HpoAccountFieldDetail } from "@/components/HpoAccountFieldDetail";
 import { loadHpoOfficeSnapshots, saveHpoOfficeSnapshots } from "@/lib/hpo-field-offline";
 import {
   addHpoRouteStops,
+  exportHpoRouteTracker,
   removeHpoRouteStop,
   reorderHpoRouteStopsCanonical,
   reoptimizeHpoRouteRemaining,
@@ -1050,6 +1051,7 @@ export function HpoRoutePlanner() {
   const updateStop = useServerFn(updateHpoRouteStop);
   const reorderStops = useServerFn(reorderHpoRouteStopsCanonical);
   const addStopsToRoute = useServerFn(addHpoRouteStops);
+  const exportTracker = useServerFn(exportHpoRouteTracker);
   const removeStopFromRoute = useServerFn(removeHpoRouteStop);
   const reoptimizeRemaining = useServerFn(reoptimizeHpoRouteRemaining);
   const captureNote = useServerFn(captureHpoRouteNote);
@@ -1387,27 +1389,15 @@ export function HpoRoutePlanner() {
   }
 
   async function copyExcel(route: RoutePlan) {
-    const completed = [...route.stops]
-      .sort((a, b) => a.stop_order - b.stop_order)
-      .filter((stop) => terminalStatuses.has(stop.status));
-    const rows = [
-      ["Date", "Stop Number", "Office", "Visit Status", "Visit Notes", "Follow-Up", "Account Status"],
-      ...completed.map((stop) => [
-        route.route_date,
-        String(stop.stop_order),
-        stop.office_name ?? "",
-        stop.status.replaceAll("_", " "),
-        stop.notes ?? stop.visit_summary ?? "",
-        stop.next_action ?? "",
-        stop.visit_outcome ?? "",
-      ]),
-    ];
-    const tsv = rows
-      .map((row) => row.map((cell) => String(cell).replace(/[\t\n\r]+/g, " ")).join("\t"))
-      .join("\n");
-    await navigator.clipboard.writeText(tsv);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
+    setError(null);
+    try {
+      const result = await exportTracker({ data: { routeId: route.id } });
+      await navigator.clipboard.writeText(result.tsv);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Couldn't prepare the route tracker export.");
+    }
   }
 
   async function submitRouteNote(route: RoutePlan) {
@@ -1439,9 +1429,15 @@ export function HpoRoutePlanner() {
     setError(null);
     setCalendarMessage(null);
     try {
-      const result = await syncCalendar({ data: { routeId: route.id } });
+      const result = await syncCalendar({
+        data: {
+          routeId: route.id,
+          idempotencyKey: `ui:${crypto.randomUUID()}:hpo.route.sync_calendar`,
+          sourceChannel: "ui",
+        },
+      });
       setCalendarMessage(
-        result.action === "created"
+        result.calendarAction === "created"
           ? "Route block added to Emery Calendar."
           : "Route block updated in Emery Calendar.",
       );
