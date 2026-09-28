@@ -73,10 +73,12 @@ export function HpoAccountFieldDetail({
   const officeLocations = (data?.officeLocations ?? []).filter(
     (location: any, index: number, rows: any[]) =>
       location?.address &&
+      location?.metadata?.map_as_location !== false &&
       rows.findIndex(
         (candidate: any) =>
+          candidate?.metadata?.map_as_location !== false &&
           String(candidate?.address ?? "").trim().toLowerCase() ===
-          String(location.address).trim().toLowerCase(),
+            String(location.address).trim().toLowerCase(),
       ) === index,
   );
   const singleLinkedLocation = officeLocations.length === 1 ? officeLocations[0] : null;
