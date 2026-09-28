@@ -1213,6 +1213,96 @@ export const getHpoNearbyBackups = createServerFn({ method: "POST" })
     }),
   );
 
+export async function executeHpoRouteCompleteCore(input: {
+  db: any;
+  userId: string;
+  routeId: string;
+  idempotencyKey: string;
+  sourceChannel: string;
+  sourceMessageId?: string | null;
+}) {
+  const db = input.db;
+  const stops = await loadStops(db, input.userId, input.routeId);
+  const open = stops.filter((stop: any) => !TERMINAL.has(String(stop.status)));
+  if (open.length) {
+    return {
+      ok: false as const,
+      blocked: true as const,
+      openStops: open.map((stop: any) => ({
+        id: stop.id,
+        stopOrder: stop.stop_order,
+        officeName: stop.office_name,
+        status: stop.status,
+      })),
+    };
+  }
+
+  const action = "hpo.route.complete";
+  const run = await beginExecution({
+    db,
+    userId: input.userId,
+    domain: "hpo_route",
+    action,
+    sourceMessageId: input.sourceMessageId ?? null,
+    idempotencyKey: input.idempotencyKey,
+    targetType: "hpo_route",
+    targetId: input.routeId,
+    requestPayload: { routeId: input.routeId, sourceChannel: input.sourceChannel },
+  });
+  if (run.reused && run.status === "completed" && run.resultPayload["routeComplete"]) {
+    return run.resultPayload["routeComplete"] as any;
+  }
+  try {
+    const completedAt = new Date().toISOString();
+    const route = await loadRoute(db, input.userId, input.routeId);
+    const metadata =
+      route.metadata && typeof route.metadata === "object" && !Array.isArray(route.metadata)
+        ? route.metadata
+        : {};
+    const { data: updated, error } = await db
+      .from("hpo_route_plans")
+      .update({
+        status: "completed",
+        metadata: { ...metadata, completed_at: completedAt, completion_execution_run_id: run.id },
+        updated_at: completedAt,
+      })
+      .eq("id", input.routeId)
+      .eq("user_id", input.userId)
+      .select("id,status,updated_at,metadata")
+      .single();
+    if (error || !updated || updated.status !== "completed") {
+      throw error ?? new Error("Route completion verification failed");
+    }
+    const result = {
+      ok: true as const,
+      blocked: false as const,
+      action,
+      executionRunId: run.id,
+      route: updated,
+      reused: run.reused,
+    };
+    await completeExecution({
+      db,
+      userId: input.userId,
+      runId: run.id,
+      resultPayload: { routeComplete: result },
+      targetType: "hpo_route",
+      targetId: input.routeId,
+    });
+    return result;
+  } catch (error) {
+    await failExecution({
+      db,
+      userId: input.userId,
+      runId: run.id,
+      errorCode: "hpo_route_complete_failed",
+      errorMessage: error instanceof Error ? error.message : String(error),
+      retryable: true,
+    }).catch(() => undefined);
+    throw error;
+  }
+}
+
 export const completeHpoRoute = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { routeId: string; idempotencyKey: string; sourceChannel?: string | null }) => ({
@@ -1220,86 +1310,15 @@ export const completeHpoRoute = createServerFn({ method: "POST" })
     idempotencyKey: clean(input.idempotencyKey),
     sourceChannel: clean(input.sourceChannel) || "ui",
   }))
-  .handler(async ({ data, context }) => {
-    const db = context.supabase as any;
-    const stops = await loadStops(db, context.userId, data.routeId);
-    const open = stops.filter((stop: any) => !TERMINAL.has(String(stop.status)));
-    if (open.length) {
-      return {
-        ok: false,
-        blocked: true,
-        openStops: open.map((stop: any) => ({
-          id: stop.id,
-          stopOrder: stop.stop_order,
-          officeName: stop.office_name,
-          status: stop.status,
-        })),
-      };
-    }
-
-    const action = "hpo.route.complete";
-    const run = await beginExecution({
-      db,
+  .handler(async ({ data, context }) =>
+    executeHpoRouteCompleteCore({
+      db: context.supabase as any,
       userId: context.userId,
-      domain: "hpo_route",
-      action,
+      routeId: data.routeId,
       idempotencyKey: data.idempotencyKey,
-      targetType: "hpo_route",
-      targetId: data.routeId,
-      requestPayload: { routeId: data.routeId, sourceChannel: data.sourceChannel },
-    });
-    if (run.reused && run.status === "completed" && run.resultPayload["routeComplete"]) {
-      return run.resultPayload["routeComplete"];
-    }
-    try {
-      const completedAt = new Date().toISOString();
-      const route = await loadRoute(db, context.userId, data.routeId);
-      const metadata =
-        route.metadata && typeof route.metadata === "object" && !Array.isArray(route.metadata)
-          ? route.metadata
-          : {};
-      const { data: updated, error } = await db
-        .from("hpo_route_plans")
-        .update({
-          status: "completed",
-          metadata: { ...metadata, completed_at: completedAt, completion_execution_run_id: run.id },
-          updated_at: completedAt,
-        })
-        .eq("id", data.routeId)
-        .eq("user_id", context.userId)
-        .select("id,status,updated_at,metadata")
-        .single();
-      if (error || !updated || updated.status !== "completed") {
-        throw error ?? new Error("Route completion verification failed");
-      }
-      const result = {
-        ok: true,
-        action,
-        executionRunId: run.id,
-        route: updated,
-        reused: run.reused,
-      };
-      await completeExecution({
-        db,
-        userId: context.userId,
-        runId: run.id,
-        resultPayload: { routeComplete: result },
-        targetType: "hpo_route",
-        targetId: data.routeId,
-      });
-      return result;
-    } catch (error) {
-      await failExecution({
-        db,
-        userId: context.userId,
-        runId: run.id,
-        errorCode: "hpo_route_complete_failed",
-        errorMessage: error instanceof Error ? error.message : String(error),
-        retryable: true,
-      }).catch(() => undefined);
-      throw error;
-    }
-  });
+      sourceChannel: data.sourceChannel,
+    }),
+  );
 
 export const getHpoAccountFieldContext = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
