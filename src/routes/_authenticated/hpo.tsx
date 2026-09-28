@@ -138,7 +138,7 @@ function HpoWorkspace() {
       title="HPO"
       askEmery={`I'm working in HPO ${view}. Help me with my field accounts and route.`}
     >
-      <div className="mx-auto max-w-5xl space-y-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+      <div className="mx-auto max-w-5xl min-w-0 space-y-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         <nav
           aria-label="HPO field areas"
           className="sticky top-0 z-20 grid grid-cols-4 gap-1 border-b border-border/60 bg-background/95 p-1 backdrop-blur-md"
@@ -168,11 +168,12 @@ function HpoWorkspace() {
             </Button>
           </div>
         )}
-        {view === "today" ? (
+        {view === "today" && initialResolved ? (
           <HpoFieldToday key={`today-${revision}`} onOpenMap={() => setView("map")} />
         ) : null}
-        {view === "map" ? <HpoRoutePlanner key={`map-${revision}`} /> : null}
-        {(view === "accounts" || view === "activity") && loading ? (
+        {view === "map" && initialResolved ? <HpoRoutePlanner key={`map-${revision}`} /> : null}
+        {((view === "accounts" || view === "activity") && loading) ||
+        ((view === "today" || view === "map") && !initialResolved) ? (
           <p className="py-12 text-center text-sm text-muted-foreground">Opening HPO records…</p>
         ) : null}
         {view === "accounts" && data ? (
