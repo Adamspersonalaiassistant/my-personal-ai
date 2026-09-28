@@ -769,86 +769,138 @@ export const removeHpoRouteStop = createServerFn({ method: "POST" })
     }),
   );
 
+export async function executeHpoRouteReorderCore(input: {
+  db: any;
+  userId: string;
+  routeId: string;
+  stopIds: string[];
+  idempotencyKey: string;
+  sourceChannel: string;
+  sourceMessageId?: string | null;
+}) {
+  const db = input.db;
+  const action = "hpo.route.reorder";
+  const run = await beginExecution({
+    db,
+    userId: input.userId,
+    domain: "hpo_route",
+    action,
+    sourceMessageId: input.sourceMessageId ?? null,
+    idempotencyKey: input.idempotencyKey,
+    targetType: "hpo_route",
+    targetId: input.routeId,
+    requestPayload: {
+      routeId: input.routeId,
+      stopIds: input.stopIds,
+      sourceChannel: input.sourceChannel,
+    },
+  });
+  if (run.reused && run.status === "completed" && run.resultPayload["routeReorder"]) {
+    return run.resultPayload["routeReorder"];
+  }
+  try {
+    const current = await loadStops(db, input.userId, input.routeId);
+    const currentIds = current.map((row: any) => row.id).sort();
+    const requestedIds = [...input.stopIds].sort();
+    if (
+      currentIds.length !== requestedIds.length ||
+      currentIds.some((id: string, index: number) => id !== requestedIds[index])
+    ) {
+      throw new Error("Manual reorder must include every current route stop exactly once");
+    }
+
+    const terminalById = new Map(
+      current.map((row: any) => [row.id, TERMINAL.has(String(row.status))]),
+    );
+    const currentOrdered = [...current].sort((left: any, right: any) => left.stop_order - right.stop_order);
+    const terminalSlots = currentOrdered
+      .map((row: any, index: number) => ({ row, index }))
+      .filter(({ row }: any) => TERMINAL.has(String(row.status)));
+    for (const { row, index } of terminalSlots) {
+      if (input.stopIds[index] !== row.id) {
+        throw new Error("Completed/closed/skipped route history cannot be moved.");
+      }
+    }
+
+    for (let index = 0; index < input.stopIds.length; index += 1) {
+      const stopId = input.stopIds[index]!;
+      if (terminalById.get(stopId)) continue;
+      const { error } = await db
+        .from("hpo_route_stops")
+        .update({
+          stop_order: index + 1,
+          distance_meters_from_previous: null,
+          drive_seconds_from_previous: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", stopId)
+        .eq("route_id", input.routeId)
+        .eq("user_id", input.userId);
+      if (error) throw error;
+    }
+    await clearRouteOptimization(db, input.userId, input.routeId);
+    const verified = await loadStops(db, input.userId, input.routeId);
+    const verifiedIds = verified
+      .sort((left: any, right: any) => left.stop_order - right.stop_order)
+      .map((row: any) => row.id);
+    if (verifiedIds.join("|") !== input.stopIds.join("|")) {
+      throw new Error("Route reorder verification failed");
+    }
+    const result = {
+      ok: true,
+      action,
+      executionRunId: run.id,
+      stopIds: verifiedIds,
+      reused: run.reused,
+    };
+    await completeExecution({
+      db,
+      userId: input.userId,
+      runId: run.id,
+      resultPayload: { routeReorder: result },
+      targetType: "hpo_route",
+      targetId: input.routeId,
+    });
+    return result;
+  } catch (error) {
+    await failExecution({
+      db,
+      userId: input.userId,
+      runId: run.id,
+      errorCode: "hpo_route_reorder_failed",
+      errorMessage: error instanceof Error ? error.message : String(error),
+      retryable: true,
+    }).catch(() => undefined);
+    throw error;
+  }
+}
+
 export const reorderHpoRouteStopsCanonical = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { routeId: string; stopIds: string[]; idempotencyKey: string; sourceChannel?: string | null }) => ({
+  .inputValidator((input: {
+    routeId: string;
+    stopIds: string[];
+    idempotencyKey: string;
+    sourceChannel?: string | null;
+  }) => ({
     routeId: clean(input.routeId),
-    stopIds: (Array.isArray(input.stopIds) ? input.stopIds : []).map(clean).filter(Boolean).slice(0, 30),
+    stopIds: (Array.isArray(input.stopIds) ? input.stopIds : [])
+      .map(clean)
+      .filter(Boolean)
+      .slice(0, 30),
     idempotencyKey: clean(input.idempotencyKey),
     sourceChannel: clean(input.sourceChannel) || "ui",
   }))
-  .handler(async ({ data, context }) => {
-    const db = context.supabase as any;
-    const action = "hpo.route.reorder";
-    const run = await beginExecution({
-      db,
+  .handler(async ({ data, context }) =>
+    executeHpoRouteReorderCore({
+      db: context.supabase as any,
       userId: context.userId,
-      domain: "hpo_route",
-      action,
+      routeId: data.routeId,
+      stopIds: data.stopIds,
       idempotencyKey: data.idempotencyKey,
-      targetType: "hpo_route",
-      targetId: data.routeId,
-      requestPayload: { routeId: data.routeId, stopIds: data.stopIds, sourceChannel: data.sourceChannel },
-    });
-    if (run.reused && run.status === "completed" && run.resultPayload["routeReorder"]) {
-      return run.resultPayload["routeReorder"];
-    }
-    try {
-      const current = await loadStops(db, context.userId, data.routeId);
-      const currentIds = current.map((row: any) => row.id).sort();
-      const requestedIds = [...data.stopIds].sort();
-      if (
-        currentIds.length !== requestedIds.length ||
-        currentIds.some((id: string, index: number) => id !== requestedIds[index])
-      ) {
-        throw new Error("Manual reorder must include every current route stop exactly once");
-      }
-      for (let index = 0; index < data.stopIds.length; index += 1) {
-        const { error } = await db
-          .from("hpo_route_stops")
-          .update({
-            stop_order: index + 1,
-            distance_meters_from_previous: null,
-            drive_seconds_from_previous: null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", data.stopIds[index])
-          .eq("route_id", data.routeId)
-          .eq("user_id", context.userId);
-        if (error) throw error;
-      }
-      await clearRouteOptimization(db, context.userId, data.routeId);
-      const verified = await loadStops(db, context.userId, data.routeId);
-      const verifiedIds = verified.sort((a: any, b: any) => a.stop_order - b.stop_order).map((row: any) => row.id);
-      if (verifiedIds.join("|") !== data.stopIds.join("|")) throw new Error("Route reorder verification failed");
-      const result = {
-        ok: true,
-        action,
-        executionRunId: run.id,
-        stopIds: verifiedIds,
-        reused: run.reused,
-      };
-      await completeExecution({
-        db,
-        userId: context.userId,
-        runId: run.id,
-        resultPayload: { routeReorder: result },
-        targetType: "hpo_route",
-        targetId: data.routeId,
-      });
-      return result;
-    } catch (error) {
-      await failExecution({
-        db,
-        userId: context.userId,
-        runId: run.id,
-        errorCode: "hpo_route_reorder_failed",
-        errorMessage: error instanceof Error ? error.message : String(error),
-        retryable: true,
-      }).catch(() => undefined);
-      throw error;
-    }
-  });
+      sourceChannel: data.sourceChannel,
+    }),
+  );
 
 export async function executeHpoRouteReoptimizeCore(input: {
   db: any;
