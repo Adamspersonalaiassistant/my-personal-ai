@@ -479,6 +479,7 @@ export function HpoMapV2MapLibre({
   const geolocateRef = useRef<maplibregl.GeolocateControl | null>(null);
   const officeMarkersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
   const fallbackStyleUsedRef = useRef(false);
+  const styleLoadedRef = useRef(false);
   const [ready, setReady] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
   const [signalFilter, setSignalFilter] = useState<SignalFilter>("all");
@@ -538,13 +539,14 @@ export function HpoMapV2MapLibre({
       map.addControl(geolocate, "top-right");
 
       map.on("style.load", () => {
+        styleLoadedRef.current = true;
         setupSourcesAndLayers(map);
         setReady(true);
       });
       map.on("error", (event: any) => {
         const message = String(event?.error?.message ?? "");
         const styleLoadProblem = /style|source|sprite|glyph|fetch|network|http/i.test(message);
-        if (!ready && styleLoadProblem && !fallbackStyleUsedRef.current) {
+        if (!styleLoadedRef.current && styleLoadProblem && !fallbackStyleUsedRef.current) {
           fallbackStyleUsedRef.current = true;
           map.setStyle(FALLBACK_LIGHT_STYLE);
           return;
@@ -561,6 +563,7 @@ export function HpoMapV2MapLibre({
         officeMarkersRef.current.clear();
         map.remove();
         mapRef.current = null;
+        styleLoadedRef.current = false;
       };
     } catch (error) {
       onFatalError?.(error instanceof Error ? error.message : "MapLibre could not initialize.");
