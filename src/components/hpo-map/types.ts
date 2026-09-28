@@ -33,7 +33,10 @@ export type HpoMapRouteStop = {
 
 export type HpoMapRoute = {
   id: string;
+  route_date?: string | null;
   optimized_at: string | null;
+  optimized_distance_meters?: number | null;
+  optimized_duration_seconds?: number | null;
   metadata: Record<string, unknown> | null;
   start_latitude: number | null;
   start_longitude: number | null;
