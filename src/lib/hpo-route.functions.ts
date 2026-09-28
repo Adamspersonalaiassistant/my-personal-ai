@@ -157,6 +157,60 @@ function inferStatus(note: string) {
   return "completed";
 }
 
+function followupDueFromNote(note: string, timeZone: string) {
+  const lower = note.toLowerCase();
+  if (!/\b(follow\s*up|call|email|text|reach out|revisit|go back|confirm)\b/i.test(lower)) return null;
+
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short",
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const base = new Date(
+    Number(values["year"]),
+    Number(values["month"]) - 1,
+    Number(values["day"]),
+    12,
+    0,
+    0,
+  );
+
+  let daysToAdd: number | null = null;
+  if (/\btomorrow\b/.test(lower)) daysToAdd = 1;
+  else if (/\bnext week\b/.test(lower)) daysToAdd = 7;
+  else {
+    const weekdays: Record<string, number> = {
+      sunday: 0,
+      monday: 1,
+      tuesday: 2,
+      wednesday: 3,
+      thursday: 4,
+      friday: 5,
+      saturday: 6,
+    };
+    const match = lower.match(/\b(?:next\s+|this\s+|on\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
+    if (match?.[1]) {
+      const target = weekdays[match[1]];
+      const current = base.getDay();
+      let delta = (target - current + 7) % 7;
+      if (delta === 0 || lower.includes(`next ${match[1]}`)) delta = delta || 7;
+      daysToAdd = delta;
+    }
+  }
+  if (daysToAdd == null) return null;
+
+  const due = new Date(base);
+  due.setDate(due.getDate() + daysToAdd);
+  const year = String(due.getFullYear());
+  const month = String(due.getMonth() + 1).padStart(2, "0");
+  const day = String(due.getDate()).padStart(2, "0");
+  return zonedDateTimeToUtc(`${year}-${month}-${day}`, "12:00", timeZone);
+}
+
 async function geocode(address: string) {
   const url =
     "https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=us&limit=1&q=" +
@@ -2098,6 +2152,8 @@ export async function captureHpoRouteNoteCore(input: {
   const status = inferStatus(message);
   const visitOutcome = inferOutcome(message);
   const nextAction = extractNextAction(message);
+  const timezone = await getTimezone(input.db, input.userId);
+  const parsedNextActionDueAt = nextAction ? followupDueFromNote(message, timezone) : null;
   const visitExecution = await executeHpoRouteStopVisitCore({
     db: input.db,
     userId: input.userId,
@@ -2106,7 +2162,7 @@ export async function captureHpoRouteNoteCore(input: {
     notes: message,
     visitOutcome,
     nextAction,
-    nextActionDueAt: target.next_action_due_at ?? null,
+    nextActionDueAt: parsedNextActionDueAt ?? target.next_action_due_at ?? null,
     idempotencyKey: `route-note:${execution.id}:${target.id}:hpo.route_stop.log_visit`,
     sourceChannel: "voice_or_route_note",
     parentRunId: execution.id,
@@ -2124,6 +2180,7 @@ export async function captureHpoRouteNoteCore(input: {
     status: updated.status,
     visitOutcome,
     nextAction,
+    nextActionDueAt: parsedNextActionDueAt ?? target.next_action_due_at ?? null,
     routeStatus,
   } as const;
   await completeExecution({
