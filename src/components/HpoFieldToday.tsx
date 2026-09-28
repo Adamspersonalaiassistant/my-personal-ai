@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 /* eslint-disable @typescript-eslint/no-explicit-any -- Canonical HPO server payloads and offline snapshots are legacy dynamically shaped records. */
 import { useServerFn } from "@tanstack/react-start";
 import {
-  AlertTriangle,
   CheckCircle2,
   Clock3,
   LocateFixed,
@@ -10,11 +9,13 @@ import {
   Navigation,
   RefreshCw,
   Route as RouteIcon,
-  Sparkles,
   Wifi,
   WifiOff,
   ArrowUp,
   ArrowDown,
+  CalendarPlus,
+  FilePenLine,
+  Trash2,
 } from "lucide-react";
 import { EmeryVoiceControl } from "@/components/EmeryVoiceControl";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ import {
   getHpoFieldToday,
   getHpoNearbyBackups,
   reoptimizeHpoRouteRemaining,
+  removeHpoRouteStop,
   reorderHpoRouteStopsCanonical,
 } from "@/lib/hpo-field.functions";
 import {
@@ -47,6 +49,7 @@ import {
 } from "@/lib/hpo-field-offline";
 
 const TERMINAL = new Set(["completed", "visited", "closed", "bad_address", "skipped"]);
+type CaptureMode = "visit" | "note" | "followup" | "reschedule";
 
 function distanceLabel(meters: number | null | undefined) {
   if (!meters) return null;
@@ -114,6 +117,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
   const addStops = useServerFn(addHpoRouteStops);
   const reoptimize = useServerFn(reoptimizeHpoRouteRemaining);
   const finishRoute = useServerFn(completeHpoRoute);
+  const removeStop = useServerFn(removeHpoRouteStop);
   const reorder = useServerFn(reorderHpoRouteStopsCanonical);
 
   const [data, setData] = useState<any>(null);
@@ -127,6 +131,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showNote, setShowNote] = useState(false);
+  const [captureMode, setCaptureMode] = useState<CaptureMode>("visit");
   const [note, setNote] = useState("");
   const [visitStatus, setVisitStatus] = useState("completed");
   const [followup, setFollowup] = useState("");
@@ -139,10 +144,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
   const progressPercent = Math.round(Number(data?.progress ?? 0) * 100);
   const accountContext = data?.accountContext ?? null;
   const latestInteraction = accountContext?.interactions?.[0] ?? null;
-  const primaryContact =
-    accountContext?.contacts?.find((contact: any) => contact.is_primary) ??
-    accountContext?.contacts?.[0] ??
-    null;
+  const primaryContact = accountContext?.contacts?.[0] ?? null;
 
   async function load(preferCache = false) {
     setError(null);
@@ -211,6 +213,16 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
           visitOutcome: payload.visitOutcome ?? null,
           nextAction: payload.nextAction ?? null,
           nextActionDueAt: payload.nextActionDueAt ?? null,
+          idempotencyKey: mutation.idempotencyKey,
+          sourceChannel: "offline_sync",
+          baseUpdatedAt: mutation.baseUpdatedAt ?? null,
+        },
+      });
+    } else if (mutation.action === "hpo.route_stop.add_note") {
+      await saveVisit({
+        data: {
+          stopId: mutation.targetId,
+          notes: payload.notes ?? "",
           idempotencyKey: mutation.idempotencyKey,
           sourceChannel: "offline_sync",
           baseUpdatedAt: mutation.baseUpdatedAt ?? null,
@@ -302,6 +314,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
     if (!nextStop?.id) {
       setNote("");
       setShowNote(false);
+      setCaptureMode("visit");
       return;
     }
     void loadHpoDraftNote(nextStop.id)
@@ -499,30 +512,41 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
     }
   }
 
-  async function submitVisit() {
-    if (!nextStop?.id || !note.trim() || working) return;
+  function openCapture(mode: CaptureMode) {
+    setCaptureMode(mode);
+    if (mode === "visit") setVisitStatus("completed");
+    if (mode === "reschedule") setVisitStatus("skipped");
+    setShowNote(true);
+  }
+
+  async function submitVisit(statusOverride?: string) {
+    const status = statusOverride ?? visitStatus;
+    const effectiveNote = note.trim() || (captureMode === "reschedule" ? "Visit rescheduled." : "");
+    if (!nextStop?.id || !effectiveNote || working) return;
     setWorking(true);
     setError(null);
     setMessage(null);
     const dueIso = followupDue ? new Date(`${followupDue}T12:00:00`).toISOString() : null;
     const key = `field:${crypto.randomUUID()}:hpo.route_stop.log_visit`;
     const payload = {
-      status: visitStatus,
-      notes: note.trim(),
+      status,
+      notes: effectiveNote,
       visitOutcome:
-        visitStatus === "closed"
-          ? "Office closed"
-          : visitStatus === "bad_address"
-            ? "Bad / unusable address"
-            : visitStatus === "skipped"
-              ? "Skipped"
-              : "Visit completed",
+        captureMode === "reschedule"
+          ? "Rescheduled"
+          : status === "closed"
+            ? "Office closed"
+            : status === "bad_address"
+              ? "Bad / unusable address"
+              : status === "skipped"
+                ? "Skipped"
+                : "Visit completed",
       nextAction: followup.trim() || null,
       nextActionDueAt: dueIso,
     };
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       await queueMutation("hpo.route_stop.log_visit", nextStop.id, payload, key);
-      optimisticFinalStatus(visitStatus);
+      optimisticFinalStatus(status);
       setNote("");
       setFollowup("");
       setFollowupDue("");
@@ -549,10 +573,90 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
     } catch (caught) {
       if (isNetworkFailure(caught)) {
         await queueMutation("hpo.route_stop.log_visit", nextStop.id, payload, key);
-        optimisticFinalStatus(visitStatus);
+        optimisticFinalStatus(status);
         setShowNote(false);
       } else {
         setError(caught instanceof Error ? caught.message : "Couldn't save this visit.");
+      }
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function submitNoteOnly() {
+    if (!nextStop?.id || !note.trim() || working) return;
+    setWorking(true);
+    setError(null);
+    setMessage(null);
+    const payload = { notes: note.trim() };
+    const key = `field:${crypto.randomUUID()}:hpo.route_stop.add_note`;
+    try {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        await queueMutation("hpo.route_stop.add_note", nextStop.id, payload, key);
+      } else {
+        await saveVisit({
+          data: {
+            stopId: nextStop.id,
+            notes: payload.notes,
+            idempotencyKey: key,
+            sourceChannel: "field_ui",
+          },
+        });
+        setMessage("Note added without completing the stop.");
+        await load();
+      }
+      await clearHpoDraftNote(nextStop.id).catch(() => undefined);
+      setNote("");
+      setShowNote(false);
+    } catch (caught) {
+      if (isNetworkFailure(caught)) {
+        await queueMutation("hpo.route_stop.add_note", nextStop.id, payload, key);
+        setNote("");
+        setShowNote(false);
+      } else {
+        setError(caught instanceof Error ? caught.message : "Couldn't save this note.");
+      }
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function submitFollowupOnly() {
+    if (!nextStop?.id || !followup.trim() || working) return;
+    setWorking(true);
+    setError(null);
+    setMessage(null);
+    const payload = {
+      nextAction: followup.trim(),
+      nextActionDueAt: followupDue ? new Date(`${followupDue}T12:00:00`).toISOString() : null,
+    };
+    const key = `field:${crypto.randomUUID()}:hpo.route_stop.set_followup`;
+    try {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        await queueMutation("hpo.route_stop.set_followup", nextStop.id, payload, key);
+      } else {
+        await saveFollowup({
+          data: {
+            stopId: nextStop.id,
+            ...payload,
+            idempotencyKey: key,
+            sourceChannel: "field_ui",
+          },
+        });
+        setMessage("Follow-up saved. The stop remains open.");
+        await load();
+      }
+      setFollowup("");
+      setFollowupDue("");
+      setShowNote(false);
+    } catch (caught) {
+      if (isNetworkFailure(caught)) {
+        await queueMutation("hpo.route_stop.set_followup", nextStop.id, payload, key);
+        setFollowup("");
+        setFollowupDue("");
+        setShowNote(false);
+      } else {
+        setError(caught instanceof Error ? caught.message : "Couldn't save this follow-up.");
       }
     } finally {
       setWorking(false);
@@ -668,6 +772,29 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not reorder the route.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function removeQueuedStop(stopId: string, officeName: string) {
+    if (!route?.id || working || offline || pendingCount) return;
+    if (!window.confirm(`Remove ${officeName || "this stop"} from today's route?`)) return;
+    setWorking(true);
+    setError(null);
+    try {
+      await removeStop({
+        data: {
+          routeId: route.id,
+          stopId,
+          idempotencyKey: `field:${crypto.randomUUID()}:hpo.route.remove_stop`,
+          sourceChannel: "field_ui",
+        },
+      });
+      setMessage(`${officeName || "Stop"} removed. Completed-stop history was preserved.`);
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not remove this stop.");
     } finally {
       setWorking(false);
     }
@@ -897,48 +1024,66 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
               </button>
             </div>
 
-            <div className="mt-2 grid grid-cols-4 gap-1.5">
+            <div className="mt-2 grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => void setOutcome("completed")}
+                onClick={() => openCapture("visit")}
                 disabled={working}
-                className="emery-press min-h-14 rounded-xl border border-primary/20 bg-primary/[0.06] px-1.5 text-[10px] font-semibold text-primary"
+                className="emery-press min-h-12 rounded-xl bg-primary px-2 text-xs font-semibold text-primary-foreground"
               >
-                <CheckCircle2 className="mx-auto mb-1 size-4" /> Done
+                <CheckCircle2 className="mr-1.5 inline size-4" /> Log Visit
               </button>
+              <button
+                type="button"
+                onClick={() => openCapture("note")}
+                disabled={working}
+                className="emery-press min-h-12 rounded-xl border border-primary/20 bg-primary/[0.045] px-2 text-xs font-semibold text-primary"
+              >
+                <FilePenLine className="mr-1.5 inline size-4" /> Add Note
+              </button>
+              <button
+                type="button"
+                onClick={() => openCapture("followup")}
+                disabled={working}
+                className="emery-press min-h-12 rounded-xl border border-border/55 px-2 text-xs font-semibold text-muted-foreground"
+              >
+                <CalendarPlus className="mr-1.5 inline size-4" /> Set Follow-Up
+              </button>
+              <button
+                type="button"
+                onClick={() => openCapture("reschedule")}
+                disabled={working}
+                className="emery-press min-h-12 rounded-xl border border-border/55 px-2 text-xs font-semibold text-muted-foreground"
+              >
+                <Clock3 className="mr-1.5 inline size-4" /> Reschedule
+              </button>
+            </div>
+            <div className="mt-2 grid grid-cols-3 gap-1.5">
               <button
                 type="button"
                 onClick={() => void setOutcome("closed")}
                 disabled={working}
-                className="emery-press min-h-14 rounded-xl border border-border/45 px-1.5 text-[10px] font-semibold text-muted-foreground"
+                className="emery-press min-h-11 rounded-xl border border-border/45 px-1.5 text-[10px] font-semibold text-muted-foreground"
               >
-                <Clock3 className="mx-auto mb-1 size-4" /> Closed
+                Office Closed
               </button>
               <button
                 type="button"
                 onClick={() => void setOutcome("bad_address")}
                 disabled={working}
-                className="emery-press min-h-14 rounded-xl border border-border/45 px-1.5 text-[10px] font-semibold text-muted-foreground"
+                className="emery-press min-h-11 rounded-xl border border-border/45 px-1.5 text-[10px] font-semibold text-muted-foreground"
               >
-                <AlertTriangle className="mx-auto mb-1 size-4" /> Bad address
+                Bad Address
               </button>
               <button
                 type="button"
                 onClick={() => void setOutcome("skipped")}
                 disabled={working}
-                className="emery-press min-h-14 rounded-xl border border-border/45 px-1.5 text-[10px] font-semibold text-muted-foreground"
+                className="emery-press min-h-11 rounded-xl border border-border/45 px-1.5 text-[10px] font-semibold text-muted-foreground"
               >
                 Skip
               </button>
             </div>
-
-            <button
-              type="button"
-              onClick={() => setShowNote((value) => !value)}
-              className="emery-press mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-primary/15 bg-primary/[0.035] px-3 text-xs font-semibold text-primary"
-            >
-              <Sparkles className="size-4" /> {showNote ? "Close Visit Note" : "Add Visit Note"}
-            </button>
           </section>
 
           {accountContext ? (
@@ -985,9 +1130,19 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
             <section className="border-b border-border/60 pb-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold">Visit note</p>
+                  <p className="text-sm font-semibold">
+                    {captureMode === "visit"
+                      ? "Log visit"
+                      : captureMode === "note"
+                        ? "Add account note"
+                        : captureMode === "followup"
+                          ? "Set follow-up"
+                          : "Reschedule stop"}
+                  </p>
                   <p className="mt-0.5 text-[10px] text-muted-foreground">
-                    The note is saved locally while you type.
+                    {captureMode === "followup"
+                      ? "The stop stays open after this follow-up is saved."
+                      : "Your note is saved locally while you type."}
                   </p>
                 </div>
                 <EmeryVoiceControl
@@ -995,55 +1150,91 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                   onConversationChanged={() => void load()}
                 />
               </div>
-              <textarea
-                value={note}
-                onChange={(event) => setNote(event.target.value)}
-                placeholder="What happened at this office?"
-                className="mt-3 min-h-28 w-full resize-none rounded-xl border border-border/50 bg-card/50 px-3 py-3 text-[16px] leading-6 outline-none focus:border-primary/30"
-              />
-              <div className="mt-2 flex gap-1 overflow-x-auto [scrollbar-width:none]">
-                {(
-                  [
-                    ["completed", "Completed"],
-                    ["closed", "Closed"],
-                    ["bad_address", "Bad address"],
-                    ["skipped", "Skip"],
-                  ] as const
-                ).map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setVisitStatus(value)}
-                    className={`min-h-9 shrink-0 rounded-xl border px-2.5 text-[10px] font-semibold ${
-                      visitStatus === value
-                        ? "border-primary/25 bg-primary/[0.08] text-primary"
-                        : "border-border/45 text-muted-foreground"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <input
-                value={followup}
-                onChange={(event) => setFollowup(event.target.value)}
-                placeholder="Next action / follow-up"
-                className="mt-2 h-11 w-full rounded-xl border border-border/50 bg-card/50 px-3 text-base outline-none focus:border-primary/30"
-              />
-              <input
-                type="date"
-                value={followupDue}
-                onChange={(event) => setFollowupDue(event.target.value)}
-                aria-label="Follow-up due date"
-                className="mt-2 h-11 w-full rounded-xl border border-border/50 bg-card/50 px-3 text-base outline-none focus:border-primary/30"
-              />
+              {captureMode !== "followup" ? (
+                <textarea
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                  placeholder={
+                    captureMode === "reschedule"
+                      ? "Why is this office being rescheduled? (optional)"
+                      : "What happened at this office?"
+                  }
+                  className="mt-3 min-h-28 w-full resize-none rounded-xl border border-border/50 bg-card/50 px-3 py-3 text-[16px] leading-6 outline-none focus:border-primary/30"
+                />
+              ) : null}
+              {captureMode === "visit" ? (
+                <div className="mt-2 grid grid-cols-2 gap-1.5">
+                  {(
+                    [
+                      ["completed", "Completed"],
+                      ["closed", "Closed"],
+                      ["bad_address", "Bad address"],
+                      ["skipped", "Skip"],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setVisitStatus(value)}
+                      className={`min-h-11 rounded-xl border px-2.5 text-[10px] font-semibold ${
+                        visitStatus === value
+                          ? "border-primary/25 bg-primary/[0.08] text-primary"
+                          : "border-border/45 text-muted-foreground"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {captureMode === "visit" ||
+              captureMode === "followup" ||
+              captureMode === "reschedule" ? (
+                <>
+                  <input
+                    value={followup}
+                    onChange={(event) => setFollowup(event.target.value)}
+                    placeholder={
+                      captureMode === "reschedule"
+                        ? "Next action (required)"
+                        : "Next action / follow-up"
+                    }
+                    className="mt-2 h-12 w-full rounded-xl border border-border/50 bg-card/50 px-3 text-base outline-none focus:border-primary/30"
+                  />
+                  <input
+                    type="date"
+                    value={followupDue}
+                    onChange={(event) => setFollowupDue(event.target.value)}
+                    aria-label="Follow-up due date"
+                    className="mt-2 h-12 w-full rounded-xl border border-border/50 bg-card/50 px-3 text-base outline-none focus:border-primary/30"
+                  />
+                </>
+              ) : null}
               <button
                 type="button"
-                onClick={() => void submitVisit()}
-                disabled={!note.trim() || working}
+                onClick={() => {
+                  if (captureMode === "note") void submitNoteOnly();
+                  else if (captureMode === "followup") void submitFollowupOnly();
+                  else if (captureMode === "reschedule") void submitVisit("skipped");
+                  else void submitVisit();
+                }}
+                disabled={
+                  working ||
+                  (captureMode === "note" && !note.trim()) ||
+                  (captureMode === "visit" && !note.trim()) ||
+                  ((captureMode === "followup" || captureMode === "reschedule") && !followup.trim())
+                }
                 className="emery-press mt-3 min-h-12 w-full rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-40"
               >
-                {offline ? "Save on Phone" : "Save Visit"}
+                {offline
+                  ? "Save on Phone"
+                  : captureMode === "visit"
+                    ? "Save Visit"
+                    : captureMode === "note"
+                      ? "Save Note"
+                      : captureMode === "followup"
+                        ? "Save Follow-Up"
+                        : "Reschedule Stop"}
               </button>
             </section>
           ) : null}
@@ -1149,6 +1340,18 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                         aria-label={`Move ${stop.office_name || "stop"} later`}
                       >
                         <ArrowDown />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="size-11 text-destructive"
+                        disabled={working}
+                        onClick={() =>
+                          void removeQueuedStop(stop.id, stop.office_name || "this stop")
+                        }
+                        aria-label={`Remove ${stop.office_name || "stop"} from route`}
+                      >
+                        <Trash2 />
                       </Button>
                     </div>
                   )}

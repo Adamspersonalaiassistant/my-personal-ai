@@ -6,6 +6,7 @@ import {
   CalendarClock,
   History,
   MapPin,
+  Mail,
   Phone,
   UserRound,
   X,
@@ -65,7 +66,6 @@ export function HpoAccountFieldDetail({
   const contacts = data?.contacts ?? [];
   const interactions = data?.interactions ?? [];
   const routeStops = data?.routeStops ?? [];
-  const primary = contacts.find((contact: any) => contact.is_primary) ?? contacts[0] ?? null;
 
   return (
     <div
@@ -108,7 +108,9 @@ export function HpoAccountFieldDetail({
           </div>
         ) : (
           <div className="space-y-3 pb-2">
-            <div className="grid grid-cols-3 gap-2">
+            <div
+              className={`grid gap-2 ${onLog && onFollowup ? "grid-cols-3" : onLog || onFollowup ? "grid-cols-2" : "grid-cols-1"}`}
+            >
               {onLog && (
                 <Button className="min-h-11 px-2 text-xs" onClick={onLog}>
                   Log visit
@@ -374,18 +376,28 @@ export function HpoAccountFieldDetail({
                         <p className="truncate text-xs font-semibold">{contact.name}</p>
                         <p className="mt-0.5 text-[10px] text-muted-foreground">
                           {contact.role_title || "Contact"}
-                          {contact.is_primary ? " · Primary" : ""}
                         </p>
                       </div>
-                      {contact.phone ? (
-                        <a
-                          href={`tel:${contact.phone}`}
-                          className="emery-press flex size-11 shrink-0 items-center justify-center rounded-xl border border-primary/15 text-primary"
-                          aria-label={`Call ${contact.name}`}
-                        >
-                          <Phone className="size-3.5" />
-                        </a>
-                      ) : null}
+                      <div className="flex shrink-0 gap-1">
+                        {contact.phone ? (
+                          <a
+                            href={`tel:${contact.phone}`}
+                            className="emery-press flex size-11 shrink-0 items-center justify-center rounded-xl border border-primary/15 text-primary"
+                            aria-label={`Call ${contact.name}`}
+                          >
+                            <Phone className="size-3.5" />
+                          </a>
+                        ) : null}
+                        {contact.email ? (
+                          <a
+                            href={`mailto:${contact.email}`}
+                            className="emery-press flex size-11 shrink-0 items-center justify-center rounded-xl border border-primary/15 text-primary"
+                            aria-label={`Email ${contact.name}`}
+                          >
+                            <Mail className="size-3.5" />
+                          </a>
+                        ) : null}
+                      </div>
                     </div>
                     {contact.relationship_notes ? (
                       <p className="mt-2 text-[10px] leading-4 text-muted-foreground">
@@ -397,7 +409,7 @@ export function HpoAccountFieldDetail({
               </div>
             </section>
 
-            <section className="emery-glass rounded-[1.45rem] p-4">
+            <section className="rounded-2xl border border-border/55 bg-card/30 p-4">
               <div className="flex items-center gap-2">
                 <History className="size-4 text-primary" />
                 <p className="text-sm font-semibold">Relationship history</p>
@@ -414,7 +426,14 @@ export function HpoAccountFieldDetail({
                           {dateLabel(interaction.occurred_at)}
                         </span>
                       </div>
-                      <p className="mt-1.5 text-xs leading-5">{interaction.summary}</p>
+                      {interaction.metadata?.spoken_with ? (
+                        <p className="mt-1 text-[10px] text-primary">
+                          Spoke with {interaction.metadata.spoken_with}
+                        </p>
+                      ) : null}
+                      <p className="mt-1.5 whitespace-pre-wrap text-xs leading-5">
+                        {interaction.summary}
+                      </p>
                       {interaction.outcome ? (
                         <p className="mt-1 text-[10px] text-muted-foreground">
                           {interaction.outcome}
@@ -433,7 +452,7 @@ export function HpoAccountFieldDetail({
               )}
             </section>
 
-            <section className="emery-glass rounded-[1.45rem] p-4">
+            <section className="rounded-2xl border border-border/55 bg-card/30 p-4">
               <div className="flex items-center gap-2">
                 <CalendarClock className="size-4 text-primary" />
                 <p className="text-sm font-semibold">Route visit history</p>

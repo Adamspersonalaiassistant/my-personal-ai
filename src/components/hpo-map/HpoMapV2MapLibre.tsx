@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- MapLibre events and persisted GeoJSON metadata are dynamically shaped. */
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import type {
@@ -63,15 +64,17 @@ type Props = {
 type Filter = "all" | "account" | "prospect";
 type SignalFilter = "all" | "followup" | "stale" | "priority";
 
-function officeCollection(offices: HpoMapOffice[], selected: Set<string>, focusedKey: string | null) {
+function officeCollection(
+  offices: HpoMapOffice[],
+  selected: Set<string>,
+  focusedKey: string | null,
+) {
   return {
     type: "FeatureCollection" as const,
     features: offices
       .filter(
         (office) =>
-          office.mapped &&
-          Number.isFinite(office.latitude) &&
-          Number.isFinite(office.longitude),
+          office.mapped && Number.isFinite(office.latitude) && Number.isFinite(office.longitude),
       )
       .map((office) => ({
         type: "Feature" as const,
@@ -99,9 +102,11 @@ function routeCollection(route?: HpoMapRoute | null) {
   const full = Array.isArray(route?.metadata?.["route_geometry"])
     ? (route?.metadata?.["route_geometry"] as unknown[])
     : null;
-  const raw = remaining && remaining.length >= 2 ? remaining : full ?? [];
+  const raw = remaining && remaining.length >= 2 ? remaining : (full ?? []);
   let coordinates = raw
-    .map((entry) => (Array.isArray(entry) && entry.length >= 2 ? [Number(entry[0]), Number(entry[1])] : null))
+    .map((entry) =>
+      Array.isArray(entry) && entry.length >= 2 ? [Number(entry[0]), Number(entry[1])] : null,
+    )
     .filter(
       (entry): entry is [number, number] =>
         Boolean(entry) && Number.isFinite(entry![0]) && Number.isFinite(entry![1]),
@@ -195,8 +200,7 @@ function pointInPolygon(point: [number, number], polygon: Array<[number, number]
     const [xi, yi] = polygon[i]!;
     const [xj, yj] = polygon[j]!;
     const intersects =
-      yi > y !== yj > y &&
-      x < ((xj - xi) * (y - yi)) / ((yj - yi) || Number.EPSILON) + xi;
+      yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi || Number.EPSILON) + xi;
     if (intersects) inside = !inside;
   }
   return inside;
@@ -205,9 +209,9 @@ function pointInPolygon(point: [number, number], polygon: Array<[number, number]
 function isDue(office: HpoMapOffice, now: number) {
   return Boolean(
     office.kind === "account" &&
-      office.nextActionDueAt &&
-      !Number.isNaN(Date.parse(office.nextActionDueAt)) &&
-      Date.parse(office.nextActionDueAt) <= now,
+    office.nextActionDueAt &&
+    !Number.isNaN(Date.parse(office.nextActionDueAt)) &&
+    Date.parse(office.nextActionDueAt) <= now,
   );
 }
 
@@ -221,9 +225,7 @@ function isStale(office: HpoMapOffice, now: number) {
 function boundsForOffices(offices: HpoMapOffice[]) {
   const points = offices.filter(
     (office) =>
-      office.mapped &&
-      Number.isFinite(office.latitude) &&
-      Number.isFinite(office.longitude),
+      office.mapped && Number.isFinite(office.latitude) && Number.isFinite(office.longitude),
   );
   if (!points.length) return null;
   const bounds = new maplibregl.LngLatBounds();
@@ -322,17 +324,7 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       filter: ["has", "point_count"],
       paint: {
         "circle-color": BLUE,
-        "circle-radius": [
-          "step",
-          ["get", "point_count"],
-          17,
-          10,
-          20,
-          30,
-          23,
-          75,
-          27,
-        ],
+        "circle-radius": ["step", ["get", "point_count"], 17, 10, 20, 30, 23, 75, 27],
         "circle-stroke-color": "#ffffff",
         "circle-stroke-width": 3,
         "circle-opacity": 0.94,
@@ -587,7 +579,8 @@ export function HpoMapV2MapLibre({
       });
       map.on("error", (event: any) => {
         const message = String(event?.error?.message ?? "");
-        if (/webgl|context|initial/i.test(message)) onFatalError?.(message || "MapLibre could not initialize.");
+        if (/webgl|context|initial/i.test(message))
+          onFatalError?.(message || "MapLibre could not initialize.");
       });
 
       const resizeObserver = new ResizeObserver(() => map.resize());
@@ -613,7 +606,9 @@ export function HpoMapV2MapLibre({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    (map.getSource("hpo-route-line") as GeoJSONSource | undefined)?.setData(routeCollection(route) as any);
+    (map.getSource("hpo-route-line") as GeoJSONSource | undefined)?.setData(
+      routeCollection(route) as any,
+    );
     (map.getSource("hpo-route-stops") as GeoJSONSource | undefined)?.setData(
       routeStopsCollection(route) as any,
     );
@@ -681,7 +676,11 @@ export function HpoMapV2MapLibre({
     });
 
     return () => {
-      for (const layer of ["hpo-office-points", "hpo-prospect-points", "hpo-office-selected-ring"]) {
+      for (const layer of [
+        "hpo-office-points",
+        "hpo-prospect-points",
+        "hpo-office-selected-ring",
+      ]) {
         map.off("click", layer, officeClick);
       }
       map.off("click", drawClick);
@@ -692,7 +691,8 @@ export function HpoMapV2MapLibre({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready || !selectedOffice) return;
-    if (!Number.isFinite(selectedOffice.longitude) || !Number.isFinite(selectedOffice.latitude)) return;
+    if (!Number.isFinite(selectedOffice.longitude) || !Number.isFinite(selectedOffice.latitude))
+      return;
     map.easeTo({
       center: [Number(selectedOffice.longitude), Number(selectedOffice.latitude)],
       zoom: Math.max(map.getZoom(), 13.5),
@@ -725,10 +725,7 @@ export function HpoMapV2MapLibre({
         (office) =>
           Number.isFinite(office.longitude) &&
           Number.isFinite(office.latitude) &&
-          pointInPolygon(
-            [Number(office.longitude), Number(office.latitude)],
-            drawPoints,
-          ),
+          pointInPolygon([Number(office.longitude), Number(office.latitude)], drawPoints),
       )
       .map((office) => office.key);
     if (keys.length) onSelectMany?.(keys);
@@ -771,23 +768,20 @@ export function HpoMapV2MapLibre({
   const totalMapped = offices.filter((office) => office.mapped).length;
 
   return (
-    <section className="hpo-map-v2 overflow-hidden rounded-[1.6rem] border border-primary/15 bg-white shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
-      <div className="border-b border-slate-200 bg-white p-4 text-slate-950">
+    <section className="hpo-map-v2 overflow-hidden rounded-2xl border border-primary/15 bg-white shadow-[0_12px_32px_rgba(0,0,0,0.14)]">
+      <div className="border-b border-slate-200 bg-white p-3 text-slate-950">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#1769e8]">
-              Office Map · Account Tracker
+              Territory Map
             </p>
-            <h3 className="mt-1 text-lg font-semibold">Build the day from your territory.</h3>
-            <p className="mt-1 text-xs leading-5 text-slate-500">
-              Clean territory view · tap a pin or list row · clusters expand as you zoom.
-            </p>
+            <h3 className="mt-1 text-base font-semibold">Find offices and build the route.</h3>
           </div>
           <button
             type="button"
             onClick={onRefreshPins}
             disabled={preparing}
-            className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm disabled:opacity-40"
+            className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm disabled:opacity-40"
             aria-label="Refresh office map pins"
           >
             <RefreshCw className={`size-3.5 ${preparing ? "animate-spin" : ""}`} />
@@ -801,25 +795,25 @@ export function HpoMapV2MapLibre({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search offices, cities, specialties"
-              className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#1769e8]/40 focus:bg-white"
+              className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-base text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#1769e8]/40 focus:bg-white"
             />
           </div>
         </div>
 
         <div className="mt-2 flex gap-1 rounded-xl bg-slate-100 p-1">
-          {([
-            ["all", "All"],
-            ["account", "Accounts"],
-            ["prospect", "Prospects"],
-          ] as const).map(([value, label]) => (
+          {(
+            [
+              ["all", "All"],
+              ["account", "Accounts"],
+              ["prospect", "Prospects"],
+            ] as const
+          ).map(([value, label]) => (
             <button
               key={value}
               type="button"
               onClick={() => setFilter(value)}
-              className={`min-h-9 flex-1 rounded-lg px-2.5 text-[10px] font-semibold transition ${
-                filter === value
-                  ? "bg-white text-[#1769e8] shadow-sm"
-                  : "text-slate-500"
+              className={`min-h-11 flex-1 rounded-lg px-2.5 text-[10px] font-semibold transition ${
+                filter === value ? "bg-white text-[#1769e8] shadow-sm" : "text-slate-500"
               }`}
             >
               {label}
@@ -827,18 +821,20 @@ export function HpoMapV2MapLibre({
           ))}
         </div>
 
-        <div className="mt-2 flex gap-1 overflow-x-auto pb-0.5 [scrollbar-width:none]">
-          {([
-            ["all", "Any status"],
-            ["followup", "Follow-up due"],
-            ["stale", "Stale 60d+"],
-            ["priority", "High priority"],
-          ] as const).map(([value, label]) => (
+        <div className="mt-2 grid grid-cols-2 gap-1.5">
+          {(
+            [
+              ["all", "Any status"],
+              ["followup", "Follow-up due"],
+              ["stale", "Stale 60d+"],
+              ["priority", "High priority"],
+            ] as const
+          ).map(([value, label]) => (
             <button
               key={value}
               type="button"
               onClick={() => setSignalFilter(value)}
-              className={`min-h-8 shrink-0 rounded-full border px-3 text-[9px] font-semibold transition ${
+              className={`min-h-11 rounded-lg border px-2 text-[10px] font-semibold transition ${
                 signalFilter === value
                   ? "border-[#1769e8]/30 bg-blue-50 text-[#1769e8]"
                   : "border-slate-200 bg-white text-slate-500"
@@ -859,7 +855,10 @@ export function HpoMapV2MapLibre({
       </div>
 
       <div className="relative">
-        <div ref={containerRef} className="h-[410px] w-full bg-[#f8fafc]" />
+        <div
+          ref={containerRef}
+          className="h-[min(52dvh,480px)] min-h-[360px] w-full bg-[#f8fafc]"
+        />
         <div className="absolute left-2 top-2 z-10 flex items-center gap-1">
           <div className="pointer-events-none rounded-lg border border-slate-200/80 bg-white/92 px-2 py-1 text-[9px] font-medium text-slate-500 shadow-sm backdrop-blur">
             {drawMode ? "Tap 3+ points around offices" : "Drag · pinch · tap clusters"}
@@ -868,7 +867,7 @@ export function HpoMapV2MapLibre({
             <button
               type="button"
               onClick={startDraw}
-              className="min-h-8 rounded-lg border border-[#1769e8]/20 bg-white/95 px-2.5 text-[9px] font-semibold text-[#1769e8] shadow-sm"
+              className="min-h-11 rounded-lg border border-[#1769e8]/20 bg-white/95 px-2.5 text-[10px] font-semibold text-[#1769e8] shadow-sm"
             >
               Draw select
             </button>
@@ -878,14 +877,14 @@ export function HpoMapV2MapLibre({
                 type="button"
                 onClick={finishDraw}
                 disabled={drawPoints.length < 3}
-                className="min-h-8 rounded-lg bg-[#1769e8] px-2.5 text-[9px] font-semibold text-white shadow-sm disabled:opacity-40"
+                className="min-h-11 rounded-lg bg-[#1769e8] px-2.5 text-[10px] font-semibold text-white shadow-sm disabled:opacity-40"
               >
                 Select {drawPoints.length >= 3 ? "area" : `${3 - drawPoints.length} more`}
               </button>
               <button
                 type="button"
                 onClick={cancelDraw}
-                className="flex size-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm"
+                className="flex size-11 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm"
                 aria-label="Cancel area selection"
               >
                 <X className="size-3.5" />
@@ -897,7 +896,7 @@ export function HpoMapV2MapLibre({
           <button
             type="button"
             onClick={fitOffices}
-            className="flex size-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-[#1769e8] shadow-md"
+            className="flex size-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-[#1769e8] shadow-md"
             aria-label="Fit offices"
           >
             <Maximize2 className="size-3.5" />
@@ -906,7 +905,7 @@ export function HpoMapV2MapLibre({
             <button
               type="button"
               onClick={fitSelected}
-              className="min-h-9 rounded-xl border border-[#1769e8]/20 bg-white px-2.5 text-[10px] font-semibold text-[#1769e8] shadow-md"
+              className="min-h-11 rounded-xl border border-[#1769e8]/20 bg-white px-2.5 text-[10px] font-semibold text-[#1769e8] shadow-md"
             >
               Fit selected
             </button>
@@ -915,7 +914,7 @@ export function HpoMapV2MapLibre({
             <button
               type="button"
               onClick={fitRoute}
-              className="min-h-9 rounded-xl border border-[#1769e8]/20 bg-white px-2.5 text-[10px] font-semibold text-[#1769e8] shadow-md"
+              className="min-h-11 rounded-xl border border-[#1769e8]/20 bg-white px-2.5 text-[10px] font-semibold text-[#1769e8] shadow-md"
             >
               Fit route
             </button>
@@ -923,7 +922,7 @@ export function HpoMapV2MapLibre({
           <button
             type="button"
             onClick={() => geolocateRef.current?.trigger()}
-            className="flex size-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-[#1769e8] shadow-md"
+            className="flex size-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-[#1769e8] shadow-md"
             aria-label="Show my current location"
           >
             <LocateFixed className="size-3.5" />
@@ -932,8 +931,8 @@ export function HpoMapV2MapLibre({
       </div>
 
       <div className="border-t border-slate-200 bg-white p-3">
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
-          {filtered.slice(0, 80).map((office) => {
+        <div className="max-h-56 space-y-1 overflow-y-auto overscroll-contain">
+          {filtered.slice(0, 40).map((office) => {
             const selected = selectedSet.has(office.key);
             const focused = office.key === selectedOfficeKey;
             return (
@@ -941,10 +940,8 @@ export function HpoMapV2MapLibre({
                 key={office.key}
                 type="button"
                 onClick={() => onSelectOffice(office.key)}
-                className={`min-w-[190px] max-w-[230px] shrink-0 rounded-xl border p-2.5 text-left transition ${
-                  focused
-                    ? "border-[#1769e8]/50 bg-blue-50 shadow-sm"
-                    : "border-slate-200 bg-white"
+                className={`min-h-12 w-full rounded-xl border p-2.5 text-left transition ${
+                  focused ? "border-[#1769e8]/50 bg-blue-50 shadow-sm" : "border-slate-200 bg-white"
                 }`}
               >
                 <div className="flex items-start gap-2">
@@ -958,7 +955,7 @@ export function HpoMapV2MapLibre({
                     {office.kind === "account" ? "A" : "P"}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[11px] font-semibold text-slate-900">
+                    <span className="block break-words text-[11px] font-semibold text-slate-900">
                       {office.officeName}
                     </span>
                     <span className="mt-0.5 block truncate text-[9px] text-slate-500">
@@ -987,7 +984,7 @@ export function HpoMapV2MapLibre({
             </span>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <h4 className="truncate text-sm font-semibold">{selectedOffice.officeName}</h4>
+                <h4 className="break-words text-sm font-semibold">{selectedOffice.officeName}</h4>
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-semibold capitalize text-slate-500">
                   {selectedOffice.kind}
                 </span>
@@ -997,12 +994,15 @@ export function HpoMapV2MapLibre({
               </p>
               {selectedOffice.nextAction ? (
                 <p className="mt-2 text-[10px] text-slate-600">
-                  <span className="font-semibold text-slate-800">Next:</span> {selectedOffice.nextAction}
+                  <span className="font-semibold text-slate-800">Next:</span>{" "}
+                  {selectedOffice.nextAction}
                 </p>
               ) : null}
             </div>
           </div>
-          <div className={`mt-3 grid gap-2 ${selectedOffice.accountId ? "grid-cols-3" : "grid-cols-2"}`}>
+          <div
+            className={`mt-3 grid gap-2 ${selectedOffice.accountId ? "grid-cols-3" : "grid-cols-2"}`}
+          >
             <a
               href={`https://maps.apple.com/?q=${encodeURIComponent(
                 [selectedOffice.officeName, selectedOffice.address, selectedOffice.city]
@@ -1042,7 +1042,9 @@ export function HpoMapV2MapLibre({
       <div className="flex items-center gap-2 border-t border-slate-200 bg-white p-3 text-slate-950">
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold">
-            {selectedKeys.length ? `${selectedKeys.length} offices selected` : "Tap a pin or list row"}
+            {selectedKeys.length
+              ? `${selectedKeys.length} offices selected`
+              : "Tap a pin or list row"}
           </p>
           <p className="mt-0.5 truncate text-[10px] text-slate-500">
             Selected offices become the route builder stop list.

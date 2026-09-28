@@ -1,11 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import {
-  beginExecution,
-  completeExecution,
-  failExecution,
-} from "@/lib/execution-ledger";
+import { beginExecution, completeExecution, failExecution } from "@/lib/execution-ledger";
 
 const TERMINAL = new Set(["completed", "visited", "skipped", "closed", "bad_address"]);
 
@@ -35,9 +31,7 @@ function haversineMiles(aLat: number, aLon: number, bLat: number, bLon: number) 
   const dLon = (bLon - aLon) * rad;
   const lat1 = aLat * rad;
   const lat2 = bLat * rad;
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
   return 3958.7613 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
@@ -94,7 +88,8 @@ function optimizeSequence(
     let best: number | null = null;
     let cost = Number.POSITIVE_INFINITY;
     for (const candidate of remaining) {
-      const next = current == null ? 0 : durations[current]?.[candidate] ?? Number.POSITIVE_INFINITY;
+      const next =
+        current == null ? 0 : (durations[current]?.[candidate] ?? Number.POSITIVE_INFINITY);
       if (next < cost) {
         best = candidate;
         cost = next;
@@ -227,7 +222,9 @@ export async function getHpoFieldTodayCore(input: { db: any; userId: string }) {
 
   const routes = routeRows ?? [];
   const route =
-    routes.find((row: any) => row.route_date === today && ["active", "in_progress"].includes(row.status)) ??
+    routes.find(
+      (row: any) => row.route_date === today && ["active", "in_progress"].includes(row.status),
+    ) ??
     routes.find((row: any) => row.route_date === today) ??
     routes.find((row: any) => ["active", "in_progress"].includes(row.status)) ??
     routes[0] ??
@@ -252,8 +249,11 @@ export async function getHpoFieldTodayCore(input: { db: any; userId: string }) {
   const stops = await loadStops(db, userId, route.id);
   const completedStops = stops.filter((stop: any) => TERMINAL.has(String(stop.status)));
   const nextStop = stops.find((stop: any) => !TERMINAL.has(String(stop.status))) ?? null;
-  const lastCompletedStop = [...completedStops]
-    .sort((a: any, b: any) => Date.parse(b.visited_at ?? b.updated_at) - Date.parse(a.visited_at ?? a.updated_at))[0] ?? null;
+  const lastCompletedStop =
+    [...completedStops].sort(
+      (a: any, b: any) =>
+        Date.parse(b.visited_at ?? b.updated_at) - Date.parse(a.visited_at ?? a.updated_at),
+    )[0] ?? null;
 
   let accountContext: any = null;
   if (nextStop?.account_id) {
@@ -266,21 +266,25 @@ export async function getHpoFieldTodayCore(input: { db: any; userId: string }) {
         .maybeSingle(),
       db
         .from("hpo_contacts")
-        .select("id,name,role_title,email,phone,relationship_notes,is_primary")
+        .select("id,name,role_title,email,phone,relationship_notes,created_at")
         .eq("account_id", nextStop.account_id)
         .eq("user_id", userId)
-        .order("is_primary", { ascending: false })
+        .order("created_at", { ascending: true })
         .limit(8),
       db
         .from("hpo_interactions")
-        .select("id,occurred_at,interaction_type,summary,outcome,next_action,next_action_due_at,source_type,source_ref,metadata")
+        .select(
+          "id,occurred_at,interaction_type,summary,outcome,next_action,next_action_due_at,source_type,source_ref,metadata",
+        )
         .eq("account_id", nextStop.account_id)
         .eq("user_id", userId)
         .order("occurred_at", { ascending: false })
         .limit(8),
       db
         .from("hpo_route_stops")
-        .select("id,route_id,visited_at,status,visit_summary,visit_outcome,next_action,next_action_due_at")
+        .select(
+          "id,route_id,visited_at,status,visit_summary,visit_outcome,next_action,next_action_due_at",
+        )
         .eq("account_id", nextStop.account_id)
         .eq("user_id", userId)
         .neq("id", nextStop.id)
@@ -363,7 +367,9 @@ export async function executeHpoRouteStopArriveCore(input: {
       !Number.isNaN(Date.parse(stop.updated_at)) &&
       Date.parse(stop.updated_at) > Date.parse(input.baseUpdatedAt) + 1000
     ) {
-      throw new Error("offline_conflict: This stop changed after the offline snapshot. Refresh before retrying.");
+      throw new Error(
+        "offline_conflict: This stop changed after the offline snapshot. Refresh before retrying.",
+      );
     }
     if (TERMINAL.has(String(stop.status))) throw new Error("This stop already has a final outcome");
 
@@ -375,7 +381,7 @@ export async function executeHpoRouteStopArriveCore(input: {
         stop,
         arrivedAt:
           stop.metadata && typeof stop.metadata === "object" && !Array.isArray(stop.metadata)
-            ? (stop.metadata as Record<string, unknown>)["arrived_at"] ?? stop.updated_at
+            ? ((stop.metadata as Record<string, unknown>)["arrived_at"] ?? stop.updated_at)
             : stop.updated_at,
         reused: run.reused,
       };
@@ -453,20 +459,22 @@ export async function executeHpoRouteStopArriveCore(input: {
 
 export const arriveHpoRouteStop = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: {
-    stopId: string;
-    idempotencyKey: string;
-    sourceChannel?: string | null;
-    baseUpdatedAt?: string | null;
-  }) => ({
-    stopId: clean(input.stopId),
-    idempotencyKey: clean(input.idempotencyKey),
-    sourceChannel: clean(input.sourceChannel) || "ui",
-    baseUpdatedAt:
-      input.baseUpdatedAt && !Number.isNaN(Date.parse(input.baseUpdatedAt))
-        ? new Date(input.baseUpdatedAt).toISOString()
-        : null,
-  }))
+  .inputValidator(
+    (input: {
+      stopId: string;
+      idempotencyKey: string;
+      sourceChannel?: string | null;
+      baseUpdatedAt?: string | null;
+    }) => ({
+      stopId: clean(input.stopId),
+      idempotencyKey: clean(input.idempotencyKey),
+      sourceChannel: clean(input.sourceChannel) || "ui",
+      baseUpdatedAt:
+        input.baseUpdatedAt && !Number.isNaN(Date.parse(input.baseUpdatedAt))
+          ? new Date(input.baseUpdatedAt).toISOString()
+          : null,
+    }),
+  )
   .handler(async ({ data, context }) =>
     executeHpoRouteStopArriveCore({
       db: context.supabase as any,
@@ -620,26 +628,28 @@ export async function executeHpoRouteAddStopsCore(input: {
 
 export const addHpoRouteStops = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: {
-    routeId: string;
-    stops: HpoRouteStopCandidate[];
-    idempotencyKey: string;
-    sourceChannel?: string | null;
-  }) => ({
-    routeId: clean(input.routeId),
-    stops: (Array.isArray(input.stops) ? input.stops : []).slice(0, 20).map((stop) => ({
-      accountId: clean(stop.accountId) || null,
-      prospectId: clean(stop.prospectId) || null,
-      officeName: clean(stop.officeName),
-      address: clean(stop.address),
-      city: clean(stop.city) || null,
-      latitude: Number.isFinite(stop.latitude) ? Number(stop.latitude) : null,
-      longitude: Number.isFinite(stop.longitude) ? Number(stop.longitude) : null,
-      visitPriority: clean(stop.visitPriority) || null,
-    })),
-    idempotencyKey: clean(input.idempotencyKey),
-    sourceChannel: clean(input.sourceChannel) || "ui",
-  }))
+  .inputValidator(
+    (input: {
+      routeId: string;
+      stops: HpoRouteStopCandidate[];
+      idempotencyKey: string;
+      sourceChannel?: string | null;
+    }) => ({
+      routeId: clean(input.routeId),
+      stops: (Array.isArray(input.stops) ? input.stops : []).slice(0, 20).map((stop) => ({
+        accountId: clean(stop.accountId) || null,
+        prospectId: clean(stop.prospectId) || null,
+        officeName: clean(stop.officeName),
+        address: clean(stop.address),
+        city: clean(stop.city) || null,
+        latitude: Number.isFinite(stop.latitude) ? Number(stop.latitude) : null,
+        longitude: Number.isFinite(stop.longitude) ? Number(stop.longitude) : null,
+        visitPriority: clean(stop.visitPriority) || null,
+      })),
+      idempotencyKey: clean(input.idempotencyKey),
+      sourceChannel: clean(input.sourceChannel) || "ui",
+    }),
+  )
   .handler(async ({ data, context }) =>
     executeHpoRouteAddStopsCore({
       db: context.supabase as any,
@@ -747,17 +757,19 @@ export async function executeHpoRouteRemoveStopCore(input: {
 
 export const removeHpoRouteStop = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: {
-    routeId: string;
-    stopId: string;
-    idempotencyKey: string;
-    sourceChannel?: string | null;
-  }) => ({
-    routeId: clean(input.routeId),
-    stopId: clean(input.stopId),
-    idempotencyKey: clean(input.idempotencyKey),
-    sourceChannel: clean(input.sourceChannel) || "ui",
-  }))
+  .inputValidator(
+    (input: {
+      routeId: string;
+      stopId: string;
+      idempotencyKey: string;
+      sourceChannel?: string | null;
+    }) => ({
+      routeId: clean(input.routeId),
+      stopId: clean(input.stopId),
+      idempotencyKey: clean(input.idempotencyKey),
+      sourceChannel: clean(input.sourceChannel) || "ui",
+    }),
+  )
   .handler(async ({ data, context }) =>
     executeHpoRouteRemoveStopCore({
       db: context.supabase as any,
@@ -812,7 +824,9 @@ export async function executeHpoRouteReorderCore(input: {
     const terminalById = new Map(
       current.map((row: any) => [row.id, TERMINAL.has(String(row.status))]),
     );
-    const currentOrdered = [...current].sort((left: any, right: any) => left.stop_order - right.stop_order);
+    const currentOrdered = [...current].sort(
+      (left: any, right: any) => left.stop_order - right.stop_order,
+    );
     const terminalSlots = currentOrdered
       .map((row: any, index: number) => ({ row, index }))
       .filter(({ row }: any) => TERMINAL.has(String(row.status)));
@@ -877,20 +891,22 @@ export async function executeHpoRouteReorderCore(input: {
 
 export const reorderHpoRouteStopsCanonical = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: {
-    routeId: string;
-    stopIds: string[];
-    idempotencyKey: string;
-    sourceChannel?: string | null;
-  }) => ({
-    routeId: clean(input.routeId),
-    stopIds: (Array.isArray(input.stopIds) ? input.stopIds : [])
-      .map(clean)
-      .filter(Boolean)
-      .slice(0, 30),
-    idempotencyKey: clean(input.idempotencyKey),
-    sourceChannel: clean(input.sourceChannel) || "ui",
-  }))
+  .inputValidator(
+    (input: {
+      routeId: string;
+      stopIds: string[];
+      idempotencyKey: string;
+      sourceChannel?: string | null;
+    }) => ({
+      routeId: clean(input.routeId),
+      stopIds: (Array.isArray(input.stopIds) ? input.stopIds : [])
+        .map(clean)
+        .filter(Boolean)
+        .slice(0, 30),
+      idempotencyKey: clean(input.idempotencyKey),
+      sourceChannel: clean(input.sourceChannel) || "ui",
+    }),
+  )
   .handler(async ({ data, context }) =>
     executeHpoRouteReorderCore({
       db: context.supabase as any,
@@ -960,7 +976,9 @@ export async function executeHpoRouteReoptimizeCore(input: {
     }
     for (const stop of open) {
       if (!Number.isFinite(stop.latitude) || !Number.isFinite(stop.longitude)) {
-        throw new Error(`${stop.office_name ?? "A remaining stop"} is missing map coordinates. Refresh pins or optimize the full route first.`);
+        throw new Error(
+          `${stop.office_name ?? "A remaining stop"} is missing map coordinates. Refresh pins or optimize the full route first.`,
+        );
       }
     }
 
@@ -986,7 +1004,12 @@ export async function executeHpoRouteReoptimizeCore(input: {
         ? { lat: Number(route.end_latitude), lon: Number(route.end_longitude) }
         : null;
 
-    const points: Array<{ lat: number; lon: number; kind: "start" | "stop" | "end"; stopId?: string }> = [];
+    const points: Array<{
+      lat: number;
+      lon: number;
+      kind: "start" | "stop" | "end";
+      stopId?: string;
+    }> = [];
     if (startPoint) points.push({ ...startPoint, kind: "start" });
     for (const stop of open) {
       points.push({
@@ -1113,19 +1136,21 @@ export async function executeHpoRouteReoptimizeCore(input: {
 
 export const reoptimizeHpoRouteRemaining = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: {
-    routeId: string;
-    latitude?: number | null;
-    longitude?: number | null;
-    idempotencyKey: string;
-    sourceChannel?: string | null;
-  }) => ({
-    routeId: clean(input.routeId),
-    latitude: Number.isFinite(input.latitude) ? Number(input.latitude) : null,
-    longitude: Number.isFinite(input.longitude) ? Number(input.longitude) : null,
-    idempotencyKey: clean(input.idempotencyKey),
-    sourceChannel: clean(input.sourceChannel) || "ui",
-  }))
+  .inputValidator(
+    (input: {
+      routeId: string;
+      latitude?: number | null;
+      longitude?: number | null;
+      idempotencyKey: string;
+      sourceChannel?: string | null;
+    }) => ({
+      routeId: clean(input.routeId),
+      latitude: Number.isFinite(input.latitude) ? Number(input.latitude) : null,
+      longitude: Number.isFinite(input.longitude) ? Number(input.longitude) : null,
+      idempotencyKey: clean(input.idempotencyKey),
+      sourceChannel: clean(input.sourceChannel) || "ui",
+    }),
+  )
   .handler(async ({ data, context }) =>
     executeHpoRouteReoptimizeCore({
       db: context.supabase as any,
@@ -1159,10 +1184,7 @@ export async function getHpoNearbyBackupsCore(input: {
     routeStops = await loadStops(db, input.userId, routeId);
   }
 
-  let origin =
-    latitude != null && longitude != null
-      ? { lat: latitude, lon: longitude }
-      : null;
+  let origin = latitude != null && longitude != null ? { lat: latitude, lon: longitude } : null;
   if (!origin && routeStops.length) {
     const lastVisited = [...routeStops]
       .filter(
@@ -1187,18 +1209,24 @@ export async function getHpoNearbyBackupsCore(input: {
   if (!origin) throw new Error("Current location is needed to find nearby backup offices");
 
   const existingAccounts = new Set(routeStops.map((stop: any) => stop.account_id).filter(Boolean));
-  const existingProspects = new Set(routeStops.map((stop: any) => stop.prospect_id).filter(Boolean));
+  const existingProspects = new Set(
+    routeStops.map((stop: any) => stop.prospect_id).filter(Boolean),
+  );
   const [accountsResult, prospectsResult] = await Promise.all([
     db
       .from("hpo_accounts")
-      .select("id,name,account_type,specialty,address,city,latitude,longitude,priority,owner_name,last_touch_at,next_action,next_action_due_at,tags,status")
+      .select(
+        "id,name,account_type,specialty,address,city,latitude,longitude,priority,owner_name,last_touch_at,next_action,next_action_due_at,tags,status",
+      )
       .eq("user_id", input.userId)
       .eq("status", "active")
       .not("latitude", "is", null)
       .not("longitude", "is", null),
     db
       .from("hpo_prospects")
-      .select("id,name,prospect_type,specialty,address,city,latitude,longitude,fit_status,verification_status,metadata")
+      .select(
+        "id,name,prospect_type,specialty,address,city,latitude,longitude,fit_status,verification_status,metadata",
+      )
       .eq("user_id", input.userId)
       .neq("fit_status", "rejected")
       .not("latitude", "is", null)
@@ -1211,8 +1239,13 @@ export async function getHpoNearbyBackupsCore(input: {
   const rough = [
     ...(accountsResult.data ?? [])
       .filter((row: any) => !existingAccounts.has(row.id))
-      .filter((row: any) => !(Array.isArray(row.tags) && row.tags.includes("exclude_from_adam_route")))
-      .filter((row: any) => !clean(row.owner_name) || String(row.owner_name).trim().toLowerCase() === "adam")
+      .filter(
+        (row: any) => !(Array.isArray(row.tags) && row.tags.includes("exclude_from_adam_route")),
+      )
+      .filter(
+        (row: any) =>
+          !clean(row.owner_name) || String(row.owner_name).trim().toLowerCase() === "adam",
+      )
       .map((row: any) => ({
         key: `account:${row.id}`,
         kind: "account" as const,
@@ -1228,7 +1261,12 @@ export async function getHpoNearbyBackupsCore(input: {
         nextAction: row.next_action,
         nextActionDueAt: row.next_action_due_at,
         detail: [row.account_type, row.specialty].filter(Boolean).join(" · "),
-        directMiles: haversineMiles(origin.lat, origin.lon, Number(row.latitude), Number(row.longitude)),
+        directMiles: haversineMiles(
+          origin.lat,
+          origin.lon,
+          Number(row.latitude),
+          Number(row.longitude),
+        ),
       })),
     ...(prospectsResult.data ?? [])
       .filter((row: any) => !existingProspects.has(row.id))
@@ -1246,8 +1284,15 @@ export async function getHpoNearbyBackupsCore(input: {
         lastTouchAt: null,
         nextAction: null,
         nextActionDueAt: null,
-        detail: [row.prospect_type, row.specialty, row.verification_status].filter(Boolean).join(" · "),
-        directMiles: haversineMiles(origin.lat, origin.lon, Number(row.latitude), Number(row.longitude)),
+        detail: [row.prospect_type, row.specialty, row.verification_status]
+          .filter(Boolean)
+          .join(" · "),
+        directMiles: haversineMiles(
+          origin.lat,
+          origin.lon,
+          Number(row.latitude),
+          Number(row.longitude),
+        ),
         prospectFit: row.fit_status,
         verified: row.verification_status === "verified",
       })),
@@ -1266,8 +1311,7 @@ export async function getHpoNearbyBackupsCore(input: {
       const seconds = Number(durations[0]?.[index + 1] ?? Number.POSITIVE_INFINITY);
       const meters = Number(distances[0]?.[index + 1] ?? Number.POSITIVE_INFINITY);
       const driveMinutes = Math.round(seconds / 60);
-      const overdue =
-        row.nextActionDueAt && Date.parse(row.nextActionDueAt) < now ? 1 : 0;
+      const overdue = row.nextActionDueAt && Date.parse(row.nextActionDueAt) < now ? 1 : 0;
       const daysSinceTouch = row.lastTouchAt
         ? Math.max(0, Math.floor((now - Date.parse(row.lastTouchAt)) / 86400000))
         : row.kind === "account"
@@ -1288,7 +1332,9 @@ export async function getHpoNearbyBackupsCore(input: {
         score,
         reasons: [
           overdue ? "follow-up overdue" : null,
-          row.kind === "account" && daysSinceTouch >= 30 ? `${daysSinceTouch} days since touch` : null,
+          row.kind === "account" && daysSinceTouch >= 30
+            ? `${daysSinceTouch} days since touch`
+            : null,
           row.priority >= 4 ? "high priority" : null,
           `${driveMinutes} min away`,
         ].filter(Boolean),
@@ -1303,17 +1349,21 @@ export async function getHpoNearbyBackupsCore(input: {
 
 export const getHpoNearbyBackups = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: {
-    routeId?: string | null;
-    latitude?: number | null;
-    longitude?: number | null;
-    maxMinutes?: number;
-  } = {}) => ({
-    routeId: clean(input.routeId) || null,
-    latitude: Number.isFinite(input.latitude) ? Number(input.latitude) : null,
-    longitude: Number.isFinite(input.longitude) ? Number(input.longitude) : null,
-    maxMinutes: Math.max(5, Math.min(30, Number(input.maxMinutes ?? 10) || 10)),
-  }))
+  .inputValidator(
+    (
+      input: {
+        routeId?: string | null;
+        latitude?: number | null;
+        longitude?: number | null;
+        maxMinutes?: number;
+      } = {},
+    ) => ({
+      routeId: clean(input.routeId) || null,
+      latitude: Number.isFinite(input.latitude) ? Number(input.latitude) : null,
+      longitude: Number.isFinite(input.longitude) ? Number(input.longitude) : null,
+      maxMinutes: Math.max(5, Math.min(30, Number(input.maxMinutes ?? 10) || 10)),
+    }),
+  )
   .handler(async ({ data, context }) =>
     getHpoNearbyBackupsCore({
       db: context.supabase as any,
@@ -1417,11 +1467,13 @@ export async function executeHpoRouteCompleteCore(input: {
 
 export const completeHpoRoute = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { routeId: string; idempotencyKey: string; sourceChannel?: string | null }) => ({
-    routeId: clean(input.routeId),
-    idempotencyKey: clean(input.idempotencyKey),
-    sourceChannel: clean(input.sourceChannel) || "ui",
-  }))
+  .inputValidator(
+    (input: { routeId: string; idempotencyKey: string; sourceChannel?: string | null }) => ({
+      routeId: clean(input.routeId),
+      idempotencyKey: clean(input.idempotencyKey),
+      sourceChannel: clean(input.sourceChannel) || "ui",
+    }),
+  )
   .handler(async ({ data, context }) =>
     executeHpoRouteCompleteCore({
       db: context.supabase as any,
@@ -1471,7 +1523,11 @@ export async function getHpoRouteTrackerExportCore(input: {
   const tsv = cells
     .map((row) =>
       row
-        .map((cell) => String(cell ?? "").replace(/[\t\n\r]+/g, " ").trim())
+        .map((cell) =>
+          String(cell ?? "")
+            .replace(/[\t\n\r]+/g, " ")
+            .trim(),
+        )
         .join("\t"),
     )
     .join("\n");
@@ -1505,29 +1561,38 @@ export const getHpoAccountFieldContext = createServerFn({ method: "POST" })
   .inputValidator((input: { accountId: string }) => ({ accountId: clean(input.accountId) }))
   .handler(async ({ data, context }) => {
     const db = context.supabase as any;
-    const [accountResult, contactsResult, interactionsResult, routeStopsResult] = await Promise.all([
-      db.from("hpo_accounts").select("*").eq("id", data.accountId).eq("user_id", context.userId).single(),
-      db
-        .from("hpo_contacts")
-        .select("*")
-        .eq("account_id", data.accountId)
-        .eq("user_id", context.userId)
-        .order("is_primary", { ascending: false }),
-      db
-        .from("hpo_interactions")
-        .select("*")
-        .eq("account_id", data.accountId)
-        .eq("user_id", context.userId)
-        .order("occurred_at", { ascending: false })
-        .limit(20),
-      db
-        .from("hpo_route_stops")
-        .select("id,route_id,stop_order,status,visited_at,visit_summary,visit_outcome,next_action,next_action_due_at,updated_at")
-        .eq("account_id", data.accountId)
-        .eq("user_id", context.userId)
-        .order("visited_at", { ascending: false, nullsFirst: false })
-        .limit(20),
-    ]);
+    const [accountResult, contactsResult, interactionsResult, routeStopsResult] = await Promise.all(
+      [
+        db
+          .from("hpo_accounts")
+          .select("*")
+          .eq("id", data.accountId)
+          .eq("user_id", context.userId)
+          .single(),
+        db
+          .from("hpo_contacts")
+          .select("*")
+          .eq("account_id", data.accountId)
+          .eq("user_id", context.userId)
+          .order("created_at", { ascending: true }),
+        db
+          .from("hpo_interactions")
+          .select("*")
+          .eq("account_id", data.accountId)
+          .eq("user_id", context.userId)
+          .order("occurred_at", { ascending: false })
+          .limit(20),
+        db
+          .from("hpo_route_stops")
+          .select(
+            "id,route_id,stop_order,status,visited_at,visit_summary,visit_outcome,next_action,next_action_due_at,updated_at",
+          )
+          .eq("account_id", data.accountId)
+          .eq("user_id", context.userId)
+          .order("visited_at", { ascending: false, nullsFirst: false })
+          .limit(20),
+      ],
+    );
     if (accountResult.error) throw accountResult.error;
     if (contactsResult.error) throw contactsResult.error;
     if (interactionsResult.error) throw interactionsResult.error;

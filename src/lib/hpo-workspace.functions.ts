@@ -36,7 +36,7 @@ export const getHpoWorkspace = createServerFn({ method: "GET" })
       db
         .from("hpo_interactions")
         .select(
-          "id,account_id,contact_id,interaction_type,occurred_at,summary,outcome,relationship_signal,next_action,next_action_due_at",
+          "id,account_id,contact_id,interaction_type,occurred_at,summary,outcome,relationship_signal,next_action,next_action_due_at,metadata",
         )
         .eq("user_id", context.userId)
         .order("occurred_at", { ascending: false })

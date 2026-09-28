@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- Existing HPO payloads include dynamic metadata and legacy records. */
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
@@ -18,6 +19,7 @@ type HpoAccountInput = {
 
 type HpoInteractionInput = {
   accountId: string;
+  contactName?: string;
   interactionType?: string;
   occurredAt?: string;
   summary: string;
@@ -272,6 +274,7 @@ export const logHpoInteraction = createServerFn({ method: "POST" })
     if (!summary) throw new Error("Interaction summary is required");
     return {
       accountId: String(input.accountId),
+      contactName: input.contactName?.trim() || null,
       interactionType: input.interactionType?.trim() || "visit",
       occurredAt:
         input.occurredAt && !Number.isNaN(Date.parse(input.occurredAt))
@@ -311,6 +314,7 @@ export const logHpoInteraction = createServerFn({ method: "POST" })
         next_action: data.nextAction,
         next_action_due_at: data.nextActionDueAt,
         source_type: "manual",
+        metadata: data.contactName ? { spoken_with: data.contactName } : {},
       })
       .select("id")
       .single();

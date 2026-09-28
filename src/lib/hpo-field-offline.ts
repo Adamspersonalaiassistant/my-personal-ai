@@ -1,7 +1,9 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- IndexedDB helpers deserialize legacy HPO snapshots with dynamic shapes. */
 export type HpoOfflineMutationAction =
   | "hpo.route_stop.arrive"
   | "hpo.route_stop.set_outcome"
   | "hpo.route_stop.log_visit"
+  | "hpo.route_stop.add_note"
   | "hpo.route_stop.set_followup";
 
 export type HpoOfflineMutation = {
@@ -34,14 +36,20 @@ function openDatabase(): Promise<IDBDatabase> {
   if (!browserDb()) return Promise.reject(new Error("IndexedDB is unavailable"));
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onerror = () => reject(request.error ?? new Error("Could not open HPO offline storage"));
+    request.onerror = () =>
+      reject(request.error ?? new Error("Could not open HPO offline storage"));
     request.onupgradeneeded = () => {
       const db = request.result;
-      if (!db.objectStoreNames.contains(STORE_ROUTES)) db.createObjectStore(STORE_ROUTES, { keyPath: "key" });
-      if (!db.objectStoreNames.contains(STORE_OFFICES)) db.createObjectStore(STORE_OFFICES, { keyPath: "key" });
-      if (!db.objectStoreNames.contains(STORE_DRAFTS)) db.createObjectStore(STORE_DRAFTS, { keyPath: "key" });
-      if (!db.objectStoreNames.contains(STORE_OUTBOX)) db.createObjectStore(STORE_OUTBOX, { keyPath: "mutationId" });
-      if (!db.objectStoreNames.contains(STORE_SYNC)) db.createObjectStore(STORE_SYNC, { keyPath: "key" });
+      if (!db.objectStoreNames.contains(STORE_ROUTES))
+        db.createObjectStore(STORE_ROUTES, { keyPath: "key" });
+      if (!db.objectStoreNames.contains(STORE_OFFICES))
+        db.createObjectStore(STORE_OFFICES, { keyPath: "key" });
+      if (!db.objectStoreNames.contains(STORE_DRAFTS))
+        db.createObjectStore(STORE_DRAFTS, { keyPath: "key" });
+      if (!db.objectStoreNames.contains(STORE_OUTBOX))
+        db.createObjectStore(STORE_OUTBOX, { keyPath: "mutationId" });
+      if (!db.objectStoreNames.contains(STORE_SYNC))
+        db.createObjectStore(STORE_SYNC, { keyPath: "key" });
     };
     request.onsuccess = () => resolve(request.result);
   });
@@ -144,7 +152,10 @@ export async function clearHpoDraftNote(stopId: string) {
 }
 
 export async function enqueueHpoMutation(
-  input: Omit<HpoOfflineMutation, "mutationId" | "traceId" | "createdAt" | "attempts" | "status"> & {
+  input: Omit<
+    HpoOfflineMutation,
+    "mutationId" | "traceId" | "createdAt" | "attempts" | "status"
+  > & {
     mutationId?: string;
     traceId?: string;
   },

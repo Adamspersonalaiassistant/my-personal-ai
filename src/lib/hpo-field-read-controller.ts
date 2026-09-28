@@ -82,7 +82,7 @@ function accountBrief(context: any | null) {
   const account = context.account;
   const contacts = Array.isArray(context.contacts) ? context.contacts : [];
   const interactions = Array.isArray(context.interactions) ? context.interactions : [];
-  const primary = contacts.find((contact: any) => contact.is_primary) ?? contacts[0] ?? null;
+  const primary = contacts[0] ?? null;
   const latest = interactions[0] ?? null;
 
   return {
@@ -139,14 +139,11 @@ function formatReply(
   }
 
   if (action === "hpo.route.day_summary") {
-    const counts = (state.stops ?? []).reduce(
-      (acc: Record<string, number>, stop: any) => {
-        const key = String(stop.status ?? "planned");
-        acc[key] = (acc[key] ?? 0) + 1;
-        return acc;
-      },
-      {},
-    );
+    const counts = (state.stops ?? []).reduce((acc: Record<string, number>, stop: any) => {
+      const key = String(stop.status ?? "planned");
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    }, {});
     const outcomes = [
       counts["completed"] || counts["visited"]
         ? `${(counts["completed"] ?? 0) + (counts["visited"] ?? 0)} completed`
@@ -169,7 +166,8 @@ function formatReply(
 
   if (action === "hpo.account.get_context") {
     if (!state.nextStop) return "There isn't an unfinished stop to brief you on.";
-    if (!brief) return `${next ?? "The next stop"} is a prospect or doesn't have saved account history yet.`;
+    if (!brief)
+      return `${next ?? "The next stop"} is a prospect or doesn't have saved account history yet.`;
 
     const pieces = [brief.name];
     if (brief.primaryContact?.name) {

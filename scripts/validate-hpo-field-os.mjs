@@ -22,6 +22,7 @@ const routeActions = read("src/lib/hpo-route-action-controller.ts");
 const emery = read("src/lib/emery.functions.ts");
 const voice = read("src/lib/voice.functions.ts");
 const hpoRoute = read("src/routes/_authenticated/hpo.tsx");
+const hpoFns = read("src/lib/hpo.functions.ts");
 const fieldToday = read("src/components/HpoFieldToday.tsx");
 const fieldFns = read("src/lib/hpo-field.functions.ts");
 const offline = read("src/lib/hpo-field-offline.ts");
@@ -159,6 +160,13 @@ check(
     accountDetail.includes("addHpoFieldContact"),
 );
 check(
+  "Activity exposes direct visit and touch capture with contact context",
+  hpoRoute.includes("Log Visit") &&
+    hpoRoute.includes("Log Touch") &&
+    hpoRoute.includes("Who did you speak with?") &&
+    hpoFns.includes("spoken_with"),
+);
+check(
   "HPO workspace reads and updates are authenticated owner-scoped",
   read("src/lib/hpo-workspace.functions.ts").includes("requireSupabaseAuth") &&
     read("src/lib/hpo-workspace.functions.ts").includes('.eq("user_id", context.userId)'),
@@ -172,9 +180,25 @@ check(
   "Today field mode exposes next-stop field controls",
   fieldToday.includes("Next Stop") &&
     fieldToday.includes("I'm Here") &&
+    fieldToday.includes("Log Visit") &&
+    fieldToday.includes("Add Note") &&
+    fieldToday.includes("Set Follow-Up") &&
+    fieldToday.includes("Reschedule") &&
     fieldToday.includes("Bad address") &&
     fieldToday.includes("Nearby backup") &&
     fieldToday.includes("Fix remaining route"),
+);
+check(
+  "Today route queue supports canonical reorder and open-stop removal",
+  fieldToday.includes("reorderHpoRouteStopsCanonical") &&
+    fieldToday.includes("removeHpoRouteStop") &&
+    fieldToday.includes("removeQueuedStop"),
+);
+check(
+  "Today note and follow-up capture remain offline capable",
+  fieldToday.includes('"hpo.route_stop.add_note"') &&
+    fieldToday.includes('"hpo.route_stop.set_followup"') &&
+    offline.includes('"hpo.route_stop.add_note"'),
 );
 check(
   "Today field mode uses canonical route mutations",
@@ -230,10 +254,21 @@ check(
     accountDetail.includes("Route visit history"),
 );
 check(
+  "field contact reads match the live HPO contact schema",
+  !fieldFns.includes("is_primary") && !accountDetail.includes("is_primary"),
+);
+check(
   "route builder runs as an over-map mobile sheet",
   planner.includes('role="dialog"') &&
     planner.includes("Build HPO daily route") &&
     planner.includes("max-h-[90dvh]"),
+);
+check(
+  "Map is the territory command surface without a duplicate route map",
+  v2.includes("Territory Map") &&
+    v2.includes("max-h-56") &&
+    planner.includes("Saved route") &&
+    !planner.includes("<RouteMap route="),
 );
 check(
   "active route supports add remove manual reorder and remainder reoptimize",

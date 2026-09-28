@@ -69,6 +69,7 @@ function HpoWorkspace() {
   const [selected, setSelected] = useState<string | null>(null);
   const [sheet, setSheet] = useState<"add" | "log" | "followup" | null>(null);
   const [logAccount, setLogAccount] = useState("");
+  const [logKind, setLogKind] = useState("visit");
   const [page, setPage] = useState(0);
   const [moreLoading, setMoreLoading] = useState(false);
   const [revision, setRevision] = useState(0);
@@ -127,9 +128,10 @@ function HpoWorkspace() {
     }
   }
   const account = data?.accounts.find((item) => item.id === selected) ?? null;
-  const openLog = (accountId = "") => {
+  const openLog = (accountId = "", kind = "visit") => {
     setSelected(null);
     setLogAccount(accountId);
+    setLogKind(kind);
     setSheet("log");
   };
   const openFollowup = (accountId: string) => {
@@ -204,7 +206,7 @@ function HpoWorkspace() {
             accountId={selected}
             onClose={() => setSelected(null)}
             onChanged={() => void refresh()}
-            onLog={() => openLog(selected)}
+            onLog={() => openLog(selected, "visit")}
             onFollowup={() => openFollowup(selected)}
           />
         )}
@@ -222,6 +224,7 @@ function HpoWorkspace() {
           <TouchSheet
             accounts={data?.accounts ?? []}
             initialAccount={logAccount}
+            initialKind={logKind}
             onClose={() => setSheet(null)}
             onSave={async (values) => {
               await logTouch({ data: values });
@@ -389,7 +392,7 @@ function ActivityView({
 }: {
   data: Workspace;
   onOpen: (id: string) => void;
-  onLog: (id?: string) => void;
+  onLog: (id?: string, kind?: string) => void;
   onFollowup: (id: string) => void;
   onMore: () => void;
   loading: boolean;
@@ -413,9 +416,18 @@ function ActivityView({
     <section className="space-y-4">
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-lg font-semibold">Activity</h1>
-        <Button className="h-11 px-3" onClick={() => onLog()}>
-          <Plus /> Log
-        </Button>
+        <div className="grid grid-cols-2 gap-1.5">
+          <Button className="h-11 px-2.5 text-xs" onClick={() => onLog("", "visit")}>
+            <Plus /> Log Visit
+          </Button>
+          <Button
+            variant="outline"
+            className="h-11 px-2.5 text-xs"
+            onClick={() => onLog("", "call")}
+          >
+            Log Touch
+          </Button>
+        </div>
       </div>
       {due.length > 0 && (
         <div className="border-y border-border/60 py-2">
@@ -496,6 +508,14 @@ function ActivityView({
               <span className="block break-words text-xs font-normal leading-5 text-muted-foreground">
                 {i.summary}
               </span>
+              {i.metadata &&
+              typeof i.metadata === "object" &&
+              !Array.isArray(i.metadata) &&
+              typeof i.metadata["spoken_with"] === "string" ? (
+                <span className="block text-[11px] font-normal text-primary">
+                  Spoke with {i.metadata["spoken_with"]}
+                </span>
+              ) : null}
               <span className="block text-[11px] font-normal text-muted-foreground">
                 {date(i.occurred_at)}
                 {i.next_action ? ` · Next: ${i.next_action}` : ""}
@@ -653,14 +673,17 @@ function AccountSheet({
 function TouchSheet({
   accounts,
   initialAccount,
+  initialKind,
   onClose,
   onSave,
 }: {
   accounts: Account[];
   initialAccount: string;
+  initialKind: string;
   onClose: () => void;
   onSave: (values: {
     accountId: string;
+    contactName: string;
     interactionType: string;
     summary: string;
     outcome: string;
@@ -669,7 +692,8 @@ function TouchSheet({
   }) => Promise<void>;
 }) {
   const [accountId, setAccount] = useState(initialAccount || accounts[0]?.id || "");
-  const [kind, setKind] = useState("visit");
+  const [kind, setKind] = useState(initialKind);
+  const [contactName, setContactName] = useState("");
   const [summary, setSummary] = useState("");
   const [outcome, setOutcome] = useState("");
   const [nextAction, setNext] = useState("");
@@ -677,7 +701,10 @@ function TouchSheet({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   return (
-    <Sheet title="Log field activity" onClose={onClose}>
+    <Sheet
+      title={kind === "visit" ? "Log office visit" : "Log relationship touch"}
+      onClose={onClose}
+    >
       <form
         className="space-y-3"
         onSubmit={async (e) => {
@@ -687,6 +714,7 @@ function TouchSheet({
           try {
             await onSave({
               accountId,
+              contactName,
               interactionType: kind,
               summary,
               outcome,
@@ -714,6 +742,15 @@ function TouchSheet({
               </option>
             ))}
           </select>
+        </label>
+        <label className="block text-xs text-muted-foreground">
+          Who did you speak with?
+          <input
+            value={contactName}
+            onChange={(e) => setContactName(e.target.value)}
+            placeholder="Name or role (optional)"
+            className={`mt-1 ${field}`}
+          />
         </label>
         <label className="block text-xs text-muted-foreground">
           Activity

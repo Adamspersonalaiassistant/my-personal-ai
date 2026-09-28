@@ -33,7 +33,6 @@ import {
   syncHpoRouteToCalendar,
   updateHpoRouteStop,
 } from "@/lib/hpo-route.functions";
-import { EmeryVoiceControl } from "@/components/EmeryVoiceControl";
 import { HpoMapAdapter } from "@/components/hpo-map/HpoMapAdapter";
 import { HpoAccountFieldDetail } from "@/components/HpoAccountFieldDetail";
 import { loadHpoOfficeSnapshots, saveHpoOfficeSnapshots } from "@/lib/hpo-field-offline";
@@ -1554,13 +1553,6 @@ export function HpoRoutePlanner() {
             Fix Remaining
           </button>
         </div>
-        <div className="mt-2 flex min-h-11 items-center justify-between border-t border-border/50 pt-2">
-          <p className="text-xs text-muted-foreground">Voice route notes</p>
-          <EmeryVoiceControl
-            hpoRouteId={activeRoute?.id ?? null}
-            onConversationChanged={() => void refresh(activeRoute?.id ?? null)}
-          />
-        </div>
       </section>
 
       {data || mapOffices.length ? (
@@ -1675,38 +1667,31 @@ export function HpoRoutePlanner() {
       ) : null}
 
       {data?.routes.length ? (
-        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none]">
-          {data.routes.map((route) => {
-            const completed = route.stops.filter((stop) =>
-              terminalStatuses.has(stop.status),
-            ).length;
-            return (
-              <button
-                key={route.id}
-                type="button"
-                onClick={() => setActiveRouteId(route.id)}
-                className={`emery-press min-w-[180px] rounded-2xl border px-3.5 py-3 text-left ${
-                  route.id === activeRoute?.id
-                    ? "border-primary/25 bg-primary/[0.075]"
-                    : "border-border/45 bg-card/35"
-                }`}
-              >
-                <p className="text-xs font-semibold">{formatDate(route.route_date)}</p>
-                <p className="mt-1 truncate text-[11px] text-muted-foreground">
-                  {route.area || "Marketing Route"}
-                </p>
-                <p className="mt-2 text-[10px] text-primary">
-                  {completed}/{route.stops.length} stops logged
-                </p>
-              </button>
-            );
-          })}
-        </div>
+        <label className="block text-xs font-medium text-muted-foreground">
+          Saved route
+          <select
+            value={activeRoute?.id ?? ""}
+            onChange={(event) => setActiveRouteId(event.target.value)}
+            className="mt-1 h-12 w-full rounded-xl border border-border/60 bg-card/55 px-3 text-base text-foreground outline-none focus:border-primary/35"
+          >
+            {data.routes.map((savedRoute) => {
+              const completed = savedRoute.stops.filter((stop) =>
+                terminalStatuses.has(stop.status),
+              ).length;
+              return (
+                <option key={savedRoute.id} value={savedRoute.id}>
+                  {formatDate(savedRoute.route_date)} · {savedRoute.area || "Marketing Route"} ·{" "}
+                  {completed}/{savedRoute.stops.length}
+                </option>
+              );
+            })}
+          </select>
+        </label>
       ) : null}
 
       {activeRoute ? (
         <section className="space-y-4">
-          <div className="emery-glass rounded-[1.6rem] p-4">
+          <div className="rounded-2xl border border-border/55 bg-card/30 p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="emery-kicker">Daily Route Journal</p>
@@ -1747,7 +1732,7 @@ export function HpoRoutePlanner() {
             ) : null}
           </div>
 
-          <section className="overflow-hidden rounded-[1.55rem] border border-primary/20 bg-[linear-gradient(145deg,rgba(30,95,255,0.09),rgba(8,16,34,0.55))] p-4 shadow-[0_16px_45px_rgba(0,0,0,0.16)]">
+          <section className="overflow-hidden rounded-2xl border border-primary/20 bg-primary/[0.035] p-4">
             <p className="emery-kicker">Now</p>
             {nextStop ? (
               <>
@@ -1825,8 +1810,6 @@ export function HpoRoutePlanner() {
               </div>
             )}
           </section>
-
-          <RouteMap route={activeRoute} />
 
           <section className="rounded-[1.55rem] border border-primary/15 bg-primary/[0.035] p-4">
             <div className="flex items-start gap-3">
@@ -2108,7 +2091,7 @@ function RouteBuilder({
         <button
           type="button"
           onClick={onClose}
-          className="emery-press flex size-10 items-center justify-center rounded-xl text-muted-foreground"
+          className="emery-press flex size-11 items-center justify-center rounded-xl text-muted-foreground"
           aria-label="Close route builder"
         >
           <X className="size-4" />
@@ -2299,7 +2282,7 @@ function RouteBuilder({
                       })
                     }
                     disabled={index === 0}
-                    className="emery-press flex size-8 items-center justify-center rounded-lg text-muted-foreground disabled:opacity-25"
+                    className="emery-press flex size-11 items-center justify-center rounded-lg text-muted-foreground disabled:opacity-25"
                     aria-label={`Move ${stop.officeName} up`}
                   >
                     <ArrowUp className="size-3.5" />
@@ -2315,7 +2298,7 @@ function RouteBuilder({
                       })
                     }
                     disabled={index === selected.length - 1}
-                    className="emery-press flex size-8 items-center justify-center rounded-lg text-muted-foreground disabled:opacity-25"
+                    className="emery-press flex size-11 items-center justify-center rounded-lg text-muted-foreground disabled:opacity-25"
                     aria-label={`Move ${stop.officeName} down`}
                   >
                     <ArrowDown className="size-3.5" />
@@ -2325,7 +2308,7 @@ function RouteBuilder({
                     onClick={() =>
                       setSelected((current) => current.filter((item) => item.key !== stop.key))
                     }
-                    className="emery-press flex size-8 items-center justify-center rounded-lg text-muted-foreground"
+                    className="emery-press flex size-11 items-center justify-center rounded-lg text-muted-foreground"
                     aria-label={`Remove ${stop.officeName}`}
                   >
                     <Trash2 className="size-3.5" />
@@ -2481,7 +2464,7 @@ function StopCard({
               type="button"
               onClick={onRemove}
               disabled={working}
-              className="emery-press flex size-9 items-center justify-center rounded-xl border border-destructive/20 text-destructive/80 disabled:opacity-25"
+              className="emery-press flex size-11 items-center justify-center rounded-xl border border-destructive/20 text-destructive/80 disabled:opacity-25"
               aria-label="Remove stop from route"
             >
               <Trash2 className="size-3.5" />
@@ -2511,7 +2494,7 @@ function StopCard({
             href={mapsHref}
             target="_blank"
             rel="noreferrer"
-            className="emery-press flex min-h-10 items-center gap-2 rounded-xl border border-border/45 px-3 text-[11px] font-semibold text-muted-foreground"
+            className="emery-press flex min-h-11 items-center gap-2 rounded-xl border border-border/45 px-3 text-[11px] font-semibold text-muted-foreground"
           >
             <Navigation className="size-3.5" /> Navigate
             <ExternalLink className="size-3" />
@@ -2521,7 +2504,7 @@ function StopCard({
           type="button"
           data-route-note-toggle
           onClick={() => setExpanded((value) => !value)}
-          className={`emery-press ml-auto min-h-10 rounded-xl px-3 text-[11px] font-semibold ${
+          className={`emery-press ml-auto min-h-11 rounded-xl px-3 text-[11px] font-semibold ${
             expanded
               ? "border border-border/45 text-muted-foreground"
               : "bg-primary text-primary-foreground"
@@ -2533,13 +2516,13 @@ function StopCard({
 
       {expanded ? (
         <div className="mt-3 border-t border-border/30 pt-3">
-          <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
+          <div className="grid grid-cols-3 gap-1.5">
             {["planned", "completed", "closed", "bad_address", "skipped"].map((value) => (
               <button
                 key={value}
                 type="button"
                 onClick={() => setStatus(value)}
-                className={`emery-press min-h-9 shrink-0 rounded-xl border px-2.5 text-[10px] font-semibold capitalize ${
+                className={`emery-press min-h-11 rounded-xl border px-2 text-[10px] font-semibold capitalize ${
                   status === value
                     ? "border-primary/25 bg-primary/[0.08] text-primary"
                     : "border-border/40 text-muted-foreground"
@@ -2576,7 +2559,7 @@ function StopCard({
             type="button"
             disabled={working}
             onClick={() => void saveAndCollapse()}
-            className="emery-press mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-40"
+            className="emery-press mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-40"
           >
             <CheckCircle2 className="size-3.5" /> Save visit note
           </button>
