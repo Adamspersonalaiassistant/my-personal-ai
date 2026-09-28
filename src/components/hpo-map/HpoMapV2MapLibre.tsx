@@ -9,7 +9,7 @@ import type {
   StyleSpecification,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { Check, List, LocateFixed, Map as MapIcon, MapPinned, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
+import { Building2, ChevronDown, List, LocateFixed, MapPinned, MessageCircle, Navigation, Plus, Search, SlidersHorizontal, X } from "lucide-react";
 import type { HpoMapOffice, HpoMapRoute } from "@/components/hpo-map/types";
 import { openHpoEmery } from "@/components/HpoEmerySheet";
 import "@/components/hpo-map/hpo-map-v2.css";
@@ -60,6 +60,7 @@ type Props = {
   onBuildRoute: () => void;
   preparing: boolean;
   onRefreshPins: () => void;
+  onNavigateHpo?: (view: "today" | "map" | "accounts" | "activity") => void;
   onFatalError?: (message: string) => void;
 };
 
@@ -472,11 +473,11 @@ export function HpoMapV2MapLibre({
   onBuildRoute,
   preparing,
   onRefreshPins,
+  onNavigateHpo,
   onFatalError,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
-  const geolocateRef = useRef<maplibregl.GeolocateControl | null>(null);
   const officeMarkersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
   const fallbackStyleUsedRef = useRef(false);
   const styleLoadedRef = useRef(false);
@@ -488,6 +489,7 @@ export function HpoMapV2MapLibre({
   const [drawPoints, setDrawPoints] = useState<Array<[number, number]>>([]);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const [showTools, setShowTools] = useState(false);
+  const [sheetExpanded, setSheetExpanded] = useState(false);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -529,14 +531,6 @@ export function HpoMapV2MapLibre({
         cooperativeGestures: false,
       });
       mapRef.current = map;
-      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
-      const geolocate = new maplibregl.GeolocateControl({
-        positionOptions: { enableHighAccuracy: true },
-        trackUserLocation: false,
-        showUserLocation: true,
-      });
-      geolocateRef.current = geolocate;
-      map.addControl(geolocate, "top-right");
 
       map.on("style.load", () => {
         styleLoadedRef.current = true;
@@ -710,6 +704,28 @@ export function HpoMapV2MapLibre({
     map.fitBounds(bounds, { padding: 50, maxZoom: 13.2, duration: 350 });
   }, [filtered, ready]);
 
+  function zoomBy(delta: number) {
+    const map = mapRef.current;
+    if (!map) return;
+    map.easeTo({ zoom: Math.max(5, Math.min(18, map.getZoom() + delta)), duration: 180 });
+  }
+
+  function locateMe() {
+    const map = mapRef.current;
+    if (!map || typeof navigator === "undefined" || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        map.easeTo({
+          center: [position.coords.longitude, position.coords.latitude],
+          zoom: Math.max(map.getZoom(), 12.8),
+          duration: 420,
+        });
+      },
+      () => undefined,
+      { enableHighAccuracy: true, maximumAge: 60000, timeout: 5000 },
+    );
+  }
+
   function startDraw() {
     setDrawPoints([]);
     setDrawMode(true);
@@ -756,313 +772,401 @@ export function HpoMapV2MapLibre({
   void onBuildRoute;
 
   return (
-    <section className="hpo-map-v2 overflow-hidden rounded-2xl border border-primary/15 bg-white shadow-[0_12px_32px_rgba(0,0,0,0.14)]">
-      <div className="border-b border-slate-200 bg-white p-3 text-slate-950">
-        <div className="grid grid-cols-2 rounded-xl bg-slate-100 p-1">
-          <button
-            type="button"
-            onClick={() => setViewMode("map")}
-            className={`flex min-h-11 items-center justify-center gap-2 rounded-lg text-xs font-semibold transition ${
-              viewMode === "map" ? "bg-[#1769e8] text-white shadow-sm" : "text-slate-600"
-            }`}
-          >
-            <MapIcon className="size-4" /> Map
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode("list")}
-            className={`flex min-h-11 items-center justify-center gap-2 rounded-lg text-xs font-semibold transition ${
-              viewMode === "list" ? "bg-[#1769e8] text-white shadow-sm" : "text-slate-600"
-            }`}
-          >
-            <List className="size-4" /> List
-          </button>
-        </div>
+    <section className="hpo-map-v2 relative h-full min-h-0 w-full overflow-hidden bg-[#eef2f7] text-slate-950">
+      <div
+        ref={containerRef}
+        className={`absolute inset-0 bg-[#eef2f7] ${viewMode === "map" ? "block" : "hidden"}`}
+      />
 
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <p className="text-[11px] font-medium text-slate-500">
-            {totalMapped} mapped · {offices.length} offices
-            {preparing ? " · updating…" : ""}
-          </p>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setShowTools((value) => !value)}
-              className="flex min-h-10 items-center gap-1.5 rounded-lg px-2.5 text-[10px] font-semibold text-[#1769e8] hover:bg-blue-50"
-            >
-              <SlidersHorizontal className="size-3.5" />
-              {showTools ? "Close" : "Search"}
-            </button>
-            <button
-              type="button"
-              onClick={onRefreshPins}
-              disabled={preparing}
-              className="flex size-10 items-center justify-center rounded-lg text-[#1769e8] hover:bg-blue-50 disabled:opacity-40"
-              aria-label="Refresh office map points"
-            >
-              <RefreshCw className={`size-4 ${preparing ? "animate-spin" : ""}`} />
-            </button>
-          </div>
-        </div>
-
-        {showTools ? (
-          <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+      {viewMode === "map" ? (
+        <>
+          <div className="pointer-events-none absolute left-0 right-0 top-0 z-30 px-3 pt-3">
+            <div className="pointer-events-auto mx-auto flex h-[52px] max-w-2xl items-center gap-2 rounded-[1.05rem] border border-white/80 bg-white/96 px-3 shadow-[0_8px_26px_rgba(15,23,42,0.2)] backdrop-blur-xl">
+              <Search className="size-[19px] shrink-0 text-[#1769e8]" />
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search office, city or specialty"
-                className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-base text-slate-900 outline-none placeholder:text-slate-400"
+                placeholder="Search HPO accounts, offices or towns"
+                className="min-w-0 flex-1 bg-transparent text-[15px] font-medium text-slate-900 outline-none placeholder:font-normal placeholder:text-slate-400"
               />
-            </div>
-            <div className="mt-2 grid grid-cols-3 gap-1">
-              {(
-                [
-                  ["all", "All"],
-                  ["account", "Accounts"],
-                  ["prospect", "Prospects"],
-                ] as const
-              ).map(([value, label]) => (
+              {query ? (
                 <button
-                  key={value}
                   type="button"
-                  onClick={() => setFilter(value)}
-                  className={`min-h-10 rounded-lg text-[10px] font-semibold ${
-                    filter === value ? "bg-[#1769e8] text-white" : "bg-white text-slate-600"
-                  }`}
+                  onClick={() => setQuery("")}
+                  className="flex size-9 shrink-0 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100"
+                  aria-label="Clear map search"
                 >
-                  {label}
+                  <X className="size-4" />
                 </button>
-              ))}
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setShowTools((value) => !value)}
+                className={`flex size-9 shrink-0 items-center justify-center rounded-full ${
+                  showTools ? "bg-blue-50 text-[#1769e8]" : "text-slate-600 hover:bg-slate-100"
+                }`}
+                aria-label="Map filters"
+              >
+                <SlidersHorizontal className="size-[18px]" />
+              </button>
             </div>
-            <div className="mt-1 grid grid-cols-2 gap-1">
-              {(
-                [
-                  ["all", "Any status"],
-                  ["followup", "Follow-up due"],
-                  ["stale", "Stale 60d+"],
-                  ["priority", "High priority"],
-                ] as const
-              ).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setSignalFilter(value)}
-                  className={`min-h-10 rounded-lg text-[10px] font-semibold ${
-                    signalFilter === value ? "bg-blue-50 text-[#1769e8]" : "bg-white text-slate-500"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                startDraw();
-                setShowTools(false);
-              }}
-              className="mt-2 min-h-10 w-full rounded-lg border border-blue-200 bg-white text-[10px] font-semibold text-[#1769e8]"
-            >
-              Select offices by area
-            </button>
-          </div>
-        ) : null}
-      </div>
 
-      <div className={viewMode === "map" ? "relative" : "hidden"}>
-        <div
-          ref={containerRef}
-          className="h-[min(64dvh,620px)] min-h-[500px] w-full bg-[#eef2f7]"
-        />
-        {drawMode ? (
-          <div className="absolute left-3 top-3 z-10 flex items-center gap-1 rounded-xl bg-white/95 p-1.5 shadow-lg">
-            <span className="px-2 text-[10px] font-semibold text-slate-600">
-              Tap 3+ points around offices
-            </span>
+            <div className="pointer-events-auto mx-auto mt-2 flex max-w-2xl gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <button
+                type="button"
+                onClick={() => onNavigateHpo?.("today")}
+                className="min-h-10 shrink-0 rounded-full border border-white/80 bg-white/96 px-4 text-[12px] font-semibold text-slate-700 shadow-[0_4px_14px_rgba(15,23,42,0.14)]"
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                onClick={() => (route?.stops?.length ? fitRoute() : openHpoEmery("Build my HPO route. Ask me only for the date or area if you need it.", "Route"))}
+                className="min-h-10 shrink-0 rounded-full border border-white/80 bg-white/96 px-4 text-[12px] font-semibold text-slate-700 shadow-[0_4px_14px_rgba(15,23,42,0.14)]"
+              >
+                Route
+              </button>
+              <button
+                type="button"
+                onClick={() => onNavigateHpo?.("accounts")}
+                className="min-h-10 shrink-0 rounded-full border border-white/80 bg-white/96 px-4 text-[12px] font-semibold text-slate-700 shadow-[0_4px_14px_rgba(15,23,42,0.14)]"
+              >
+                Accounts
+              </button>
+              <button
+                type="button"
+                onClick={locateMe}
+                className="min-h-10 shrink-0 rounded-full border border-white/80 bg-white/96 px-4 text-[12px] font-semibold text-slate-700 shadow-[0_4px_14px_rgba(15,23,42,0.14)]"
+              >
+                Nearby
+              </button>
+              <button
+                type="button"
+                onClick={() => setSignalFilter((current) => (current === "followup" ? "all" : "followup"))}
+                className={`min-h-10 shrink-0 rounded-full border px-4 text-[12px] font-semibold shadow-[0_4px_14px_rgba(15,23,42,0.14)] ${
+                  signalFilter === "followup"
+                    ? "border-[#1769e8] bg-[#1769e8] text-white"
+                    : "border-white/80 bg-white/96 text-slate-700"
+                }`}
+              >
+                Follow-up Due
+              </button>
+            </div>
+
+            {showTools ? (
+              <div className="pointer-events-auto mx-auto mt-2 max-w-2xl rounded-2xl border border-white/80 bg-white/97 p-2.5 shadow-[0_10px_30px_rgba(15,23,42,0.2)] backdrop-blur-xl">
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(
+                    [
+                      ["all", "All"],
+                      ["account", "Accounts"],
+                      ["prospect", "Prospects"],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setFilter(value)}
+                      className={`min-h-10 rounded-xl text-[11px] font-semibold ${
+                        filter === value ? "bg-[#1769e8] text-white" : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+                  {(
+                    [
+                      ["all", "Any status"],
+                      ["followup", "Follow-up due"],
+                      ["stale", "Stale 60d+"],
+                      ["priority", "High priority"],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setSignalFilter(value)}
+                      className={`min-h-10 rounded-xl text-[11px] font-semibold ${
+                        signalFilter === value ? "bg-blue-50 text-[#1769e8]" : "bg-slate-50 text-slate-500"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      startDraw();
+                      setShowTools(false);
+                    }}
+                    className="min-h-10 rounded-xl border border-blue-200 bg-white text-[11px] font-semibold text-[#1769e8]"
+                  >
+                    Select Area
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void onRefreshPins()}
+                    disabled={preparing}
+                    className="min-h-10 rounded-xl border border-slate-200 bg-white text-[11px] font-semibold text-slate-600 disabled:opacity-40"
+                  >
+                    {preparing ? "Updating…" : `${totalMapped} mapped`}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          {drawMode ? (
+            <div className="absolute left-3 top-[9.8rem] z-30 flex items-center gap-1 rounded-2xl border border-white/80 bg-white/96 p-1.5 shadow-xl backdrop-blur-xl">
+              <span className="px-2 text-[10px] font-semibold text-slate-600">
+                Tap around the offices
+              </span>
+              <button
+                type="button"
+                onClick={finishDraw}
+                disabled={drawPoints.length < 3}
+                className="min-h-10 rounded-xl bg-[#1769e8] px-3 text-[10px] font-semibold text-white disabled:opacity-40"
+              >
+                {drawPoints.length >= 3 ? "Select area" : `${3 - drawPoints.length} more`}
+              </button>
+              <button
+                type="button"
+                onClick={cancelDraw}
+                className="flex size-10 items-center justify-center rounded-xl text-slate-500"
+                aria-label="Cancel area selection"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+          ) : null}
+
+          <div className="absolute right-3 top-[9.8rem] z-20 flex flex-col overflow-hidden rounded-2xl border border-white/80 bg-white/96 shadow-[0_8px_24px_rgba(15,23,42,0.18)] backdrop-blur-xl">
             <button
               type="button"
-              onClick={finishDraw}
-              disabled={drawPoints.length < 3}
-              className="min-h-10 rounded-lg bg-[#1769e8] px-3 text-[10px] font-semibold text-white disabled:opacity-40"
+              onClick={() => zoomBy(1)}
+              className="flex size-11 items-center justify-center border-b border-slate-200 text-xl font-medium text-slate-700"
+              aria-label="Zoom in"
             >
-              Select {drawPoints.length >= 3 ? "area" : `${3 - drawPoints.length} more`}
+              +
             </button>
             <button
               type="button"
-              onClick={cancelDraw}
-              className="flex size-10 items-center justify-center rounded-lg text-slate-500"
-              aria-label="Cancel area selection"
+              onClick={() => zoomBy(-1)}
+              className="flex size-11 items-center justify-center text-2xl font-light text-slate-700"
+              aria-label="Zoom out"
             >
-              <X className="size-4" />
+              −
             </button>
           </div>
-        ) : null}
-        <div className="absolute bottom-4 right-4 z-10 flex items-center gap-2">
-          {route?.stops?.length ? (
-            <button
-              type="button"
-              onClick={fitRoute}
-              className="min-h-11 rounded-xl border border-slate-200 bg-white/96 px-3 text-[11px] font-semibold text-[#1769e8] shadow-lg"
-            >
-              Fit route
-            </button>
-          ) : null}
+
           <button
             type="button"
-            onClick={() => geolocateRef.current?.trigger()}
-            className="flex size-12 items-center justify-center rounded-full border border-slate-200 bg-white/96 text-[#1769e8] shadow-lg"
-            aria-label="Show my current location"
+            onClick={locateMe}
+            className="absolute right-3 top-[15.8rem] z-20 flex size-11 items-center justify-center rounded-2xl border border-white/80 bg-white/96 text-[#1769e8] shadow-[0_8px_24px_rgba(15,23,42,0.18)] backdrop-blur-xl"
+            aria-label="Center on my location"
           >
             <LocateFixed className="size-5" />
           </button>
-        </div>
-      </div>
+
+          <button
+            type="button"
+            onClick={() => setViewMode("list")}
+            className="absolute right-3 top-[19.2rem] z-20 flex size-11 items-center justify-center rounded-2xl border border-white/80 bg-white/96 text-slate-700 shadow-[0_8px_24px_rgba(15,23,42,0.18)] backdrop-blur-xl"
+            aria-label="Open office list"
+          >
+            <List className="size-5" />
+          </button>
+        </>
+      ) : null}
 
       {viewMode === "list" ? (
-      <div className="border-t border-slate-200 bg-white p-3">
-        <div className="max-h-[56dvh] space-y-1 overflow-y-auto overscroll-contain">
-          {filtered.slice(0, 40).map((office) => {
-            const selected = selectedSet.has(office.key);
-            const focused = office.key === selectedOfficeKey;
-            return (
-              <button
-                key={office.key}
-                type="button"
-                onClick={() => onSelectOffice(office.key)}
-                className={`min-h-12 w-full rounded-xl border p-2.5 text-left transition ${
-                  focused ? "border-[#1769e8]/50 bg-blue-50 shadow-sm" : "border-slate-200 bg-white"
-                }`}
-              >
-                <div className="flex items-start gap-2">
-                  <span
-                    className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border text-[9px] font-bold ${
-                      office.kind === "account"
-                        ? "border-[#1769e8] bg-[#1769e8] text-white"
-                        : "border-[#1769e8] bg-white text-[#1769e8]"
-                    }`}
-                  >
-                    {office.kind === "account" ? "A" : "P"}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block break-words text-[11px] font-semibold text-slate-900">
-                      {office.officeName}
-                    </span>
-                    <span className="mt-0.5 block truncate text-[9px] text-slate-500">
-                      {office.city || office.address}
-                    </span>
-                  </span>
-                  {selected ? <Check className="size-3.5 shrink-0 text-[#1769e8]" /> : null}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      ) : null}
-
-      {selectedOffice ? (
-        <div className={`${viewMode === "map" ? "relative z-20 mx-3 -mt-24 rounded-[1.6rem] border border-slate-200 shadow-[0_22px_48px_rgba(15,23,42,0.22)]" : "border-t border-slate-200"} bg-white p-4 text-slate-950`}>
-          <div className="flex items-start gap-3">
-            <span
-              className={`flex size-10 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold ${
-                selectedOffice.kind === "account"
-                  ? "border-[#1769e8] bg-[#1769e8] text-white"
-                  : "border-[#1769e8] bg-white text-[#1769e8]"
-              }`}
-            >
-              {selectedOffice.kind === "account" ? "A" : "P"}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <h4 className="break-words text-sm font-semibold">{selectedOffice.officeName}</h4>
-                <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[9px] font-semibold capitalize text-[#1769e8]">
-                  {selectedOffice.kind}
-                </span>
-              </div>
-              <p className="mt-0.5 text-[11px] leading-4 text-slate-500">
-                {[selectedOffice.address, selectedOffice.city].filter(Boolean).join(", ")}
-              </p>
-              {selectedOffice.nextAction ? (
-                <p className="mt-2 text-[10px] text-slate-600">
-                  <span className="font-semibold text-slate-800">Next:</span>{" "}
-                  {selectedOffice.nextAction}
-                </p>
-              ) : null}
-            </div>
-          </div>
-          <div
-            className={`mt-3 grid gap-2 ${selectedOffice.accountId ? "grid-cols-3" : "grid-cols-2"}`}
-          >
-            <a
-              href={`https://maps.apple.com/?q=${encodeURIComponent(
-                [selectedOffice.officeName, selectedOffice.address, selectedOffice.city]
-                  .filter(Boolean)
-                  .join(", "),
-              )}`}
-              target="_blank"
-              rel="noreferrer"
-              className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 px-2 text-[11px] font-semibold text-slate-600"
-            >
-              <MapPinned className="size-3.5" /> Maps
-            </a>
-            {selectedOffice.accountId ? (
-              <button
-                type="button"
-                onClick={() => onOpenAccount?.(selectedOffice.accountId!)}
-                className="min-h-11 rounded-xl border border-slate-200 px-2 text-[11px] font-semibold text-slate-700"
-              >
-                Account
-              </button>
-            ) : null}
+        <div className="absolute inset-0 z-40 flex flex-col bg-[#f6f8fb]">
+          <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-3">
             <button
               type="button"
-              onClick={() =>
-                openHpoEmery(
-                  `Add ${selectedOffice.officeName} at ${[selectedOffice.address, selectedOffice.city]
-                    .filter(Boolean)
-                    .join(", ")} to my current HPO route. If there isn't an active route, ask me the minimum question needed to create one.`,
-                  selectedOffice.officeName,
-                )
-              }
-              className="min-h-11 rounded-xl bg-[#1769e8] px-2 text-[11px] font-semibold text-white"
+              onClick={() => setViewMode("map")}
+              className="flex size-11 items-center justify-center rounded-xl bg-slate-100 text-slate-700"
+              aria-label="Back to map"
             >
-              Add with Emery
+              <MapPinned className="size-5" />
             </button>
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search HPO offices"
+                className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-base text-slate-900 outline-none"
+              />
+            </div>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            <p className="mb-2 text-[11px] font-semibold text-slate-500">
+              {filtered.length} matching offices
+            </p>
+            <div className="space-y-2">
+              {filtered.map((office) => (
+                <button
+                  key={office.key}
+                  type="button"
+                  onClick={() => {
+                    onSelectOffice(office.key);
+                    setViewMode("map");
+                    setSheetExpanded(true);
+                  }}
+                  className="flex min-h-[64px] w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-left shadow-sm"
+                >
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-[#1769e8]">
+                    <MapPinned className="size-5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-slate-900">
+                      {office.officeName}
+                    </span>
+                    <span className="mt-0.5 block truncate text-[11px] text-slate-500">
+                      {[office.address, office.city].filter(Boolean).join(", ")}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       ) : null}
 
-      <div className="flex items-center gap-2 border-t border-slate-200 bg-white px-4 py-3 text-slate-950">
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold">
-            {selectedKeys.length
-              ? `${selectedKeys.length} offices selected`
-              : "Tap a pin or list row"}
-          </p>
-          <p className="mt-0.5 truncate text-[10px] text-slate-500">
-            Use Emery to add stops, build the route, or change the plan.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            const names = selectedKeys
-              .map((key) => offices.find((office) => office.key === key)?.officeName)
-              .filter(Boolean);
-            openHpoEmery(
-              names.length
-                ? `Build or update my HPO route using these selected offices: ${names.join(", ")}.`
-                : "Help me build my HPO route from the offices on this map. Ask me only for the date or area if you actually need it.",
-              "Map route",
-            );
-          }}
-          className="min-h-11 shrink-0 rounded-xl bg-[#1769e8] px-3 text-xs font-semibold text-white"
+      {viewMode === "map" ? (
+        <div
+          className={`absolute bottom-0 left-0 right-0 z-30 rounded-t-[1.7rem] border-t border-white/80 bg-white/97 shadow-[0_-12px_34px_rgba(15,23,42,0.2)] backdrop-blur-xl transition-[height] duration-200 ${
+            sheetExpanded || selectedOffice ? "h-[250px]" : "h-[108px]"
+          }`}
         >
-          Ask Emery
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={() => setSheetExpanded((value) => !value)}
+            className="absolute left-1/2 top-2 z-10 h-1.5 w-11 -translate-x-1/2 rounded-full bg-slate-300"
+            aria-label={sheetExpanded ? "Collapse map sheet" : "Expand map sheet"}
+          />
+          {selectedOffice ? (
+            <div className="h-full px-4 pb-4 pt-5">
+              <div className="flex items-start gap-3">
+                <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-blue-50 text-[#1769e8]">
+                  <MapPinned className="size-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="truncate text-[16px] font-bold text-slate-950">
+                      {selectedOffice.officeName}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => onSelectOffice("")}
+                      className="flex size-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500"
+                      aria-label="Clear selected office"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  </div>
+                  <p className="mt-0.5 truncate text-[12px] text-slate-500">
+                    {[selectedOffice.address, selectedOffice.city].filter(Boolean).join(", ")}
+                  </p>
+                  {selectedOffice.nextAction ? (
+                    <p className="mt-1 truncate text-[11px] text-slate-600">
+                      Next: {selectedOffice.nextAction}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-4 gap-2">
+                <a
+                  href={`https://maps.apple.com/?q=${encodeURIComponent(
+                    [selectedOffice.officeName, selectedOffice.address, selectedOffice.city]
+                      .filter(Boolean)
+                      .join(", "),
+                  )}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl bg-slate-100 text-[10px] font-semibold text-slate-700"
+                >
+                  <Navigation className="size-4" /> Navigate
+                </a>
+                {selectedOffice.accountId ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenAccount?.(selectedOffice.accountId!)}
+                    className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl bg-slate-100 text-[10px] font-semibold text-slate-700"
+                  >
+                    <Building2 className="size-4" /> Account
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => openHpoEmery(`Add ${selectedOffice.officeName} as an HPO account.`, selectedOffice.officeName)}
+                    className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl bg-slate-100 text-[10px] font-semibold text-slate-700"
+                  >
+                    <Plus className="size-4" /> Account
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() =>
+                    openHpoEmery(
+                      `Add ${selectedOffice.officeName} at ${[selectedOffice.address, selectedOffice.city]
+                        .filter(Boolean)
+                        .join(", ")} to my current HPO route. If there isn't an active route, ask me the minimum question needed.`,
+                      selectedOffice.officeName,
+                    )
+                  }
+                  className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl bg-blue-50 text-[10px] font-semibold text-[#1769e8]"
+                >
+                  <MapPinned className="size-4" /> Route
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    openHpoEmery(
+                      `I'm looking at ${selectedOffice.officeName}. Help me with this HPO relationship, route stop, visit, notes, or follow-up.`,
+                      selectedOffice.officeName,
+                    )
+                  }
+                  className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl bg-[#1769e8] text-[10px] font-semibold text-white"
+                >
+                  <MessageCircle className="size-4" /> Emery
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex h-full items-center gap-3 px-4 pb-3 pt-5">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-slate-950">
+                  {route?.stops?.length
+                    ? `${route.stops.length} stops on the active route`
+                    : `${totalMapped} HPO offices on the map`}
+                </p>
+                <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                  Tap a blue pin, search an office, or ask Emery to plan the field day.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  openHpoEmery(
+                    "Help me with the HPO map. I can add offices, build or change my route, review nearby accounts, or log a visit.",
+                    "HPO Map",
+                  )
+                }
+                className="flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-[#1769e8] px-4 text-[12px] font-semibold text-white shadow-sm"
+              >
+                <MessageCircle className="size-4" />
+                Emery
+              </button>
+            </div>
+          )}
+        </div>
+      ) : null}
     </section>
   );
 }
