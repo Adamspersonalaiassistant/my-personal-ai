@@ -5,8 +5,10 @@ import {
 } from "@/lib/hpo-route.functions";
 import {
   executeHpoRouteAddStopsCore,
+  executeHpoRouteCompleteCore,
   executeHpoRouteRemoveStopCore,
   executeHpoRouteReoptimizeCore,
+  getHpoNearbyBackupsCore,
 } from "@/lib/hpo-field.functions";
 
 export type HpoRouteCommandAction =
@@ -15,7 +17,9 @@ export type HpoRouteCommandAction =
   | "hpo.route.add_stops"
   | "hpo.route.remove_stop"
   | "hpo.route.optimize"
-  | "hpo.route.reoptimize";
+  | "hpo.route.reoptimize"
+  | "hpo.nearby.find"
+  | "hpo.route.complete";
 
 export type HpoRouteCommandResult = {
   recognized: boolean;
@@ -322,6 +326,10 @@ async function chooseRouteCandidates(db: any, userId: string, message: string, c
 function requestedAction(message: string): HpoRouteCommandAction {
   const text = normalize(message);
   if (/\b(build|create|make)\b.*\broute\b/.test(text)) return "hpo.route.create";
+  if (/\b(wrap up|wrap today|finish (?:the )?(?:route|day)|complete (?:the )?route|end (?:the )?route)\b/.test(text))
+    return "hpo.route.complete";
+  if (/\b(another|backup|nearby|within \d{1,2} minutes?|where should i go|where can i go|i have \d{1,3} minutes? left)\b/.test(text))
+    return "hpo.nearby.find";
   if (/\b(reoptimize|re optimize|fix (?:the )?(?:rest|remaining)|optimize (?:the )?(?:rest|remaining))\b/.test(text))
     return "hpo.route.reoptimize";
   if (/\boptimize\b/.test(text)) return "hpo.route.optimize";
@@ -437,6 +445,72 @@ export async function processHpoRouteCommand(input: {
         needsClarification: true,
         question: "You don't have an active HPO route to change. Build or open a route first.",
         reply: "You don't have an active HPO route to change. Build or open a route first.",
+      });
+    }
+
+    if (action === "hpo.nearby.find") {
+      const withinMatch = input.message.match(/\bwithin\s+(\d{1,2})\s+minutes?\b/i);
+      const availableMatch = input.message.match(/\b(?:i have|got)\s+(\d{1,3})\s+minutes?(?:\s+left)?\b/i);
+      const availableMinutes = availableMatch ? Number(availableMatch[1]) : null;
+      const maxMinutes = withinMatch
+        ? Number(withinMatch[1])
+        : availableMinutes != null
+          ? Math.max(5, Math.min(30, availableMinutes - 15))
+          : 10;
+      const nearby = await getHpoNearbyBackupsCore({
+        db: input.db,
+        userId: input.userId,
+        routeId: route.id,
+        latitude: input.latitude,
+        longitude: input.longitude,
+        maxMinutes,
+      });
+      const recommendation = nearby.recommended;
+      if (!recommendation) {
+        return empty({
+          performed: false,
+          routeId: route.id,
+          reply: `I don't have an eligible backup office within ${maxMinutes} minutes right now.`,
+        });
+      }
+      const why = Array.isArray(recommendation.reasons) && recommendation.reasons.length
+        ? ` ${recommendation.reasons.join(" · ")}.`
+        : "";
+      return empty({
+        performed: false,
+        routeId: route.id,
+        reply: `Best nearby option: ${recommendation.officeName} · ${recommendation.driveMinutes} min · ${recommendation.distanceMiles} mi.${why} Say “Add ${recommendation.officeName}” if you want it on the route.`,
+      });
+    }
+
+    if (action === "hpo.route.complete") {
+      const result = await executeHpoRouteCompleteCore({
+        db: input.db,
+        userId: input.userId,
+        routeId: route.id,
+        idempotencyKey: requestPrefix
+          ? `${requestPrefix}:hpo.route.complete`
+          : `route:${route.id}:complete:${Date.now()}`,
+        sourceChannel: input.sourceChannel,
+        sourceMessageId: input.sourceMessageId ?? null,
+      });
+      if (!result.ok && result.blocked) {
+        const open = result.openStops ?? [];
+        const preview = open
+          .slice(0, 3)
+          .map((stop: any) => `Stop ${stop.stopOrder} · ${stop.officeName ?? "route stop"}`)
+          .join(", ");
+        return empty({
+          performed: false,
+          routeId: route.id,
+          reply: `I didn't close the route because ${open.length} stop${open.length === 1 ? " is" : "s are"} still unfinished${preview ? `: ${preview}` : ""}. Give those stops an outcome first.`,
+        });
+      }
+      return empty({
+        performed: true,
+        routeId: route.id,
+        executionRunId: result.executionRunId ?? null,
+        reply: "Today's HPO route is wrapped up. Every stop has a final outcome and the route is marked completed.",
       });
     }
 
