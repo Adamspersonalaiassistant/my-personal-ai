@@ -321,9 +321,144 @@ export const getHpoFieldToday = createServerFn({ method: "GET" })
     }),
   );
 
+export async function executeHpoRouteStopArriveCore(input: {
+  db: any;
+  userId: string;
+  stopId: string;
+  idempotencyKey: string;
+  sourceChannel: string;
+  sourceMessageId?: string | null;
+  baseUpdatedAt?: string | null;
+}) {
+  const db = input.db;
+  const action = "hpo.route_stop.arrive";
+  const run = await beginExecution({
+    db,
+    userId: input.userId,
+    domain: "hpo_route",
+    action,
+    sourceMessageId: input.sourceMessageId ?? null,
+    idempotencyKey: input.idempotencyKey,
+    targetType: "hpo_route_stop",
+    targetId: input.stopId,
+    requestPayload: {
+      stopId: input.stopId,
+      sourceChannel: input.sourceChannel,
+      baseUpdatedAt: input.baseUpdatedAt ?? null,
+    },
+  });
+  if (run.reused && run.status === "completed" && run.resultPayload["arrival"]) {
+    return run.resultPayload["arrival"] as any;
+  }
+  try {
+    const { data: stop, error } = await db
+      .from("hpo_route_stops")
+      .select("*")
+      .eq("id", input.stopId)
+      .eq("user_id", input.userId)
+      .single();
+    if (error || !stop) throw error ?? new Error("Route stop not found");
+    if (
+      input.baseUpdatedAt &&
+      !Number.isNaN(Date.parse(stop.updated_at)) &&
+      Date.parse(stop.updated_at) > Date.parse(input.baseUpdatedAt) + 1000
+    ) {
+      throw new Error("offline_conflict: This stop changed after the offline snapshot. Refresh before retrying.");
+    }
+    if (TERMINAL.has(String(stop.status))) throw new Error("This stop already has a final outcome");
+
+    if (stop.status === "arrived") {
+      const result = {
+        ok: true as const,
+        action,
+        executionRunId: run.id,
+        stop,
+        arrivedAt:
+          stop.metadata && typeof stop.metadata === "object" && !Array.isArray(stop.metadata)
+            ? (stop.metadata as Record<string, unknown>)["arrived_at"] ?? stop.updated_at
+            : stop.updated_at,
+        reused: run.reused,
+      };
+      await completeExecution({
+        db,
+        userId: input.userId,
+        runId: run.id,
+        resultPayload: { arrival: result as unknown as Record<string, unknown> },
+        targetType: "hpo_route_stop",
+        targetId: stop.id,
+      });
+      return result;
+    }
+
+    const metadata =
+      stop.metadata && typeof stop.metadata === "object" && !Array.isArray(stop.metadata)
+        ? stop.metadata
+        : {};
+    const arrivedAt = new Date().toISOString();
+    const { data: updated, error: updateError } = await db
+      .from("hpo_route_stops")
+      .update({
+        status: "arrived",
+        metadata: {
+          ...metadata,
+          arrived_at: arrivedAt,
+          arrival_execution_run_id: run.id,
+          arrival_source_channel: input.sourceChannel,
+        },
+        updated_at: arrivedAt,
+      })
+      .eq("id", stop.id)
+      .eq("user_id", input.userId)
+      .select("*")
+      .single();
+    if (updateError || !updated || updated.status !== "arrived") {
+      throw updateError ?? new Error("Arrival verification failed");
+    }
+    const { error: routeError } = await db
+      .from("hpo_route_plans")
+      .update({ status: "active", updated_at: arrivedAt })
+      .eq("id", stop.route_id)
+      .eq("user_id", input.userId);
+    if (routeError) throw routeError;
+
+    const result = {
+      ok: true as const,
+      action,
+      executionRunId: run.id,
+      stop: updated,
+      arrivedAt,
+      reused: run.reused,
+    };
+    await completeExecution({
+      db,
+      userId: input.userId,
+      runId: run.id,
+      resultPayload: { arrival: result as unknown as Record<string, unknown> },
+      targetType: "hpo_route_stop",
+      targetId: stop.id,
+    });
+    return result;
+  } catch (error) {
+    await failExecution({
+      db,
+      userId: input.userId,
+      runId: run.id,
+      errorCode: "hpo_route_stop_arrive_failed",
+      errorMessage: error instanceof Error ? error.message : String(error),
+      retryable: true,
+    }).catch(() => undefined);
+    throw error;
+  }
+}
+
 export const arriveHpoRouteStop = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { stopId: string; idempotencyKey: string; sourceChannel?: string | null; baseUpdatedAt?: string | null }) => ({
+  .inputValidator((input: {
+    stopId: string;
+    idempotencyKey: string;
+    sourceChannel?: string | null;
+    baseUpdatedAt?: string | null;
+  }) => ({
     stopId: clean(input.stopId),
     idempotencyKey: clean(input.idempotencyKey),
     sourceChannel: clean(input.sourceChannel) || "ui",
@@ -332,91 +467,16 @@ export const arriveHpoRouteStop = createServerFn({ method: "POST" })
         ? new Date(input.baseUpdatedAt).toISOString()
         : null,
   }))
-  .handler(async ({ data, context }) => {
-    const db = context.supabase as any;
-    const action = "hpo.route_stop.arrive";
-    const run = await beginExecution({
-      db,
+  .handler(async ({ data, context }) =>
+    executeHpoRouteStopArriveCore({
+      db: context.supabase as any,
       userId: context.userId,
-      domain: "hpo_route",
-      action,
+      stopId: data.stopId,
       idempotencyKey: data.idempotencyKey,
-      targetType: "hpo_route_stop",
-      targetId: data.stopId,
-      requestPayload: { stopId: data.stopId, sourceChannel: data.sourceChannel, baseUpdatedAt: data.baseUpdatedAt },
-    });
-    if (run.reused && run.status === "completed" && run.resultPayload["arrival"]) {
-      return run.resultPayload["arrival"];
-    }
-    try {
-      const { data: stop, error } = await db
-        .from("hpo_route_stops")
-        .select("*")
-        .eq("id", data.stopId)
-        .eq("user_id", context.userId)
-        .single();
-      if (error || !stop) throw error ?? new Error("Route stop not found");
-      if (
-        data.baseUpdatedAt &&
-        !Number.isNaN(Date.parse(stop.updated_at)) &&
-        Date.parse(stop.updated_at) > Date.parse(data.baseUpdatedAt) + 1000
-      ) {
-        throw new Error("offline_conflict: This stop changed after the offline snapshot. Refresh before retrying.");
-      }
-      if (TERMINAL.has(String(stop.status))) throw new Error("This stop already has a final outcome");
-      const metadata =
-        stop.metadata && typeof stop.metadata === "object" && !Array.isArray(stop.metadata)
-          ? stop.metadata
-          : {};
-      const arrivedAt = new Date().toISOString();
-      const { data: updated, error: updateError } = await db
-        .from("hpo_route_stops")
-        .update({
-          status: "arrived",
-          metadata: { ...metadata, arrived_at: arrivedAt, arrival_execution_run_id: run.id },
-          updated_at: arrivedAt,
-        })
-        .eq("id", stop.id)
-        .eq("user_id", context.userId)
-        .select("*")
-        .single();
-      if (updateError || !updated || updated.status !== "arrived") {
-        throw updateError ?? new Error("Arrival verification failed");
-      }
-      await db
-        .from("hpo_route_plans")
-        .update({ status: "active", updated_at: arrivedAt })
-        .eq("id", stop.route_id)
-        .eq("user_id", context.userId);
-      const result = {
-        ok: true,
-        action,
-        executionRunId: run.id,
-        stop: updated,
-        arrivedAt,
-        reused: run.reused,
-      };
-      await completeExecution({
-        db,
-        userId: context.userId,
-        runId: run.id,
-        resultPayload: { arrival: result },
-        targetType: "hpo_route_stop",
-        targetId: stop.id,
-      });
-      return result;
-    } catch (error) {
-      await failExecution({
-        db,
-        userId: context.userId,
-        runId: run.id,
-        errorCode: "hpo_route_stop_arrive_failed",
-        errorMessage: error instanceof Error ? error.message : String(error),
-        retryable: true,
-      }).catch(() => undefined);
-      throw error;
-    }
-  });
+      sourceChannel: data.sourceChannel,
+      baseUpdatedAt: data.baseUpdatedAt,
+    }),
+  );
 
 export type HpoRouteStopCandidate = {
   accountId?: string | null;
