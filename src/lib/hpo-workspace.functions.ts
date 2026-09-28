@@ -123,3 +123,51 @@ export const setHpoFieldAccountFollowup = createServerFn({ method: "POST" })
     if (!account) throw new Error("Account not found");
     return account;
   });
+
+export const addHpoFieldContact = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (input: {
+      accountId: string;
+      name: string;
+      roleTitle?: string;
+      phone?: string;
+      email?: string;
+      relationshipNotes?: string;
+    }) =>
+      z
+        .object({
+          accountId: z.string().uuid(),
+          name: z.string().trim().min(1).max(150),
+          roleTitle: z.string().trim().max(150).optional(),
+          phone: z.string().trim().max(50).optional(),
+          email: z.union([z.literal(""), z.string().trim().email().max(200)]).optional(),
+          relationshipNotes: z.string().trim().max(1500).optional(),
+        })
+        .parse(input),
+  )
+  .handler(async ({ context, data }) => {
+    const { data: account, error: fetchError } = await context.supabase
+      .from("hpo_accounts")
+      .select("id")
+      .eq("id", data.accountId)
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    if (fetchError) throw fetchError;
+    if (!account) throw new Error("Account not found");
+    const { data: contact, error } = await context.supabase
+      .from("hpo_contacts")
+      .insert({
+        account_id: account.id,
+        user_id: context.userId,
+        name: data.name,
+        role_title: data.roleTitle || null,
+        phone: data.phone || null,
+        email: data.email || null,
+        relationship_notes: data.relationshipNotes || null,
+      })
+      .select("id")
+      .single();
+    if (error) throw error;
+    return contact;
+  });

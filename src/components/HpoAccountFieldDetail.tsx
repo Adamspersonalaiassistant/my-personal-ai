@@ -12,7 +12,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { getHpoAccountFieldContext } from "@/lib/hpo-field.functions";
-import { updateHpoFieldAccount } from "@/lib/hpo-workspace.functions";
+import { addHpoFieldContact, updateHpoFieldAccount } from "@/lib/hpo-workspace.functions";
 import { Button } from "@/components/ui/button";
 
 function dateLabel(value: string | null | undefined) {
@@ -37,6 +37,9 @@ export function HpoAccountFieldDetail({
 }) {
   const load = useServerFn(getHpoAccountFieldContext);
   const update = useServerFn(updateHpoFieldAccount);
+  const addContact = useServerFn(addHpoFieldContact);
+  const [contactOpen, setContactOpen] = useState(false);
+  const [contactError, setContactError] = useState("");
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState("");
@@ -289,7 +292,7 @@ export function HpoAccountFieldDetail({
               </div>
             </section>
 
-            {primary || contacts.length ? (
+            {(
               <section className="emery-glass rounded-[1.45rem] p-4">
                 <div className="flex items-center gap-2">
                   <UserRound className="size-4 text-primary" />
