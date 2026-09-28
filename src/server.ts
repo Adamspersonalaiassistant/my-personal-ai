@@ -49,7 +49,25 @@ export default {
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
-      return await normalizeCatastrophicSsrResponse(response);
+      const normalized = await normalizeCatastrophicSsrResponse(response);
+      const contentType = normalized.headers.get("content-type") ?? "";
+      const pathname = new URL(request.url).pathname;
+      const shouldNoCache =
+        contentType.includes("text/html") ||
+        pathname === "/manifest.webmanifest";
+      if (!shouldNoCache) return normalized;
+
+      const headers = new Headers(normalized.headers);
+      headers.set("cache-control", "no-store, no-cache, must-revalidate, max-age=0");
+      headers.set("pragma", "no-cache");
+      headers.set("expires", "0");
+      headers.set("surrogate-control", "no-store");
+
+      return new Response(normalized.body, {
+        status: normalized.status,
+        statusText: normalized.statusText,
+        headers,
+      });
     } catch (error) {
       console.error(error);
       return new Response(renderErrorPage(), {
