@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Clock3,
   MapPinned,
+  MessageCircle,
   Plus,
   Search,
   UsersRound,
@@ -17,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { HpoRoutePlanner } from "@/components/HpoRoutePlanner";
 import { HpoFieldToday } from "@/components/HpoFieldToday";
 import { HpoAccountFieldDetail } from "@/components/HpoAccountFieldDetail";
+import { HpoEmerySheet, openHpoEmery } from "@/components/HpoEmerySheet";
 import { createHpoAccount, logHpoInteraction } from "@/lib/hpo.functions";
 import { getHpoWorkspace, setHpoFieldAccountFollowup } from "@/lib/hpo-workspace.functions";
 import { getHpoFieldToday } from "@/lib/hpo-field.functions";
@@ -128,6 +130,15 @@ function HpoWorkspace() {
     }
   }
   const account = data?.accounts.find((item) => item.id === selected) ?? null;
+  const emeryContextPrompt = account
+    ? `I'm looking at ${account.name} in HPO. Help me with this account and use the live HPO record.`
+    : view === "map"
+      ? "I'm on the HPO map. Help me add offices, build or change my route, or work with the accounts on this map."
+      : view === "today"
+        ? "I'm in HPO Today. Help me run today's route, log visits, change stops, or handle the next action."
+        : view === "accounts"
+          ? "I'm in HPO Accounts. Help me add, update, research, or plan follow-up for an account."
+          : "I'm in HPO Activity. Help me log a visit or touch, update follow-ups, or review recent account activity.";
   const openLog = (accountId = "", kind = "visit") => {
     setSelected(null);
     setLogAccount(accountId);
@@ -187,7 +198,12 @@ function HpoWorkspace() {
           <Accounts
             accounts={data.accounts}
             limited={data.accountLimitReached}
-            onAdd={() => setSheet("add")}
+            onAdd={() =>
+              openHpoEmery(
+                "Add a new HPO account. Ask me only for the office name and physical street address if I haven't given them yet, then save it to HPO and plot it on the map.",
+                "Accounts",
+              )
+            }
             onOpen={setSelected}
           />
         ) : null}
@@ -195,8 +211,22 @@ function HpoWorkspace() {
           <ActivityView
             data={data}
             onOpen={setSelected}
-            onLog={openLog}
-            onFollowup={openFollowup}
+            onLog={(accountId, kind) => {
+              const target = data.accounts.find((item) => item.id === accountId);
+              openHpoEmery(
+                kind === "visit"
+                  ? `Log an HPO office visit${target ? ` for ${target.name}` : ""}. Ask me what happened and who I spoke with, then save it.`
+                  : `Log an HPO relationship touch${target ? ` for ${target.name}` : ""}. Ask me for the missing details and save it.`,
+                "Activity",
+              );
+            }}
+            onFollowup={(accountId) => {
+              const target = data.accounts.find((item) => item.id === accountId);
+              openHpoEmery(
+                `Update the next HPO follow-up${target ? ` for ${target.name}` : ""}. Ask me only for the missing action or date, then save it.`,
+                "Follow-up",
+              );
+            }}
             onMore={() => void loadMore()}
             loading={moreLoading}
           />
@@ -206,8 +236,18 @@ function HpoWorkspace() {
             accountId={selected}
             onClose={() => setSelected(null)}
             onChanged={() => void refresh()}
-            onLog={() => openLog(selected, "visit")}
-            onFollowup={() => openFollowup(selected)}
+            onLog={() =>
+              openHpoEmery(
+                `Log a visit for ${account?.name || "this HPO account"}. Ask me what happened and who I spoke with, then save it.`,
+                account?.name || "Account",
+              )
+            }
+            onFollowup={() =>
+              openHpoEmery(
+                `Set or update the follow-up for ${account?.name || "this HPO account"}.`,
+                account?.name || "Account",
+              )
+            }
           />
         )}
         {sheet === "add" && (
@@ -244,6 +284,18 @@ function HpoWorkspace() {
             }}
           />
         )}
+
+        <button
+          type="button"
+          onClick={() => openHpoEmery(emeryContextPrompt, `HPO · ${view}`)}
+          className="fixed bottom-[calc(4.9rem+env(safe-area-inset-bottom))] right-4 z-[55] flex min-h-12 items-center gap-2 rounded-full border border-primary/20 bg-primary px-4 text-xs font-semibold text-primary-foreground shadow-[0_12px_32px_rgba(0,0,0,0.35)] md:bottom-6 md:right-6"
+          aria-label="Ask Emery about HPO"
+        >
+          <MessageCircle className="size-4" />
+          Emery
+        </button>
+        <HpoEmerySheet onChanged={() => void refresh()} />
+
       </div>
     </AppShell>
   );
