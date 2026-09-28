@@ -9,6 +9,7 @@ import {
   failExecution,
 } from "@/lib/execution-ledger";
 import { executeCanonicalTaskCreate } from "@/lib/execution-kernel";
+import { geocodeHpoOfficeAddress } from "@/lib/hpo-geocode";
 
 type RouteStopInput = {
   accountId?: string | null;
@@ -456,30 +457,6 @@ async function upsertInteractionForStop(
 }
 
 
-async function geocodeOfficeForMap(address: string) {
-  const response = await fetch(
-    `https://photon.komoot.io/api/?limit=1&lang=en&q=${encodeURIComponent(address)}`,
-    {
-      headers: {
-        "User-Agent": "EmeryPersonalAI/1.0 HPO-office-map",
-        Accept: "application/json",
-      },
-    },
-  );
-  if (!response.ok) return null;
-  const payload = (await response.json()) as {
-    features?: Array<{ geometry?: { coordinates?: [number, number] } }>;
-  };
-  const coordinates = payload.features?.[0]?.geometry?.coordinates;
-  if (!coordinates || coordinates.length < 2) return null;
-  const lon = Number(coordinates[0]);
-  const lat = Number(coordinates[1]);
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-  // Reject obvious out-of-region geocodes. Emery's current HPO field map is NJ-focused.
-  if (lat < 38.7 || lat > 41.5 || lon < -75.7 || lon > -73.7) return null;
-  return { lat, lon };
-}
-
 export const getHpoRouteNextStop = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { routeId?: string | null } = {}) => ({
@@ -591,8 +568,7 @@ export const prepareHpoOfficeMap = createServerFn({ method: "POST" })
           .eq("user_id", userId)
           .eq("status", "active")
           .not("address", "is", null)
-          .is("latitude", null)
-          .is("geocoded_at", null)
+          .or("latitude.is.null,longitude.is.null")
           .limit(data.limit),
         db
           .from("hpo_prospects")
@@ -600,8 +576,7 @@ export const prepareHpoOfficeMap = createServerFn({ method: "POST" })
           .eq("user_id", userId)
           .neq("fit_status", "rejected")
           .not("address", "is", null)
-          .is("latitude", null)
-          .is("geocoded_at", null)
+          .or("latitude.is.null,longitude.is.null")
           .limit(data.limit),
       ]);
     if (accountError) throw accountError;
@@ -620,9 +595,8 @@ export const prepareHpoOfficeMap = createServerFn({ method: "POST" })
       const results = await Promise.all(
         chunk.map(async (row: any) => {
           attempted += 1;
-          const query = [row.address, row.city, "NJ"].filter(Boolean).join(", ");
           try {
-            const point = await geocodeOfficeForMap(query);
+            const point = await geocodeHpoOfficeAddress(String(row.address ?? ""), row.city);
             const table = row.kind === "account" ? "hpo_accounts" : "hpo_prospects";
             const patch: Record<string, unknown> = { geocoded_at: new Date().toISOString() };
             if (point) {
