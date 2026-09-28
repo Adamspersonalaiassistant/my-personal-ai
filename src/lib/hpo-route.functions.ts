@@ -1120,6 +1120,7 @@ export async function executeHpoRouteStopOutcomeCore(input: {
   sourceMessageId?: string | null;
   parentRunId?: string | null;
   traceId?: string | null;
+  baseUpdatedAt?: string | null;
 }) {
   const action = "hpo.route_stop.set_outcome";
   const idempotencyKey = clean(input.idempotencyKey);
@@ -1145,6 +1146,7 @@ export async function executeHpoRouteStopOutcomeCore(input: {
       nextActionDueAt: input.nextActionDueAt ?? null,
       sourceChannel: input.sourceChannel,
       traceId: input.traceId ?? null,
+      baseUpdatedAt: input.baseUpdatedAt ?? null,
     },
   });
 
@@ -1171,6 +1173,14 @@ export async function executeHpoRouteStopOutcomeCore(input: {
       .eq("user_id", input.userId)
       .single();
     if (fetchError || !stop) throw fetchError ?? new Error("Route stop not found");
+    if (
+      input.baseUpdatedAt &&
+      !Number.isNaN(Date.parse(input.baseUpdatedAt)) &&
+      !Number.isNaN(Date.parse(stop.updated_at)) &&
+      Date.parse(stop.updated_at) > Date.parse(input.baseUpdatedAt) + 1000
+    ) {
+      throw new Error("offline_conflict: This stop changed after the offline snapshot. Refresh before retrying.");
+    }
 
     const patch: Record<string, unknown> = {
       status: input.status,
@@ -1271,6 +1281,7 @@ export async function executeHpoRouteStopFollowupCore(input: {
   sourceMessageId?: string | null;
   parentRunId?: string | null;
   traceId?: string | null;
+  baseUpdatedAt?: string | null;
 }) {
   const action = "hpo.route_stop.set_followup";
   const nextAction = clean(input.nextAction);
@@ -1295,6 +1306,7 @@ export async function executeHpoRouteStopFollowupCore(input: {
       nextActionDueAt: input.nextActionDueAt ?? null,
       sourceChannel: input.sourceChannel,
       traceId: input.traceId ?? null,
+      baseUpdatedAt: input.baseUpdatedAt ?? null,
     },
   });
 
@@ -1323,6 +1335,14 @@ export async function executeHpoRouteStopFollowupCore(input: {
       .eq("user_id", input.userId)
       .single();
     if (stopError || !stop) throw stopError ?? new Error("Route stop not found");
+    if (
+      input.baseUpdatedAt &&
+      !Number.isNaN(Date.parse(input.baseUpdatedAt)) &&
+      !Number.isNaN(Date.parse(stop.updated_at)) &&
+      Date.parse(stop.updated_at) > Date.parse(input.baseUpdatedAt) + 1000
+    ) {
+      throw new Error("offline_conflict: This stop changed after the offline snapshot. Refresh before retrying.");
+    }
 
     const dueAt = input.nextActionDueAt ?? null;
     const { data: updated, error: updateError } = await input.db
@@ -1431,6 +1451,7 @@ export const setHpoRouteStopOutcome = createServerFn({ method: "POST" })
       status: "completed" | "visited" | "closed" | "bad_address" | "skipped";
       idempotencyKey?: string | null;
       sourceChannel?: string | null;
+      baseUpdatedAt?: string | null;
     }) => {
       const status = clean(input.status);
       const allowed = new Set(["completed", "visited", "closed", "bad_address", "skipped"]);
@@ -1440,6 +1461,10 @@ export const setHpoRouteStopOutcome = createServerFn({ method: "POST" })
         status: status as "completed" | "visited" | "closed" | "bad_address" | "skipped",
         idempotencyKey: clean(input.idempotencyKey) || null,
         sourceChannel: clean(input.sourceChannel) || "ui",
+        baseUpdatedAt:
+          input.baseUpdatedAt && !Number.isNaN(Date.parse(input.baseUpdatedAt))
+            ? new Date(input.baseUpdatedAt).toISOString()
+            : null,
       };
     },
   )
@@ -1452,6 +1477,7 @@ export const setHpoRouteStopOutcome = createServerFn({ method: "POST" })
       idempotencyKey:
         data.idempotencyKey || `ui:${crypto.randomUUID()}:hpo.route_stop.set_outcome`,
       sourceChannel: data.sourceChannel,
+      baseUpdatedAt: data.baseUpdatedAt,
     }),
   );
 
@@ -1469,6 +1495,7 @@ export async function executeHpoRouteStopVisitCore(input: {
   sourceMessageId?: string | null;
   parentRunId?: string | null;
   traceId?: string | null;
+  baseUpdatedAt?: string | null;
 }) {
   const action = "hpo.route_stop.log_visit";
   const key = clean(input.idempotencyKey);
@@ -1494,6 +1521,7 @@ export async function executeHpoRouteStopVisitCore(input: {
       nextActionDueAt: input.nextActionDueAt ?? null,
       sourceChannel: input.sourceChannel,
       traceId: input.traceId ?? null,
+      baseUpdatedAt: input.baseUpdatedAt ?? null,
     },
   });
 
@@ -1528,6 +1556,7 @@ export async function executeHpoRouteStopVisitCore(input: {
       sourceMessageId: input.sourceMessageId ?? null,
       parentRunId: execution.id,
       traceId: input.traceId ?? execution.id,
+      baseUpdatedAt: input.baseUpdatedAt ?? null,
     });
 
     if (input.nextAction?.trim()) {
@@ -1603,6 +1632,7 @@ export const updateHpoRouteStop = createServerFn({ method: "POST" })
       nextActionDueAt?: string | null;
       idempotencyKey?: string | null;
       sourceChannel?: string | null;
+      baseUpdatedAt?: string | null;
     }) => {
       const status = clean(input.status) || null;
       const allowed = new Set(["planned", "arrived", "completed", "visited", "skipped", "closed", "bad_address"]);
@@ -1621,6 +1651,10 @@ export const updateHpoRouteStop = createServerFn({ method: "POST" })
               : undefined,
         idempotencyKey: clean(input.idempotencyKey) || null,
         sourceChannel: clean(input.sourceChannel) || "ui",
+        baseUpdatedAt:
+          input.baseUpdatedAt && !Number.isNaN(Date.parse(input.baseUpdatedAt))
+            ? new Date(input.baseUpdatedAt).toISOString()
+            : null,
       };
     },
   )
@@ -1645,6 +1679,7 @@ export const updateHpoRouteStop = createServerFn({ method: "POST" })
           nextActionDueAt: data.nextActionDueAt,
           idempotencyKey: key,
           sourceChannel: data.sourceChannel,
+          baseUpdatedAt: data.baseUpdatedAt,
         });
       }
       return executeHpoRouteStopOutcomeCore({
@@ -1654,6 +1689,7 @@ export const updateHpoRouteStop = createServerFn({ method: "POST" })
         status: data.status as "completed" | "visited" | "closed" | "bad_address" | "skipped",
         idempotencyKey: key,
         sourceChannel: data.sourceChannel,
+        baseUpdatedAt: data.baseUpdatedAt,
       });
     }
     const { data: stop, error: fetchError } = await db
@@ -1663,6 +1699,14 @@ export const updateHpoRouteStop = createServerFn({ method: "POST" })
       .eq("user_id", context.userId)
       .single();
     if (fetchError || !stop) throw fetchError ?? new Error("Route stop not found");
+    if (
+      data.baseUpdatedAt &&
+      !Number.isNaN(Date.parse(data.baseUpdatedAt)) &&
+      !Number.isNaN(Date.parse(stop.updated_at)) &&
+      Date.parse(stop.updated_at) > Date.parse(data.baseUpdatedAt) + 1000
+    ) {
+      throw new Error("offline_conflict: This stop changed after the offline snapshot. Refresh before retrying.");
+    }
 
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (data.status) {
@@ -1707,6 +1751,7 @@ export const setHpoRouteStopFollowup = createServerFn({ method: "POST" })
       nextActionDueAt?: string | null;
       idempotencyKey?: string | null;
       sourceChannel?: string | null;
+      baseUpdatedAt?: string | null;
     }) => ({
       stopId: clean(input.stopId),
       nextAction: clean(input.nextAction),
@@ -1718,6 +1763,10 @@ export const setHpoRouteStopFollowup = createServerFn({ method: "POST" })
             : undefined,
       idempotencyKey: clean(input.idempotencyKey) || null,
       sourceChannel: clean(input.sourceChannel) || "ui",
+      baseUpdatedAt:
+        input.baseUpdatedAt && !Number.isNaN(Date.parse(input.baseUpdatedAt))
+          ? new Date(input.baseUpdatedAt).toISOString()
+          : null,
     }),
   )
   .handler(async ({ data, context }) =>
@@ -1730,6 +1779,7 @@ export const setHpoRouteStopFollowup = createServerFn({ method: "POST" })
       idempotencyKey:
         data.idempotencyKey || `ui:${crypto.randomUUID()}:hpo.route_stop.set_followup`,
       sourceChannel: data.sourceChannel,
+      baseUpdatedAt: data.baseUpdatedAt,
     }),
   );
 
