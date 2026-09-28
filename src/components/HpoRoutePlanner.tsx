@@ -1151,8 +1151,7 @@ export function HpoRoutePlanner() {
     const needsPins = [...data.accounts, ...data.prospects].some(
       (office: any) =>
         office.address &&
-        (!Number.isFinite(office.latitude) || !Number.isFinite(office.longitude)) &&
-        !office.geocoded_at,
+        (!Number.isFinite(office.latitude) || !Number.isFinite(office.longitude)),
     );
     if (!needsPins) {
       setMapPreparedOnce(true);
