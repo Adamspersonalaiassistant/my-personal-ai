@@ -58,6 +58,7 @@ function hpoRouteStopConfirmation(result:any){
   }
   const label=String(result.status??"updated").replaceAll("_"," ");
   const office=result.officeName||"That stop";
+  if(result.action==="hpo.route_stop.arrive")return `Arrived at ${office}. You're on the current stop.`;
   const saved = result.action==="hpo.route_stop.log_visit"
     ? `Saved the visit for ${office}${result.followupTaskId?" and added the authorized follow-up task":""}.`
     : `${office} marked ${label}.`;
