@@ -549,14 +549,43 @@ export function HpoMapV2MapLibre({
       });
       mapRef.current = map;
 
+      let streetTileErrors = 0;
+      let healthy = false;
+      const healthTimer = window.setTimeout(() => {
+        if (healthy) return;
+        const sourceLoaded =
+          typeof map.isSourceLoaded === "function" ? map.isSourceLoaded("osm") : false;
+        if (!sourceLoaded) {
+          onFatalError?.("Street map tiles did not finish loading on this device.");
+        }
+      }, 8000);
+
       map.on("style.load", () => {
         setupSourcesAndLayers(map);
         setReady(true);
         requestAnimationFrame(() => map.resize());
       });
+      map.on("idle", () => {
+        const sourceLoaded =
+          typeof map.isSourceLoaded === "function" ? map.isSourceLoaded("osm") : true;
+        if (sourceLoaded) {
+          healthy = true;
+          window.clearTimeout(healthTimer);
+        }
+      });
       map.on("error", (event: any) => {
         const message = String(event?.error?.message ?? "");
-        if (/webgl|context|initial/i.test(message)) {
+        const sourceId = String(event?.sourceId ?? "");
+        if (sourceId === "osm" || /tile|raster|network|fetch/i.test(message)) {
+          streetTileErrors += 1;
+          if (streetTileErrors >= 3 && !healthy) {
+            window.clearTimeout(healthTimer);
+            onFatalError?.(message || "Street map tiles could not load.");
+            return;
+          }
+        }
+        if (/webgl|context|initial|worker/i.test(message)) {
+          window.clearTimeout(healthTimer);
           onFatalError?.(message || "MapLibre could not initialize.");
         }
       });
@@ -564,6 +593,7 @@ export function HpoMapV2MapLibre({
       const resizeObserver = new ResizeObserver(() => map.resize());
       resizeObserver.observe(containerRef.current);
       return () => {
+        window.clearTimeout(healthTimer);
         resizeObserver.disconnect();
         for (const marker of officeMarkersRef.current.values()) marker.remove();
         officeMarkersRef.current.clear();
