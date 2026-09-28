@@ -500,7 +500,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
   }
 
   async function submitVisit() {
-    if (!nextStop?.id || (!note.trim() && !followup.trim()) || working) return;
+    if (!nextStop?.id || !note.trim() || working) return;
     setWorking(true);
     setError(null);
     setMessage(null);
@@ -1040,7 +1040,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
               <button
                 type="button"
                 onClick={() => void submitVisit()}
-                disabled={(!note.trim() && !followup.trim()) || working}
+                disabled={!note.trim() || working}
                 className="emery-press mt-3 min-h-12 w-full rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-40"
               >
                 {offline ? "Save on Phone" : "Save Visit"}
