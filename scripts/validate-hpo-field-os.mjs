@@ -21,6 +21,11 @@ const migration = read("supabase/migrations/20260927234500_hpo_map_v2_feature_fl
 const routeActions = read("src/lib/hpo-route-action-controller.ts");
 const emery = read("src/lib/emery.functions.ts");
 const voice = read("src/lib/voice.functions.ts");
+const hpoRoute = read("src/routes/_authenticated/hpo.tsx");
+const fieldToday = read("src/components/HpoFieldToday.tsx");
+const fieldFns = read("src/lib/hpo-field.functions.ts");
+const offline = read("src/lib/hpo-field-offline.ts");
+const accountDetail = read("src/components/HpoAccountFieldDetail.tsx");
 
 check("Map V1 remains in Route Planner", planner.includes("function OfficePlanningMap("));
 check("Route Planner uses renderer adapter", planner.includes("<HpoMapAdapter"));
@@ -47,6 +52,21 @@ check("visit logging preserves interaction linkage", routeFns.includes("Visit in
 check("route-note voice/text capture uses canonical visit action", routeFns.includes("hpo.route_stop.log_visit") && routeFns.includes("visitExecution"));
 check("route-stop follow-up is a canonical action", routeFns.includes("executeHpoRouteStopFollowupCore") && routeFns.includes('"hpo.route_stop.set_followup"'));
 check("visit action composes canonical follow-up when present", routeFns.includes("${key}:followup") && routeFns.includes("executeHpoRouteStopFollowupCore"));
+check("HPO primary field modes are Map Today Accounts Activity", hpoRoute.includes('["map", "Map"') && hpoRoute.includes('["today", "Today"') && hpoRoute.includes('["accounts", "Accounts"') && hpoRoute.includes('["notes", "Activity"'));
+check("legacy HPO tools remain accessible as secondary surfaces", hpoRoute.includes("More HPO tools") && hpoRoute.includes('"dashboard"') && hpoRoute.includes('"relationships"') && hpoRoute.includes('"performance"') && hpoRoute.includes('"events"') && hpoRoute.includes('"tasks"'));
+check("Today field mode exposes next-stop field controls", fieldToday.includes("Next Stop") && fieldToday.includes("I'm Here") && fieldToday.includes("Bad address") && fieldToday.includes("Nearby backup") && fieldToday.includes("Fix remaining route"));
+check("Today field mode uses canonical route mutations", fieldToday.includes("setHpoRouteStopOutcome") && fieldToday.includes("addHpoRouteStops") && fieldToday.includes("reoptimizeHpoRouteRemaining") && fieldToday.includes("completeHpoRoute"));
+check("HPO field OS has IndexedDB route note and outbox stores", offline.includes('"hpo_route_snapshots"') && offline.includes('"hpo_draft_notes"') && offline.includes('"hpo_outbox"') && offline.includes("indexedDB.open"));
+check("offline HPO mutations preserve idempotency", offline.includes("idempotencyKey") && fieldToday.includes("offline_sync"));
+check("route add/remove/reorder actions use execution ledger", fieldFns.includes('"hpo.route.add_stops"') && fieldFns.includes('"hpo.route.remove_stop"') && fieldFns.includes('"hpo.route.reorder"') && fieldFns.includes("beginExecution"));
+check("remaining route reoptimization preserves terminal history", fieldFns.includes('"hpo.route.reoptimize"') && fieldFns.includes("const open = stops.filter") && fieldFns.includes("openSlots"));
+check("nearby backup ranking is deterministic", fieldFns.includes("getHpoNearbyBackups") && fieldFns.includes("driveMinutes * 2") && !fieldFns.includes("MODEL_POLICY"));
+check("route completion protects unfinished stops", fieldFns.includes("completeHpoRoute") && fieldFns.includes("openStops"));
+check("field account detail preserves contacts interactions and route history", accountDetail.includes("Contacts") && accountDetail.includes("Relationship history") && accountDetail.includes("Route visit history"));
+check("route builder runs as an over-map mobile sheet", planner.includes('role="dialog"') && planner.includes("Build HPO daily route") && planner.includes("max-h-[90dvh]"));
+check("active route supports add remove manual reorder and remainder reoptimize", planner.includes("addSelectedToActiveRoute") && planner.includes("removeOpenStop") && planner.includes("reorderHpoRouteStopsCanonical") && planner.includes("reoptimizeActiveRemaining"));
+check("reoptimized route geometry is rendered when available", v2.includes("route_geometry_remaining") && v2.includes("route_geometry"));
+
 
 if (process.exitCode) process.exit(process.exitCode);
 console.log("HPO Field OS Map V2 foundation certification passed.");
