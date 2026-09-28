@@ -1560,46 +1560,62 @@ export const getHpoAccountFieldContext = createServerFn({ method: "POST" })
   .inputValidator((input: { accountId: string }) => ({ accountId: clean(input.accountId) }))
   .handler(async ({ data, context }) => {
     const db = context.supabase as any;
-    const [accountResult, contactsResult, interactionsResult, routeStopsResult] = await Promise.all(
-      [
-        db
-          .from("hpo_accounts")
-          .select("*")
-          .eq("id", data.accountId)
-          .eq("user_id", context.userId)
-          .single(),
-        db
-          .from("hpo_contacts")
-          .select("*")
-          .eq("account_id", data.accountId)
-          .eq("user_id", context.userId)
-          .order("created_at", { ascending: true }),
-        db
-          .from("hpo_interactions")
-          .select("*")
-          .eq("account_id", data.accountId)
-          .eq("user_id", context.userId)
-          .order("occurred_at", { ascending: false })
-          .limit(20),
-        db
-          .from("hpo_route_stops")
-          .select(
-            "id,route_id,stop_order,status,visited_at,visit_summary,visit_outcome,next_action,next_action_due_at,updated_at",
-          )
-          .eq("account_id", data.accountId)
-          .eq("user_id", context.userId)
-          .order("visited_at", { ascending: false, nullsFirst: false })
-          .limit(20),
-      ],
-    );
+    const [
+      accountResult,
+      contactsResult,
+      interactionsResult,
+      routeStopsResult,
+      officeLocationsResult,
+    ] = await Promise.all([
+      db
+        .from("hpo_accounts")
+        .select("*")
+        .eq("id", data.accountId)
+        .eq("user_id", context.userId)
+        .single(),
+      db
+        .from("hpo_contacts")
+        .select("*")
+        .eq("account_id", data.accountId)
+        .eq("user_id", context.userId)
+        .order("created_at", { ascending: true }),
+      db
+        .from("hpo_interactions")
+        .select("*")
+        .eq("account_id", data.accountId)
+        .eq("user_id", context.userId)
+        .order("occurred_at", { ascending: false })
+        .limit(20),
+      db
+        .from("hpo_route_stops")
+        .select(
+          "id,route_id,stop_order,status,visited_at,visit_summary,visit_outcome,next_action,next_action_due_at,updated_at",
+        )
+        .eq("account_id", data.accountId)
+        .eq("user_id", context.userId)
+        .order("visited_at", { ascending: false, nullsFirst: false })
+        .limit(20),
+      db
+        .from("hpo_prospects")
+        .select(
+          "id,name,address,city,latitude,longitude,prospect_type,verification_status,metadata,source_ref",
+        )
+        .eq("promoted_account_id", data.accountId)
+        .eq("user_id", context.userId)
+        .not("address", "is", null)
+        .order("city", { ascending: true })
+        .order("address", { ascending: true }),
+    ]);
     if (accountResult.error) throw accountResult.error;
     if (contactsResult.error) throw contactsResult.error;
     if (interactionsResult.error) throw interactionsResult.error;
     if (routeStopsResult.error) throw routeStopsResult.error;
+    if (officeLocationsResult.error) throw officeLocationsResult.error;
     return {
       account: accountResult.data,
       contacts: contactsResult.data ?? [],
       interactions: interactionsResult.data ?? [],
       routeStops: routeStopsResult.data ?? [],
+      officeLocations: officeLocationsResult.data ?? [],
     };
   });
