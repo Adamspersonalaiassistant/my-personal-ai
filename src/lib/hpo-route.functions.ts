@@ -593,7 +593,7 @@ export const prepareHpoOfficeMap = createServerFn({ method: "POST" })
           .from("hpo_prospects")
           .select("id,name,address,city,latitude,longitude,geocoded_at")
           .eq("user_id", userId)
-          .neq("fit_status", "rejected")
+          .in("fit_status", ["undecided", "qualified"])
           .not("address", "is", null)
           .or("latitude.is.null,longitude.is.null")
           .limit(data.limit),
@@ -651,7 +651,7 @@ export const prepareHpoOfficeMap = createServerFn({ method: "POST" })
         .from("hpo_prospects")
         .select("id", { count: "exact", head: true })
         .eq("user_id", userId)
-        .neq("fit_status", "rejected")
+        .in("fit_status", ["undecided", "qualified"])
         .not("address", "is", null)
         .is("latitude", null),
     ]);
@@ -727,7 +727,7 @@ export const getHpoRoutePlanner = createServerFn({ method: "GET" })
         )
         .eq("user_id", userId)
         .not("address", "is", null)
-        .neq("fit_status", "rejected")
+        .in("fit_status", ["undecided", "qualified"])
         .order("name", { ascending: true })
         .limit(1000),
       db
