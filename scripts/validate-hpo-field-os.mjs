@@ -33,10 +33,10 @@ const routeCommands = read("src/lib/hpo-route-command-controller.ts");
 const capabilities = read("src/lib/execution-capabilities.ts");
 
 check("Map V1 remains in Route Planner", planner.includes("function OfficePlanningMap("));
-check("Route Planner uses renderer adapter", planner.includes("<HpoMapAdapter"));
+check("Route Planner uses direct RepMove-style Map V2 renderer", planner.includes("<HpoMapV2MapLibre"));
 check(
-  "Map V1 is supplied as fallback",
-  planner.includes("v1={") && planner.includes("<OfficePlanningMap"),
+  "Legacy map is not rendered in the active HPO route planner",
+  !planner.includes("<HpoMapAdapter") && planner.includes("<HpoMapV2MapLibre"),
 );
 check("MapLibre dependency is declared", Boolean(packageJson.dependencies?.["maplibre-gl"]));
 check(
