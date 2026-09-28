@@ -133,9 +133,10 @@ check(
     v2.includes("to my current HPO route"),
 );
 check(
-  "Map V2 uses a professional no-key vector basemap and blue teardrop pins",
-  v2.includes('const PROFESSIONAL_MAP_STYLE = "https://tiles.openfreemap.org/styles/bright"') &&
+  "Map V2 uses a reliable no-key full-detail street basemap and blue teardrop pins",
+  v2.includes('const PROFESSIONAL_MAP_STYLE: StyleSpecification') &&
     v2.includes("tile.openstreetmap.org") &&
+    v2.includes('"raster-opacity": 1') &&
     v2.includes("officeMarkersRef") &&
     v2.includes("new maplibregl.Marker") &&
     v2.includes("createOfficePinElement") &&
