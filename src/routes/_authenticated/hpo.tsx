@@ -231,7 +231,6 @@ function HpoWorkspace() {
         </section>
         ) : null}
 
-        {view === "dashboard" ? (
         {showSecondary || ["dashboard", "relationships", "performance", "events", "tasks"].includes(view) ? (
           <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none]">
             {views
