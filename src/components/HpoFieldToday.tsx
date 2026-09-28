@@ -176,10 +176,6 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
         data: {
           stopId: mutation.targetId,
           status: payload.status,
-          notes: payload.notes ?? null,
-          visitOutcome: payload.visitOutcome ?? null,
-          nextAction: payload.nextAction ?? null,
-          nextActionDueAt: payload.nextActionDueAt ?? null,
           idempotencyKey: mutation.idempotencyKey,
           sourceChannel: "offline_sync",
         },
@@ -510,7 +506,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
     setError(null);
     try {
       const position = await currentPosition();
-      const result = await reoptimize({
+      const result: any = await reoptimize({
         data: {
           routeId: route.id,
           latitude: position?.latitude ?? null,
@@ -802,7 +798,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                   ["closed", "Closed"],
                   ["bad_address", "Bad address"],
                   ["skipped", "Skip"],
-                ].map(([value, label]) => (
+                ] as const).map(([value, label]) => (
                   <button
                     key={value}
                     type="button"
