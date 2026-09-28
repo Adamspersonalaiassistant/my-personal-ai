@@ -82,6 +82,12 @@ check("conversational route selection respects Adam ownership/exclusion guards",
 check("route command office matching removes command filler", routeCommands.includes("officeTargetPhrase"));
 check("Route Planner caches and can reopen territory records offline", planner.includes("saveHpoOfficeSnapshots") && planner.includes("loadHpoOfficeSnapshots"));
 check("natural field-note follow-up dates are parsed deterministically", routeFns.includes("followupDueFromNote") && routeFns.includes("parsedNextActionDueAt"));
+check("conversational HPO recovery can recommend one deterministic nearby backup", routeCommands.includes('"hpo.nearby.find"') && routeCommands.includes("getHpoNearbyBackupsCore") && routeCommands.includes("Best nearby option"));
+check("conversational route wrap-up protects unfinished stops", routeCommands.includes('"hpo.route.complete"') && routeCommands.includes("executeHpoRouteCompleteCore") && routeCommands.includes("still unfinished"));
+check("Voice route recovery can use current device location", voiceControl.includes("currentHpoVoiceLocation") && voiceControl.includes("latitude: location.latitude") && voiceControl.includes("longitude: location.longitude"));
+check("natural visit capture returns execution trace", routeFns.includes("executionRunId: execution.id") && routeActions.includes("visit.executionRunId"));
+check("field summary is deterministic", fieldRead.includes('"hpo.route.day_summary"') && fieldRead.includes("Today:"));
+
 
 
 
