@@ -9,7 +9,7 @@ import type {
   StyleSpecification,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { Check, List, LocateFixed, Map as MapIcon, MapPinned, Maximize2, RefreshCw, Search, X } from "lucide-react";
+import { Check, List, LocateFixed, Map as MapIcon, MapPinned, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
 import type { HpoMapOffice, HpoMapRoute } from "@/components/hpo-map/types";
 import "@/components/hpo-map/hpo-map-v2.css";
 
@@ -40,11 +40,11 @@ const LIGHT_EMERY_STYLE: StyleSpecification = {
       type: "raster",
       source: "osm",
       paint: {
-        "raster-saturation": -1,
-        "raster-contrast": -0.18,
-        "raster-brightness-min": 0.78,
+        "raster-saturation": -0.55,
+        "raster-contrast": 0.04,
+        "raster-brightness-min": 0,
         "raster-brightness-max": 1,
-        "raster-opacity": 0.9,
+        "raster-opacity": 1,
       },
     },
   ],
@@ -364,7 +364,7 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       source: "hpo-offices",
       filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "kind"], "account"]],
       paint: {
-        "circle-radius": ["case", ["==", ["get", "selected"], 1], 9, 7],
+        "circle-radius": ["case", ["==", ["get", "selected"], 1], 14, 11],
         "circle-color": GREEN,
         "circle-stroke-color": "#ffffff",
         "circle-stroke-width": 3,
@@ -379,13 +379,27 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       source: "hpo-offices",
       filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "kind"], "prospect"]],
       paint: {
-        "circle-radius": ["case", ["==", ["get", "selected"], 1], 9, 7],
-        "circle-color": "#ffffff",
+        "circle-radius": ["case", ["==", ["get", "selected"], 1], 14, 11],
+        "circle-color": GREEN,
         "circle-stroke-color": GREEN,
         "circle-stroke-width": 3,
       },
     });
   }
+  if (!map.getLayer("hpo-office-centers")) {
+    map.addLayer({
+      id: "hpo-office-centers",
+      type: "circle",
+      source: "hpo-offices",
+      filter: ["!", ["has", "point_count"]],
+      paint: {
+        "circle-radius": 3.6,
+        "circle-color": "#ffffff",
+        "circle-opacity": 1,
+      },
+    });
+  }
+
   if (!map.getLayer("hpo-office-priority-ring")) {
     map.addLayer({
       id: "hpo-office-priority-ring",
@@ -530,6 +544,7 @@ export function HpoMapV2MapLibre({
   const [drawMode, setDrawMode] = useState(false);
   const [drawPoints, setDrawPoints] = useState<Array<[number, number]>>([]);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
+  const [showTools, setShowTools] = useState(false);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -786,31 +801,34 @@ export function HpoMapV2MapLibre({
 
   return (
     <section className="hpo-map-v2 overflow-hidden rounded-2xl border border-primary/15 bg-white shadow-[0_12px_32px_rgba(0,0,0,0.14)]">
-      <div className="border-b border-slate-200 bg-white p-3 text-slate-950">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#1769e8]">
-              {routeMiles ? `Today · ${routeMiles} miles` : "Territory Map"}
+      <div className="bg-[#bcebdc] px-3 pb-3 pt-3 text-slate-950">
+        <div className="grid grid-cols-[44px_1fr_44px] items-center gap-2">
+          <div />
+          <div className="text-center">
+            <p className="text-[11px] font-semibold text-[#31486f]">
+              {routeMiles ? `Today · ${routeMiles} Miles` : "HPO Territory"}
             </p>
-            <h3 className="mt-1 text-base font-semibold">Field territory</h3>
+            <h3 className="mt-0.5 text-[15px] font-bold tracking-tight text-[#1f3354]">
+              {viewMode === "map" ? "Field Map" : "Office List"}
+            </h3>
           </div>
           <button
             type="button"
             onClick={onRefreshPins}
             disabled={preparing}
-            className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm disabled:opacity-40"
+            className="flex size-11 items-center justify-center rounded-xl bg-white/75 text-[#31486f] shadow-sm disabled:opacity-40"
             aria-label="Refresh office map pins"
           >
-            <RefreshCw className={`size-3.5 ${preparing ? "animate-spin" : ""}`} />
+            <RefreshCw className={`size-4 ${preparing ? "animate-spin" : ""}`} />
           </button>
         </div>
 
-        <div className="mt-3 grid grid-cols-2 rounded-xl bg-[#d9f4e9] p-1">
+        <div className="mt-3 grid grid-cols-2 rounded-xl bg-white/45 p-1">
           <button
             type="button"
             onClick={() => setViewMode("map")}
             className={`flex min-h-11 items-center justify-center gap-2 rounded-lg text-xs font-semibold transition ${
-              viewMode === "map" ? "bg-[#31486f] text-white shadow-sm" : "text-slate-600"
+              viewMode === "map" ? "bg-[#31486f] text-white shadow-sm" : "text-[#31486f]"
             }`}
           >
             <MapIcon className="size-4" /> Map
@@ -819,117 +837,122 @@ export function HpoMapV2MapLibre({
             type="button"
             onClick={() => setViewMode("list")}
             className={`flex min-h-11 items-center justify-center gap-2 rounded-lg text-xs font-semibold transition ${
-              viewMode === "list" ? "bg-[#31486f] text-white shadow-sm" : "text-slate-600"
+              viewMode === "list" ? "bg-[#31486f] text-white shadow-sm" : "text-[#31486f]"
             }`}
           >
             <List className="size-4" /> List
           </button>
         </div>
 
-        <div className="mt-3 flex items-center gap-2">
-          <div className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search offices, cities, specialties"
-              className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-base text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#1769e8]/40 focus:bg-white"
-            />
-          </div>
-        </div>
-
-        <div className="mt-2 flex gap-1 rounded-xl bg-slate-100 p-1">
-          {(
-            [
-              ["all", "All"],
-              ["account", "Accounts"],
-              ["prospect", "Prospects"],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setFilter(value)}
-              className={`min-h-11 flex-1 rounded-lg px-2.5 text-[10px] font-semibold transition ${
-                filter === value ? "bg-white text-[#1769e8] shadow-sm" : "text-slate-500"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-2 grid grid-cols-2 gap-1.5">
-          {(
-            [
-              ["all", "Any status"],
-              ["followup", "Follow-up due"],
-              ["stale", "Stale 60d+"],
-              ["priority", "High priority"],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setSignalFilter(value)}
-              className={`min-h-11 rounded-lg border px-2 text-[10px] font-semibold transition ${
-                signalFilter === value
-                  ? "border-[#1769e8]/30 bg-blue-50 text-[#1769e8]"
-                  : "border-slate-200 bg-white text-slate-500"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-2 flex items-center justify-between gap-3 text-[10px] text-slate-500">
-          <span>
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <p className="text-[10px] font-medium text-[#36516f]">
             {totalMapped}/{totalWithAddress} offices mapped
-            {preparing ? " · preparing pins…" : ""}
-          </span>
-          <span>{selectedKeys.length} selected for route</span>
+            {preparing ? " · preparing…" : ""}
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowTools((value) => !value)}
+            className="flex min-h-10 items-center gap-1.5 rounded-xl bg-white/65 px-3 text-[10px] font-semibold text-[#31486f]"
+          >
+            <SlidersHorizontal className="size-3.5" />
+            {showTools ? "Hide tools" : "Search & filters"}
+          </button>
         </div>
+
+        {showTools ? (
+          <div className="mt-2 rounded-xl bg-white/72 p-2 shadow-sm">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search offices, cities, specialties"
+                className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-base text-slate-900 outline-none placeholder:text-slate-400"
+              />
+            </div>
+            <div className="mt-2 grid grid-cols-3 gap-1">
+              {(
+                [
+                  ["all", "All"],
+                  ["account", "Accounts"],
+                  ["prospect", "Prospects"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setFilter(value)}
+                  className={`min-h-10 rounded-lg text-[10px] font-semibold ${
+                    filter === value ? "bg-[#31486f] text-white" : "bg-slate-100 text-slate-600"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="mt-1 grid grid-cols-2 gap-1">
+              {(
+                [
+                  ["all", "Any status"],
+                  ["followup", "Follow-up due"],
+                  ["stale", "Stale 60d+"],
+                  ["priority", "High priority"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setSignalFilter(value)}
+                  className={`min-h-10 rounded-lg text-[10px] font-semibold ${
+                    signalFilter === value ? "bg-[#d9f4e9] text-[#047857]" : "bg-white text-slate-500"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                startDraw();
+                setShowTools(false);
+              }}
+              className="mt-2 min-h-10 w-full rounded-lg border border-[#10b981]/25 bg-white text-[10px] font-semibold text-[#047857]"
+            >
+              Select offices by area
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <div className={viewMode === "map" ? "relative" : "hidden"}>
         <div
           ref={containerRef}
-          className="h-[min(58dvh,540px)] min-h-[390px] w-full bg-[#f8fafc]"
+          className="h-[min(64dvh,620px)] min-h-[500px] w-full bg-[#f1f5f4]"
         />
-        <div className="absolute left-2 top-2 z-10 flex items-center gap-1">
-          <div className="pointer-events-none rounded-lg border border-slate-200/80 bg-white/92 px-2 py-1 text-[9px] font-medium text-slate-500 shadow-sm backdrop-blur">
-            {drawMode ? "Tap 3+ points around offices" : "Drag · pinch · tap clusters"}
-          </div>
-          {!drawMode ? (
+        {drawMode ? (
+          <div className="absolute left-3 top-3 z-10 flex items-center gap-1 rounded-xl bg-white/95 p-1.5 shadow-lg">
+            <span className="px-2 text-[10px] font-semibold text-slate-600">
+              Tap 3+ points around offices
+            </span>
             <button
               type="button"
-              onClick={startDraw}
-              className="min-h-11 rounded-lg border border-[#1769e8]/20 bg-white/95 px-2.5 text-[10px] font-semibold text-[#1769e8] shadow-sm"
+              onClick={finishDraw}
+              disabled={drawPoints.length < 3}
+              className="min-h-10 rounded-lg bg-[#10b981] px-3 text-[10px] font-semibold text-white disabled:opacity-40"
             >
-              Draw select
+              Select {drawPoints.length >= 3 ? "area" : `${3 - drawPoints.length} more`}
             </button>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={finishDraw}
-                disabled={drawPoints.length < 3}
-                className="min-h-11 rounded-lg bg-[#1769e8] px-2.5 text-[10px] font-semibold text-white shadow-sm disabled:opacity-40"
-              >
-                Select {drawPoints.length >= 3 ? "area" : `${3 - drawPoints.length} more`}
-              </button>
-              <button
-                type="button"
-                onClick={cancelDraw}
-                className="flex size-11 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm"
-                aria-label="Cancel area selection"
-              >
-                <X className="size-3.5" />
-              </button>
-            </>
-          )}
-        </div>
+            <button
+              type="button"
+              onClick={cancelDraw}
+              className="flex size-10 items-center justify-center rounded-lg text-slate-500"
+              aria-label="Cancel area selection"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+        ) : null}
         <div className="absolute bottom-3 right-3 z-10 flex gap-1">
           <button
             type="button"
@@ -942,17 +965,12 @@ export function HpoMapV2MapLibre({
           {selectedKeys.length ? (
             <button
               type="button"
-              onClick={fitSelected}
-              className="min-h-11 rounded-xl border border-[#1769e8]/20 bg-white px-2.5 text-[10px] font-semibold text-[#1769e8] shadow-md"
-            >
-              Fit selected
-            </button>
-          ) : null}
+              onClick={fitSelected}        <div className="absolute bottom-4 right-4 z-10 flex items-center gap-2">
           {route?.stops?.length ? (
             <button
               type="button"
               onClick={fitRoute}
-              className="min-h-11 rounded-xl border border-[#1769e8]/20 bg-white px-2.5 text-[10px] font-semibold text-[#1769e8] shadow-md"
+              className="min-h-11 rounded-xl border border-slate-200 bg-white/96 px-3 text-[11px] font-semibold text-[#31486f] shadow-lg"
             >
               Fit route
             </button>
@@ -960,10 +978,10 @@ export function HpoMapV2MapLibre({
           <button
             type="button"
             onClick={() => geolocateRef.current?.trigger()}
-            className="flex size-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-[#1769e8] shadow-md"
+            className="flex size-12 items-center justify-center rounded-full border border-slate-200 bg-white/96 text-[#1769e8] shadow-lg"
             aria-label="Show my current location"
           >
-            <LocateFixed className="size-3.5" />
+            <LocateFixed className="size-5" />
           </button>
         </div>
       </div>
@@ -1011,7 +1029,7 @@ export function HpoMapV2MapLibre({
       ) : null}
 
       {selectedOffice ? (
-        <div className={`${viewMode === "map" ? "relative z-20 mx-3 -mt-16 rounded-2xl border border-slate-200 shadow-[0_18px_40px_rgba(15,23,42,0.18)]" : "border-t border-slate-200"} bg-white p-4 text-slate-950`}>
+        <div className={`${viewMode === "map" ? "relative z-20 mx-3 -mt-24 rounded-[1.6rem] border border-slate-200 shadow-[0_22px_48px_rgba(15,23,42,0.22)]" : "border-t border-slate-200"} bg-white p-4 text-slate-950`}>
           <div className="flex items-start gap-3">
             <span
               className={`flex size-10 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold ${
@@ -1079,7 +1097,7 @@ export function HpoMapV2MapLibre({
         </div>
       ) : null}
 
-      <div className="flex items-center gap-2 border-t border-slate-200 bg-white p-3 text-slate-950">
+      <div className="flex items-center gap-2 border-t border-slate-200 bg-white px-4 py-3 text-slate-950">
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold">
             {selectedKeys.length
