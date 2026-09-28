@@ -1,5 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { executeHpoRouteStopOutcomeCore } from "@/lib/hpo-route.functions";
+import {
+  captureHpoRouteNoteCore,
+  executeHpoRouteStopOutcomeCore,
+} from "@/lib/hpo-route.functions";
 
 const TERMINAL = new Set(["completed", "visited", "skipped", "closed", "bad_address"]);
 
@@ -8,7 +11,7 @@ export type HpoRouteStopActionResult = {
   performed: boolean;
   needsClarification: boolean;
   question: string | null;
-  action: "none" | "hpo.route_stop.set_outcome";
+  action: "none" | "hpo.route_stop.set_outcome" | "hpo.route_stop.log_visit";
   routeId: string | null;
   stopId: string | null;
   officeName: string | null;
@@ -16,6 +19,7 @@ export type HpoRouteStopActionResult = {
   executionRunId: string | null;
   nextStopId: string | null;
   nextStopName: string | null;
+  followupTaskId?: string | null;
   error?: string | null;
 };
 
@@ -96,7 +100,12 @@ export async function processHpoRouteStopAction(input: {
   sourceChannel?: string;
 }): Promise<HpoRouteStopActionResult> {
   const outcome = requestedOutcome(input.message);
-  if (!outcome) {
+  const visitSignal =
+    !outcome &&
+    /\b(just left|spoke with|talked to|met with|left (?:the )?(?:cards|materials|information|info)|dropped off|attorney (?:was|is)|front desk|receptionist|follow\s*up|will pass|took the (?:cards|materials|info|information))\b/i.test(
+      input.message,
+    );
+  if (!outcome && !visitSignal) {
     return {
       recognized: false,
       performed: false,
@@ -142,16 +151,84 @@ export async function processHpoRouteStopAction(input: {
       performed: false,
       needsClarification: true,
       question: "Which HPO route are you updating? Open that route or tell me the route date.",
-      action: "hpo.route_stop.set_outcome",
+      action: outcome ? "hpo.route_stop.set_outcome" : "hpo.route_stop.log_visit",
       routeId: null,
       stopId: null,
       officeName: null,
-      status: outcome.status,
+      status: outcome?.status ?? null,
       executionRunId: null,
       nextStopId: null,
       nextStopName: null,
     };
   }
+
+  if (visitSignal) {
+    try {
+      const visit = await captureHpoRouteNoteCore({
+        db,
+        userId: input.userId,
+        routeId: route.id,
+        message: input.message,
+      });
+      if (!visit.ok) {
+        return {
+          recognized: true,
+          performed: false,
+          needsClarification: true,
+          question: visit.question,
+          action: "hpo.route_stop.log_visit",
+          routeId: route.id,
+          stopId: null,
+          officeName: null,
+          status: null,
+          executionRunId: null,
+          nextStopId: null,
+          nextStopName: null,
+        };
+      }
+      const { data: refreshedStops } = await db
+        .from("hpo_route_stops")
+        .select("id,office_name,stop_order,status")
+        .eq("user_id", input.userId)
+        .eq("route_id", route.id)
+        .order("stop_order", { ascending: true });
+      const next =
+        (refreshedStops ?? []).find((stop: any) => !TERMINAL.has(String(stop.status))) ?? null;
+      return {
+        recognized: true,
+        performed: true,
+        needsClarification: false,
+        question: null,
+        action: "hpo.route_stop.log_visit",
+        routeId: route.id,
+        stopId: visit.stopId,
+        officeName: visit.officeName ?? null,
+        status: visit.status,
+        executionRunId: null,
+        nextStopId: next?.id ?? null,
+        nextStopName: next?.office_name ?? null,
+        followupTaskId: visit.followupTaskId ?? null,
+      };
+    } catch (error) {
+      return {
+        recognized: true,
+        performed: false,
+        needsClarification: false,
+        question: null,
+        action: "hpo.route_stop.log_visit",
+        routeId: route.id,
+        stopId: null,
+        officeName: null,
+        status: null,
+        executionRunId: null,
+        nextStopId: null,
+        nextStopName: null,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  if (!outcome) throw new Error("Route-stop outcome could not be resolved");
 
   const { data: stops, error: stopError } = await db
     .from("hpo_route_stops")
