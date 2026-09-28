@@ -25,9 +25,9 @@ const LIGHT_EMERY_STYLE: StyleSpecification = {
   sources: {
     osm: {
       type: "raster",
-      tiles: ["https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"],
+      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
       tileSize: 256,
-      attribution: "© OpenStreetMap contributors © CARTO",
+      attribution: "© OpenStreetMap contributors",
       maxzoom: 19,
     },
   },
@@ -38,10 +38,10 @@ const LIGHT_EMERY_STYLE: StyleSpecification = {
       source: "osm",
       paint: {
         "raster-saturation": -1,
-        "raster-contrast": -0.16,
-        "raster-brightness-min": 0.62,
+        "raster-contrast": -0.34,
+        "raster-brightness-min": 0.82,
         "raster-brightness-max": 1,
-        "raster-opacity": 0.92,
+        "raster-opacity": 0.52,
       },
     },
   ],
@@ -331,7 +331,7 @@ function setupSourcesAndLayers(map: MapLibreMap) {
         "circle-color": BLUE,
         "circle-stroke-color": "#ffffff",
         "circle-stroke-width": 2.5,
-        "circle-opacity": 0.98,
+        "circle-opacity": 0,
       },
     });
   }
@@ -345,7 +345,7 @@ function setupSourcesAndLayers(map: MapLibreMap) {
         "circle-radius": 14,
         "circle-color": "rgba(23,105,232,0.10)",
         "circle-stroke-color": BLUE_DARK,
-        "circle-stroke-width": 2.5,
+        "circle-stroke-width": 0,
       },
     });
   }
@@ -424,6 +424,7 @@ export function HpoMapV2MapLibre({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const geolocateRef = useRef<maplibregl.GeolocateControl | null>(null);
+  const officeMarkersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
   const [ready, setReady] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
   const [signalFilter, setSignalFilter] = useState<SignalFilter>("all");
@@ -496,6 +497,8 @@ export function HpoMapV2MapLibre({
       resizeObserver.observe(containerRef.current);
       return () => {
         resizeObserver.disconnect();
+        for (const marker of officeMarkersRef.current.values()) marker.remove();
+        officeMarkersRef.current.clear();
         map.remove();
         mapRef.current = null;
       };
@@ -517,6 +520,51 @@ export function HpoMapV2MapLibre({
     const source = map.getSource("hpo-offices") as GeoJSONSource | undefined;
     source?.setData(officeCollection(filtered, selectedSet, selectedOfficeKey) as any);
   }, [filtered, ready, selectedOfficeKey, selectedSet]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+
+    for (const marker of officeMarkersRef.current.values()) marker.remove();
+    officeMarkersRef.current.clear();
+
+    for (const office of filtered) {
+      if (!Number.isFinite(office.longitude) || !Number.isFinite(office.latitude)) continue;
+
+      const selected = selectedSet.has(office.key);
+      const focused = office.key === selectedOfficeKey;
+      const element = document.createElement("button");
+      element.type = "button";
+      element.setAttribute("aria-label", office.officeName);
+      element.style.width = selected || focused ? "22px" : "17px";
+      element.style.height = selected || focused ? "22px" : "17px";
+      element.style.borderRadius = "9999px";
+      element.style.border = selected || focused ? "4px solid white" : "3px solid white";
+      element.style.background = focused ? BLUE_DARK : BLUE;
+      element.style.boxShadow =
+        selected || focused
+          ? "0 0 0 3px rgba(23,105,232,.24), 0 4px 12px rgba(15,23,42,.28)"
+          : "0 2px 8px rgba(15,23,42,.28)";
+      element.style.cursor = "pointer";
+      element.style.padding = "0";
+      element.style.display = "block";
+      element.addEventListener("click", (event) => {
+        event.stopPropagation();
+        onSelectOffice(office.key);
+      });
+
+      const marker = new maplibregl.Marker({ element, anchor: "center" })
+        .setLngLat([Number(office.longitude), Number(office.latitude)])
+        .addTo(map);
+
+      officeMarkersRef.current.set(office.key, marker);
+    }
+
+    return () => {
+      for (const marker of officeMarkersRef.current.values()) marker.remove();
+      officeMarkersRef.current.clear();
+    };
+  }, [filtered, onSelectOffice, ready, selectedOfficeKey, selectedSet]);
 
   useEffect(() => {
     const map = mapRef.current;
