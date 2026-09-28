@@ -316,10 +316,14 @@ export const getHpoFieldToday = createServerFn({ method: "GET" })
 
 export const arriveHpoRouteStop = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { stopId: string; idempotencyKey: string; sourceChannel?: string | null }) => ({
+  .inputValidator((input: { stopId: string; idempotencyKey: string; sourceChannel?: string | null; baseUpdatedAt?: string | null }) => ({
     stopId: clean(input.stopId),
     idempotencyKey: clean(input.idempotencyKey),
     sourceChannel: clean(input.sourceChannel) || "ui",
+    baseUpdatedAt:
+      input.baseUpdatedAt && !Number.isNaN(Date.parse(input.baseUpdatedAt))
+        ? new Date(input.baseUpdatedAt).toISOString()
+        : null,
   }))
   .handler(async ({ data, context }) => {
     const db = context.supabase as any;
@@ -332,7 +336,7 @@ export const arriveHpoRouteStop = createServerFn({ method: "POST" })
       idempotencyKey: data.idempotencyKey,
       targetType: "hpo_route_stop",
       targetId: data.stopId,
-      requestPayload: { stopId: data.stopId, sourceChannel: data.sourceChannel },
+      requestPayload: { stopId: data.stopId, sourceChannel: data.sourceChannel, baseUpdatedAt: data.baseUpdatedAt },
     });
     if (run.reused && run.status === "completed" && run.resultPayload["arrival"]) {
       return run.resultPayload["arrival"];
@@ -345,6 +349,13 @@ export const arriveHpoRouteStop = createServerFn({ method: "POST" })
         .eq("user_id", context.userId)
         .single();
       if (error || !stop) throw error ?? new Error("Route stop not found");
+      if (
+        data.baseUpdatedAt &&
+        !Number.isNaN(Date.parse(stop.updated_at)) &&
+        Date.parse(stop.updated_at) > Date.parse(data.baseUpdatedAt) + 1000
+      ) {
+        throw new Error("offline_conflict: This stop changed after the offline snapshot. Refresh before retrying.");
+      }
       if (TERMINAL.has(String(stop.status))) throw new Error("This stop already has a final outcome");
       const metadata =
         stop.metadata && typeof stop.metadata === "object" && !Array.isArray(stop.metadata)
