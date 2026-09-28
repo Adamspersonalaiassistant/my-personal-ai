@@ -8,7 +8,7 @@ import type {
   StyleSpecification,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { Check, LocateFixed, MapPinned, Maximize2, RefreshCw, Search } from "lucide-react";
+import { Check, LocateFixed, MapPinned, Maximize2, RefreshCw, Search, X } from "lucide-react";
 import type { HpoMapOffice, HpoMapRoute } from "@/components/hpo-map/types";
 import "@/components/hpo-map/hpo-map-v2.css";
 
@@ -51,6 +51,8 @@ type Props = {
   selectedOfficeKey: string | null;
   route?: HpoMapRoute | null;
   onSelectOffice: (key: string) => void;
+  onSelectMany?: (keys: string[]) => void;
+  onOpenAccount?: (accountId: string) => void;
   onToggleRouteStop: (office: HpoMapOffice) => void;
   onBuildRoute: () => void;
   preparing: boolean;
@@ -59,6 +61,7 @@ type Props = {
 };
 
 type Filter = "all" | "account" | "prospect";
+type SignalFilter = "all" | "followup" | "stale" | "priority";
 
 function officeCollection(offices: HpoMapOffice[], selected: Set<string>, focusedKey: string | null) {
   return {
@@ -160,6 +163,61 @@ function routeStopsCollection(route?: HpoMapRoute | null) {
   };
 }
 
+function selectionCollection(points: Array<[number, number]>) {
+  const geometry =
+    points.length >= 3
+      ? {
+          type: "Polygon" as const,
+          coordinates: [[...points, points[0]!]],
+        }
+      : points.length >= 2
+        ? { type: "LineString" as const, coordinates: points }
+        : null;
+  return {
+    type: "FeatureCollection" as const,
+    features: geometry
+      ? [
+          {
+            type: "Feature" as const,
+            geometry,
+            properties: {},
+          },
+        ]
+      : [],
+  };
+}
+
+function pointInPolygon(point: [number, number], polygon: Array<[number, number]>) {
+  if (polygon.length < 3) return false;
+  const [x, y] = point;
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [xi, yi] = polygon[i]!;
+    const [xj, yj] = polygon[j]!;
+    const intersects =
+      yi > y !== yj > y &&
+      x < ((xj - xi) * (y - yi)) / ((yj - yi) || Number.EPSILON) + xi;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function isDue(office: HpoMapOffice, now: number) {
+  return Boolean(
+    office.kind === "account" &&
+      office.nextActionDueAt &&
+      !Number.isNaN(Date.parse(office.nextActionDueAt)) &&
+      Date.parse(office.nextActionDueAt) <= now,
+  );
+}
+
+function isStale(office: HpoMapOffice, now: number) {
+  if (office.kind !== "account") return false;
+  if (!office.lastTouchAt) return true;
+  const parsed = Date.parse(office.lastTouchAt);
+  return !Number.isNaN(parsed) && now - parsed >= 60 * 24 * 60 * 60 * 1000;
+}
+
 function boundsForOffices(offices: HpoMapOffice[]) {
   const points = offices.filter(
     (office) =>
@@ -197,6 +255,12 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       data: { type: "FeatureCollection", features: [] },
     });
   }
+  if (!map.getSource("hpo-selection-area")) {
+    map.addSource("hpo-selection-area", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+  }
 
   if (!map.getLayer("hpo-route-casing")) {
     map.addLayer({
@@ -220,6 +284,31 @@ function setupSourcesAndLayers(map: MapLibreMap) {
         "line-color": BLUE,
         "line-width": 4,
         "line-opacity": 0.9,
+      },
+      layout: { "line-cap": "round", "line-join": "round" },
+    });
+  }
+
+  if (!map.getLayer("hpo-selection-fill")) {
+    map.addLayer({
+      id: "hpo-selection-fill",
+      type: "fill",
+      source: "hpo-selection-area",
+      paint: {
+        "fill-color": BLUE,
+        "fill-opacity": 0.1,
+      },
+    });
+  }
+  if (!map.getLayer("hpo-selection-line")) {
+    map.addLayer({
+      id: "hpo-selection-line",
+      type: "line",
+      source: "hpo-selection-area",
+      paint: {
+        "line-color": BLUE,
+        "line-width": 2.5,
+        "line-dasharray": [2, 1.5],
       },
       layout: { "line-cap": "round", "line-join": "round" },
     });
@@ -425,6 +514,8 @@ export function HpoMapV2MapLibre({
   selectedOfficeKey,
   route,
   onSelectOffice,
+  onSelectMany,
+  onOpenAccount,
   onToggleRouteStop,
   onBuildRoute,
   preparing,
@@ -436,14 +527,21 @@ export function HpoMapV2MapLibre({
   const geolocateRef = useRef<maplibregl.GeolocateControl | null>(null);
   const [ready, setReady] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
+  const [signalFilter, setSignalFilter] = useState<SignalFilter>("all");
   const [query, setQuery] = useState("");
+  const [drawMode, setDrawMode] = useState(false);
+  const [drawPoints, setDrawPoints] = useState<Array<[number, number]>>([]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
+    const now = Date.now();
     return offices.filter((office) => {
       if (!office.mapped || !Number.isFinite(office.latitude) || !Number.isFinite(office.longitude))
         return false;
       if (filter !== "all" && office.kind !== filter) return false;
+      if (signalFilter === "followup" && !isDue(office, now)) return false;
+      if (signalFilter === "stale" && !isStale(office, now)) return false;
+      if (signalFilter === "priority" && Number(office.priority ?? 0) < 4) return false;
       if (!needle) return true;
       return [office.officeName, office.address, office.city, office.specialty, office.detail]
         .filter(Boolean)
@@ -451,7 +549,7 @@ export function HpoMapV2MapLibre({
         .toLowerCase()
         .includes(needle);
     });
-  }, [filter, offices, query]);
+  }, [filter, offices, query, signalFilter]);
 
   const selectedSet = useMemo(() => new Set(selectedKeys), [selectedKeys]);
   const selectedOffice =
@@ -524,11 +622,33 @@ export function HpoMapV2MapLibre({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
+    (map.getSource("hpo-selection-area") as GeoJSONSource | undefined)?.setData(
+      selectionCollection(drawPoints) as any,
+    );
+    if (drawMode) {
+      map.dragPan.disable();
+      map.doubleClickZoom.disable();
+      map.getCanvas().style.cursor = "crosshair";
+    } else {
+      map.dragPan.enable();
+      map.doubleClickZoom.enable();
+      map.getCanvas().style.cursor = "";
+    }
+  }, [drawMode, drawPoints, ready]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
 
     const officeClick = (event: MapMouseEvent & { features?: MapGeoJSONFeature[] }) => {
+      if (drawMode) return;
       const key = featureKey(event.features?.[0]);
       if (!key) return;
       onSelectOffice(key);
+    };
+    const drawClick = (event: MapMouseEvent) => {
+      if (!drawMode) return;
+      setDrawPoints((current) => [...current, [event.lngLat.lng, event.lngLat.lat]]);
     };
     const clusterClick = async (event: MapMouseEvent & { features?: MapGeoJSONFeature[] }) => {
       const feature = event.features?.[0];
@@ -551,6 +671,7 @@ export function HpoMapV2MapLibre({
         map.getCanvas().style.cursor = "";
       });
     }
+    map.on("click", drawClick);
     map.on("click", "hpo-office-clusters", clusterClick);
     map.on("mouseenter", "hpo-office-clusters", () => {
       map.getCanvas().style.cursor = "pointer";
@@ -563,9 +684,10 @@ export function HpoMapV2MapLibre({
       for (const layer of ["hpo-office-points", "hpo-prospect-points", "hpo-office-selected-ring"]) {
         map.off("click", layer, officeClick);
       }
+      map.off("click", drawClick);
       map.off("click", "hpo-office-clusters", clusterClick);
     };
-  }, [onSelectOffice, ready]);
+  }, [drawMode, onSelectOffice, ready]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -584,7 +706,35 @@ export function HpoMapV2MapLibre({
     const bounds = boundsForOffices(filtered);
     if (!bounds || bounds.isEmpty()) return;
     map.fitBounds(bounds, { padding: 50, maxZoom: 13.2, duration: 350 });
-  }, [filter, query, ready]);
+  }, [filter, query, ready, signalFilter]);
+
+  function startDraw() {
+    setDrawPoints([]);
+    setDrawMode(true);
+  }
+
+  function cancelDraw() {
+    setDrawMode(false);
+    setDrawPoints([]);
+  }
+
+  function finishDraw() {
+    if (drawPoints.length < 3) return;
+    const keys = filtered
+      .filter(
+        (office) =>
+          Number.isFinite(office.longitude) &&
+          Number.isFinite(office.latitude) &&
+          pointInPolygon(
+            [Number(office.longitude), Number(office.latitude)],
+            drawPoints,
+          ),
+      )
+      .map((office) => office.key);
+    if (keys.length) onSelectMany?.(keys);
+    setDrawMode(false);
+    setDrawPoints([]);
+  }
 
   function fitOffices() {
     const map = mapRef.current;
@@ -677,6 +827,28 @@ export function HpoMapV2MapLibre({
           ))}
         </div>
 
+        <div className="mt-2 flex gap-1 overflow-x-auto pb-0.5 [scrollbar-width:none]">
+          {([
+            ["all", "Any status"],
+            ["followup", "Follow-up due"],
+            ["stale", "Stale 60d+"],
+            ["priority", "High priority"],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setSignalFilter(value)}
+              className={`min-h-8 shrink-0 rounded-full border px-3 text-[9px] font-semibold transition ${
+                signalFilter === value
+                  ? "border-[#1769e8]/30 bg-blue-50 text-[#1769e8]"
+                  : "border-slate-200 bg-white text-slate-500"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         <div className="mt-2 flex items-center justify-between gap-3 text-[10px] text-slate-500">
           <span>
             {totalMapped}/{totalWithAddress} offices mapped
@@ -688,8 +860,38 @@ export function HpoMapV2MapLibre({
 
       <div className="relative">
         <div ref={containerRef} className="h-[410px] w-full bg-[#f8fafc]" />
-        <div className="pointer-events-none absolute left-2 top-2 z-10 rounded-lg border border-slate-200/80 bg-white/92 px-2 py-1 text-[9px] font-medium text-slate-500 shadow-sm backdrop-blur">
-          Drag · pinch · tap clusters
+        <div className="absolute left-2 top-2 z-10 flex items-center gap-1">
+          <div className="pointer-events-none rounded-lg border border-slate-200/80 bg-white/92 px-2 py-1 text-[9px] font-medium text-slate-500 shadow-sm backdrop-blur">
+            {drawMode ? "Tap 3+ points around offices" : "Drag · pinch · tap clusters"}
+          </div>
+          {!drawMode ? (
+            <button
+              type="button"
+              onClick={startDraw}
+              className="min-h-8 rounded-lg border border-[#1769e8]/20 bg-white/95 px-2.5 text-[9px] font-semibold text-[#1769e8] shadow-sm"
+            >
+              Draw select
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={finishDraw}
+                disabled={drawPoints.length < 3}
+                className="min-h-8 rounded-lg bg-[#1769e8] px-2.5 text-[9px] font-semibold text-white shadow-sm disabled:opacity-40"
+              >
+                Select {drawPoints.length >= 3 ? "area" : `${3 - drawPoints.length} more`}
+              </button>
+              <button
+                type="button"
+                onClick={cancelDraw}
+                className="flex size-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm"
+                aria-label="Cancel area selection"
+              >
+                <X className="size-3.5" />
+              </button>
+            </>
+          )}
         </div>
         <div className="absolute bottom-3 right-3 z-10 flex gap-1">
           <button
@@ -800,7 +1002,7 @@ export function HpoMapV2MapLibre({
               ) : null}
             </div>
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className={`mt-3 grid gap-2 ${selectedOffice.accountId ? "grid-cols-3" : "grid-cols-2"}`}>
             <a
               href={`https://maps.apple.com/?q=${encodeURIComponent(
                 [selectedOffice.officeName, selectedOffice.address, selectedOffice.city]
@@ -809,20 +1011,29 @@ export function HpoMapV2MapLibre({
               )}`}
               target="_blank"
               rel="noreferrer"
-              className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-600"
+              className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 px-2 text-[11px] font-semibold text-slate-600"
             >
-              <MapPinned className="size-3.5" /> Open location
+              <MapPinned className="size-3.5" /> Maps
             </a>
+            {selectedOffice.accountId ? (
+              <button
+                type="button"
+                onClick={() => onOpenAccount?.(selectedOffice.accountId!)}
+                className="min-h-11 rounded-xl border border-slate-200 px-2 text-[11px] font-semibold text-slate-700"
+              >
+                Account
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => onToggleRouteStop(selectedOffice)}
-              className={`min-h-11 rounded-xl px-3 text-xs font-semibold ${
+              className={`min-h-11 rounded-xl px-2 text-[11px] font-semibold ${
                 selectedSet.has(selectedOffice.key)
                   ? "border border-[#1769e8]/25 bg-blue-50 text-[#1769e8]"
                   : "bg-[#1769e8] text-white"
               }`}
             >
-              {selectedSet.has(selectedOffice.key) ? "Remove from route" : "Add to route"}
+              {selectedSet.has(selectedOffice.key) ? "Remove" : "Add to route"}
             </button>
           </div>
         </div>
