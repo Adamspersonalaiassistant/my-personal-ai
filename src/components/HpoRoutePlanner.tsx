@@ -1221,6 +1221,7 @@ export function HpoRoutePlanner({
     }));
     const prospects = data.prospects.map((prospect: any) => ({
       key: `prospect:${prospect.id}`,
+      accountId: prospect.promoted_account_id || undefined,
       prospectId: prospect.id,
       officeName: prospect.name,
       address: prospect.address || "",
@@ -1229,7 +1230,7 @@ export function HpoRoutePlanner({
       longitude: prospect.longitude,
       detail:
         [prospect.prospect_type, prospect.specialty].filter(Boolean).join(" · ") || "Prospect",
-      kind: "prospect" as const,
+      kind: prospect.promoted_account_id ? ("account" as const) : ("prospect" as const),
       specialty: prospect.specialty,
       priority:
         typeof prospect.metadata?.internal_priority === "number"
