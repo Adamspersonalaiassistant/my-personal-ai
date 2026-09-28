@@ -498,24 +498,7 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
           type: "function",
           name: "execute_hpo_route_command",
           description:
-            "Execute a proven HPO route mutation when Adam explicitly asks to build a route, add or remove a saved office, optimize the current route, or reoptimize the remaining open stops. This uses the same canonical route domain actions as the manual HPO UI.",
-          parameters: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              request: {
-                type: "string",
-                description: "Adam's exact explicit HPO route command from the active voice turn.",
-              },
-            },
-            required: ["request"],
-          },
-        },
-        {
-          type: "function",
-          name: "execute_hpo_route_command",
-          description:
-            "Execute a verified HPO route command when Adam explicitly asks to build a route from saved HPO offices in named cities, add/remove a saved office, optimize/reoptimize the route, find the strongest nearby backup, or wrap up the route. Uses deterministic HPO data and routing after interpreting the command.",
+            "Execute a verified HPO route command when Adam explicitly asks to build a route from saved HPO offices in named cities, add/remove/reorder a saved office, optimize/reoptimize the route, find the strongest nearby backup, sync the route block to Emery Calendar, export completed visits, or wrap up the route. Uses the same canonical HPO domain actions as Text and the manual HPO UI.",
           parameters: {
             type: "object",
             additionalProperties: false,
