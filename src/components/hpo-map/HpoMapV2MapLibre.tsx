@@ -261,7 +261,14 @@ function setupSourcesAndLayers(map: MapLibreMap) {
         "text-size": 12,
         "text-font": ["Open Sans Bold"],
       },
-      paint: { "text-color": "#ffffff" },
+      paint: {
+        "text-color": [
+          "case",
+          ["in", ["get", "status"], ["literal", ["closed", "bad_address", "skipped"]]],
+          "#334155",
+          "#ffffff",
+        ],
+      },
     });
   }
 
@@ -294,6 +301,26 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       },
     });
   }
+  if (!map.getLayer("hpo-office-priority-ring")) {
+    map.addLayer({
+      id: "hpo-office-priority-ring",
+      type: "circle",
+      source: "hpo-offices",
+      filter: [
+        "all",
+        ["!", ["has", "point_count"]],
+        [">=", ["coalesce", ["get", "priority"], 0], 4],
+      ],
+      paint: {
+        "circle-radius": 11,
+        "circle-color": "rgba(23,105,232,0)",
+        "circle-stroke-color": BLUE_DARK,
+        "circle-stroke-width": 1.5,
+        "circle-stroke-opacity": 0.45,
+      },
+    });
+  }
+
   if (!map.getLayer("hpo-office-selected-ring")) {
     map.addLayer({
       id: "hpo-office-selected-ring",
@@ -348,13 +375,28 @@ function setupSourcesAndLayers(map: MapLibreMap) {
         "circle-radius": ["case", ["==", ["get", "current"], 1], 12, 10],
         "circle-color": [
           "case",
+          ["==", ["get", "status"], "closed"],
+          "#ffffff",
+          ["==", ["get", "status"], "bad_address"],
+          "#fff7ed",
+          ["==", ["get", "status"], "skipped"],
+          "#e2e8f0",
           ["==", ["get", "completed"], 1],
-          "#9aa8ba",
+          "#94a3b8",
           BLUE,
         ],
-        "circle-stroke-color": "#ffffff",
+        "circle-stroke-color": [
+          "case",
+          ["==", ["get", "status"], "bad_address"],
+          "#f97316",
+          ["==", ["get", "status"], "closed"],
+          "#64748b",
+          ["==", ["get", "status"], "skipped"],
+          "#94a3b8",
+          "#ffffff",
+        ],
         "circle-stroke-width": 2.5,
-        "circle-opacity": ["case", ["==", ["get", "completed"], 1], 0.6, 1],
+        "circle-opacity": ["case", ["==", ["get", "status"], "skipped"], 0.65, 1],
       },
     });
   }
