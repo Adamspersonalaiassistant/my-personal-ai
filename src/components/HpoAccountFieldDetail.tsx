@@ -292,13 +292,30 @@ export function HpoAccountFieldDetail({
               </div>
             </section>
 
-            {(
-              <section className="emery-glass rounded-[1.45rem] p-4">
+            <section className="border-b border-border/50 pb-3">
                 <div className="flex items-center gap-2">
                   <UserRound className="size-4 text-primary" />
                   <p className="text-sm font-semibold">Contacts</p>
+                  <Button variant="ghost" className="ml-auto min-h-11 text-xs text-primary" onClick={() => setContactOpen((value) => !value)}>{contactOpen ? "Cancel" : "Add contact"}</Button>
                 </div>
+                {contactOpen && <form className="mt-2 space-y-2" onSubmit={async (event) => {
+                  event.preventDefault();
+                  const form = new FormData(event.currentTarget);
+                  setContactError("");
+                  try {
+                    await addContact({ data: { accountId, name: String(form.get("name") || ""), roleTitle: String(form.get("role") || ""), phone: String(form.get("phone") || ""), email: String(form.get("email") || ""), relationshipNotes: String(form.get("notes") || "") } });
+                    setData(await load({ data: { accountId } }));
+                    setContactOpen(false);
+                    onChanged?.();
+                  } catch (cause) { setContactError(cause instanceof Error ? cause.message : "Could not add contact."); }
+                }}>
+                  {[["name", "Name"], ["role", "Role"], ["phone", "Phone"], ["email", "Email"]].map(([key, label]) => <label key={key} className="block text-xs text-muted-foreground">{label}<input required={key === "name"} name={key} type={key === "email" ? "email" : key === "phone" ? "tel" : "text"} className="mt-1 min-h-11 w-full rounded-md border border-border bg-card px-3 text-base text-foreground" /></label>)}
+                  <label className="block text-xs text-muted-foreground">Relationship notes<textarea name="notes" className="mt-1 min-h-24 w-full rounded-md border border-border bg-card p-3 text-base text-foreground" /></label>
+                  {contactError && <p role="alert" className="text-sm text-destructive">{contactError}</p>}
+                  <Button className="min-h-11 w-full">Save contact</Button>
+                </form>}
                 <div className="mt-3 space-y-2">
+                  {!contacts.length && <p className="text-xs text-muted-foreground">No contacts saved yet.</p>}
                   {contacts.slice(0, 8).map((contact: any) => (
                     <div key={contact.id} className="emery-surface rounded-xl p-3">
                       <div className="flex items-start justify-between gap-3">
@@ -328,7 +345,6 @@ export function HpoAccountFieldDetail({
                   ))}
                 </div>
               </section>
-            ) : null}
 
             <section className="emery-glass rounded-[1.45rem] p-4">
               <div className="flex items-center gap-2">
