@@ -514,7 +514,7 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
           type: "function",
           name: "execute_hpo_route_command",
           description:
-            "Execute a verified HPO route command when Adam explicitly asks to build a route from saved HPO offices in named cities, add/remove a saved office, optimize the active route, or reoptimize its unfinished remainder. Uses deterministic HPO data and routing after interpreting the command.",
+            "Execute a verified HPO route command when Adam explicitly asks to build a route from saved HPO offices in named cities, add/remove a saved office, optimize/reoptimize the route, find the strongest nearby backup, or wrap up the route. Uses deterministic HPO data and routing after interpreting the command.",
           parameters: {
             type: "object",
             additionalProperties: false,
