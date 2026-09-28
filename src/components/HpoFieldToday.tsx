@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+/* eslint-disable @typescript-eslint/no-explicit-any -- Canonical HPO server payloads and offline snapshots are legacy dynamically shaped records. */
 import { useServerFn } from "@tanstack/react-start";
 import {
   AlertTriangle,

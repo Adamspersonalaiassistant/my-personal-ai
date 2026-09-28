@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+/* eslint-disable @typescript-eslint/no-explicit-any -- Legacy planner payloads include dynamic map and metadata records. */
 import { useServerFn } from "@tanstack/react-start";
 import {
   ArrowDown,

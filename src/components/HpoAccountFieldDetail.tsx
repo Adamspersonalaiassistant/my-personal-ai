@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+/* eslint-disable @typescript-eslint/no-explicit-any -- Existing field-context payloads include dynamic account metadata. */
 import { useServerFn } from "@tanstack/react-start";
 import {
   ArrowUpRight,
