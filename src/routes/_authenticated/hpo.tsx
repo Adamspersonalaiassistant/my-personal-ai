@@ -108,7 +108,7 @@ function HpoWorkspace() {
             acc[part.type] = part.value;
             return acc;
           }, {});
-        const today = `${todayKey.year}-${todayKey.month}-${todayKey.day}`;
+        const today = `${todayKey["year"]}-${todayKey["month"]}-${todayKey["day"]}`;
         const hasActiveRoute = (next?.routes ?? []).some(
           (route: any) =>
             ["active", "in_progress"].includes(String(route.status)) ||
