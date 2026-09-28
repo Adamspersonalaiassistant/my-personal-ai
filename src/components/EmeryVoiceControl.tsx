@@ -19,7 +19,7 @@ import {
 type VoiceStatus = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "error";
 
 async function currentHpoVoiceLocation(request: string) {
-  if (!/\b(from here|where i am|current location|remaining|rest of (?:the )?route)\b/i.test(request)) {
+  if (!/\b(from here|where i am|current location|remaining|rest of (?:the )?route|nearby|backup|within \d{1,2} minutes?|where should i go|where can i go|minutes? left)\b/i.test(request)) {
     return { latitude: null as number | null, longitude: null as number | null };
   }
   if (typeof navigator === "undefined" || !navigator.geolocation) {
