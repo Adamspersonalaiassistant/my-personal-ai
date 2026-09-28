@@ -7,6 +7,7 @@ import {
   executeHpoRouteAddStopsCore,
   executeHpoRouteCompleteCore,
   executeHpoRouteRemoveStopCore,
+  executeHpoRouteReorderCore,
   executeHpoRouteReoptimizeCore,
   getHpoNearbyBackupsCore,
 } from "@/lib/hpo-field.functions";
@@ -16,6 +17,7 @@ export type HpoRouteCommandAction =
   | "hpo.route.create"
   | "hpo.route.add_stops"
   | "hpo.route.remove_stop"
+  | "hpo.route.reorder"
   | "hpo.route.optimize"
   | "hpo.route.reoptimize"
   | "hpo.nearby.find"
@@ -323,6 +325,35 @@ async function chooseRouteCandidates(db: any, userId: string, message: string, c
   return { candidates, area: matchedCities.join("/") };
 }
 
+function bestOpenStop(stops: any[], phrase: string) {
+  const ranked = stops
+    .filter((row: any) => !TERMINAL.has(String(row.status)))
+    .map((row: any) => ({ row, score: nameScore(phrase, row.office_name ?? "") }))
+    .filter((item: { row: any; score: number }) => item.score >= 45)
+    .sort(
+      (left: { row: any; score: number }, right: { row: any; score: number }) =>
+        right.score - left.score,
+    );
+  if (!ranked.length) return { row: null, ambiguous: false };
+  if (ranked.length > 1 && ranked[0]!.score - ranked[1]!.score < 10) {
+    return { row: null, ambiguous: true };
+  }
+  return { row: ranked[0]!.row, ambiguous: false };
+}
+
+function reorderPreservingTerminalSlots(stops: any[], openIds: string[]) {
+  let openIndex = 0;
+  return [...stops]
+    .sort((left: any, right: any) => left.stop_order - right.stop_order)
+    .map((stop: any) => {
+      if (TERMINAL.has(String(stop.status))) return stop.id as string;
+      const id = openIds[openIndex];
+      openIndex += 1;
+      return id;
+    })
+    .filter(Boolean) as string[];
+}
+
 function requestedAction(message: string): HpoRouteCommandAction {
   const text = normalize(message);
   if (/\b(build|create|make)\b.*\broute\b/.test(text)) return "hpo.route.create";
@@ -333,6 +364,10 @@ function requestedAction(message: string): HpoRouteCommandAction {
   if (/\b(reoptimize|re optimize|fix (?:the )?(?:rest|remaining)|optimize (?:the )?(?:rest|remaining))\b/.test(text))
     return "hpo.route.reoptimize";
   if (/\boptimize\b/.test(text)) return "hpo.route.optimize";
+  if (
+    /\b(?:put|move)\b.+\b(?:first|last|before|after)\b/.test(text) ||
+    /\b(?:first|last)\s+(?:stop|office)\b/.test(text)
+  ) return "hpo.route.reorder";
   if (/\b(add|put)\b.+\b(?:route|stop|office)\b/.test(text) || /^add\s+/.test(text))
     return "hpo.route.add_stops";
   if (/\b(remove|take)\b.+\b(?:route|stop|office|out|off)\b/.test(text))
@@ -555,6 +590,105 @@ export async function processHpoRouteCommand(input: {
     }
 
     const stops = await routeStops(input.db, input.userId, route.id);
+
+    if (action === "hpo.route.reorder") {
+      const open = stops.filter((row: any) => !TERMINAL.has(String(row.status)));
+      if (open.length < 2) {
+        return empty({
+          routeId: route.id,
+          reply: "There aren't enough unfinished stops to reorder.",
+        });
+      }
+
+      const normalized = normalize(input.message);
+      const relation = normalized.match(/\b(first|last|before|after)\b/)?.[1] ?? null;
+      const rawTarget =
+        relation && relation !== "before" && relation !== "after"
+          ? normalized
+              .replace(/\b(put|move|make|the|stop|office|route|please|first|last)\b/g, " ")
+              .replace(/\s+/g, " ")
+              .trim()
+          : relation
+            ? normalize(input.message.split(new RegExp(`\\b${relation}\\b`, "i"))[0] ?? "")
+                .replace(/\b(put|move|make|the|stop|office|route|please)\b/g, " ")
+                .replace(/\s+/g, " ")
+                .trim()
+            : "";
+      const targetMatch = bestOpenStop(open, rawTarget);
+      if (targetMatch.ambiguous || !targetMatch.row) {
+        return empty({
+          needsClarification: true,
+          routeId: route.id,
+          question: "Which route office do you want me to move?",
+          reply: "Which route office do you want me to move?",
+        });
+      }
+
+      const openIds = open.map((row: any) => row.id).filter((id: unknown): id is string => Boolean(id));
+      const targetId = targetMatch.row.id as string;
+      const withoutTarget = openIds.filter((id: string) => id !== targetId);
+
+      let orderedOpen: string[] = [];
+      if (relation === "first") {
+        orderedOpen = [targetId, ...withoutTarget];
+      } else if (relation === "last") {
+        orderedOpen = [...withoutTarget, targetId];
+      } else if (relation === "before" || relation === "after") {
+        const pieces = input.message.split(new RegExp(`\\b${relation}\\b`, "i"));
+        const referencePhrase = normalize(pieces[1] ?? "")
+          .replace(/\b(the|stop|office|route|please)\b/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+        const referenceMatch = bestOpenStop(
+          open.filter((row: any) => row.id !== targetId),
+          referencePhrase,
+        );
+        if (referenceMatch.ambiguous || !referenceMatch.row) {
+          return empty({
+            needsClarification: true,
+            routeId: route.id,
+            question: `Which office should ${targetMatch.row.office_name} go ${relation}?`,
+            reply: `Which office should ${targetMatch.row.office_name} go ${relation}?`,
+          });
+        }
+        const referenceId = referenceMatch.row.id as string;
+        const refIndex = withoutTarget.indexOf(referenceId);
+        const insertAt = relation === "after" ? refIndex + 1 : refIndex;
+        orderedOpen = [...withoutTarget];
+        orderedOpen.splice(Math.max(0, insertAt), 0, targetId);
+      } else {
+        return empty({
+          needsClarification: true,
+          routeId: route.id,
+          question: "Should I put that office first, last, before another office, or after another office?",
+          reply: "Should I put that office first, last, before another office, or after another office?",
+        });
+      }
+
+      const stopIds = reorderPreservingTerminalSlots(stops, orderedOpen);
+      const result: any = await executeHpoRouteReorderCore({
+        db: input.db,
+        userId: input.userId,
+        routeId: route.id,
+        stopIds,
+        idempotencyKey: requestPrefix
+          ? `${requestPrefix}:hpo.route.reorder`
+          : `route:${route.id}:reorder:${Date.now()}`,
+        sourceChannel: input.sourceChannel,
+        sourceMessageId: input.sourceMessageId ?? null,
+      });
+      return empty({
+        performed: true,
+        routeId: route.id,
+        executionRunId: result.executionRunId ?? null,
+        reply:
+          relation === "first"
+            ? `Moved ${targetMatch.row.office_name} to the first unfinished route position.`
+            : relation === "last"
+              ? `Moved ${targetMatch.row.office_name} to the last unfinished route position.`
+              : `Moved ${targetMatch.row.office_name} ${relation} the requested office. Completed route history was not moved.`,
+      });
+    }
 
     if (action === "hpo.route.remove_stop") {
       const text = normalize(input.message);
