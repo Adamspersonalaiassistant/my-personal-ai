@@ -3,6 +3,7 @@ import {
   captureHpoRouteNoteCore,
   executeHpoRouteStopOutcomeCore,
 } from "@/lib/hpo-route.functions";
+import { executeHpoRouteStopArriveCore } from "@/lib/hpo-field.functions";
 
 const TERMINAL = new Set(["completed", "visited", "skipped", "closed", "bad_address"]);
 
@@ -11,7 +12,11 @@ export type HpoRouteStopActionResult = {
   performed: boolean;
   needsClarification: boolean;
   question: string | null;
-  action: "none" | "hpo.route_stop.set_outcome" | "hpo.route_stop.log_visit";
+  action:
+    | "none"
+    | "hpo.route_stop.arrive"
+    | "hpo.route_stop.set_outcome"
+    | "hpo.route_stop.log_visit";
   routeId: string | null;
   stopId: string | null;
   officeName: string | null;
@@ -100,12 +105,18 @@ export async function processHpoRouteStopAction(input: {
   sourceChannel?: string;
 }): Promise<HpoRouteStopActionResult> {
   const outcome = requestedOutcome(input.message);
+  const arrivalSignal =
+    !outcome &&
+    /\b(i(?:'|’)??m here|im here|i am here|arrived|i arrived|at the office|i(?:'|’)??m at the office|im at the office)\b/i.test(
+      input.message,
+    );
   const visitSignal =
     !outcome &&
+    !arrivalSignal &&
     /\b(just left|spoke with|talked to|met with|left (?:the )?(?:cards|materials|information|info)|dropped off|attorney (?:was|is)|front desk|receptionist|follow\s*up|will pass|took the (?:cards|materials|info|information))\b/i.test(
       input.message,
     );
-  if (!outcome && !visitSignal) {
+  if (!outcome && !arrivalSignal && !visitSignal) {
     return {
       recognized: false,
       performed: false,
@@ -151,7 +162,11 @@ export async function processHpoRouteStopAction(input: {
       performed: false,
       needsClarification: true,
       question: "Which HPO route are you updating? Open that route or tell me the route date.",
-      action: outcome ? "hpo.route_stop.set_outcome" : "hpo.route_stop.log_visit",
+      action: outcome
+        ? "hpo.route_stop.set_outcome"
+        : arrivalSignal
+          ? "hpo.route_stop.arrive"
+          : "hpo.route_stop.log_visit",
       routeId: null,
       stopId: null,
       officeName: null,
@@ -160,6 +175,76 @@ export async function processHpoRouteStopAction(input: {
       nextStopId: null,
       nextStopName: null,
     };
+  }
+
+  if (arrivalSignal) {
+    const { data: stops, error: stopError } = await db
+      .from("hpo_route_stops")
+      .select("*")
+      .eq("user_id", input.userId)
+      .eq("route_id", route.id)
+      .order("stop_order", { ascending: true });
+    if (stopError) throw stopError;
+    const target = resolveStopFromMessage(stops ?? [], input.message);
+    if (!target) {
+      return {
+        recognized: true,
+        performed: false,
+        needsClarification: true,
+        question: "Which stop did you arrive at? Say the stop number or office name.",
+        action: "hpo.route_stop.arrive",
+        routeId: route.id,
+        stopId: null,
+        officeName: null,
+        status: "arrived",
+        executionRunId: null,
+        nextStopId: null,
+        nextStopName: null,
+      };
+    }
+
+    try {
+      const receipt = await executeHpoRouteStopArriveCore({
+        db,
+        userId: input.userId,
+        stopId: target.id,
+        idempotencyKey: input.sourceMessageId
+          ? `message:${input.sourceMessageId}:hpo.route_stop.arrive`
+          : `${input.sourceChannel ?? "text"}:${route.id}:${target.id}:arrive:${Date.now()}`,
+        sourceChannel: input.sourceChannel ?? "text",
+        sourceMessageId: input.sourceMessageId ?? null,
+      });
+      return {
+        recognized: true,
+        performed: true,
+        needsClarification: false,
+        question: null,
+        action: "hpo.route_stop.arrive",
+        routeId: route.id,
+        stopId: receipt.stop.id,
+        officeName: receipt.stop.office_name ?? null,
+        status: receipt.stop.status,
+        executionRunId: receipt.executionRunId,
+        nextStopId: null,
+        nextStopName: null,
+      };
+    } catch (error) {
+      return {
+        recognized: true,
+        performed: false,
+        needsClarification: false,
+        question: null,
+        action: "hpo.route_stop.arrive",
+        routeId: route.id,
+        stopId: target.id,
+        officeName: target.office_name ?? null,
+        status: "arrived",
+        executionRunId: null,
+        nextStopId: null,
+        nextStopName: null,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
 
   if (visitSignal) {
