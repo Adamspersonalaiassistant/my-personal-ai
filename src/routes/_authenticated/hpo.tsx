@@ -457,11 +457,11 @@ function ActivityView({
         </div>
       )}
       <div className="flex gap-1 border-b border-border/60 pb-2">
-        {[
+        {([
           ["all", "All"],
           ["visit", "Visits"],
           ["touch", "Other touches"],
-        ].map(([key, label]) => (
+        ] as const).map(([key, label]) => (
           <Button
             key={key}
             variant="ghost"
