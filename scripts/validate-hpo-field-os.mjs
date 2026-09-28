@@ -29,6 +29,7 @@ const accountDetail = read("src/components/HpoAccountFieldDetail.tsx");
 const fieldRead = read("src/lib/hpo-field-read-controller.ts");
 const voiceControl = read("src/components/EmeryVoiceControl.tsx");
 const routeCommands = read("src/lib/hpo-route-command-controller.ts");
+const capabilities = read("src/lib/execution-capabilities.ts");
 
 check("Map V1 remains in Route Planner", planner.includes("function OfficePlanningMap("));
 check("Route Planner uses renderer adapter", planner.includes("<HpoMapAdapter"));
@@ -92,10 +93,13 @@ check("natural route-stop actions use stable request ids in Voice", routeActions
 check("explicit Voice route notes are retry-safe", voice.includes("requestId?: string | null") && voice.includes("hpo.route_stop.log_visit") && voiceControl.includes("executeHpoRouteNote") && voiceControl.includes("routeId: hpoRouteId"));
 
 
-
-
-
-
+check("route Calendar sync is a canonical verified mutation", routeFns.includes("executeHpoRouteSyncCalendarCore") && routeFns.includes('"hpo.route.sync_calendar"') && routeFns.includes("Route Calendar update verification failed") && routeFns.includes("completeExecution"));
+check("manual Route Planner uses verified route Calendar sync", planner.includes("hpo.route.sync_calendar") && planner.includes("result.calendarAction"));
+check("route export is centralized deterministic domain logic", fieldFns.includes("getHpoRouteTrackerExportCore") && fieldFns.includes('"hpo.route.export"') && fieldFns.includes("exportHpoRouteTracker"));
+check("manual tracker copy uses centralized route export", planner.includes("exportHpoRouteTracker") && planner.includes("result.tsv"));
+check("Text and Voice route controller supports export and Calendar sync", routeCommands.includes('"hpo.route.export"') && routeCommands.includes('"hpo.route.sync_calendar"') && routeCommands.includes("getHpoRouteTrackerExportCore") && routeCommands.includes("executeHpoRouteSyncCalendarCore"));
+check("capability registry reflects proven conversational route creation", capabilities.includes("conversationalRouteCreation: true") && capabilities.includes("export completed route visits") && capabilities.includes("verified execution"));
+check("Realtime declares only one HPO route command tool", (voice.match(/name: "execute_hpo_route_command"/g) ?? []).length === 1);
 
 if (process.exitCode) process.exit(process.exitCode);
 console.log("HPO Field OS Map V2 foundation certification passed.");
