@@ -29,12 +29,17 @@ import {
   getHpoRouteScheduleAdvice,
   optimizeHpoRoute,
   prepareHpoOfficeMap,
-  reorderHpoRouteStops,
   syncHpoRouteToCalendar,
   updateHpoRouteStop,
 } from "@/lib/hpo-route.functions";
 import { EmeryVoiceControl } from "@/components/EmeryVoiceControl";
 import { HpoMapAdapter } from "@/components/hpo-map/HpoMapAdapter";
+import {
+  addHpoRouteStops,
+  removeHpoRouteStop,
+  reorderHpoRouteStopsCanonical,
+  reoptimizeHpoRouteRemaining,
+} from "@/lib/hpo-field.functions";
 
 type Stop = {
   id: string;
@@ -1041,7 +1046,10 @@ export function HpoRoutePlanner() {
   const createRoute = useServerFn(createHpoRoute);
   const optimize = useServerFn(optimizeHpoRoute);
   const updateStop = useServerFn(updateHpoRouteStop);
-  const reorderStops = useServerFn(reorderHpoRouteStops);
+  const reorderStops = useServerFn(reorderHpoRouteStopsCanonical);
+  const addStopsToRoute = useServerFn(addHpoRouteStops);
+  const removeStopFromRoute = useServerFn(removeHpoRouteStop);
+  const reoptimizeRemaining = useServerFn(reoptimizeHpoRouteRemaining);
   const captureNote = useServerFn(captureHpoRouteNote);
   const syncCalendar = useServerFn(syncHpoRouteToCalendar);
   const askSchedule = useServerFn(getHpoRouteScheduleAdvice);
@@ -1244,6 +1252,96 @@ export function HpoRoutePlanner() {
     }
   }
 
+  async function reoptimizeActiveRemaining(routeId: string) {
+    setOptimizing(true);
+    setError(null);
+    try {
+      let latitude: number | null = null;
+      let longitude: number | null = null;
+      if (typeof navigator !== "undefined" && navigator.geolocation) {
+        const point = await new Promise<{ latitude: number; longitude: number } | null>((resolve) => {
+          navigator.geolocation.getCurrentPosition(
+            (position) =>
+              resolve({
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+              }),
+            () => resolve(null),
+            { enableHighAccuracy: true, maximumAge: 60000, timeout: 5000 },
+          );
+        });
+        latitude = point?.latitude ?? null;
+        longitude = point?.longitude ?? null;
+      }
+      await reoptimizeRemaining({
+        data: {
+          routeId,
+          latitude,
+          longitude,
+          idempotencyKey: `ui:${crypto.randomUUID()}:hpo.route.reoptimize`,
+          sourceChannel: "ui",
+        },
+      });
+      await refresh(routeId);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Couldn't reoptimize the remaining route.");
+    } finally {
+      setOptimizing(false);
+    }
+  }
+
+  async function addSelectedToActiveRoute() {
+    if (!activeRoute || !mapSelectedOffices.length || working) return;
+    setWorking(true);
+    setError(null);
+    try {
+      await addStopsToRoute({
+        data: {
+          routeId: activeRoute.id,
+          stops: mapSelectedOffices.map((office) => ({
+            accountId: office.accountId ?? null,
+            prospectId: office.prospectId ?? null,
+            officeName: office.officeName,
+            address: office.address,
+            city: office.city ?? null,
+            latitude: office.latitude ?? null,
+            longitude: office.longitude ?? null,
+          })),
+          idempotencyKey: `ui:${crypto.randomUUID()}:hpo.route.add_stops`,
+          sourceChannel: "ui",
+        },
+      });
+      setMapSelectedKeys([]);
+      setSelectedMapOfficeKey(null);
+      await refresh(activeRoute.id);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Couldn't add those offices to the active route.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function removeOpenStop(route: RoutePlan, stopId: string) {
+    if (working) return;
+    setWorking(true);
+    setError(null);
+    try {
+      await removeStopFromRoute({
+        data: {
+          routeId: route.id,
+          stopId,
+          idempotencyKey: `ui:${crypto.randomUUID()}:hpo.route.remove_stop`,
+          sourceChannel: "ui",
+        },
+      });
+      await refresh(route.id);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Couldn't remove that stop.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
   async function moveStop(route: RoutePlan, stopId: string, delta: number) {
     const ordered = [...route.stops].sort((a, b) => a.stop_order - b.stop_order);
     const index = ordered.findIndex((stop) => stop.id === stopId);
@@ -1252,7 +1350,14 @@ export function HpoRoutePlanner() {
     [ordered[index], ordered[target]] = [ordered[target]!, ordered[index]!];
     setWorking(true);
     try {
-      await reorderStops({ data: { routeId: route.id, stopIds: ordered.map((stop) => stop.id) } });
+      await reorderStops({
+        data: {
+          routeId: route.id,
+          stopIds: ordered.map((stop) => stop.id),
+          idempotencyKey: `ui:${crypto.randomUUID()}:hpo.route.reorder`,
+          sourceChannel: "ui",
+        },
+      });
       await refresh(route.id);
     } finally {
       setWorking(false);
@@ -1371,14 +1476,14 @@ export function HpoRoutePlanner() {
           </button>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-2">
+        <div className="mt-4 grid grid-cols-3 gap-2">
           <button
             type="button"
             onClick={() => {
               setMapSeedStops([]);
               setShowBuilder(true);
             }}
-            className="emery-press flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-primary px-3 text-xs font-semibold text-primary-foreground"
+            className="emery-press flex min-h-12 flex-col items-center justify-center gap-1 rounded-2xl bg-primary px-2 text-[10px] font-semibold text-primary-foreground"
           >
             <Plus className="size-4" /> New Route
           </button>
@@ -1386,10 +1491,19 @@ export function HpoRoutePlanner() {
             type="button"
             onClick={() => activeRoute && void optimizeActive(activeRoute.id)}
             disabled={!activeRoute || optimizing}
-            className="emery-press flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-primary/20 bg-primary/[0.055] px-3 text-xs font-semibold text-primary disabled:opacity-45"
+            className="emery-press flex min-h-12 flex-col items-center justify-center gap-1 rounded-2xl border border-primary/20 bg-primary/[0.055] px-2 text-[10px] font-semibold text-primary disabled:opacity-45"
           >
             <Sparkles className="size-4" />
-            {optimizing ? "Optimizing…" : "Optimize Route"}
+            {optimizing ? "Working…" : "Optimize All"}
+          </button>
+          <button
+            type="button"
+            onClick={() => activeRoute && void reoptimizeActiveRemaining(activeRoute.id)}
+            disabled={!activeRoute || optimizing || !nextStop}
+            className="emery-press flex min-h-12 flex-col items-center justify-center gap-1 rounded-2xl border border-primary/20 bg-primary/[0.055] px-2 text-[10px] font-semibold text-primary disabled:opacity-45"
+          >
+            <Navigation className="size-4" />
+            Fix Remaining
           </button>
         </div>
         <div className="mt-2 flex min-h-12 items-center gap-3 rounded-2xl border border-primary/15 bg-primary/[0.035] px-3">
@@ -1433,6 +1547,27 @@ export function HpoRoutePlanner() {
         />
       ) : null}
 
+      {activeRoute && mapSelectedOffices.length ? (
+        <section className="flex items-center gap-3 rounded-2xl border border-primary/16 bg-primary/[0.035] px-3 py-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold">
+              {mapSelectedOffices.length} selected for the active route
+            </p>
+            <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+              Add them without rebuilding today's route.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void addSelectedToActiveRoute()}
+            disabled={working}
+            className="emery-press min-h-11 shrink-0 rounded-xl bg-primary px-3 text-[11px] font-semibold text-primary-foreground disabled:opacity-40"
+          >
+            Add to Route
+          </button>
+        </section>
+      ) : null}
+
       {error ? (
         <div className="rounded-2xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
@@ -1440,36 +1575,51 @@ export function HpoRoutePlanner() {
       ) : null}
 
       {showBuilder && data ? (
-        <RouteBuilder
-          data={data}
-          initialSelected={mapSeedStops}
-          onClose={() => setShowBuilder(false)}
-          onCreate={async (payload) => {
-            setWorking(true);
-            setError(null);
-            try {
-              const result = await createRoute({ data: payload });
-              setShowBuilder(false);
-              setMapSelectedKeys([]);
-              setMapSeedStops([]);
-              try {
-                await optimize({ data: { routeId: result.routeId } });
-              } catch (optimizeCause) {
-                setError(
-                  optimizeCause instanceof Error
-                    ? `Route saved. ${optimizeCause.message}`
-                    : "Route saved, but optimization needs attention.",
-                );
-              }
-              await refresh(result.routeId);
-            } catch (cause) {
-              setError(cause instanceof Error ? cause.message : "Couldn't create route.");
-            } finally {
-              setWorking(false);
-            }
-          }}
-          working={working}
-        />
+        <div
+          className="fixed inset-0 z-[75] flex items-end bg-background/60 backdrop-blur-[3px]"
+          onClick={() => !working && setShowBuilder(false)}
+          role="presentation"
+        >
+          <div
+            className="emery-sheet-in max-h-[90dvh] w-full overflow-y-auto rounded-t-[1.7rem] border-t border-border/55 bg-background px-3 pb-[max(0.85rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-24px_70px_rgba(0,0,0,0.42)] sm:mx-auto sm:max-w-2xl"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Build HPO daily route"
+          >
+            <div className="mx-auto mb-1 h-1 w-10 rounded-full bg-border/80" />
+            <RouteBuilder
+              data={data}
+              initialSelected={mapSeedStops}
+              onClose={() => setShowBuilder(false)}
+              onCreate={async (payload) => {
+                setWorking(true);
+                setError(null);
+                try {
+                  const result = await createRoute({ data: payload });
+                  setShowBuilder(false);
+                  setMapSelectedKeys([]);
+                  setMapSeedStops([]);
+                  try {
+                    await optimize({ data: { routeId: result.routeId } });
+                  } catch (optimizeCause) {
+                    setError(
+                      optimizeCause instanceof Error
+                        ? `Route saved. ${optimizeCause.message}`
+                        : "Route saved, but optimization needs attention.",
+                    );
+                  }
+                  await refresh(result.routeId);
+                } catch (cause) {
+                  setError(cause instanceof Error ? cause.message : "Couldn't create route.");
+                } finally {
+                  setWorking(false);
+                }
+              }}
+              working={working}
+            />
+          </div>
+        </div>
       ) : null}
 
       {data?.routes.length ? (
@@ -1726,6 +1876,7 @@ export function HpoRoutePlanner() {
                   last={index === ordered.length - 1}
                   working={working}
                   onMove={(delta) => void moveStop(activeRoute, stop.id, delta)}
+                  onRemove={() => void removeOpenStop(activeRoute, stop.id)}
                   onSave={async (input) => {
                     setWorking(true);
                     setError(null);
@@ -2057,14 +2208,48 @@ function RouteBuilder({
                   <p className="truncate text-xs font-semibold">{stop.officeName}</p>
                   <p className="mt-0.5 truncate text-[10px] text-muted-foreground">{stop.address}</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setSelected((current) => current.filter((item) => item.key !== stop.key))}
-                  className="emery-press flex size-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground"
-                  aria-label={`Remove ${stop.officeName}`}
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
+                <div className="flex shrink-0 gap-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSelected((current) => {
+                        if (index <= 0) return current;
+                        const next = [...current];
+                        [next[index - 1], next[index]] = [next[index]!, next[index - 1]!];
+                        return next;
+                      })
+                    }
+                    disabled={index === 0}
+                    className="emery-press flex size-8 items-center justify-center rounded-lg text-muted-foreground disabled:opacity-25"
+                    aria-label={`Move ${stop.officeName} up`}
+                  >
+                    <ArrowUp className="size-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSelected((current) => {
+                        if (index >= current.length - 1) return current;
+                        const next = [...current];
+                        [next[index], next[index + 1]] = [next[index + 1]!, next[index]!];
+                        return next;
+                      })
+                    }
+                    disabled={index === selected.length - 1}
+                    className="emery-press flex size-8 items-center justify-center rounded-lg text-muted-foreground disabled:opacity-25"
+                    aria-label={`Move ${stop.officeName} down`}
+                  >
+                    <ArrowDown className="size-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelected((current) => current.filter((item) => item.key !== stop.key))}
+                    className="emery-press flex size-8 items-center justify-center rounded-lg text-muted-foreground"
+                    aria-label={`Remove ${stop.officeName}`}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -2112,6 +2297,7 @@ function StopCard({
   last,
   working,
   onMove,
+  onRemove,
   onSave,
 }: {
   stop: Stop;
@@ -2119,6 +2305,7 @@ function StopCard({
   last: boolean;
   working: boolean;
   onMove: (delta: number) => void;
+  onRemove: () => void;
   onSave: (input: {
     status: string;
     notes: string;
@@ -2207,6 +2394,17 @@ function StopCard({
           >
             <ArrowDown className="size-3.5" />
           </button>
+          {!completed ? (
+            <button
+              type="button"
+              onClick={onRemove}
+              disabled={working}
+              className="emery-press flex size-9 items-center justify-center rounded-xl border border-destructive/20 text-destructive/80 disabled:opacity-25"
+              aria-label="Remove stop from route"
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          ) : null}
         </div>
       </div>
 
