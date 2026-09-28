@@ -868,56 +868,6 @@ export const executeVoiceHpoFieldRead = createServerFn({ method: "POST" })
 
 export const executeVoiceHpoRouteCommand = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { request: string; requestId?: string | null }) => ({
-    request: String(input?.request ?? "").trim().slice(0, 3000),
-    requestId: input?.requestId ? String(input.requestId).trim().slice(0, 240) : null,
-  }))
-  .handler(async ({ data, context }) => {
-    if (!data.request) {
-      return {
-        recognized: false,
-        performed: false,
-        needsClarification: true,
-        question: "What route change do you want me to make?",
-        action: "none",
-      } as const;
-    }
-    const startedAt = Date.now();
-    const db = context.supabase as any;
-    const { data: profile } = await db
-      .from("profiles")
-      .select("timezone")
-      .eq("user_id", context.userId)
-      .maybeSingle();
-    const result = await processHpoRouteCommand({
-      db,
-      userId: context.userId,
-      message: data.request,
-      timezone: profile?.timezone ?? "America/New_York",
-      requestId: data.requestId,
-      latitude: data.latitude,
-      longitude: data.longitude,
-      sourceChannel: "voice",
-    });
-    await recordRuntimeEvent(db, context.userId, {
-      channel: "voice",
-      eventType: "hpo_route_command",
-      domain: "hpo",
-      action: result.action,
-      status: result.needsClarification ? "clarification" : result.performed ? "ok" : result.error ? "error" : "skipped",
-      durationMs: Date.now() - startedAt,
-      model: null,
-      metadata: {
-        routeId: result.routeId,
-        executionRunId: result.executionRunId,
-        deterministic: true,
-      },
-    });
-    return result;
-  });
-
-export const executeVoiceHpoRouteCommand = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((input: {
     request: string;
     requestId?: string | null;
@@ -952,6 +902,8 @@ export const executeVoiceHpoRouteCommand = createServerFn({ method: "POST" })
       message: data.request,
       timezone: profile?.timezone ?? "America/New_York",
       requestId: data.requestId,
+      latitude: data.latitude,
+      longitude: data.longitude,
       sourceChannel: "voice",
     });
     await recordRuntimeEvent(db, context.userId, {
