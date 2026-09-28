@@ -339,6 +339,8 @@ export async function processHpoRouteCommand(input: {
   timezone: string;
   sourceMessageId?: string | null;
   requestId?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   sourceChannel: string;
 }): Promise<HpoRouteCommandResult> {
   const action = requestedAction(input.message);
@@ -462,6 +464,8 @@ export async function processHpoRouteCommand(input: {
         db: input.db,
         userId: input.userId,
         routeId: route.id,
+        latitude: Number.isFinite(input.latitude) ? Number(input.latitude) : null,
+        longitude: Number.isFinite(input.longitude) ? Number(input.longitude) : null,
         idempotencyKey: requestPrefix
           ? `${requestPrefix}:hpo.route.reoptimize`
           : `route:${route.id}:reoptimize:${Date.now()}`,
