@@ -9,6 +9,7 @@ import { selectRelevantMemories, buildExecutiveFocus, readConversationState } fr
 import { processCalendarAction } from "@/lib/calendar-agent";
 import { processHpoAction } from "@/lib/hpo-action-controller";
 import { processHpoFieldReadCommand } from "@/lib/hpo-field-read-controller";
+import { processHpoRouteCommand } from "@/lib/hpo-route-command-controller";
 import { captureHpoRouteNoteCore } from "@/lib/hpo-route.functions";
 import { MODEL_POLICY } from "@/lib/model-policy";
 import { recordRuntimeEvent } from "@/lib/runtime-telemetry";
@@ -292,6 +293,7 @@ LIVE VOICE OPERATING CONTRACT:
 - Use execute_calendar_action whenever Adam explicitly asks to add/create/schedule/complete/move a task or internal Calendar event. Never claim a write unless the tool reports performed=true.
 - Use execute_hpo_action whenever Adam explicitly asks to log a non-PHI HPO relationship touch or set an HPO account follow-up. Never put patient names, medical/case details, or other PHI into HPO relationship records.
 - Use get_hpo_field_state whenever Adam asks what's next, where he left off, asks for a brief on the current/next office, asks what happened last time, or asks who he spoke to. This is a deterministic HPO read and should be preferred over guessing from session context.
+- Use execute_hpo_route_command when Adam explicitly asks to build an HPO route, add/remove a saved office, optimize the route, or reoptimize what remains. Only report success when the tool confirms the persisted route action.
 - Use execute_hpo_route_note whenever Adam is on a field route and explicitly tells you what happened at a numbered stop or office, or asks you to save a route/marketing note. Preserve his wording and let the server identify the route stop. If the tool asks which stop, ask exactly that question.
 - Casual planning is not write permission. If the calendar tool asks a clarification question, ask exactly that concise question and do not invent missing details.
 - Tool results are private working context. Answer Adam naturally rather than narrating tool mechanics.
@@ -486,6 +488,23 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
               request: {
                 type: "string",
                 description: "Adam's exact HPO field-state question from the active voice turn.",
+              },
+            },
+            required: ["request"],
+          },
+        },
+        {
+          type: "function",
+          name: "execute_hpo_route_command",
+          description:
+            "Execute a proven HPO route mutation when Adam explicitly asks to build a route, add or remove a saved office, optimize the current route, or reoptimize the remaining open stops. This uses the same canonical route domain actions as the manual HPO UI.",
+          parameters: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              request: {
+                type: "string",
+                description: "Adam's exact explicit HPO route command from the active voice turn.",
               },
             },
             required: ["request"],
@@ -824,6 +843,54 @@ export const executeVoiceHpoFieldRead = createServerFn({ method: "POST" })
         nextStopId: result.nextStop?.id ?? null,
         completed: result.completed,
         total: result.total,
+        deterministic: true,
+      },
+    });
+    return result;
+  });
+
+export const executeVoiceHpoRouteCommand = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { request: string; requestId?: string | null }) => ({
+    request: String(input?.request ?? "").trim().slice(0, 3000),
+    requestId: input?.requestId ? String(input.requestId).trim().slice(0, 240) : null,
+  }))
+  .handler(async ({ data, context }) => {
+    if (!data.request) {
+      return {
+        recognized: false,
+        performed: false,
+        needsClarification: true,
+        question: "What route change do you want me to make?",
+        action: "none",
+      } as const;
+    }
+    const startedAt = Date.now();
+    const db = context.supabase as any;
+    const { data: profile } = await db
+      .from("profiles")
+      .select("timezone")
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    const result = await processHpoRouteCommand({
+      db,
+      userId: context.userId,
+      message: data.request,
+      timezone: profile?.timezone ?? "America/New_York",
+      requestId: data.requestId,
+      sourceChannel: "voice",
+    });
+    await recordRuntimeEvent(db, context.userId, {
+      channel: "voice",
+      eventType: "hpo_route_command",
+      domain: "hpo",
+      action: result.action,
+      status: result.needsClarification ? "clarification" : result.performed ? "ok" : result.error ? "error" : "skipped",
+      durationMs: Date.now() - startedAt,
+      model: null,
+      metadata: {
+        routeId: result.routeId,
+        executionRunId: result.executionRunId,
         deterministic: true,
       },
     });
