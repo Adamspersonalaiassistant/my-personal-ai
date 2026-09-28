@@ -1505,56 +1505,6 @@ export function HpoRoutePlanner() {
 
   return (
     <div id="hpo-route-planner" className="space-y-4">
-      <section className="border-b border-border/60 pb-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold">Territory map</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Select offices to build or update a route.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => void refresh()}
-            className="emery-press flex size-11 shrink-0 items-center justify-center rounded-2xl border border-border/55 text-muted-foreground"
-            aria-label="Refresh routes"
-          >
-            <RefreshCw className="size-4" />
-          </button>
-        </div>
-
-        <div className="mt-4 grid grid-cols-3 gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setMapSeedStops([]);
-              setShowBuilder(true);
-            }}
-            className="emery-press flex min-h-12 flex-col items-center justify-center gap-1 rounded-2xl bg-primary px-2 text-[10px] font-semibold text-primary-foreground"
-          >
-            <Plus className="size-4" /> New Route
-          </button>
-          <button
-            type="button"
-            onClick={() => activeRoute && void optimizeActive(activeRoute.id)}
-            disabled={!activeRoute || optimizing}
-            className="emery-press flex min-h-12 flex-col items-center justify-center gap-1 rounded-2xl border border-primary/20 bg-primary/[0.055] px-2 text-[10px] font-semibold text-primary disabled:opacity-45"
-          >
-            <Sparkles className="size-4" />
-            {optimizing ? "Working…" : "Optimize All"}
-          </button>
-          <button
-            type="button"
-            onClick={() => activeRoute && void reoptimizeActiveRemaining(activeRoute.id)}
-            disabled={!activeRoute || optimizing || !nextStop}
-            className="emery-press flex min-h-12 flex-col items-center justify-center gap-1 rounded-2xl border border-primary/20 bg-primary/[0.055] px-2 text-[10px] font-semibold text-primary disabled:opacity-45"
-          >
-            <Navigation className="size-4" />
-            Fix Remaining
-          </button>
-        </div>
-      </section>
-
       {data || mapOffices.length ? (
         <HpoMapV2MapLibre
           offices={mapOffices}
@@ -1571,6 +1521,36 @@ export function HpoRoutePlanner() {
           onFatalError={(message) => setError(`Map renderer error: ${message}`)}
         />
       ) : null}
+
+      <section className="grid grid-cols-3 gap-2 rounded-2xl bg-white p-2.5 text-slate-900 shadow-[0_10px_28px_rgba(15,23,42,0.1)]">
+        <button
+          type="button"
+          onClick={() => {
+            setMapSeedStops([]);
+            setShowBuilder(true);
+          }}
+          className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-[#31486f] px-2 text-[10px] font-semibold text-white"
+        >
+          <Plus className="size-4" /> New Route
+        </button>
+        <button
+          type="button"
+          onClick={() => activeRoute && void optimizeActive(activeRoute.id)}
+          disabled={!activeRoute || optimizing}
+          className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-[#d9f4e9] px-2 text-[10px] font-semibold text-[#047857] disabled:opacity-40"
+        >
+          <Sparkles className="size-4" />
+          {optimizing ? "Working…" : "Optimize"}
+        </button>
+        <button
+          type="button"
+          onClick={() => activeRoute && void reoptimizeActiveRemaining(activeRoute.id)}
+          disabled={!activeRoute || optimizing || !nextStop}
+          className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 text-[10px] font-semibold text-[#31486f] disabled:opacity-40"
+        >
+          <Navigation className="size-4" /> Fix Route
+        </button>
+      </section>
 
       {mapAccountDetailId ? (
         <HpoAccountFieldDetail
