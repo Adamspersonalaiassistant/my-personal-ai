@@ -1409,7 +1409,6 @@ export async function executeHpoRouteStopOutcomeCore(input: {
       sourceChannel: input.sourceChannel,
       traceId: input.traceId ?? null,
       baseUpdatedAt: input.baseUpdatedAt ?? null,
-      createTask: Boolean(input.createTask),
     },
   });
 
@@ -1846,6 +1845,8 @@ export async function executeHpoRouteStopVisitCore(input: {
       stop: any;
       interactionId: string | null;
       routeStatus: string;
+      followupExecutionRunId?: string | null;
+      followupTaskId?: string | null;
       reused: boolean;
     };
   }
