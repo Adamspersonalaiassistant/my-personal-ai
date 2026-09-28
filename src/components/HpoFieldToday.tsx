@@ -732,6 +732,22 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
           />
         </div>
 
+        {data.lastCompletedStop || nextStop ? (
+          <div className="mt-3 rounded-xl border border-primary/15 bg-primary/[0.035] px-3 py-2.5">
+            <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-primary">
+              Resume context
+            </p>
+            <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+              {data.lastCompletedStop
+                ? `Last: Stop ${data.lastCompletedStop.stop_order} · ${data.lastCompletedStop.office_name || "completed"}.`
+                : "No completed stops yet."}{" "}
+              {nextStop
+                ? `Next: Stop ${nextStop.stop_order} · ${nextStop.office_name || "route stop"}.`
+                : "No unfinished stops remain."}
+            </p>
+          </div>
+        ) : null}
+
         {pendingCount ? (
           <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2">
             <p className="text-[10px] text-amber-200">
