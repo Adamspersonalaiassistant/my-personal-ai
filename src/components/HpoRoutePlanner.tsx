@@ -34,6 +34,7 @@ import {
 } from "@/lib/hpo-route.functions";
 import { EmeryVoiceControl } from "@/components/EmeryVoiceControl";
 import { HpoMapAdapter } from "@/components/hpo-map/HpoMapAdapter";
+import { HpoAccountFieldDetail } from "@/components/HpoAccountFieldDetail";
 import {
   addHpoRouteStops,
   removeHpoRouteStop,
@@ -1073,6 +1074,7 @@ export function HpoRoutePlanner() {
   const [mapSeedStops, setMapSeedStops] = useState<Candidate[]>([]);
   const [mapPreparing, setMapPreparing] = useState(false);
   const [mapPreparedOnce, setMapPreparedOnce] = useState(false);
+  const [mapAccountDetailId, setMapAccountDetailId] = useState<string | null>(null);
 
   async function refresh(preferredRouteId?: string | null) {
     const result = (await load({})) as PlannerData;
@@ -1208,6 +1210,12 @@ export function HpoRoutePlanner() {
         ? current.filter((key) => key !== office.key)
         : [...current, office.key].slice(0, 30),
     );
+  }
+
+  function selectManyMapOffices(keys: string[]) {
+    if (!keys.length) return;
+    setSelectedMapOfficeKey(keys[0] ?? null);
+    setMapSelectedKeys((current) => [...new Set([...current, ...keys])].slice(0, 30));
   }
 
   function startRouteFromMap() {
@@ -1540,10 +1548,19 @@ export function HpoRoutePlanner() {
           selectedOfficeKey={selectedMapOfficeKey}
           route={activeRoute}
           onSelectOffice={setSelectedMapOfficeKey}
+          onSelectMany={selectManyMapOffices}
+          onOpenAccount={setMapAccountDetailId}
           onToggleRouteStop={toggleMapRouteStop}
           onBuildRoute={startRouteFromMap}
           preparing={mapPreparing}
           onRefreshPins={() => void refreshOfficePins()}
+        />
+      ) : null}
+
+      {mapAccountDetailId ? (
+        <HpoAccountFieldDetail
+          accountId={mapAccountDetailId}
+          onClose={() => setMapAccountDetailId(null)}
         />
       ) : null}
 
