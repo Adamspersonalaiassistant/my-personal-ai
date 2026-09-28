@@ -1,6 +1,11 @@
-import { useState, type ReactNode } from "react";
-import { HpoMapV2MapLibre } from "@/components/hpo-map/HpoMapV2MapLibre";
+import { lazy, Suspense, useState, type ReactNode } from "react";
 import type { HpoMapOffice, HpoMapRoute } from "@/components/hpo-map/types";
+
+const HpoMapV2MapLibre = lazy(() =>
+  import("@/components/hpo-map/HpoMapV2MapLibre").then((module) => ({
+    default: module.HpoMapV2MapLibre,
+  })),
+);
 
 type Props = {
   enabled: boolean;
@@ -22,12 +27,14 @@ export function HpoMapAdapter({ enabled, v1, ...props }: Props) {
   if (!enabled || failed) return <>{v1}</>;
 
   return (
-    <HpoMapV2MapLibre
-      {...props}
-      onFatalError={(message) => {
-        console.error("HPO Map V2 renderer failed; falling back to V1.", message);
-        setFailed(true);
-      }}
-    />
+    <Suspense fallback={<>{v1}</>}>
+      <HpoMapV2MapLibre
+        {...props}
+        onFatalError={(message) => {
+          console.error("HPO Map V2 renderer failed; falling back to V1.", message);
+          setFailed(true);
+        }}
+      />
+    </Suspense>
   );
 }
