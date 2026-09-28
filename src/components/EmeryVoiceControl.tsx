@@ -7,6 +7,7 @@ import {
   executeVoiceCalendarAction,
   executeVoiceHpoAction,
   executeVoiceHpoFieldRead,
+  executeVoiceHpoRouteCommand,
   executeVoiceHpoRouteNote,
   getVoiceReadiness,
   persistVoiceTranscript,
@@ -48,6 +49,7 @@ export function EmeryVoiceControl({
   const executeCalendarAction = useServerFn(executeVoiceCalendarAction);
   const executeHpoAction = useServerFn(executeVoiceHpoAction);
   const executeHpoFieldRead = useServerFn(executeVoiceHpoFieldRead);
+  const executeHpoRouteCommand = useServerFn(executeVoiceHpoRouteCommand);
   const executeHpoRouteNote = useServerFn(executeVoiceHpoRouteNote);
   const searchWeb = useServerFn(searchWebForVoice);
   const refreshContext = useServerFn(refreshVoiceContext);
@@ -216,7 +218,7 @@ export function EmeryVoiceControl({
           return;
         }
 
-        if (name === "execute_hpo_route_note") {
+        if (name === "execute_hpo_route_command") {\n          const result = await executeHpoRouteCommand({\n            data: {\n              request: String(args.request ?? ""),\n              requestId: `voice:${sessionIdRef.current ?? "session"}:${callId}`,\n            },\n          });\n          sendToolOutput(callId, JSON.stringify(result));\n          onConversationChanged?.();\n          return;\n        }\n\n        if (name === "execute_hpo_route_note") {
           const result = await executeHpoRouteNote({
             data: {
               request: String(args.request ?? ""),
@@ -318,7 +320,7 @@ export function EmeryVoiceControl({
         sendToolOutput(callId, "That tool is temporarily unavailable. Answer without inventing its result.");
       }
     },
-    [executeCalendarAction, executeHpoAction, executeHpoFieldRead, executeHpoRouteNote, hpoRouteId, onConversationChanged, refreshContext, searchWeb, sendToolOutput, updateVoiceDelivery],
+    [executeCalendarAction, executeHpoAction, executeHpoFieldRead, executeHpoRouteCommand, executeHpoRouteNote, hpoRouteId, onConversationChanged, refreshContext, searchWeb, sendToolOutput, updateVoiceDelivery],
   );
 
   const handleRealtimeEvent = useCallback(
