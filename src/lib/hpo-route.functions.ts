@@ -398,6 +398,100 @@ async function geocodeOfficeForMap(address: string) {
   return { lat, lon };
 }
 
+export const getHpoRouteNextStop = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { routeId?: string | null } = {}) => ({
+    routeId: clean(input?.routeId) || null,
+  }))
+  .handler(async ({ data, context }) => {
+    const db = context.supabase as any;
+    const userId = context.userId;
+    const timezone = await getTimezone(db, userId);
+    const today = localDateKey(new Date().toISOString(), timezone);
+
+    let route: any = null;
+    if (data.routeId) {
+      const { data: selected, error } = await db
+        .from("hpo_route_plans")
+        .select("*")
+        .eq("id", data.routeId)
+        .eq("user_id", userId)
+        .single();
+      if (error || !selected) throw error ?? new Error("Route not found");
+      route = selected;
+    } else {
+      const { data: routes, error } = await db
+        .from("hpo_route_plans")
+        .select("*")
+        .eq("user_id", userId)
+        .in("status", ["draft", "planned", "active", "in_progress"])
+        .gte("route_date", today)
+        .order("route_date", { ascending: true })
+        .order("updated_at", { ascending: false })
+        .limit(8);
+      if (error) throw error;
+      const rows = routes ?? [];
+      route =
+        rows.find((row: any) => row.route_date === today && ["active", "in_progress"].includes(row.status)) ??
+        rows.find((row: any) => row.route_date === today) ??
+        rows.find((row: any) => ["active", "in_progress"].includes(row.status)) ??
+        rows[0] ??
+        null;
+    }
+
+    if (!route) {
+      return {
+        route: null,
+        nextStop: null,
+        completed: 0,
+        total: 0,
+        remaining: 0,
+        accountContext: null,
+      };
+    }
+
+    const { data: stops, error: stopsError } = await db
+      .from("hpo_route_stops")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("route_id", route.id)
+      .order("stop_order", { ascending: true });
+    if (stopsError) throw stopsError;
+    const rows = stops ?? [];
+    const completed = rows.filter((stop: any) => TERMINAL.has(String(stop.status))).length;
+    const nextStop = rows.find((stop: any) => !TERMINAL.has(String(stop.status))) ?? null;
+
+    let accountContext: any = null;
+    if (nextStop?.account_id) {
+      const [{ data: account }, { data: interaction }] = await Promise.all([
+        db
+          .from("hpo_accounts")
+          .select("id,name,account_type,specialty,address,city,priority,owner_name,relationship_stage,relationship_health,last_touch_at,next_action,next_action_due_at,notes")
+          .eq("id", nextStop.account_id)
+          .eq("user_id", userId)
+          .maybeSingle(),
+        db
+          .from("hpo_interactions")
+          .select("id,occurred_at,summary,outcome,next_action,next_action_due_at")
+          .eq("account_id", nextStop.account_id)
+          .eq("user_id", userId)
+          .order("occurred_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      accountContext = account ? { ...account, latestInteraction: interaction ?? null } : null;
+    }
+
+    return {
+      route,
+      nextStop,
+      completed,
+      total: rows.length,
+      remaining: Math.max(0, rows.length - completed),
+      accountContext,
+    };
+  });
+
 export const prepareHpoOfficeMap = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { limit?: number }) => ({
