@@ -1,7 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Activity, CalendarDays, ChevronRight, Clock3, MapPinned, Plus, Search, UsersRound, X } from "lucide-react";
+import {
+  Activity,
+  CalendarDays,
+  ChevronRight,
+  Clock3,
+  MapPinned,
+  Plus,
+  Search,
+  UsersRound,
+  X,
+} from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { HpoRoutePlanner } from "@/components/HpoRoutePlanner";
@@ -21,18 +31,28 @@ const tabs = [
   { key: "accounts", label: "Accounts", icon: UsersRound },
   { key: "activity", label: "Activity", icon: Activity },
 ] as const;
-const field = "min-h-12 w-full rounded-md border border-border/70 bg-card/60 px-3 text-base text-foreground outline-none focus:border-primary";
-const date = (value: string | null | undefined) => value ? new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—";
+const field =
+  "min-h-12 w-full rounded-md border border-border/70 bg-card/60 px-3 text-base text-foreground outline-none focus:border-primary";
+const date = (value: string | null | undefined) =>
+  value ? new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—";
 
 export const Route = createFileRoute("/_authenticated/hpo")({
-  head: () => ({ meta: [
-    { title: "HPO Field — Emery" },
-    { name: "description", content: "Hudson Pro field routes, territory, accounts, and relationship activity." },
-    { property: "og:title", content: "HPO Field — Emery" },
-    { property: "og:description", content: "Hudson Pro field routes, territory, accounts, and relationship activity." },
-    { property: "og:type", content: "website" },
-    { name: "twitter:card", content: "summary" },
-  ] }),
+  head: () => ({
+    meta: [
+      { title: "HPO Field — Emery" },
+      {
+        name: "description",
+        content: "Hudson Pro field routes, territory, accounts, and relationship activity.",
+      },
+      { property: "og:title", content: "HPO Field — Emery" },
+      {
+        property: "og:description",
+        content: "Hudson Pro field routes, territory, accounts, and relationship activity.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: HpoWorkspace,
 });
 
@@ -55,20 +75,33 @@ function HpoWorkspace() {
   const [initialResolved, setInitialResolved] = useState(false);
 
   async function refresh() {
-    try { setData(await read({ data: { page: 0 } })); setPage(0); setRevision((n) => n + 1); setError(""); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load HPO."); }
-    finally { setLoading(false); }
+    try {
+      setData(await read({ data: { page: 0 } }));
+      setPage(0);
+      setRevision((n) => n + 1);
+      setError("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not load HPO.");
+    } finally {
+      setLoading(false);
+    }
   }
-  useEffect(() => { void refresh(); }, []);
+  useEffect(() => {
+    void refresh();
+  }, []);
   useEffect(() => {
     if (initialResolved) return;
     let cancelled = false;
-    void readToday({}).then((result) => {
-      if (cancelled) return;
-      if (result.route && result.route.route_date === result.today) setView("today");
-      setInitialResolved(true);
-    }).catch(() => setInitialResolved(true));
-    return () => { cancelled = true; };
+    void readToday({})
+      .then((result) => {
+        if (cancelled) return;
+        if (result.route && result.route.route_date === result.today) setView("today");
+        setInitialResolved(true);
+      })
+      .catch(() => setInitialResolved(true));
+    return () => {
+      cancelled = true;
+    };
   }, [readToday, initialResolved]);
 
   async function loadMore() {
@@ -76,97 +109,732 @@ function HpoWorkspace() {
     setMoreLoading(true);
     try {
       const next = await read({ data: { page: page + 1 } });
-      setData({ ...data, interactions: [...data.interactions, ...next.interactions], hasMore: next.hasMore });
+      setData({
+        ...data,
+        interactions: [...data.interactions, ...next.interactions],
+        hasMore: next.hasMore,
+      });
       setPage(page + 1);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load more activity."); }
-    finally { setMoreLoading(false); }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not load more activity.");
+    } finally {
+      setMoreLoading(false);
+    }
   }
   const account = data?.accounts.find((item) => item.id === selected) ?? null;
-  const openLog = (accountId = "") => { setSelected(null); setLogAccount(accountId); setSheet("log"); };
-  const openFollowup = (accountId: string) => { setSelected(null); setLogAccount(accountId); setSheet("followup"); };
+  const openLog = (accountId = "") => {
+    setSelected(null);
+    setLogAccount(accountId);
+    setSheet("log");
+  };
+  const openFollowup = (accountId: string) => {
+    setSelected(null);
+    setLogAccount(accountId);
+    setSheet("followup");
+  };
 
-  return <AppShell title="HPO" askEmery={`I'm working in HPO ${view}. Help me with my field accounts and route.`}>
-    <div className="mx-auto max-w-5xl space-y-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-      <nav aria-label="HPO field areas" className="sticky top-0 z-20 grid grid-cols-4 gap-1 border-b border-border/60 bg-background/95 p-1 backdrop-blur-md">
-        {tabs.map(({ key, label, icon: Icon }) => <Button key={key} type="button" variant="ghost" onClick={() => setView(key)} aria-current={view === key ? "page" : undefined}
-          className={`h-12 min-w-0 flex-col gap-0.5 rounded-md px-0 text-[11px] ${view === key ? "bg-primary/12 font-semibold text-primary" : "text-muted-foreground"}`}>
-          <Icon className="size-4" /><span>{label}</span>
-        </Button>)}
-      </nav>
-      {error && <div role="alert" className="rounded-md border border-destructive/40 p-3 text-sm text-destructive">{error} <Button variant="ghost" className="ml-2 min-h-11" onClick={() => void refresh()}>Retry</Button></div>}
-      {view === "today" ? <HpoFieldToday key={`today-${revision}`} onOpenMap={() => setView("map")} /> : null}
-      {view === "map" ? <HpoRoutePlanner key={`map-${revision}`} /> : null}
-      {(view === "accounts" || view === "activity") && loading ? <p className="py-12 text-center text-sm text-muted-foreground">Opening HPO records…</p> : null}
-      {view === "accounts" && data ? <Accounts accounts={data.accounts} limited={data.accountLimitReached} onAdd={() => setSheet("add")} onOpen={setSelected} /> : null}
-      {view === "activity" && data ? <ActivityView data={data} onOpen={setSelected} onLog={openLog} onFollowup={openFollowup} onMore={() => void loadMore()} loading={moreLoading} /> : null}
-      {selected && <HpoAccountFieldDetail accountId={selected} onClose={() => setSelected(null)} onChanged={() => void refresh()} onLog={() => openLog(selected)} onFollowup={() => openFollowup(selected)} />}
-      {sheet === "add" && <AccountSheet onClose={() => setSheet(null)} onSave={async (values) => { await createAccount({ data: values }); setSheet(null); await refresh(); }} />}
-      {sheet === "log" && <TouchSheet accounts={data?.accounts ?? []} initialAccount={logAccount} onClose={() => setSheet(null)} onSave={async (values) => { await logTouch({ data: values }); setSheet(null); await refresh(); }} />}
-      {sheet === "followup" && <FollowupSheet account={data?.accounts.find((item) => item.id === logAccount)} onClose={() => setSheet(null)} onSave={async (values) => { await setFollowup({ data: values }); setSheet(null); await refresh(); }} />}
-    </div>
-  </AppShell>;
+  return (
+    <AppShell
+      title="HPO"
+      askEmery={`I'm working in HPO ${view}. Help me with my field accounts and route.`}
+    >
+      <div className="mx-auto max-w-5xl space-y-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+        <nav
+          aria-label="HPO field areas"
+          className="sticky top-0 z-20 grid grid-cols-4 gap-1 border-b border-border/60 bg-background/95 p-1 backdrop-blur-md"
+        >
+          {tabs.map(({ key, label, icon: Icon }) => (
+            <Button
+              key={key}
+              type="button"
+              variant="ghost"
+              onClick={() => setView(key)}
+              aria-current={view === key ? "page" : undefined}
+              className={`h-12 min-w-0 flex-col gap-0.5 rounded-md px-0 text-[11px] ${view === key ? "bg-primary/12 font-semibold text-primary" : "text-muted-foreground"}`}
+            >
+              <Icon className="size-4" />
+              <span>{label}</span>
+            </Button>
+          ))}
+        </nav>
+        {error && (
+          <div
+            role="alert"
+            className="rounded-md border border-destructive/40 p-3 text-sm text-destructive"
+          >
+            {error}{" "}
+            <Button variant="ghost" className="ml-2 min-h-11" onClick={() => void refresh()}>
+              Retry
+            </Button>
+          </div>
+        )}
+        {view === "today" ? (
+          <HpoFieldToday key={`today-${revision}`} onOpenMap={() => setView("map")} />
+        ) : null}
+        {view === "map" ? <HpoRoutePlanner key={`map-${revision}`} /> : null}
+        {(view === "accounts" || view === "activity") && loading ? (
+          <p className="py-12 text-center text-sm text-muted-foreground">Opening HPO records…</p>
+        ) : null}
+        {view === "accounts" && data ? (
+          <Accounts
+            accounts={data.accounts}
+            limited={data.accountLimitReached}
+            onAdd={() => setSheet("add")}
+            onOpen={setSelected}
+          />
+        ) : null}
+        {view === "activity" && data ? (
+          <ActivityView
+            data={data}
+            onOpen={setSelected}
+            onLog={openLog}
+            onFollowup={openFollowup}
+            onMore={() => void loadMore()}
+            loading={moreLoading}
+          />
+        ) : null}
+        {selected && (
+          <HpoAccountFieldDetail
+            accountId={selected}
+            onClose={() => setSelected(null)}
+            onChanged={() => void refresh()}
+            onLog={() => openLog(selected)}
+            onFollowup={() => openFollowup(selected)}
+          />
+        )}
+        {sheet === "add" && (
+          <AccountSheet
+            onClose={() => setSheet(null)}
+            onSave={async (values) => {
+              await createAccount({ data: values });
+              setSheet(null);
+              await refresh();
+            }}
+          />
+        )}
+        {sheet === "log" && (
+          <TouchSheet
+            accounts={data?.accounts ?? []}
+            initialAccount={logAccount}
+            onClose={() => setSheet(null)}
+            onSave={async (values) => {
+              await logTouch({ data: values });
+              setSheet(null);
+              await refresh();
+            }}
+          />
+        )}
+        {sheet === "followup" && (
+          <FollowupSheet
+            account={data?.accounts.find((item) => item.id === logAccount)}
+            onClose={() => setSheet(null)}
+            onSave={async (values) => {
+              await setFollowup({ data: values });
+              setSheet(null);
+              await refresh();
+            }}
+          />
+        )}
+      </div>
+    </AppShell>
+  );
 }
 
-function Accounts({ accounts, limited, onAdd, onOpen }: { accounts: Account[]; limited: boolean; onAdd: () => void; onOpen: (id: string) => void }) {
+function Accounts({
+  accounts,
+  limited,
+  onAdd,
+  onOpen,
+}: {
+  accounts: Account[];
+  limited: boolean;
+  onAdd: () => void;
+  onOpen: (id: string) => void;
+}) {
   const [query, setQuery] = useState("");
   const [type, setType] = useState("all");
   const [stage, setStage] = useState("all");
   const [city, setCity] = useState("all");
-  const types = useMemo(() => [...new Set(accounts.map((a) => a.account_type).filter(Boolean))].sort() as string[], [accounts]);
-  const stages = useMemo(() => [...new Set(accounts.map((a) => a.relationship_stage).filter(Boolean))].sort(), [accounts]);
-  const cities = useMemo(() => [...new Set(accounts.map((a) => a.city).filter(Boolean))].sort() as string[], [accounts]);
+  const types = useMemo(
+    () => [...new Set(accounts.map((a) => a.account_type).filter(Boolean))].sort() as string[],
+    [accounts],
+  );
+  const stages = useMemo(
+    () => [...new Set(accounts.map((a) => a.relationship_stage).filter(Boolean))].sort(),
+    [accounts],
+  );
+  const cities = useMemo(
+    () => [...new Set(accounts.map((a) => a.city).filter(Boolean))].sort() as string[],
+    [accounts],
+  );
   const shown = accounts.filter((a) => {
-    const text = [a.name, a.account_type, a.specialty, a.city, a.territory, a.address].join(" ").toLowerCase();
-    return (!query || text.includes(query.toLowerCase())) && (type === "all" || a.account_type === type) && (stage === "all" || a.relationship_stage === stage) && (city === "all" || a.city === city);
+    const text = [a.name, a.account_type, a.specialty, a.city, a.territory, a.address]
+      .join(" ")
+      .toLowerCase();
+    return (
+      (!query || text.includes(query.toLowerCase())) &&
+      (type === "all" || a.account_type === type) &&
+      (stage === "all" || a.relationship_stage === stage) &&
+      (city === "all" || a.city === city)
+    );
   });
-  return <section className="space-y-3">
-    <div className="flex items-center justify-between gap-2"><div><h1 className="text-lg font-semibold">Accounts</h1><p className="text-xs text-muted-foreground">{shown.length} offices</p></div><Button onClick={onAdd} className="h-11 px-3"><Plus /> Add</Button></div>
-    <label className="relative block"><Search className="pointer-events-none absolute left-3 top-3.5 size-4 text-muted-foreground" /><span className="sr-only">Search accounts</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search office, city or address" className={`${field} pl-10`} /></label>
-    <div className="grid grid-cols-3 gap-1.5">
-      <Filter value={type} onChange={setType} label="Type" options={types} />
-      <Filter value={stage} onChange={setStage} label="Stage" options={stages} />
-      <Filter value={city} onChange={setCity} label="City" options={cities} />
-    </div>
-    {limited && <p className="text-xs text-muted-foreground">Showing the first 1,000 accounts.</p>}
-    <div className="divide-y divide-border/55 border-y border-border/55">
-      {shown.map((a) => <Button key={a.id} variant="ghost" onClick={() => onOpen(a.id)} className="h-auto min-h-[76px] w-full justify-between gap-2 rounded-none px-1.5 py-2 text-left hover:bg-card/60">
-        <span className="min-w-0 flex-1 whitespace-normal"><span className="block break-words text-sm font-semibold">{a.name}</span><span className="mt-1 block break-words text-xs font-normal text-muted-foreground">{[a.account_type, a.city, a.relationship_stage].filter(Boolean).join(" · ") || "Account"}</span><span className="mt-1 block break-words text-[11px] font-normal text-muted-foreground">{a.next_action ? `Next: ${a.next_action}${a.next_action_due_at ? ` · ${date(a.next_action_due_at)}` : ""}` : `Last touch: ${date(a.last_touch_at)}`}</span></span><span className="flex shrink-0 items-center gap-1 text-xs text-primary">P{a.priority}<ChevronRight className="size-4" /></span>
-      </Button>)}
-      {!shown.length && <p className="py-12 text-center text-sm text-muted-foreground">{accounts.length ? "No accounts match these filters." : "No accounts yet. Add your first office."}</p>}
-    </div>
-  </section>;
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h1 className="text-lg font-semibold">Accounts</h1>
+          <p className="text-xs text-muted-foreground">{shown.length} offices</p>
+        </div>
+        <Button onClick={onAdd} className="h-11 px-3">
+          <Plus /> Add
+        </Button>
+      </div>
+      <label className="relative block">
+        <Search className="pointer-events-none absolute left-3 top-3.5 size-4 text-muted-foreground" />
+        <span className="sr-only">Search accounts</span>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search office, city or address"
+          className={`${field} pl-10`}
+        />
+      </label>
+      <div className="grid grid-cols-3 gap-1.5">
+        <Filter value={type} onChange={setType} label="Type" options={types} />
+        <Filter value={stage} onChange={setStage} label="Stage" options={stages} />
+        <Filter value={city} onChange={setCity} label="City" options={cities} />
+      </div>
+      {limited && (
+        <p className="text-xs text-muted-foreground">Showing the first 1,000 accounts.</p>
+      )}
+      <div className="divide-y divide-border/55 border-y border-border/55">
+        {shown.map((a) => (
+          <Button
+            key={a.id}
+            variant="ghost"
+            onClick={() => onOpen(a.id)}
+            className="h-auto min-h-[76px] w-full justify-between gap-2 rounded-none px-1.5 py-2 text-left hover:bg-card/60"
+          >
+            <span className="min-w-0 flex-1 whitespace-normal">
+              <span className="block break-words text-sm font-semibold">{a.name}</span>
+              <span className="mt-1 block break-words text-xs font-normal text-muted-foreground">
+                {[a.account_type, a.city, a.relationship_stage].filter(Boolean).join(" · ") ||
+                  "Account"}
+              </span>
+              <span className="mt-1 block break-words text-[11px] font-normal text-muted-foreground">
+                {a.next_action
+                  ? `Next: ${a.next_action}${a.next_action_due_at ? ` · ${date(a.next_action_due_at)}` : ""}`
+                  : `Last touch: ${date(a.last_touch_at)}`}
+              </span>
+            </span>
+            <span className="flex shrink-0 items-center gap-1 text-xs text-primary">
+              P{a.priority}
+              <ChevronRight className="size-4" />
+            </span>
+          </Button>
+        ))}
+        {!shown.length && (
+          <p className="py-12 text-center text-sm text-muted-foreground">
+            {accounts.length
+              ? "No accounts match these filters."
+              : "No accounts yet. Add your first office."}
+          </p>
+        )}
+      </div>
+    </section>
+  );
 }
-function Filter({ value, onChange, label, options }: { value: string; onChange: (value: string) => void; label: string; options: string[] }) {
-  return <label className="min-w-0"><span className="sr-only">{label}</span><select value={value} onChange={(e) => onChange(e.target.value)} className="h-11 w-full min-w-0 rounded-md border border-border/70 bg-card/60 px-1.5 text-xs text-foreground"><option value="all">{label}: All</option>{options.map((o) => <option key={o} value={o}>{o}</option>)}</select></label>;
+function Filter({
+  value,
+  onChange,
+  label,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  label: string;
+  options: string[];
+}) {
+  return (
+    <label className="min-w-0">
+      <span className="sr-only">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-11 w-full min-w-0 rounded-md border border-border/70 bg-card/60 px-1.5 text-xs text-foreground"
+      >
+        <option value="all">{label}: All</option>
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
 }
-function ActivityView({ data, onOpen, onLog, onFollowup, onMore, loading }: { data: Workspace; onOpen: (id: string) => void; onLog: (id?: string) => void; onFollowup: (id: string) => void; onMore: () => void; loading: boolean }) {
+function ActivityView({
+  data,
+  onOpen,
+  onLog,
+  onFollowup,
+  onMore,
+  loading,
+}: {
+  data: Workspace;
+  onOpen: (id: string) => void;
+  onLog: (id?: string) => void;
+  onFollowup: (id: string) => void;
+  onMore: () => void;
+  loading: boolean;
+}) {
   const [filter, setFilter] = useState("all");
   const names = new Map(data.accounts.map((a) => [a.id, a.name]));
   const today = Date.now();
-  const due = data.accounts.filter((a) => a.next_action && a.next_action_due_at && Date.parse(a.next_action_due_at) <= today).sort((a, b) => Date.parse(a.next_action_due_at || "") - Date.parse(b.next_action_due_at || ""));
-  const items = data.interactions.filter((i) => filter === "all" || (filter === "visit" ? i.interaction_type === "visit" : i.interaction_type !== "visit"));
-  return <section className="space-y-4">
-    <div className="flex items-center justify-between gap-2"><h1 className="text-lg font-semibold">Activity</h1><Button className="h-11 px-3" onClick={() => onLog()}><Plus /> Log</Button></div>
-    {due.length > 0 && <div className="border-y border-border/60 py-2"><h2 className="mb-1 text-xs font-semibold uppercase text-primary">Follow-ups due · {due.length}</h2>{due.slice(0, 8).map((a) => <div key={a.id} className="flex min-h-14 items-center gap-2 border-b border-border/35 py-2 last:border-0"><Button variant="ghost" onClick={() => onOpen(a.id)} className="h-auto min-h-11 min-w-0 flex-1 justify-start whitespace-normal text-left"><span className="min-w-0 break-words"><strong className="block text-xs">{a.name}</strong><span className="text-xs font-normal text-muted-foreground">{a.next_action}</span></span></Button><Button variant="outline" className="h-11 shrink-0 px-2 text-xs" onClick={() => onFollowup(a.id)}>Update</Button></div>)}</div>}
-    {data.meetings.length > 0 && <div className="border-b border-border/60 pb-3"><h2 className="mb-2 text-xs font-semibold uppercase text-primary">Upcoming</h2>{data.meetings.slice(0, 5).map((meeting) => <div key={meeting.id} className="flex gap-2 py-1.5 text-xs"><CalendarDays className="size-4 shrink-0 text-primary" /><span className="min-w-0 break-words">{meeting.title || "HPO event"}</span><time className="ml-auto shrink-0 text-muted-foreground">{date(meeting.meeting_at)}</time></div>)}</div>}
-    <div className="flex gap-1 border-b border-border/60 pb-2">{[["all", "All"], ["visit", "Visits"], ["touch", "Other touches"]].map(([key, label]) => <Button key={key} variant="ghost" className={`h-11 px-3 text-xs ${filter === key ? "bg-primary/12 text-primary" : "text-muted-foreground"}`} onClick={() => setFilter(key)}>{label}</Button>)}</div>
-    <div className="divide-y divide-border/50">{items.map((i: Touch) => <Button key={i.id} variant="ghost" onClick={() => onOpen(i.account_id)} className="h-auto min-h-[76px] w-full justify-start rounded-none px-1 py-2.5 text-left hover:bg-card/50"><span className="min-w-0 whitespace-normal"><span className="block text-sm font-semibold">{names.get(i.account_id) || "Account"} <span className="font-normal capitalize text-primary">· {i.interaction_type}</span></span><span className="block break-words text-xs font-normal leading-5 text-muted-foreground">{i.summary}</span><span className="block text-[11px] font-normal text-muted-foreground">{date(i.occurred_at)}{i.next_action ? ` · Next: ${i.next_action}` : ""}</span></span></Button>)}{!items.length && <p className="py-10 text-center text-sm text-muted-foreground">No activity in this view yet.</p>}</div>
-    {data.hasMore && <Button variant="outline" className="h-11 w-full" onClick={onMore} disabled={loading}>{loading ? "Loading…" : "Earlier activity"}</Button>}
-  </section>;
+  const due = data.accounts
+    .filter(
+      (a) => a.next_action && a.next_action_due_at && Date.parse(a.next_action_due_at) <= today,
+    )
+    .sort(
+      (a, b) => Date.parse(a.next_action_due_at || "") - Date.parse(b.next_action_due_at || ""),
+    );
+  const items = data.interactions.filter(
+    (i) =>
+      filter === "all" ||
+      (filter === "visit" ? i.interaction_type === "visit" : i.interaction_type !== "visit"),
+  );
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-lg font-semibold">Activity</h1>
+        <Button className="h-11 px-3" onClick={() => onLog()}>
+          <Plus /> Log
+        </Button>
+      </div>
+      {due.length > 0 && (
+        <div className="border-y border-border/60 py-2">
+          <h2 className="mb-1 text-xs font-semibold uppercase text-primary">
+            Follow-ups due · {due.length}
+          </h2>
+          {due.slice(0, 8).map((a) => (
+            <div
+              key={a.id}
+              className="flex min-h-14 items-center gap-2 border-b border-border/35 py-2 last:border-0"
+            >
+              <Button
+                variant="ghost"
+                onClick={() => onOpen(a.id)}
+                className="h-auto min-h-11 min-w-0 flex-1 justify-start whitespace-normal text-left"
+              >
+                <span className="min-w-0 break-words">
+                  <strong className="block text-xs">{a.name}</strong>
+                  <span className="text-xs font-normal text-muted-foreground">{a.next_action}</span>
+                </span>
+              </Button>
+              <Button
+                variant="outline"
+                className="h-11 shrink-0 px-2 text-xs"
+                onClick={() => onFollowup(a.id)}
+              >
+                Update
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+      {data.meetings.length > 0 && (
+        <div className="border-b border-border/60 pb-3">
+          <h2 className="mb-2 text-xs font-semibold uppercase text-primary">Upcoming</h2>
+          {data.meetings.slice(0, 5).map((meeting) => (
+            <div key={meeting.id} className="flex gap-2 py-1.5 text-xs">
+              <CalendarDays className="size-4 shrink-0 text-primary" />
+              <span className="min-w-0 break-words">{meeting.title || "HPO event"}</span>
+              <time className="ml-auto shrink-0 text-muted-foreground">
+                {date(meeting.meeting_at)}
+              </time>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-1 border-b border-border/60 pb-2">
+        {[
+          ["all", "All"],
+          ["visit", "Visits"],
+          ["touch", "Other touches"],
+        ].map(([key, label]) => (
+          <Button
+            key={key}
+            variant="ghost"
+            className={`h-11 px-3 text-xs ${filter === key ? "bg-primary/12 text-primary" : "text-muted-foreground"}`}
+            onClick={() => setFilter(key)}
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
+      <div className="divide-y divide-border/50">
+        {items.map((i: Touch) => (
+          <Button
+            key={i.id}
+            variant="ghost"
+            onClick={() => onOpen(i.account_id)}
+            className="h-auto min-h-[76px] w-full justify-start rounded-none px-1 py-2.5 text-left hover:bg-card/50"
+          >
+            <span className="min-w-0 whitespace-normal">
+              <span className="block text-sm font-semibold">
+                {names.get(i.account_id) || "Account"}{" "}
+                <span className="font-normal capitalize text-primary">· {i.interaction_type}</span>
+              </span>
+              <span className="block break-words text-xs font-normal leading-5 text-muted-foreground">
+                {i.summary}
+              </span>
+              <span className="block text-[11px] font-normal text-muted-foreground">
+                {date(i.occurred_at)}
+                {i.next_action ? ` · Next: ${i.next_action}` : ""}
+              </span>
+            </span>
+          </Button>
+        ))}
+        {!items.length && (
+          <p className="py-10 text-center text-sm text-muted-foreground">
+            No activity in this view yet.
+          </p>
+        )}
+      </div>
+      {data.hasMore && (
+        <Button variant="outline" className="h-11 w-full" onClick={onMore} disabled={loading}>
+          {loading ? "Loading…" : "Earlier activity"}
+        </Button>
+      )}
+    </section>
+  );
 }
 
-function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
-  return <div className="fixed inset-0 z-[82] flex items-end justify-center bg-background/75 sm:items-center sm:p-4" role="presentation" onClick={onClose}><section role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()} className="flex max-h-[min(92dvh,calc(100dvh-1rem))] w-full max-w-lg flex-col rounded-t-lg border border-border bg-background sm:rounded-lg"><div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-2"><h2 className="text-base font-semibold">{title}</h2><Button variant="ghost" size="icon" className="size-11" aria-label="Close" onClick={onClose}><X /></Button></div><div className="min-h-0 overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 [-webkit-overflow-scrolling:touch]">{children}</div></section></div>;
+function Sheet({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-[82] flex items-end justify-center bg-background/75 sm:items-center sm:p-4"
+      role="presentation"
+      onClick={onClose}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onClick={(e) => e.stopPropagation()}
+        className="flex max-h-[min(92dvh,calc(100dvh-1rem))] w-full max-w-lg flex-col rounded-t-lg border border-border bg-background sm:rounded-lg"
+      >
+        <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-2">
+          <h2 className="text-base font-semibold">{title}</h2>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-11"
+            aria-label="Close"
+            onClick={onClose}
+          >
+            <X />
+          </Button>
+        </div>
+        <div className="min-h-0 overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 [-webkit-overflow-scrolling:touch]">
+          {children}
+        </div>
+      </section>
+    </div>
+  );
 }
-function AccountSheet({ onClose, onSave }: { onClose: () => void; onSave: (values: { name: string; accountType: string; address: string; city: string; notes: string }) => Promise<void> }) {
-  const [name, setName] = useState(""); const [accountType, setType] = useState(""); const [address, setAddress] = useState(""); const [city, setCity] = useState(""); const [notes, setNotes] = useState(""); const [saving, setSaving] = useState(false); const [error, setError] = useState("");
-  return <Sheet title="Add account" onClose={onClose}><form className="space-y-3" onSubmit={async (e) => { e.preventDefault(); setSaving(true); setError(""); try { await onSave({ name, accountType, address, city, notes }); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save account."); } finally { setSaving(false); } }}><label className="block text-xs text-muted-foreground">Office name<input required value={name} onChange={(e) => setName(e.target.value)} className={`mt-1 ${field}`} /></label><label className="block text-xs text-muted-foreground">Type<input value={accountType} onChange={(e) => setType(e.target.value)} placeholder="Attorney, provider…" className={`mt-1 ${field}`} /></label><label className="block text-xs text-muted-foreground">Address<input value={address} onChange={(e) => setAddress(e.target.value)} className={`mt-1 ${field}`} /></label><label className="block text-xs text-muted-foreground">City<input value={city} onChange={(e) => setCity(e.target.value)} className={`mt-1 ${field}`} /></label><label className="block text-xs text-muted-foreground">Relationship notes<textarea value={notes} onChange={(e) => setNotes(e.target.value)} className={`mt-1 min-h-24 py-3 ${field}`} /></label>{error && <p role="alert" className="text-xs text-destructive">{error}</p>}<Button className="h-12 w-full" disabled={saving || !name.trim()}>{saving ? "Saving…" : "Save account"}</Button></form></Sheet>;
+function AccountSheet({
+  onClose,
+  onSave,
+}: {
+  onClose: () => void;
+  onSave: (values: {
+    name: string;
+    accountType: string;
+    address: string;
+    city: string;
+    notes: string;
+  }) => Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [accountType, setType] = useState("");
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  return (
+    <Sheet title="Add account" onClose={onClose}>
+      <form
+        className="space-y-3"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setSaving(true);
+          setError("");
+          try {
+            await onSave({ name, accountType, address, city, notes });
+          } catch (cause) {
+            setError(cause instanceof Error ? cause.message : "Could not save account.");
+          } finally {
+            setSaving(false);
+          }
+        }}
+      >
+        <label className="block text-xs text-muted-foreground">
+          Office name
+          <input
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className={`mt-1 ${field}`}
+          />
+        </label>
+        <label className="block text-xs text-muted-foreground">
+          Type
+          <input
+            value={accountType}
+            onChange={(e) => setType(e.target.value)}
+            placeholder="Attorney, provider…"
+            className={`mt-1 ${field}`}
+          />
+        </label>
+        <label className="block text-xs text-muted-foreground">
+          Address
+          <input
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            className={`mt-1 ${field}`}
+          />
+        </label>
+        <label className="block text-xs text-muted-foreground">
+          City
+          <input
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+            className={`mt-1 ${field}`}
+          />
+        </label>
+        <label className="block text-xs text-muted-foreground">
+          Relationship notes
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            className={`mt-1 min-h-24 py-3 ${field}`}
+          />
+        </label>
+        {error && (
+          <p role="alert" className="text-xs text-destructive">
+            {error}
+          </p>
+        )}
+        <Button className="h-12 w-full" disabled={saving || !name.trim()}>
+          {saving ? "Saving…" : "Save account"}
+        </Button>
+      </form>
+    </Sheet>
+  );
 }
-function TouchSheet({ accounts, initialAccount, onClose, onSave }: { accounts: Account[]; initialAccount: string; onClose: () => void; onSave: (values: { accountId: string; interactionType: string; summary: string; outcome: string; nextAction: string; nextActionDueAt: string | null }) => Promise<void> }) {
-  const [accountId, setAccount] = useState(initialAccount || accounts[0]?.id || ""); const [kind, setKind] = useState("visit"); const [summary, setSummary] = useState(""); const [outcome, setOutcome] = useState(""); const [nextAction, setNext] = useState(""); const [due, setDue] = useState(""); const [saving, setSaving] = useState(false); const [error, setError] = useState("");
-  return <Sheet title="Log field activity" onClose={onClose}><form className="space-y-3" onSubmit={async (e) => { e.preventDefault(); setSaving(true); setError(""); try { await onSave({ accountId, interactionType: kind, summary, outcome, nextAction, nextActionDueAt: due ? new Date(`${due}T12:00:00`).toISOString() : null }); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not log activity."); } finally { setSaving(false); } }}><label className="block text-xs text-muted-foreground">Account<select required value={accountId} onChange={(e) => setAccount(e.target.value)} className={`mt-1 ${field}`}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label><label className="block text-xs text-muted-foreground">Activity<select value={kind} onChange={(e) => setKind(e.target.value)} className={`mt-1 ${field}`}><option value="visit">Office visit</option><option value="call">Call</option><option value="text">Text</option><option value="email">Email</option><option value="lunch">Lunch</option><option value="other">Other touch</option></select></label><label className="block text-xs text-muted-foreground">Notes<textarea required value={summary} onChange={(e) => setSummary(e.target.value)} placeholder="Who did you speak with? What happened?" className={`mt-1 min-h-32 py-3 ${field}`} /></label><label className="block text-xs text-muted-foreground">Result<input value={outcome} onChange={(e) => setOutcome(e.target.value)} className={`mt-1 ${field}`} /></label><label className="block text-xs text-muted-foreground">Follow-up<input value={nextAction} onChange={(e) => setNext(e.target.value)} className={`mt-1 ${field}`} /></label><label className="block text-xs text-muted-foreground">Follow-up date<input type="date" value={due} onChange={(e) => setDue(e.target.value)} className={`mt-1 ${field}`} /></label>{error && <p role="alert" className="text-xs text-destructive">{error}</p>}<Button className="h-12 w-full" disabled={saving || !accountId || !summary.trim()}>{saving ? "Saving…" : "Save activity"}</Button></form></Sheet>;
+function TouchSheet({
+  accounts,
+  initialAccount,
+  onClose,
+  onSave,
+}: {
+  accounts: Account[];
+  initialAccount: string;
+  onClose: () => void;
+  onSave: (values: {
+    accountId: string;
+    interactionType: string;
+    summary: string;
+    outcome: string;
+    nextAction: string;
+    nextActionDueAt: string | null;
+  }) => Promise<void>;
+}) {
+  const [accountId, setAccount] = useState(initialAccount || accounts[0]?.id || "");
+  const [kind, setKind] = useState("visit");
+  const [summary, setSummary] = useState("");
+  const [outcome, setOutcome] = useState("");
+  const [nextAction, setNext] = useState("");
+  const [due, setDue] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  return (
+    <Sheet title="Log field activity" onClose={onClose}>
+      <form
+        className="space-y-3"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setSaving(true);
+          setError("");
+          try {
+            await onSave({
+              accountId,
+              interactionType: kind,
+              summary,
+              outcome,
+              nextAction,
+              nextActionDueAt: due ? new Date(`${due}T12:00:00`).toISOString() : null,
+            });
+          } catch (cause) {
+            setError(cause instanceof Error ? cause.message : "Could not log activity.");
+          } finally {
+            setSaving(false);
+          }
+        }}
+      >
+        <label className="block text-xs text-muted-foreground">
+          Account
+          <select
+            required
+            value={accountId}
+            onChange={(e) => setAccount(e.target.value)}
+            className={`mt-1 ${field}`}
+          >
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-xs text-muted-foreground">
+          Activity
+          <select
+            value={kind}
+            onChange={(e) => setKind(e.target.value)}
+            className={`mt-1 ${field}`}
+          >
+            <option value="visit">Office visit</option>
+            <option value="call">Call</option>
+            <option value="text">Text</option>
+            <option value="email">Email</option>
+            <option value="lunch">Lunch</option>
+            <option value="other">Other touch</option>
+          </select>
+        </label>
+        <label className="block text-xs text-muted-foreground">
+          Notes
+          <textarea
+            required
+            value={summary}
+            onChange={(e) => setSummary(e.target.value)}
+            placeholder="Who did you speak with? What happened?"
+            className={`mt-1 min-h-32 py-3 ${field}`}
+          />
+        </label>
+        <label className="block text-xs text-muted-foreground">
+          Result
+          <input
+            value={outcome}
+            onChange={(e) => setOutcome(e.target.value)}
+            className={`mt-1 ${field}`}
+          />
+        </label>
+        <label className="block text-xs text-muted-foreground">
+          Follow-up
+          <input
+            value={nextAction}
+            onChange={(e) => setNext(e.target.value)}
+            className={`mt-1 ${field}`}
+          />
+        </label>
+        <label className="block text-xs text-muted-foreground">
+          Follow-up date
+          <input
+            type="date"
+            value={due}
+            onChange={(e) => setDue(e.target.value)}
+            className={`mt-1 ${field}`}
+          />
+        </label>
+        {error && (
+          <p role="alert" className="text-xs text-destructive">
+            {error}
+          </p>
+        )}
+        <Button className="h-12 w-full" disabled={saving || !accountId || !summary.trim()}>
+          {saving ? "Saving…" : "Save activity"}
+        </Button>
+      </form>
+    </Sheet>
+  );
 }
-function FollowupSheet({ account, onClose, onSave }: { account: Account | undefined; onClose: () => void; onSave: (values: { accountId: string; nextAction: string; dueAt: string | null }) => Promise<void> }) {
-  const [action, setAction] = useState(account?.next_action || ""); const [due, setDue] = useState(account?.next_action_due_at?.slice(0, 10) || ""); const [saving, setSaving] = useState(false); const [error, setError] = useState("");
-  return <Sheet title={`Follow-up · ${account?.name || "Account"}`} onClose={onClose}><form className="space-y-3" onSubmit={async (e) => { e.preventDefault(); if (!account) return; setSaving(true); setError(""); try { await onSave({ accountId: account.id, nextAction: action, dueAt: due ? new Date(`${due}T12:00:00`).toISOString() : null }); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save follow-up."); } finally { setSaving(false); } }}><label className="block text-xs text-muted-foreground">Next action<textarea required value={action} onChange={(e) => setAction(e.target.value)} className={`mt-1 min-h-24 py-3 ${field}`} /></label><label className="block text-xs text-muted-foreground">Due date<input type="date" value={due} onChange={(e) => setDue(e.target.value)} className={`mt-1 ${field}`} /></label>{error && <p role="alert" className="text-xs text-destructive">{error}</p>}<Button className="h-12 w-full" disabled={saving || !action.trim()}>{saving ? "Saving…" : "Save follow-up"}</Button></form></Sheet>;
+function FollowupSheet({
+  account,
+  onClose,
+  onSave,
+}: {
+  account: Account | undefined;
+  onClose: () => void;
+  onSave: (values: {
+    accountId: string;
+    nextAction: string;
+    dueAt: string | null;
+  }) => Promise<void>;
+}) {
+  const [action, setAction] = useState(account?.next_action || "");
+  const [due, setDue] = useState(account?.next_action_due_at?.slice(0, 10) || "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  return (
+    <Sheet title={`Follow-up · ${account?.name || "Account"}`} onClose={onClose}>
+      <form
+        className="space-y-3"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (!account) return;
+          setSaving(true);
+          setError("");
+          try {
+            await onSave({
+              accountId: account.id,
+              nextAction: action,
+              dueAt: due ? new Date(`${due}T12:00:00`).toISOString() : null,
+            });
+          } catch (cause) {
+            setError(cause instanceof Error ? cause.message : "Could not save follow-up.");
+          } finally {
+            setSaving(false);
+          }
+        }}
+      >
+        <label className="block text-xs text-muted-foreground">
+          Next action
+          <textarea
+            required
+            value={action}
+            onChange={(e) => setAction(e.target.value)}
+            className={`mt-1 min-h-24 py-3 ${field}`}
+          />
+        </label>
+        <label className="block text-xs text-muted-foreground">
+          Due date
+          <input
+            type="date"
+            value={due}
+            onChange={(e) => setDue(e.target.value)}
+            className={`mt-1 ${field}`}
+          />
+        </label>
+        {error && (
+          <p role="alert" className="text-xs text-destructive">
+            {error}
+          </p>
+        )}
+        <Button className="h-12 w-full" disabled={saving || !action.trim()}>
+          {saving ? "Saving…" : "Save follow-up"}
+        </Button>
+      </form>
+    </Sheet>
+  );
 }

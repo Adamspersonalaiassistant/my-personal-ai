@@ -49,7 +49,8 @@ export function HpoAccountFieldDetail({
         if (!cancelled) setData(result);
       })
       .catch((cause) => {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : "Couldn't load this account.");
+        if (!cancelled)
+          setError(cause instanceof Error ? cause.message : "Couldn't load this account.");
       });
     return () => {
       cancelled = true;
@@ -79,7 +80,9 @@ export function HpoAccountFieldDetail({
         <div className="sticky top-0 z-10 -mx-1 flex items-center justify-between gap-3 bg-background/95 px-1 pb-3 pt-3 backdrop-blur">
           <div className="min-w-0">
             <p className="emery-kicker">Field Account</p>
-            <h2 className="mt-1 break-words text-lg font-semibold">{account?.name ?? "Loading account…"}</h2>
+            <h2 className="mt-1 break-words text-lg font-semibold">
+              {account?.name ?? "Loading account…"}
+            </h2>
           </div>
           <button
             type="button"
@@ -96,42 +99,139 @@ export function HpoAccountFieldDetail({
             {error}
           </div>
         ) : !account ? (
-          <div className="py-14 text-center text-sm text-muted-foreground">Loading relationship context…</div>
+          <div className="py-14 text-center text-sm text-muted-foreground">
+            Loading relationship context…
+          </div>
         ) : (
           <div className="space-y-3 pb-2">
             <div className="grid grid-cols-3 gap-2">
-              {onLog && <Button className="min-h-11 px-2 text-xs" onClick={onLog}>Log visit</Button>}
-              {onFollowup && <Button variant="outline" className="min-h-11 px-2 text-xs" onClick={onFollowup}>Follow-up</Button>}
-              <Button variant="outline" className="min-h-11 px-2 text-xs" onClick={() => setEditing((value) => !value)}><Pencil className="size-4" /> Edit</Button>
+              {onLog && (
+                <Button className="min-h-11 px-2 text-xs" onClick={onLog}>
+                  Log visit
+                </Button>
+              )}
+              {onFollowup && (
+                <Button variant="outline" className="min-h-11 px-2 text-xs" onClick={onFollowup}>
+                  Follow-up
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                className="min-h-11 px-2 text-xs"
+                onClick={() => setEditing((value) => !value)}
+              >
+                <Pencil className="size-4" /> Edit
+              </Button>
             </div>
-            {editing && <form className="space-y-2 border-y border-border/60 py-3" onSubmit={async (event) => {
-              event.preventDefault();
-              const form = new FormData(event.currentTarget);
-              setSaving(true); setEditError("");
-              try {
-                await update({ data: {
-                  accountId, name: String(form.get("name") || ""), accountType: String(form.get("type") || "") || null,
-                  specialty: String(form.get("specialty") || "") || null, city: String(form.get("city") || "") || null,
-                  territory: String(form.get("territory") || "") || null, address: String(form.get("address") || "") || null,
-                  priority: Number(form.get("priority")), relationshipStage: String(form.get("stage") || "prospect"),
-                  relationshipHealth: String(form.get("health") || "") || null, opportunity: String(form.get("opportunity") || "") || null,
-                  blockers: String(form.get("blockers") || "") || null, notes: String(form.get("notes") || "") || null,
-                } });
-                setData(await load({ data: { accountId } })); setEditing(false); onChanged?.();
-              } catch (cause) { setEditError(cause instanceof Error ? cause.message : "Could not save account."); }
-              finally { setSaving(false); }
-            }}>
-              {([["name", "Office name", account.name], ["type", "Type", account.account_type], ["specialty", "Specialty", account.specialty], ["address", "Address", account.address], ["city", "City", account.city], ["territory", "Territory", account.territory], ["priority", "Priority (1–5)", account.priority], ["stage", "Relationship stage", account.relationship_stage], ["health", "Relationship health", account.relationship_health], ["opportunity", "Opportunity", account.opportunity], ["blockers", "Blockers", account.blockers]] as const).map(([key, label, value]) => <label key={key} className="block text-xs text-muted-foreground">{label}<input name={key} type={key === "priority" ? "number" : "text"} min={key === "priority" ? 1 : undefined} max={key === "priority" ? 5 : undefined} required={key === "name"} defaultValue={value ?? ""} className="mt-1 min-h-11 w-full rounded-md border border-border bg-card px-3 text-base text-foreground" /></label>)}
-              <label className="block text-xs text-muted-foreground">Notes<textarea name="notes" defaultValue={account.notes ?? ""} className="mt-1 min-h-24 w-full rounded-md border border-border bg-card p-3 text-base text-foreground" /></label>
-              {editError && <p role="alert" className="text-sm text-destructive">{editError}</p>}
-              <Button disabled={saving} className="min-h-12 w-full">{saving ? "Saving…" : "Save account"}</Button>
-            </form>}
-            {(account.relationship_health || account.opportunity || account.blockers || account.notes) && <div className="space-y-1 border-y border-border/50 py-3 text-xs leading-5">
-              {account.relationship_health && <p><strong>Relationship:</strong> {account.relationship_health}</p>}
-              {account.opportunity && <p><strong>Opportunity:</strong> {account.opportunity}</p>}
-              {account.blockers && <p><strong>Blockers:</strong> {account.blockers}</p>}
-              {account.notes && <p className="whitespace-pre-wrap break-words">{account.notes}</p>}
-            </div>}
+            {editing && (
+              <form
+                className="space-y-2 border-y border-border/60 py-3"
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  const form = new FormData(event.currentTarget);
+                  setSaving(true);
+                  setEditError("");
+                  try {
+                    await update({
+                      data: {
+                        accountId,
+                        name: String(form.get("name") || ""),
+                        accountType: String(form.get("type") || "") || null,
+                        specialty: String(form.get("specialty") || "") || null,
+                        city: String(form.get("city") || "") || null,
+                        territory: String(form.get("territory") || "") || null,
+                        address: String(form.get("address") || "") || null,
+                        priority: Number(form.get("priority")),
+                        relationshipStage: String(form.get("stage") || "prospect"),
+                        relationshipHealth: String(form.get("health") || "") || null,
+                        opportunity: String(form.get("opportunity") || "") || null,
+                        blockers: String(form.get("blockers") || "") || null,
+                        notes: String(form.get("notes") || "") || null,
+                      },
+                    });
+                    setData(await load({ data: { accountId } }));
+                    setEditing(false);
+                    onChanged?.();
+                  } catch (cause) {
+                    setEditError(
+                      cause instanceof Error ? cause.message : "Could not save account.",
+                    );
+                  } finally {
+                    setSaving(false);
+                  }
+                }}
+              >
+                {(
+                  [
+                    ["name", "Office name", account.name],
+                    ["type", "Type", account.account_type],
+                    ["specialty", "Specialty", account.specialty],
+                    ["address", "Address", account.address],
+                    ["city", "City", account.city],
+                    ["territory", "Territory", account.territory],
+                    ["priority", "Priority (1–5)", account.priority],
+                    ["stage", "Relationship stage", account.relationship_stage],
+                    ["health", "Relationship health", account.relationship_health],
+                    ["opportunity", "Opportunity", account.opportunity],
+                    ["blockers", "Blockers", account.blockers],
+                  ] as const
+                ).map(([key, label, value]) => (
+                  <label key={key} className="block text-xs text-muted-foreground">
+                    {label}
+                    <input
+                      name={key}
+                      type={key === "priority" ? "number" : "text"}
+                      min={key === "priority" ? 1 : undefined}
+                      max={key === "priority" ? 5 : undefined}
+                      required={key === "name"}
+                      defaultValue={value ?? ""}
+                      className="mt-1 min-h-11 w-full rounded-md border border-border bg-card px-3 text-base text-foreground"
+                    />
+                  </label>
+                ))}
+                <label className="block text-xs text-muted-foreground">
+                  Notes
+                  <textarea
+                    name="notes"
+                    defaultValue={account.notes ?? ""}
+                    className="mt-1 min-h-24 w-full rounded-md border border-border bg-card p-3 text-base text-foreground"
+                  />
+                </label>
+                {editError && (
+                  <p role="alert" className="text-sm text-destructive">
+                    {editError}
+                  </p>
+                )}
+                <Button disabled={saving} className="min-h-12 w-full">
+                  {saving ? "Saving…" : "Save account"}
+                </Button>
+              </form>
+            )}
+            {(account.relationship_health ||
+              account.opportunity ||
+              account.blockers ||
+              account.notes) && (
+              <div className="space-y-1 border-y border-border/50 py-3 text-xs leading-5">
+                {account.relationship_health && (
+                  <p>
+                    <strong>Relationship:</strong> {account.relationship_health}
+                  </p>
+                )}
+                {account.opportunity && (
+                  <p>
+                    <strong>Opportunity:</strong> {account.opportunity}
+                  </p>
+                )}
+                {account.blockers && (
+                  <p>
+                    <strong>Blockers:</strong> {account.blockers}
+                  </p>
+                )}
+                {account.notes && (
+                  <p className="whitespace-pre-wrap break-words">{account.notes}</p>
+                )}
+              </div>
+            )}
             <section className="border-b border-border/50 pb-3">
               <div className="flex items-start gap-3">
                 <div className="emery-icon-well flex size-10 shrink-0 items-center justify-center rounded-xl text-primary">
@@ -140,10 +240,15 @@ export function HpoAccountFieldDetail({
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold">{account.name}</p>
                   <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    {[account.address, account.city].filter(Boolean).join(", ") || "Address not saved"}
+                    {[account.address, account.city].filter(Boolean).join(", ") ||
+                      "Address not saved"}
                   </p>
                   <p className="mt-1 text-[10px] text-primary">
-                    {[account.account_type, account.specialty, account.owner_name ? `Owner: ${account.owner_name}` : null]
+                    {[
+                      account.account_type,
+                      account.specialty,
+                      account.owner_name ? `Owner: ${account.owner_name}` : null,
+                    ]
                       .filter(Boolean)
                       .join(" · ") || "HPO relationship account"}
                   </p>
@@ -153,11 +258,15 @@ export function HpoAccountFieldDetail({
 
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <div className="emery-surface rounded-xl p-2.5">
-                  <p className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">Last touch</p>
+                  <p className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">
+                    Last touch
+                  </p>
                   <p className="mt-1 text-xs font-semibold">{dateLabel(account.last_touch_at)}</p>
                 </div>
                 <div className="emery-surface rounded-xl p-2.5">
-                  <p className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">Status</p>
+                  <p className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">
+                    Status
+                  </p>
                   <p className="mt-1 text-xs font-semibold capitalize">
                     {account.relationship_stage || account.status || "active"}
                   </p>
@@ -168,9 +277,13 @@ export function HpoAccountFieldDetail({
                 <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
                   Next relationship action
                 </p>
-                <p className="mt-1 text-xs font-medium">{account.next_action || "No next action saved"}</p>
+                <p className="mt-1 text-xs font-medium">
+                  {account.next_action || "No next action saved"}
+                </p>
                 {account.next_action_due_at ? (
-                  <p className="mt-1 text-[10px] text-primary">Due {dateLabel(account.next_action_due_at)}</p>
+                  <p className="mt-1 text-[10px] text-primary">
+                    Due {dateLabel(account.next_action_due_at)}
+                  </p>
                 ) : null}
               </div>
             </section>
@@ -232,7 +345,9 @@ export function HpoAccountFieldDetail({
                       </div>
                       <p className="mt-1.5 text-xs leading-5">{interaction.summary}</p>
                       {interaction.outcome ? (
-                        <p className="mt-1 text-[10px] text-muted-foreground">{interaction.outcome}</p>
+                        <p className="mt-1 text-[10px] text-muted-foreground">
+                          {interaction.outcome}
+                        </p>
                       ) : null}
                       {interaction.next_action ? (
                         <p className="mt-1.5 text-[10px] font-medium text-primary">
@@ -260,7 +375,9 @@ export function HpoAccountFieldDetail({
                         <p className="text-[10px] font-semibold capitalize text-primary">
                           {String(stop.status).replaceAll("_", " ")}
                         </p>
-                        <span className="text-[9px] text-muted-foreground">{dateLabel(stop.visited_at || stop.updated_at)}</span>
+                        <span className="text-[9px] text-muted-foreground">
+                          {dateLabel(stop.visited_at || stop.updated_at)}
+                        </span>
                       </div>
                       {stop.visit_summary ? (
                         <p className="mt-1.5 text-xs leading-5">{stop.visit_summary}</p>
@@ -269,7 +386,9 @@ export function HpoAccountFieldDetail({
                   ))}
                 </div>
               ) : (
-                <p className="mt-3 text-xs text-muted-foreground">No prior route visits recorded.</p>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  No prior route visits recorded.
+                </p>
               )}
             </section>
 

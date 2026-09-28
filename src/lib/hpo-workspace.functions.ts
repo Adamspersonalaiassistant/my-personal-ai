@@ -25,16 +25,29 @@ export const getHpoWorkspace = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     const db = context.supabase;
     const [accounts, interactions, meetings] = await Promise.all([
-      db.from("hpo_accounts")
-        .select("id,name,account_type,specialty,territory,city,address,priority,owner_name,relationship_stage,relationship_health,status,notes,last_touch_at,next_action,next_action_due_at,opportunity,blockers,updated_at")
-        .eq("user_id", context.userId).order("name").range(0, 999),
-      db.from("hpo_interactions")
-        .select("id,account_id,contact_id,interaction_type,occurred_at,summary,outcome,relationship_signal,next_action,next_action_due_at")
-        .eq("user_id", context.userId).order("occurred_at", { ascending: false })
+      db
+        .from("hpo_accounts")
+        .select(
+          "id,name,account_type,specialty,territory,city,address,priority,owner_name,relationship_stage,relationship_health,status,notes,last_touch_at,next_action,next_action_due_at,opportunity,blockers,updated_at",
+        )
+        .eq("user_id", context.userId)
+        .order("name")
+        .range(0, 999),
+      db
+        .from("hpo_interactions")
+        .select(
+          "id,account_id,contact_id,interaction_type,occurred_at,summary,outcome,relationship_signal,next_action,next_action_due_at",
+        )
+        .eq("user_id", context.userId)
+        .order("occurred_at", { ascending: false })
         .range(data.page * 50, data.page * 50 + 49),
-      db.from("meetings").select("id,title,meeting_at,metadata")
-        .eq("user_id", context.userId).gte("meeting_at", new Date().toISOString())
-        .order("meeting_at").limit(40),
+      db
+        .from("meetings")
+        .select("id,title,meeting_at,metadata")
+        .eq("user_id", context.userId)
+        .gte("meeting_at", new Date().toISOString())
+        .order("meeting_at")
+        .limit(40),
     ]);
     if (accounts.error) throw accounts.error;
     if (interactions.error) throw interactions.error;
@@ -45,8 +58,14 @@ export const getHpoWorkspace = createServerFn({ method: "GET" })
       hasMore: (interactions.data?.length ?? 0) === 50,
       meetings: (meetings.data ?? []).filter((row) => {
         const meta = row.metadata;
-        return meta && typeof meta === "object" && !Array.isArray(meta) &&
-          (meta["domain"] === "hpo" || meta["hpo"] === true || typeof meta["hpo_account_id"] === "string");
+        return (
+          meta &&
+          typeof meta === "object" &&
+          !Array.isArray(meta) &&
+          (meta["domain"] === "hpo" ||
+            meta["hpo"] === true ||
+            typeof meta["hpo_account_id"] === "string")
+        );
       }),
       accountLimitReached: (accounts.data?.length ?? 0) === 1000,
     };
@@ -56,15 +75,26 @@ export const updateHpoFieldAccount = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: z.input<typeof accountInput>) => accountInput.parse(input))
   .handler(async ({ context, data }) => {
-    const { data: account, error } = await context.supabase.from("hpo_accounts")
+    const { data: account, error } = await context.supabase
+      .from("hpo_accounts")
       .update({
-        name: data.name, account_type: data.accountType || null, specialty: data.specialty || null,
-        city: data.city || null, territory: data.territory || null, address: data.address || null,
-        priority: data.priority, relationship_stage: data.relationshipStage,
-        relationship_health: data.relationshipHealth || null, opportunity: data.opportunity || null,
-        blockers: data.blockers || null, notes: data.notes || null,
+        name: data.name,
+        account_type: data.accountType || null,
+        specialty: data.specialty || null,
+        city: data.city || null,
+        territory: data.territory || null,
+        address: data.address || null,
+        priority: data.priority,
+        relationship_stage: data.relationshipStage,
+        relationship_health: data.relationshipHealth || null,
+        opportunity: data.opportunity || null,
+        blockers: data.blockers || null,
+        notes: data.notes || null,
       })
-      .eq("id", data.accountId).eq("user_id", context.userId).select("id").maybeSingle();
+      .eq("id", data.accountId)
+      .eq("user_id", context.userId)
+      .select("id")
+      .maybeSingle();
     if (error) throw error;
     if (!account) throw new Error("Account not found");
     return account;
@@ -72,14 +102,23 @@ export const updateHpoFieldAccount = createServerFn({ method: "POST" })
 
 export const setHpoFieldAccountFollowup = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { accountId: string; nextAction: string; dueAt?: string | null }) => z.object({
-    accountId: z.string().uuid(), nextAction: z.string().trim().min(1).max(500),
-    dueAt: z.string().datetime({ offset: true }).nullable().optional(),
-  }).parse(input))
+  .inputValidator((input: { accountId: string; nextAction: string; dueAt?: string | null }) =>
+    z
+      .object({
+        accountId: z.string().uuid(),
+        nextAction: z.string().trim().min(1).max(500),
+        dueAt: z.string().datetime({ offset: true }).nullable().optional(),
+      })
+      .parse(input),
+  )
   .handler(async ({ context, data }) => {
-    const { data: account, error } = await context.supabase.from("hpo_accounts")
+    const { data: account, error } = await context.supabase
+      .from("hpo_accounts")
       .update({ next_action: data.nextAction, next_action_due_at: data.dueAt ?? null })
-      .eq("id", data.accountId).eq("user_id", context.userId).select("id").maybeSingle();
+      .eq("id", data.accountId)
+      .eq("user_id", context.userId)
+      .select("id")
+      .maybeSingle();
     if (error) throw error;
     if (!account) throw new Error("Account not found");
     return account;

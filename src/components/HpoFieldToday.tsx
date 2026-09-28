@@ -64,7 +64,12 @@ function dateTime(value: string | null | undefined) {
   if (!value) return "Not recorded";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Not recorded";
-  return date.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  return date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function dateOnly(value: string | null | undefined) {
@@ -77,7 +82,10 @@ function dateOnly(value: string | null | undefined) {
 function isNetworkFailure(error: unknown) {
   if (typeof navigator !== "undefined" && !navigator.onLine) return true;
   const message = error instanceof Error ? error.message : String(error ?? "");
-  return error instanceof TypeError || /network|failed to fetch|load failed|offline|connection/i.test(message);
+  return (
+    error instanceof TypeError ||
+    /network|failed to fetch|load failed|offline|connection/i.test(message)
+  );
 }
 
 async function currentPosition(): Promise<{ latitude: number; longitude: number } | null> {
@@ -242,9 +250,13 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
             lastError: detail,
           });
           if (detail.includes("offline_conflict")) {
-            setError("An offline field update needs review because this stop changed on the server. Your local mutation is still saved and was not overwritten.");
+            setError(
+              "An offline field update needs review because this stop changed on the server. Your local mutation is still saved and was not overwritten.",
+            );
           } else {
-            setError("A pending field update could not sync yet. It is still saved on this phone and can retry safely.");
+            setError(
+              "A pending field update could not sync yet. It is still saved on this phone and can retry safely.",
+            );
           }
           break;
         }
@@ -308,7 +320,9 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
     setData((current: any) => {
       if (!current?.stops || !nextStop?.id) return current;
       const stops = current.stops.map((stop: any) =>
-        stop.id === nextStop.id ? { ...stop, status, visited_at: stop.visited_at ?? new Date().toISOString() } : stop,
+        stop.id === nextStop.id
+          ? { ...stop, status, visited_at: stop.visited_at ?? new Date().toISOString() }
+          : stop,
       );
       const completed = stops.filter((stop: any) => TERMINAL.has(String(stop.status))).length;
       const following = stops.find((stop: any) => !TERMINAL.has(String(stop.status))) ?? null;
@@ -461,7 +475,9 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
       return;
     }
     try {
-      await arrive({ data: { stopId: nextStop.id, idempotencyKey: key, sourceChannel: "field_ui" } });
+      await arrive({
+        data: { stopId: nextStop.id, idempotencyKey: key, sourceChannel: "field_ui" },
+      });
       setMessage("Arrival recorded.");
       await load();
     } catch (caught) {
@@ -492,7 +508,14 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
     const payload = {
       status: visitStatus,
       notes: note.trim(),
-      visitOutcome: visitStatus === "closed" ? "Office closed" : visitStatus === "bad_address" ? "Bad / unusable address" : visitStatus === "skipped" ? "Skipped" : "Visit completed",
+      visitOutcome:
+        visitStatus === "closed"
+          ? "Office closed"
+          : visitStatus === "bad_address"
+            ? "Bad / unusable address"
+            : visitStatus === "skipped"
+              ? "Skipped"
+              : "Visit completed",
       nextAction: followup.trim() || null,
       nextActionDueAt: dueIso,
     };
@@ -550,7 +573,8 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
         },
       });
       setNearbyOptions(result.options ?? []);
-      if (!(result.options ?? []).length) setMessage("No eligible backup office was found within ten minutes.");
+      if (!(result.options ?? []).length)
+        setMessage("No eligible backup office was found within ten minutes.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Couldn't find a nearby backup.");
     } finally {
@@ -613,7 +637,9 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
       );
       await load();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Couldn't reoptimize the remaining route.");
+      setError(
+        caught instanceof Error ? caught.message : "Couldn't reoptimize the remaining route.",
+      );
     } finally {
       setWorking(false);
     }
@@ -624,14 +650,26 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
     const ordered = [...(data?.stops ?? [])].sort((a: any, b: any) => a.stop_order - b.stop_order);
     const from = ordered.findIndex((stop: any) => stop.id === stopId);
     const to = from + delta;
-    if (from < 0 || to < 0 || to >= ordered.length || TERMINAL.has(String(ordered[to]?.status))) return;
+    if (from < 0 || to < 0 || to >= ordered.length || TERMINAL.has(String(ordered[to]?.status)))
+      return;
     [ordered[from], ordered[to]] = [ordered[to], ordered[from]];
-    setWorking(true); setError(null);
+    setWorking(true);
+    setError(null);
     try {
-      await reorder({ data: { routeId: route.id, stopIds: ordered.map((stop: any) => stop.id), idempotencyKey: `field:${crypto.randomUUID()}:hpo.route.reorder`, sourceChannel: "field_ui" } });
+      await reorder({
+        data: {
+          routeId: route.id,
+          stopIds: ordered.map((stop: any) => stop.id),
+          idempotencyKey: `field:${crypto.randomUUID()}:hpo.route.reorder`,
+          sourceChannel: "field_ui",
+        },
+      });
       await load();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not reorder the route."); }
-    finally { setWorking(false); }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not reorder the route.");
+    } finally {
+      setWorking(false);
+    }
   }
 
   async function copyTodayVisits() {
@@ -640,7 +678,15 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
       .filter((stop: any) => TERMINAL.has(String(stop.status)))
       .sort((a: any, b: any) => Number(a.stop_order) - Number(b.stop_order));
     const rows = [
-      ["Date", "Stop Number", "Office", "Visit Status", "Visit Notes", "Follow-Up", "Account Status"],
+      [
+        "Date",
+        "Stop Number",
+        "Office",
+        "Visit Status",
+        "Visit Notes",
+        "Follow-Up",
+        "Account Status",
+      ],
       ...completed.map((stop: any) => [
         route.route_date,
         String(stop.stop_order ?? ""),
@@ -652,10 +698,14 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
       ]),
     ];
     const tsv = rows
-      .map((row: unknown[]) => row.map((cell: unknown) => String(cell).replace(/[\t\n\r]+/g, " ")).join("\t"))
+      .map((row: unknown[]) =>
+        row.map((cell: unknown) => String(cell).replace(/[\t\n\r]+/g, " ")).join("\t"),
+      )
       .join("\n");
     await navigator.clipboard.writeText(tsv);
-    setMessage(`${completed.length} completed visit${completed.length === 1 ? "" : "s"} copied for your HPO tracker.`);
+    setMessage(
+      `${completed.length} completed visit${completed.length === 1 ? "" : "s"} copied for your HPO tracker.`,
+    );
   }
 
   async function wrapUp() {
@@ -771,7 +821,8 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
         {pendingCount ? (
           <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2">
             <p className="text-[10px] text-amber-200">
-              {pendingCount} field update{pendingCount === 1 ? "" : "s"} saved on this phone · Pending sync
+              {pendingCount} field update{pendingCount === 1 ? "" : "s"} saved on this phone ·
+              Pending sync
             </p>
             {!offline ? (
               <button
@@ -796,9 +847,12 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
               </span>
               <div className="min-w-0 flex-1">
                 <p className="emery-kicker">Next Stop</p>
-                <h3 className="mt-1 break-words text-lg font-semibold">{nextStop.office_name || "Route stop"}</h3>
+                <h3 className="mt-1 break-words text-lg font-semibold">
+                  {nextStop.office_name || "Route stop"}
+                </h3>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  {[nextStop.address, nextStop.city].filter(Boolean).join(", ") || "Address not saved"}
+                  {[nextStop.address, nextStop.city].filter(Boolean).join(", ") ||
+                    "Address not saved"}
                 </p>
                 <div className="mt-1.5 flex flex-wrap gap-2 text-[10px] text-primary">
                   {durationLabel(nextStop.drive_seconds_from_previous) ? (
@@ -825,7 +879,10 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                   <Navigation className="size-4" /> Navigate
                 </a>
               ) : (
-                <button disabled className="min-h-12 rounded-xl border border-border/45 text-xs text-muted-foreground opacity-40">
+                <button
+                  disabled
+                  className="min-h-12 rounded-xl border border-border/45 text-xs text-muted-foreground opacity-40"
+                >
                   Address needed
                 </button>
               )}
@@ -916,7 +973,9 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                   ) : null}
                 </div>
               ) : (
-                <p className="mt-3 text-xs text-muted-foreground">No prior interaction is recorded for this account.</p>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  No prior interaction is recorded for this account.
+                </p>
               )}
             </section>
           ) : null}
@@ -930,7 +989,10 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                     The note is saved locally while you type.
                   </p>
                 </div>
-                <EmeryVoiceControl hpoRouteId={route.id} onConversationChanged={() => void load()} />
+                <EmeryVoiceControl
+                  hpoRouteId={route.id}
+                  onConversationChanged={() => void load()}
+                />
               </div>
               <textarea
                 value={note}
@@ -939,12 +1001,14 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                 className="mt-3 min-h-28 w-full resize-none rounded-xl border border-border/50 bg-card/50 px-3 py-3 text-[16px] leading-6 outline-none focus:border-primary/30"
               />
               <div className="mt-2 flex gap-1 overflow-x-auto [scrollbar-width:none]">
-                {([
-                  ["completed", "Completed"],
-                  ["closed", "Closed"],
-                  ["bad_address", "Bad address"],
-                  ["skipped", "Skip"],
-                ] as const).map(([value, label]) => (
+                {(
+                  [
+                    ["completed", "Completed"],
+                    ["closed", "Closed"],
+                    ["bad_address", "Bad address"],
+                    ["skipped", "Skip"],
+                  ] as const
+                ).map(([value, label]) => (
                   <button
                     key={value}
                     type="button"
@@ -1029,14 +1093,67 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
       <section aria-label="Ordered route stops" className="border-y border-border/60 py-3">
         <h3 className="mb-2 text-sm font-semibold">Route queue · {data.total} stops</h3>
         <div className="divide-y divide-border/50">
-          {[...(data.stops ?? [])].sort((a: any, b: any) => a.stop_order - b.stop_order).map((stop: any, index: number, sorted: any[]) => {
-            const done = TERMINAL.has(String(stop.status));
-            return <div key={stop.id} className={`flex min-h-16 items-center gap-2 py-2 ${done ? "opacity-65" : ""}`}>
-              <span className={`flex size-8 shrink-0 items-center justify-center rounded-md text-xs font-semibold ${done ? "bg-muted text-muted-foreground" : "bg-primary/12 text-primary"}`}>{stop.stop_order}</span>
-              <div className="min-w-0 flex-1"><p className="break-words text-sm font-medium">{stop.office_name || "Route stop"}</p><p className="break-words text-xs text-muted-foreground">{[stop.address, stop.city].filter(Boolean).join(", ") || "Address not saved"} · {String(stop.status).replaceAll("_", " ")}</p>{done && stop.visit_summary && <p className="break-words text-xs text-muted-foreground">{stop.visit_summary}</p>}</div>
-              {!done && !offline && !pendingCount && <div className="flex shrink-0 gap-0.5"><Button size="icon" variant="ghost" className="size-11" disabled={working || index === 0 || TERMINAL.has(String(sorted[index - 1]?.status))} onClick={() => void moveQueuedStop(stop.id, -1)} aria-label={`Move ${stop.office_name || "stop"} earlier`}><ArrowUp /></Button><Button size="icon" variant="ghost" className="size-11" disabled={working || index === sorted.length - 1 || TERMINAL.has(String(sorted[index + 1]?.status))} onClick={() => void moveQueuedStop(stop.id, 1)} aria-label={`Move ${stop.office_name || "stop"} later`}><ArrowDown /></Button></div>}
-            </div>;
-          })}
+          {[...(data.stops ?? [])]
+            .sort((a: any, b: any) => a.stop_order - b.stop_order)
+            .map((stop: any, index: number, sorted: any[]) => {
+              const done = TERMINAL.has(String(stop.status));
+              return (
+                <div
+                  key={stop.id}
+                  className={`flex min-h-16 items-center gap-2 py-2 ${done ? "opacity-65" : ""}`}
+                >
+                  <span
+                    className={`flex size-8 shrink-0 items-center justify-center rounded-md text-xs font-semibold ${done ? "bg-muted text-muted-foreground" : "bg-primary/12 text-primary"}`}
+                  >
+                    {stop.stop_order}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="break-words text-sm font-medium">
+                      {stop.office_name || "Route stop"}
+                    </p>
+                    <p className="break-words text-xs text-muted-foreground">
+                      {[stop.address, stop.city].filter(Boolean).join(", ") || "Address not saved"}{" "}
+                      · {String(stop.status).replaceAll("_", " ")}
+                    </p>
+                    {done && stop.visit_summary && (
+                      <p className="break-words text-xs text-muted-foreground">
+                        {stop.visit_summary}
+                      </p>
+                    )}
+                  </div>
+                  {!done && !offline && !pendingCount && (
+                    <div className="flex shrink-0 gap-0.5">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="size-11"
+                        disabled={
+                          working || index === 0 || TERMINAL.has(String(sorted[index - 1]?.status))
+                        }
+                        onClick={() => void moveQueuedStop(stop.id, -1)}
+                        aria-label={`Move ${stop.office_name || "stop"} earlier`}
+                      >
+                        <ArrowUp />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="size-11"
+                        disabled={
+                          working ||
+                          index === sorted.length - 1 ||
+                          TERMINAL.has(String(sorted[index + 1]?.status))
+                        }
+                        onClick={() => void moveQueuedStop(stop.id, 1)}
+                        aria-label={`Move ${stop.office_name || "stop"} later`}
+                      >
+                        <ArrowDown />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
         </div>
       </section>
 

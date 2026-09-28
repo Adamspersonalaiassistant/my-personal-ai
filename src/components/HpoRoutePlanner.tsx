@@ -196,8 +196,12 @@ function routeMapBaseZoom(points: Array<{ lat: number; lon: number }>) {
   if (points.length <= 1) return 14;
   for (let zoom = 16; zoom >= 6; zoom -= 1) {
     const projected = points.map((point) => projectToWorld(point.lat, point.lon, zoom));
-    const width = Math.max(...projected.map((point) => point.x)) - Math.min(...projected.map((point) => point.x));
-    const height = Math.max(...projected.map((point) => point.y)) - Math.min(...projected.map((point) => point.y));
+    const width =
+      Math.max(...projected.map((point) => point.x)) -
+      Math.min(...projected.map((point) => point.x));
+    const height =
+      Math.max(...projected.map((point) => point.y)) -
+      Math.min(...projected.map((point) => point.y));
     if (width <= 620 && height <= 245) return zoom;
   }
   return 6;
@@ -410,10 +414,7 @@ function RouteMap({ route }: { route: RoutePlan }) {
   const fitZoom = useMemo(() => routeMapBaseZoom(points), [points]);
   const width = 760;
   const height = 340;
-  const baseCenter = useMemo(
-    () => centerForPoints(points, { lat: 40.25, lon: -74.65 }),
-    [points],
-  );
+  const baseCenter = useMemo(() => centerForPoints(points, { lat: 40.25, lon: -74.65 }), [points]);
   const map = useInteractiveMap({
     baseCenter,
     fitZoom,
@@ -429,7 +430,8 @@ function RouteMap({ route }: { route: RoutePlan }) {
           <MapPinned className="size-7 text-primary" />
           <p className="mt-3 text-sm font-semibold">Map appears after route optimization</p>
           <p className="mt-1 max-w-sm text-xs leading-5 text-muted-foreground">
-            Add your offices and tap Optimize Route. Emery will geocode the stops, choose the driving order and pin every office on the map.
+            Add your offices and tap Optimize Route. Emery will geocode the stops, choose the
+            driving order and pin every office on the map.
           </p>
         </div>
       </section>
@@ -437,7 +439,10 @@ function RouteMap({ route }: { route: RoutePlan }) {
   }
 
   const zoom = map.zoom;
-  const projected = points.map((point) => ({ ...point, ...projectToWorld(point.lat, point.lon, zoom) }));
+  const projected = points.map((point) => ({
+    ...point,
+    ...projectToWorld(point.lat, point.lon, zoom),
+  }));
   const centerWorld = projectToWorld(map.center.lat, map.center.lon, zoom);
   const left = centerWorld.x - width / 2;
   const top = centerWorld.y - height / 2;
@@ -482,9 +487,7 @@ function RouteMap({ route }: { route: RoutePlan }) {
     element?.scrollIntoView({ behavior: "smooth", block: "center" });
     window.setTimeout(() => {
       if (element?.dataset["expanded"] !== "true") {
-        element
-          ?.querySelector<HTMLButtonElement>("[data-route-note-toggle]")
-          ?.click();
+        element?.querySelector<HTMLButtonElement>("[data-route-note-toggle]")?.click();
       }
     }, 280);
   }
@@ -540,7 +543,8 @@ function RouteMap({ route }: { route: RoutePlan }) {
             draggable={false}
             className="pointer-events-none absolute max-w-none select-none"
             style={{
-              filter: "invert(0.92) hue-rotate(178deg) brightness(0.68) saturate(0.78) contrast(1.12)",
+              filter:
+                "invert(0.92) hue-rotate(178deg) brightness(0.68) saturate(0.78) contrast(1.12)",
               width: tileSize,
               height: tileSize,
               left: tile.x * tileSize - left,
@@ -580,7 +584,8 @@ function RouteMap({ route }: { route: RoutePlan }) {
         </svg>
 
         {screenPoints.map((point, index) => {
-          const completed = point.kind === "stop" && point.status && terminalStatuses.has(point.status);
+          const completed =
+            point.kind === "stop" && point.status && terminalStatuses.has(point.status);
           return (
             <button
               key={`${point.kind}-${point.stopId ?? index}`}
@@ -620,15 +625,19 @@ function RouteMap({ route }: { route: RoutePlan }) {
               onClick={() => jumpToStop(stop.id)}
               className="emery-press flex min-w-[150px] shrink-0 items-center gap-2 rounded-xl border border-border/40 bg-background/45 px-2.5 py-2 text-left"
             >
-              <span className={`flex size-7 shrink-0 items-center justify-center rounded-lg text-[10px] font-bold ${
-                terminalStatuses.has(stop.status)
-                  ? "bg-foreground text-background"
-                  : "bg-primary text-primary-foreground"
-              }`}>
+              <span
+                className={`flex size-7 shrink-0 items-center justify-center rounded-lg text-[10px] font-bold ${
+                  terminalStatuses.has(stop.status)
+                    ? "bg-foreground text-background"
+                    : "bg-primary text-primary-foreground"
+                }`}
+              >
                 {stop.stop_order}
               </span>
               <span className="min-w-0">
-                <span className="block truncate text-[11px] font-semibold">{stop.office_name || "Route stop"}</span>
+                <span className="block truncate text-[11px] font-semibold">
+                  {stop.office_name || "Route stop"}
+                </span>
                 <span className="mt-0.5 block truncate text-[9px] text-muted-foreground">
                   {stop.city || stop.address || "Address saved"}
                 </span>
@@ -694,10 +703,7 @@ function OfficePlanningMap({
   const fitZoom = points.length ? routeMapBaseZoom(points) : 8;
   const width = 760;
   const height = 390;
-  const baseCenter = useMemo(
-    () => centerForPoints(points, { lat: 40.25, lon: -74.65 }),
-    [points],
-  );
+  const baseCenter = useMemo(() => centerForPoints(points, { lat: 40.25, lon: -74.65 }), [points]);
   const officeMap = useInteractiveMap({
     baseCenter,
     fitZoom,
@@ -706,7 +712,10 @@ function OfficePlanningMap({
     resetKey: `${filter}:${query.trim().toLowerCase()}:${points.map((point) => point.key).join("|")}`,
   });
   const zoom = officeMap.zoom;
-  const projected = points.map((point) => ({ ...point, ...projectToWorld(point.lat, point.lon, zoom) }));
+  const projected = points.map((point) => ({
+    ...point,
+    ...projectToWorld(point.lat, point.lon, zoom),
+  }));
   const centerWorld = projectToWorld(officeMap.center.lat, officeMap.center.lon, zoom);
   const left = centerWorld.x - width / 2;
   const top = centerWorld.y - height / 2;
@@ -734,9 +743,12 @@ function OfficePlanningMap({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="emery-kicker">Office Map · Account Tracker</p>
-            <h3 className="mt-1 text-lg font-semibold">See the territory before you build the route.</h3>
+            <h3 className="mt-1 text-lg font-semibold">
+              See the territory before you build the route.
+            </h3>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              Drag the map like Google Maps, pinch or scroll to zoom, and tap any office pin to inspect the account or add it to a route.
+              Drag the map like Google Maps, pinch or scroll to zoom, and tap any office pin to
+              inspect the account or add it to a route.
             </p>
           </div>
           <button
@@ -761,11 +773,13 @@ function OfficePlanningMap({
             />
           </div>
           <div className="flex shrink-0 gap-1 rounded-xl border border-border/40 bg-background/45 p-1">
-            {([
-              ["all", "All"],
-              ["account", "Accounts"],
-              ["prospect", "Prospects"],
-            ] as const).map(([value, label]) => (
+            {(
+              [
+                ["all", "All"],
+                ["account", "Accounts"],
+                ["prospect", "Prospects"],
+              ] as const
+            ).map(([value, label]) => (
               <button
                 key={value}
                 type="button"
@@ -874,7 +888,8 @@ function OfficePlanningMap({
             <MapPinned className="mx-auto size-6 text-primary" />
             <p className="mt-2 text-sm font-semibold">Your office map is ready for pins.</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              Emery is mapping saved office addresses. The map stays available even before you create a route.
+              Emery is mapping saved office addresses. The map stays available even before you
+              create a route.
             </p>
           </div>
         ) : null}
@@ -887,11 +902,13 @@ function OfficePlanningMap({
       {selectedOffice ? (
         <div className="border-t border-border/35 p-4">
           <div className="flex items-start gap-3">
-            <div className={`flex size-10 shrink-0 items-center justify-center rounded-2xl text-xs font-bold ${
-              selectedOffice.kind === "account"
-                ? "bg-foreground text-background"
-                : "bg-primary/[0.09] text-primary"
-            }`}>
+            <div
+              className={`flex size-10 shrink-0 items-center justify-center rounded-2xl text-xs font-bold ${
+                selectedOffice.kind === "account"
+                  ? "bg-foreground text-background"
+                  : "bg-primary/[0.09] text-primary"
+              }`}
+            >
               {selectedOffice.kind === "account" ? "A" : "P"}
             </div>
             <div className="min-w-0 flex-1">
@@ -971,7 +988,9 @@ function OfficePlanningMap({
 
       <div className="flex items-center gap-2 border-t border-border/35 p-3">
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold">{selectedCount ? `${selectedCount} offices selected` : "Tap pins to build a route"}</p>
+          <p className="text-xs font-semibold">
+            {selectedCount ? `${selectedCount} offices selected` : "Tap pins to build a route"}
+          </p>
           <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
             Your selections become the stop list in the route builder.
           </p>
@@ -1012,7 +1031,8 @@ export function HpoRoutePlannerCompact({ onOpen }: { onOpen: () => void }) {
       .filter((route) => route.route_date >= (data?.today ?? ""))
       .sort((a, b) => a.route_date.localeCompare(b.route_date))[0] ??
     null;
-  const completed = nextRoute?.stops.filter((stop) => terminalStatuses.has(stop.status)).length ?? 0;
+  const completed =
+    nextRoute?.stops.filter((stop) => terminalStatuses.has(stop.status)).length ?? 0;
 
   return (
     <section className="emery-fade-up rounded-[1.55rem] border border-primary/18 bg-primary/[0.045] p-4">
@@ -1111,7 +1131,9 @@ export function HpoRoutePlanner() {
         const cached = await loadHpoOfficeSnapshots<MapOffice[]>().catch(() => null);
         if (cached?.length) {
           setOfflineMapOffices(cached);
-          setError("Offline territory snapshot loaded. Saved offices remain available; live route changes need a connection.");
+          setError(
+            "Offline territory snapshot loaded. Saved offices remain available; live route changes need a connection.",
+          );
         } else {
           setError(cause instanceof Error ? cause.message : "Couldn't load routes.");
         }
@@ -1152,9 +1174,9 @@ export function HpoRoutePlanner() {
     ? (data?.calendar ?? []).filter((item) => item.local_date === activeRoute.route_date)
     : [];
   const nextStop = activeRoute
-    ? [...activeRoute.stops]
+    ? ([...activeRoute.stops]
         .sort((a, b) => a.stop_order - b.stop_order)
-        .find((stop) => !terminalStatuses.has(stop.status)) ?? null
+        .find((stop) => !terminalStatuses.has(stop.status)) ?? null)
     : null;
 
   const mapOffices = useMemo<MapOffice[]>(() => {
@@ -1167,7 +1189,8 @@ export function HpoRoutePlanner() {
       city: account.city,
       latitude: account.latitude,
       longitude: account.longitude,
-      detail: [account.account_type, account.specialty].filter(Boolean).join(" · ") || "HPO account",
+      detail:
+        [account.account_type, account.specialty].filter(Boolean).join(" · ") || "HPO account",
       kind: "account" as const,
       specialty: account.specialty,
       priority: account.priority,
@@ -1189,7 +1212,8 @@ export function HpoRoutePlanner() {
       city: prospect.city,
       latitude: prospect.latitude,
       longitude: prospect.longitude,
-      detail: [prospect.prospect_type, prospect.specialty].filter(Boolean).join(" · ") || "Prospect",
+      detail:
+        [prospect.prospect_type, prospect.specialty].filter(Boolean).join(" · ") || "Prospect",
       kind: "prospect" as const,
       specialty: prospect.specialty,
       priority:
@@ -1210,7 +1234,10 @@ export function HpoRoutePlanner() {
   }, [data, offlineMapOffices]);
 
   const mapSelectedOffices = useMemo(
-    () => mapSelectedKeys.map((key) => mapOffices.find((office) => office.key === key)).filter(Boolean) as MapOffice[],
+    () =>
+      mapSelectedKeys
+        .map((key) => mapOffices.find((office) => office.key === key))
+        .filter(Boolean) as MapOffice[],
     [mapOffices, mapSelectedKeys],
   );
 
@@ -1283,17 +1310,19 @@ export function HpoRoutePlanner() {
       let latitude: number | null = null;
       let longitude: number | null = null;
       if (typeof navigator !== "undefined" && navigator.geolocation) {
-        const point = await new Promise<{ latitude: number; longitude: number } | null>((resolve) => {
-          navigator.geolocation.getCurrentPosition(
-            (position) =>
-              resolve({
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-              }),
-            () => resolve(null),
-            { enableHighAccuracy: true, maximumAge: 60000, timeout: 5000 },
-          );
-        });
+        const point = await new Promise<{ latitude: number; longitude: number } | null>(
+          (resolve) => {
+            navigator.geolocation.getCurrentPosition(
+              (position) =>
+                resolve({
+                  latitude: position.coords.latitude,
+                  longitude: position.coords.longitude,
+                }),
+              () => resolve(null),
+              { enableHighAccuracy: true, maximumAge: 60000, timeout: 5000 },
+            );
+          },
+        );
         latitude = point?.latitude ?? null;
         longitude = point?.longitude ?? null;
       }
@@ -1339,7 +1368,9 @@ export function HpoRoutePlanner() {
       setSelectedMapOfficeKey(null);
       await refresh(activeRoute.id);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Couldn't add those offices to the active route.");
+      setError(
+        cause instanceof Error ? cause.message : "Couldn't add those offices to the active route.",
+      );
     } finally {
       setWorking(false);
     }
@@ -1396,7 +1427,9 @@ export function HpoRoutePlanner() {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1800);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Couldn't prepare the route tracker export.");
+      setError(
+        cause instanceof Error ? cause.message : "Couldn't prepare the route tracker export.",
+      );
     }
   }
 
@@ -1476,7 +1509,9 @@ export function HpoRoutePlanner() {
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">Territory map</h2>
-            <p className="mt-1 text-xs text-muted-foreground">Select offices to build or update a route.</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Select offices to build or update a route.
+            </p>
           </div>
           <button
             type="button"
@@ -1641,7 +1676,9 @@ export function HpoRoutePlanner() {
       {data?.routes.length ? (
         <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none]">
           {data.routes.map((route) => {
-            const completed = route.stops.filter((stop) => terminalStatuses.has(stop.status)).length;
+            const completed = route.stops.filter((stop) =>
+              terminalStatuses.has(stop.status),
+            ).length;
             return (
               <button
                 key={route.id}
@@ -1726,10 +1763,13 @@ export function HpoRoutePlanner() {
                     </p>
                     {nextStop.drive_seconds_from_previous ? (
                       <p className="mt-1 text-[10px] font-medium text-primary">
-                        {formatDuration(nextStop.drive_seconds_from_previous)} · {formatMiles(nextStop.distance_meters_from_previous)} from previous stop
+                        {formatDuration(nextStop.drive_seconds_from_previous)} ·{" "}
+                        {formatMiles(nextStop.distance_meters_from_previous)} from previous stop
                       </p>
                     ) : (
-                      <p className="mt-1 text-[10px] font-medium text-primary">Next unfinished stop on this route</p>
+                      <p className="mt-1 text-[10px] font-medium text-primary">
+                        Next unfinished stop on this route
+                      </p>
                     )}
                   </div>
                 </div>
@@ -1777,7 +1817,8 @@ export function HpoRoutePlanner() {
                 <div>
                   <p className="text-sm font-semibold">Route complete</p>
                   <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    Every stop on this route has a final status. Review notes or copy the tracker rows.
+                    Every stop on this route has a final status. Review notes or copy the tracker
+                    rows.
                   </p>
                 </div>
               </div>
@@ -1820,7 +1861,6 @@ export function HpoRoutePlanner() {
             </div>
           </section>
 
-
           <section className="rounded-[1.55rem] border border-border/45 bg-card/30 p-4">
             <div className="flex items-start gap-3">
               <div className="emery-icon-well flex size-10 shrink-0 items-center justify-center rounded-2xl text-primary">
@@ -1829,7 +1869,8 @@ export function HpoRoutePlanner() {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold">Calendar fit</p>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  Emery uses your saved Calendar for this date so the field route does not compete with lunches, meetings or scheduled tasks.
+                  Emery uses your saved Calendar for this date so the field route does not compete
+                  with lunches, meetings or scheduled tasks.
                 </p>
               </div>
             </div>
@@ -1837,19 +1878,25 @@ export function HpoRoutePlanner() {
             {activeCalendar.length ? (
               <div className="mt-3 space-y-2">
                 {activeCalendar.map((item) => (
-                  <div key={`${item.kind}-${item.id}`} className="emery-surface flex items-start gap-3 rounded-xl px-3 py-2.5">
+                  <div
+                    key={`${item.kind}-${item.id}`}
+                    className="emery-surface flex items-start gap-3 rounded-xl px-3 py-2.5"
+                  >
                     <Clock3 className="mt-0.5 size-3.5 shrink-0 text-primary" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-xs font-semibold">{item.title}</p>
                       <p className="mt-0.5 text-[10px] text-muted-foreground">
-                        {item.local_time}{item.local_end_time ? `–${item.local_end_time}` : ""} · {item.kind}
+                        {item.local_time}
+                        {item.local_end_time ? `–${item.local_end_time}` : ""} · {item.kind}
                       </p>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="mt-3 text-xs text-muted-foreground">No timed Emery Calendar items are saved for this date yet.</p>
+              <p className="mt-3 text-xs text-muted-foreground">
+                No timed Emery Calendar items are saved for this date yet.
+              </p>
             )}
 
             <div className="mt-3 grid grid-cols-2 gap-2">
@@ -1881,7 +1928,7 @@ export function HpoRoutePlanner() {
             ) : null}
           </section>
 
-                    <div className="space-y-2">
+          <div className="space-y-2">
             {[...activeRoute.stops]
               .sort((a, b) => a.stop_order - b.stop_order)
               .map((stop, index, ordered) => (
@@ -1998,7 +2045,9 @@ function RouteBuilder({
       city: account.city,
       latitude: account.latitude,
       longitude: account.longitude,
-      detail: [account.account_type, account.city, `P${account.priority}`].filter(Boolean).join(" · "),
+      detail: [account.account_type, account.city, `P${account.priority}`]
+        .filter(Boolean)
+        .join(" · "),
     }));
     const prospects = data.prospects.map((prospect) => ({
       key: `prospect:${prospect.id}`,
@@ -2051,7 +2100,8 @@ function RouteBuilder({
           <p className="emery-kicker">New daily route</p>
           <h3 className="mt-1 text-lg font-semibold">Build the stop list first.</h3>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            Pick the date and time block around your Calendar, add offices in any order, then Emery will optimize the driving order.
+            Pick the date and time block around your Calendar, add offices in any order, then Emery
+            will optimize the driving order.
           </p>
         </div>
         <button
@@ -2110,7 +2160,9 @@ function RouteBuilder({
           <div>
             <p className="text-xs font-semibold">Fit around Emery Calendar</p>
             <p className="mt-1 text-[10px] text-muted-foreground">
-              {dayCalendar.length ? `${dayCalendar.length} timed item${dayCalendar.length === 1 ? "" : "s"} on this date` : "No timed items saved for this date"}
+              {dayCalendar.length
+                ? `${dayCalendar.length} timed item${dayCalendar.length === 1 ? "" : "s"} on this date`
+                : "No timed items saved for this date"}
             </p>
           </div>
           <label className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground">
@@ -2126,7 +2178,10 @@ function RouteBuilder({
         {dayCalendar.length ? (
           <div className="mt-2 space-y-1.5">
             {dayCalendar.slice(0, 6).map((item) => (
-              <div key={`${item.kind}-${item.id}`} className="flex items-center gap-2 rounded-xl bg-card/45 px-2.5 py-2 text-[10px]">
+              <div
+                key={`${item.kind}-${item.id}`}
+                className="flex items-center gap-2 rounded-xl bg-card/45 px-2.5 py-2 text-[10px]"
+              >
                 <Clock3 className="size-3 shrink-0 text-primary" />
                 <span className="min-w-0 flex-1 truncate">{item.title}</span>
                 <span className="shrink-0 text-muted-foreground">{item.local_time}</span>
@@ -2171,7 +2226,9 @@ function RouteBuilder({
               </button>
             ))}
             {!candidates.length ? (
-              <p className="px-4 py-5 text-center text-xs text-muted-foreground">No saved office matches.</p>
+              <p className="px-4 py-5 text-center text-xs text-muted-foreground">
+                No saved office matches.
+              </p>
             ) : null}
           </div>
         ) : null}
@@ -2216,13 +2273,18 @@ function RouteBuilder({
         {selected.length ? (
           <div className="mt-2 space-y-2">
             {selected.map((stop, index) => (
-              <div key={stop.key} className="emery-surface flex items-center gap-3 rounded-xl px-3 py-2.5">
+              <div
+                key={stop.key}
+                className="emery-surface flex items-center gap-3 rounded-xl px-3 py-2.5"
+              >
                 <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/[0.08] text-[10px] font-semibold text-primary">
                   {index + 1}
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-semibold">{stop.officeName}</p>
-                  <p className="mt-0.5 truncate text-[10px] text-muted-foreground">{stop.address}</p>
+                  <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                    {stop.address}
+                  </p>
                 </div>
                 <div className="flex shrink-0 gap-1">
                   <button
@@ -2259,7 +2321,9 @@ function RouteBuilder({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setSelected((current) => current.filter((item) => item.key !== stop.key))}
+                    onClick={() =>
+                      setSelected((current) => current.filter((item) => item.key !== stop.key))
+                    }
                     className="emery-press flex size-8 items-center justify-center rounded-lg text-muted-foreground"
                     aria-label={`Remove ${stop.officeName}`}
                   >
@@ -2270,7 +2334,9 @@ function RouteBuilder({
             ))}
           </div>
         ) : (
-          <p className="mt-2 text-xs text-muted-foreground">Add the offices you want to visit today.</p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Add the offices you want to visit today.
+          </p>
         )}
       </div>
 
@@ -2373,9 +2439,7 @@ function StopCard({
             <p className="break-words text-sm font-semibold">{stop.office_name || "Route stop"}</p>
             <span
               className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold capitalize ${
-                completed
-                  ? "bg-primary/[0.1] text-primary"
-                  : "bg-muted/70 text-muted-foreground"
+                completed ? "bg-primary/[0.1] text-primary" : "bg-muted/70 text-muted-foreground"
               }`}
             >
               {status.replaceAll("_", " ")}
@@ -2387,7 +2451,8 @@ function StopCard({
           {stop.drive_seconds_from_previous ? (
             <p className="mt-1 flex items-center gap-1 text-[10px] text-primary/85">
               <Clock3 className="size-3" />
-              {formatDuration(stop.drive_seconds_from_previous)} · {formatMiles(stop.distance_meters_from_previous)} from previous
+              {formatDuration(stop.drive_seconds_from_previous)} ·{" "}
+              {formatMiles(stop.distance_meters_from_previous)} from previous
             </p>
           ) : null}
         </div>
