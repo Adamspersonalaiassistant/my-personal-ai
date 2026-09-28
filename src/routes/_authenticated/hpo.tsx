@@ -142,27 +142,36 @@ function HpoWorkspace() {
   return (
     <AppShell
       title="HPO"
+      padded={view !== "map"}
       askEmery={`I'm working in HPO ${view}. Help me with my field accounts and route.`}
     >
-      <div className="mx-auto max-w-5xl min-w-0 space-y-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-        <nav
-          aria-label="HPO field areas"
-          className="sticky top-0 z-20 grid grid-cols-4 gap-1 rounded-xl border border-slate-200 bg-white/96 p-1 shadow-sm backdrop-blur-md"
-        >
-          {tabs.map(({ key, label, icon: Icon }) => (
-            <Button
-              key={key}
-              type="button"
-              variant="ghost"
-              onClick={() => setView(key)}
-              aria-current={view === key ? "page" : undefined}
-              className={`h-11 min-w-0 flex-row gap-1 rounded-lg px-1 text-[10px] font-semibold ${view === key ? "bg-[#31486f] text-white hover:bg-[#31486f] hover:text-white" : "text-slate-500 hover:bg-[#d9f4e9] hover:text-[#31486f]"}`}
-            >
-              <Icon className="size-3.5" />
-              <span className="truncate">{label}</span>
-            </Button>
-          ))}
-        </nav>
+      <div
+        className={
+          view === "map"
+            ? "relative h-full min-h-0 min-w-0 overflow-hidden"
+            : "mx-auto max-w-5xl min-w-0 space-y-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+        }
+      >
+        {view !== "map" ? (
+          <nav
+            aria-label="HPO field areas"
+            className="sticky top-0 z-20 grid grid-cols-4 gap-1 rounded-xl border border-slate-200 bg-white/96 p-1 shadow-sm backdrop-blur-md"
+          >
+            {tabs.map(({ key, label, icon: Icon }) => (
+              <Button
+                key={key}
+                type="button"
+                variant="ghost"
+                onClick={() => setView(key)}
+                aria-current={view === key ? "page" : undefined}
+                className={`h-11 min-w-0 flex-row gap-1 rounded-lg px-1 text-[10px] font-semibold ${view === key ? "bg-[#31486f] text-white hover:bg-[#31486f] hover:text-white" : "text-slate-500 hover:bg-[#d9f4e9] hover:text-[#31486f]"}`}
+              >
+                <Icon className="size-3.5" />
+                <span className="truncate">{label}</span>
+              </Button>
+            ))}
+          </nav>
+        ) : null}
         {error && (
           <div
             role="alert"
@@ -177,7 +186,12 @@ function HpoWorkspace() {
         {view === "today" && initialResolved ? (
           <HpoFieldToday key={`today-${revision}`} onOpenMap={() => setView("map")} />
         ) : null}
-        {view === "map" && initialResolved ? <HpoRoutePlanner key={`map-${revision}`} /> : null}
+        {view === "map" && initialResolved ? (
+          <HpoRoutePlanner
+            key={`map-${revision}`}
+            onNavigateHpo={(next) => setView(next)}
+          />
+        ) : null}
         {((view === "accounts" || view === "activity") && loading) ||
         ((view === "today" || view === "map") && !initialResolved) ? (
           <p className="py-12 text-center text-sm text-muted-foreground">Opening HPO records…</p>
@@ -273,15 +287,17 @@ function HpoWorkspace() {
           />
         )}
 
-        <button
-          type="button"
-          onClick={() => openHpoEmery(emeryContextPrompt, `HPO · ${view}`)}
-          className="fixed bottom-[calc(4.9rem+env(safe-area-inset-bottom))] right-4 z-[55] flex min-h-12 items-center gap-2 rounded-full border border-primary/20 bg-primary px-4 text-xs font-semibold text-primary-foreground shadow-[0_12px_32px_rgba(0,0,0,0.35)] md:bottom-6 md:right-6"
-          aria-label="Ask Emery about HPO"
-        >
-          <MessageCircle className="size-4" />
-          Emery
-        </button>
+        {view !== "map" ? (
+          <button
+            type="button"
+            onClick={() => openHpoEmery(emeryContextPrompt, `HPO · ${view}`)}
+            className="fixed bottom-[calc(4.9rem+env(safe-area-inset-bottom))] right-4 z-[55] flex min-h-12 items-center gap-2 rounded-full border border-primary/20 bg-primary px-4 text-xs font-semibold text-primary-foreground shadow-[0_12px_32px_rgba(0,0,0,0.35)] md:bottom-6 md:right-6"
+            aria-label="Ask Emery about HPO"
+          >
+            <MessageCircle className="size-4" />
+            Emery
+          </button>
+        ) : null}
         <HpoEmerySheet onChanged={() => void refresh()} />
 
       </div>
