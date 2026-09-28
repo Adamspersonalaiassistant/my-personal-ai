@@ -18,6 +18,26 @@ import {
 
 type VoiceStatus = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "error";
 
+async function currentHpoVoiceLocation(request: string) {
+  if (!/\b(from here|where i am|current location|remaining|rest of (?:the )?route)\b/i.test(request)) {
+    return { latitude: null as number | null, longitude: null as number | null };
+  }
+  if (typeof navigator === "undefined" || !navigator.geolocation) {
+    return { latitude: null as number | null, longitude: null as number | null };
+  }
+  return new Promise<{ latitude: number | null; longitude: number | null }>((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) =>
+        resolve({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        }),
+      () => resolve({ latitude: null, longitude: null }),
+      { enableHighAccuracy: true, maximumAge: 60000, timeout: 5000 },
+    );
+  });
+}
+
 type RealtimeEvent = {
   type?: string;
   item_id?: string;
@@ -219,10 +239,14 @@ export function EmeryVoiceControl({
         }
 
         if (name === "execute_hpo_route_command") {
+          const request = String(args.request ?? "");
+          const location = await currentHpoVoiceLocation(request);
           const result = await executeHpoRouteCommand({
             data: {
-              request: String(args.request ?? ""),
+              request,
               requestId: `voice:${sessionIdRef.current ?? "session"}:${callId}`,
+              latitude: location.latitude,
+              longitude: location.longitude,
             },
           });
           sendToolOutput(callId, JSON.stringify(result));
