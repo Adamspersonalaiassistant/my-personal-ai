@@ -790,6 +790,215 @@ export const reorderHpoRouteStopsCanonical = createServerFn({ method: "POST" })
     }
   });
 
+export async function executeHpoRouteReoptimizeCore(input: {
+  db: any;
+  userId: string;
+  routeId: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  idempotencyKey: string;
+  sourceChannel: string;
+  sourceMessageId?: string | null;
+}) {
+  const db = input.db;
+  const action = "hpo.route.reoptimize";
+  const run = await beginExecution({
+    db,
+    userId: input.userId,
+    domain: "hpo_route",
+    action,
+    sourceMessageId: input.sourceMessageId ?? null,
+    idempotencyKey: input.idempotencyKey,
+    targetType: "hpo_route",
+    targetId: input.routeId,
+    requestPayload: {
+      routeId: input.routeId,
+      latitude: input.latitude ?? null,
+      longitude: input.longitude ?? null,
+      sourceChannel: input.sourceChannel,
+    },
+  });
+  if (run.reused && run.status === "completed" && run.resultPayload["routeReoptimize"]) {
+    return run.resultPayload["routeReoptimize"];
+  }
+  try {
+    const route = await loadRoute(db, input.userId, input.routeId);
+    const stops = await loadStops(db, input.userId, input.routeId);
+    const open = stops.filter((stop: any) => !TERMINAL.has(String(stop.status)));
+    if (open.length <= 1) {
+      const result = {
+        ok: true,
+        action,
+        executionRunId: run.id,
+        reordered: open.map((stop: any) => stop.id),
+        remaining: open.length,
+        driveMinutes: 0,
+        distanceMiles: 0,
+        reused: run.reused,
+      };
+      await completeExecution({
+        db,
+        userId: input.userId,
+        runId: run.id,
+        resultPayload: { routeReoptimize: result },
+        targetType: "hpo_route",
+        targetId: route.id,
+      });
+      return result;
+    }
+    for (const stop of open) {
+      if (!Number.isFinite(stop.latitude) || !Number.isFinite(stop.longitude)) {
+        throw new Error(`${stop.office_name ?? "A remaining stop"} is missing map coordinates. Refresh pins or optimize the full route first.`);
+      }
+    }
+
+    const completed = stops.filter((stop: any) => TERMINAL.has(String(stop.status)));
+    const lastCompleted = [...completed]
+      .filter((stop: any) => Number.isFinite(stop.latitude) && Number.isFinite(stop.longitude))
+      .sort(
+        (left: any, right: any) =>
+          Date.parse(right.visited_at ?? right.updated_at) -
+          Date.parse(left.visited_at ?? left.updated_at),
+      )[0];
+
+    const startPoint =
+      input.latitude != null && input.longitude != null
+        ? { lat: input.latitude, lon: input.longitude }
+        : lastCompleted
+          ? { lat: Number(lastCompleted.latitude), lon: Number(lastCompleted.longitude) }
+          : Number.isFinite(route.start_latitude) && Number.isFinite(route.start_longitude)
+            ? { lat: Number(route.start_latitude), lon: Number(route.start_longitude) }
+            : null;
+    const endPoint =
+      Number.isFinite(route.end_latitude) && Number.isFinite(route.end_longitude)
+        ? { lat: Number(route.end_latitude), lon: Number(route.end_longitude) }
+        : null;
+
+    const points: Array<{ lat: number; lon: number; kind: "start" | "stop" | "end"; stopId?: string }> = [];
+    if (startPoint) points.push({ ...startPoint, kind: "start" });
+    for (const stop of open) {
+      points.push({
+        lat: Number(stop.latitude),
+        lon: Number(stop.longitude),
+        kind: "stop",
+        stopId: stop.id,
+      });
+    }
+    if (endPoint) points.push({ ...endPoint, kind: "end" });
+
+    const { durations, distances } = await roadMatrix(points);
+    const startIndex = startPoint ? 0 : null;
+    const stopOffset = startPoint ? 1 : 0;
+    const openIndexes = open.map((_stop: any, index: number) => stopOffset + index);
+    const endIndex = endPoint ? points.length - 1 : null;
+    const optimizedIndexes = optimizeSequence(openIndexes, durations, startIndex, endIndex);
+    const stopByNode = new Map<number, any>();
+    open.forEach((stop: any, index: number) => stopByNode.set(stopOffset + index, stop));
+    const orderedOpen = optimizedIndexes.map((index) => stopByNode.get(index)).filter(Boolean);
+    const openSlots = open
+      .map((stop: any) => Number(stop.stop_order))
+      .sort((left: number, right: number) => left - right);
+
+    let previousNode = startIndex;
+    let totalDistance = 0;
+    let totalDuration = 0;
+    for (let index = 0; index < orderedOpen.length; index += 1) {
+      const stop = orderedOpen[index]!;
+      const node = optimizedIndexes[index]!;
+      const distance = previousNode == null ? 0 : Number(distances[previousNode]?.[node] ?? 0);
+      const duration = previousNode == null ? 0 : Number(durations[previousNode]?.[node] ?? 0);
+      totalDistance += distance;
+      totalDuration += duration;
+      const { error } = await db
+        .from("hpo_route_stops")
+        .update({
+          stop_order: openSlots[index],
+          distance_meters_from_previous: Math.round(distance),
+          drive_seconds_from_previous: Math.round(duration),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", stop.id)
+        .eq("user_id", input.userId);
+      if (error) throw error;
+      previousNode = node;
+    }
+    if (previousNode != null && endIndex != null) {
+      totalDistance += Number(distances[previousNode]?.[endIndex] ?? 0);
+      totalDuration += Number(durations[previousNode]?.[endIndex] ?? 0);
+    }
+
+    const geometryPoints = [
+      ...(startPoint ? [startPoint] : []),
+      ...orderedOpen.map((stop: any) => ({
+        lat: Number(stop.latitude),
+        lon: Number(stop.longitude),
+      })),
+      ...(endPoint ? [endPoint] : []),
+    ];
+    const geometry = await routeGeometry(geometryPoints);
+    const reoptimizedAt = new Date().toISOString();
+    const metadata =
+      route.metadata && typeof route.metadata === "object" && !Array.isArray(route.metadata)
+        ? route.metadata
+        : {};
+    const { data: verifiedRoute, error: routeUpdateError } = await db
+      .from("hpo_route_plans")
+      .update({
+        status: "active",
+        metadata: {
+          ...metadata,
+          route_geometry_remaining: geometry,
+          reoptimized_at: reoptimizedAt,
+          reoptimization_engine: "open_road_matrix",
+          reoptimization_execution_run_id: run.id,
+        },
+        updated_at: reoptimizedAt,
+      })
+      .eq("id", route.id)
+      .eq("user_id", input.userId)
+      .select("id,status,updated_at,metadata")
+      .single();
+    if (routeUpdateError || !verifiedRoute) {
+      throw routeUpdateError ?? new Error("Route reoptimization verification failed");
+    }
+
+    const verified = await loadStops(db, input.userId, route.id);
+    const verifiedOpen = verified.filter((stop: any) => !TERMINAL.has(String(stop.status)));
+    const result = {
+      ok: true,
+      action,
+      executionRunId: run.id,
+      reordered: verifiedOpen
+        .sort((left: any, right: any) => left.stop_order - right.stop_order)
+        .map((stop: any) => stop.id),
+      remaining: verifiedOpen.length,
+      driveMinutes: Math.round(totalDuration / 60),
+      distanceMiles: Number((totalDistance / 1609.344).toFixed(1)),
+      reoptimizedAt,
+      reused: run.reused,
+    };
+    await completeExecution({
+      db,
+      userId: input.userId,
+      runId: run.id,
+      resultPayload: { routeReoptimize: result },
+      targetType: "hpo_route",
+      targetId: route.id,
+    });
+    return result;
+  } catch (error) {
+    await failExecution({
+      db,
+      userId: input.userId,
+      runId: run.id,
+      errorCode: "hpo_route_reoptimize_failed",
+      errorMessage: error instanceof Error ? error.message : String(error),
+      retryable: true,
+    }).catch(() => undefined);
+    throw error;
+  }
+}
+
 export const reoptimizeHpoRouteRemaining = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: {
@@ -805,188 +1014,17 @@ export const reoptimizeHpoRouteRemaining = createServerFn({ method: "POST" })
     idempotencyKey: clean(input.idempotencyKey),
     sourceChannel: clean(input.sourceChannel) || "ui",
   }))
-  .handler(async ({ data, context }) => {
-    const db = context.supabase as any;
-    const action = "hpo.route.reoptimize";
-    const run = await beginExecution({
-      db,
+  .handler(async ({ data, context }) =>
+    executeHpoRouteReoptimizeCore({
+      db: context.supabase as any,
       userId: context.userId,
-      domain: "hpo_route",
-      action,
+      routeId: data.routeId,
+      latitude: data.latitude,
+      longitude: data.longitude,
       idempotencyKey: data.idempotencyKey,
-      targetType: "hpo_route",
-      targetId: data.routeId,
-      requestPayload: {
-        routeId: data.routeId,
-        latitude: data.latitude,
-        longitude: data.longitude,
-        sourceChannel: data.sourceChannel,
-      },
-    });
-    if (run.reused && run.status === "completed" && run.resultPayload["routeReoptimize"]) {
-      return run.resultPayload["routeReoptimize"];
-    }
-    try {
-      const route = await loadRoute(db, context.userId, data.routeId);
-      const stops = await loadStops(db, context.userId, data.routeId);
-      const open = stops.filter((stop: any) => !TERMINAL.has(String(stop.status)));
-      if (open.length <= 1) {
-        const result = {
-          ok: true,
-          action,
-          executionRunId: run.id,
-          reordered: open.map((stop: any) => stop.id),
-          remaining: open.length,
-          driveMinutes: 0,
-          distanceMiles: 0,
-          reused: run.reused,
-        };
-        await completeExecution({
-          db,
-          userId: context.userId,
-          runId: run.id,
-          resultPayload: { routeReoptimize: result },
-          targetType: "hpo_route",
-          targetId: route.id,
-        });
-        return result;
-      }
-      for (const stop of open) {
-        if (!Number.isFinite(stop.latitude) || !Number.isFinite(stop.longitude)) {
-          throw new Error(`${stop.office_name ?? "A remaining stop"} is missing map coordinates. Refresh pins or optimize the full route first.`);
-        }
-      }
-
-      const completed = stops.filter((stop: any) => TERMINAL.has(String(stop.status)));
-      const lastCompleted = [...completed]
-        .filter((stop: any) => Number.isFinite(stop.latitude) && Number.isFinite(stop.longitude))
-        .sort((a: any, b: any) => Date.parse(b.visited_at ?? b.updated_at) - Date.parse(a.visited_at ?? a.updated_at))[0];
-
-      const startPoint =
-        data.latitude != null && data.longitude != null
-          ? { lat: data.latitude, lon: data.longitude }
-          : lastCompleted
-            ? { lat: Number(lastCompleted.latitude), lon: Number(lastCompleted.longitude) }
-            : Number.isFinite(route.start_latitude) && Number.isFinite(route.start_longitude)
-              ? { lat: Number(route.start_latitude), lon: Number(route.start_longitude) }
-              : null;
-      const endPoint =
-        Number.isFinite(route.end_latitude) && Number.isFinite(route.end_longitude)
-          ? { lat: Number(route.end_latitude), lon: Number(route.end_longitude) }
-          : null;
-
-      const points: Array<{ lat: number; lon: number; kind: "start" | "stop" | "end"; stopId?: string }> = [];
-      if (startPoint) points.push({ ...startPoint, kind: "start" });
-      for (const stop of open) {
-        points.push({
-          lat: Number(stop.latitude),
-          lon: Number(stop.longitude),
-          kind: "stop",
-          stopId: stop.id,
-        });
-      }
-      if (endPoint) points.push({ ...endPoint, kind: "end" });
-
-      const { durations, distances } = await roadMatrix(points);
-      const startIndex = startPoint ? 0 : null;
-      const stopOffset = startPoint ? 1 : 0;
-      const openIndexes = open.map((_stop: any, index: number) => stopOffset + index);
-      const endIndex = endPoint ? points.length - 1 : null;
-      const optimizedIndexes = optimizeSequence(openIndexes, durations, startIndex, endIndex);
-      const stopByNode = new Map<number, any>();
-      open.forEach((stop: any, index: number) => stopByNode.set(stopOffset + index, stop));
-      const orderedOpen = optimizedIndexes.map((index) => stopByNode.get(index)).filter(Boolean);
-      const openSlots = open.map((stop: any) => Number(stop.stop_order)).sort((a: number, b: number) => a - b);
-
-      let previousNode = startIndex;
-      let totalDistance = 0;
-      let totalDuration = 0;
-      for (let index = 0; index < orderedOpen.length; index += 1) {
-        const stop = orderedOpen[index]!;
-        const node = optimizedIndexes[index]!;
-        const distance = previousNode == null ? 0 : Number(distances[previousNode]?.[node] ?? 0);
-        const duration = previousNode == null ? 0 : Number(durations[previousNode]?.[node] ?? 0);
-        totalDistance += distance;
-        totalDuration += duration;
-        const { error } = await db
-          .from("hpo_route_stops")
-          .update({
-            stop_order: openSlots[index],
-            distance_meters_from_previous: Math.round(distance),
-            drive_seconds_from_previous: Math.round(duration),
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", stop.id)
-          .eq("user_id", context.userId);
-        if (error) throw error;
-        previousNode = node;
-      }
-      if (previousNode != null && endIndex != null) {
-        totalDistance += Number(distances[previousNode]?.[endIndex] ?? 0);
-        totalDuration += Number(durations[previousNode]?.[endIndex] ?? 0);
-      }
-
-      const geometryPoints = [
-        ...(startPoint ? [startPoint] : []),
-        ...orderedOpen.map((stop: any) => ({ lat: Number(stop.latitude), lon: Number(stop.longitude) })),
-        ...(endPoint ? [endPoint] : []),
-      ];
-      const geometry = await routeGeometry(geometryPoints);
-      const reoptimizedAt = new Date().toISOString();
-      const metadata =
-        route.metadata && typeof route.metadata === "object" && !Array.isArray(route.metadata)
-          ? route.metadata
-          : {};
-      const { error: routeUpdateError } = await db
-        .from("hpo_route_plans")
-        .update({
-          status: "active",
-          metadata: {
-            ...metadata,
-            route_geometry_remaining: geometry,
-            reoptimized_at: reoptimizedAt,
-            reoptimization_engine: "open_road_matrix",
-          },
-          updated_at: reoptimizedAt,
-        })
-        .eq("id", route.id)
-        .eq("user_id", context.userId);
-      if (routeUpdateError) throw routeUpdateError;
-
-      const verified = await loadStops(db, context.userId, route.id);
-      const verifiedOpen = verified.filter((stop: any) => !TERMINAL.has(String(stop.status)));
-      const result = {
-        ok: true,
-        action,
-        executionRunId: run.id,
-        reordered: verifiedOpen.sort((a: any, b: any) => a.stop_order - b.stop_order).map((stop: any) => stop.id),
-        remaining: verifiedOpen.length,
-        driveMinutes: Math.round(totalDuration / 60),
-        distanceMiles: Number((totalDistance / 1609.344).toFixed(1)),
-        reoptimizedAt,
-        reused: run.reused,
-      };
-      await completeExecution({
-        db,
-        userId: context.userId,
-        runId: run.id,
-        resultPayload: { routeReoptimize: result },
-        targetType: "hpo_route",
-        targetId: route.id,
-      });
-      return result;
-    } catch (error) {
-      await failExecution({
-        db,
-        userId: context.userId,
-        runId: run.id,
-        errorCode: "hpo_route_reoptimize_failed",
-        errorMessage: error instanceof Error ? error.message : String(error),
-        retryable: true,
-      }).catch(() => undefined);
-      throw error;
-    }
-  });
+      sourceChannel: data.sourceChannel,
+    }),
+  );
 
 export const getHpoNearbyBackups = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
