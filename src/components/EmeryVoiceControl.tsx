@@ -218,7 +218,19 @@ export function EmeryVoiceControl({
           return;
         }
 
-        if (name === "execute_hpo_route_command") {\n          const result = await executeHpoRouteCommand({\n            data: {\n              request: String(args.request ?? ""),\n              requestId: `voice:${sessionIdRef.current ?? "session"}:${callId}`,\n            },\n          });\n          sendToolOutput(callId, JSON.stringify(result));\n          onConversationChanged?.();\n          return;\n        }\n\n        if (name === "execute_hpo_route_note") {
+        if (name === "execute_hpo_route_command") {
+          const result = await executeHpoRouteCommand({
+            data: {
+              request: String(args.request ?? ""),
+              requestId: `voice:${sessionIdRef.current ?? "session"}:${callId}`,
+            },
+          });
+          sendToolOutput(callId, JSON.stringify(result));
+          onConversationChanged?.();
+          return;
+        }
+
+        if (name === "execute_hpo_route_note") {
           const result = await executeHpoRouteNote({
             data: {
               request: String(args.request ?? ""),
