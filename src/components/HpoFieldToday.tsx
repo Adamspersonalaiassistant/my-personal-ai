@@ -363,7 +363,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
     setWorking(true);
     setError(null);
     setMessage(null);
-    const hasDraft = Boolean(note.trim());
+    const hasDraft = Boolean(note.trim() || followup.trim());
     const dueIso = followupDue ? new Date(`${followupDue}T12:00:00`).toISOString() : null;
     const payload = {
       status,
@@ -500,7 +500,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
   }
 
   async function submitVisit() {
-    if (!nextStop?.id || !note.trim() || working) return;
+    if (!nextStop?.id || (!note.trim() && !followup.trim()) || working) return;
     setWorking(true);
     setError(null);
     setMessage(null);
@@ -788,7 +788,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
             <button
               type="button"
               onClick={() => void load()}
-              className="emery-press flex size-9 items-center justify-center rounded-xl border border-border/45 text-muted-foreground"
+              className="emery-press flex size-11 items-center justify-center rounded-xl border border-border/45 text-muted-foreground"
               aria-label="Refresh today's route"
             >
               <RefreshCw className="size-3.5" />
@@ -1027,7 +1027,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
               <input
                 value={followup}
                 onChange={(event) => setFollowup(event.target.value)}
-                placeholder="Optional next action"
+                placeholder="Next action / follow-up"
                 className="mt-2 h-11 w-full rounded-xl border border-border/50 bg-card/50 px-3 text-base outline-none focus:border-primary/30"
               />
               <input
@@ -1040,7 +1040,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
               <button
                 type="button"
                 onClick={() => void submitVisit()}
-                disabled={!note.trim() || working}
+                disabled={(!note.trim() && !followup.trim()) || working}
                 className="emery-press mt-3 min-h-12 w-full rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-40"
               >
                 {offline ? "Save on Phone" : "Save Visit"}
