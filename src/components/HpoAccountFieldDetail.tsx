@@ -142,7 +142,9 @@ export function HpoAccountFieldDetail({
               ) : null}
               <button
                 type="button"
-                onClick={() =>
+                disabled={!routeAddress && !officeLocations.length}
+                onClick={() => {
+                  if (!routeAddress && !officeLocations.length) return;
                   openHpoEmery(
                     routeAddress
                       ? `Add ${account.name} at ${[routeAddress, routeCity]
@@ -154,12 +156,12 @@ export function HpoAccountFieldDetail({
                           )
                           .join(" | ")}. Ask me which office only if I did not specify one.`,
                     account.name,
-                  )
-                }
-                className="flex min-h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-xl border border-primary/20 bg-primary/[0.055] px-2 text-[10px] font-semibold text-primary"
+                  );
+                }}
+                className="flex min-h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-xl border border-primary/20 bg-primary/[0.055] px-2 text-[10px] font-semibold text-primary disabled:cursor-not-allowed disabled:opacity-35"
               >
                 <MapPinned className="size-4" />
-                Route
+                {routeAddress || officeLocations.length ? "Route" : "No Address"}
               </button>
               <button
                 type="button"
