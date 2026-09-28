@@ -1126,6 +1126,7 @@ export function HpoRoutePlanner({
   const [mapPreparedOnce, setMapPreparedOnce] = useState(false);
   const [mapAccountDetailId, setMapAccountDetailId] = useState<string | null>(null);
   const [offlineMapOffices, setOfflineMapOffices] = useState<MapOffice[]>([]);
+  const [mapRendererFailed, setMapRendererFailed] = useState(false);
 
   async function refresh(preferredRouteId?: string | null) {
     const result = (await load({})) as PlannerData;
@@ -1520,21 +1521,52 @@ export function HpoRoutePlanner({
   return (
     <div id="hpo-route-planner" className="relative h-full min-h-0 w-full overflow-hidden">
       {data || mapOffices.length ? (
-        <HpoMapV2MapLibre
-          offices={mapOffices}
-          selectedKeys={mapSelectedKeys}
-          selectedOfficeKey={selectedMapOfficeKey}
-          route={activeRoute}
-          onSelectOffice={setSelectedMapOfficeKey}
-          onSelectMany={selectManyMapOffices}
-          onOpenAccount={setMapAccountDetailId}
-          onToggleRouteStop={toggleMapRouteStop}
-          onBuildRoute={startRouteFromMap}
-          preparing={mapPreparing}
-          onRefreshPins={() => void refreshOfficePins()}
-          onNavigateHpo={onNavigateHpo}
-          onFatalError={(message) => setError(`Map renderer error: ${message}`)}
-        />
+        mapRendererFailed ? (
+          <div className="h-full min-h-0 overflow-y-auto bg-[#eef2f7] p-3 pb-28">
+            <div className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-blue-200 bg-white px-3 py-2 text-[11px] text-slate-600 shadow-sm">
+              <span>Compatible street map is active so HPO stays usable on this device.</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setMapRendererFailed(false);
+                  setError(null);
+                }}
+                className="min-h-9 shrink-0 rounded-lg bg-blue-50 px-3 font-semibold text-[#1769e8]"
+              >
+                Retry
+              </button>
+            </div>
+            <OfficePlanningMap
+              offices={mapOffices}
+              selectedKeys={mapSelectedKeys}
+              selectedOfficeKey={selectedMapOfficeKey}
+              onSelectOffice={setSelectedMapOfficeKey}
+              onToggleRouteStop={toggleMapRouteStop}
+              onBuildRoute={startRouteFromMap}
+              preparing={mapPreparing}
+              onRefreshPins={() => void refreshOfficePins()}
+            />
+          </div>
+        ) : (
+          <HpoMapV2MapLibre
+            offices={mapOffices}
+            selectedKeys={mapSelectedKeys}
+            selectedOfficeKey={selectedMapOfficeKey}
+            route={activeRoute}
+            onSelectOffice={setSelectedMapOfficeKey}
+            onSelectMany={selectManyMapOffices}
+            onOpenAccount={setMapAccountDetailId}
+            onToggleRouteStop={toggleMapRouteStop}
+            onBuildRoute={startRouteFromMap}
+            preparing={mapPreparing}
+            onRefreshPins={() => void refreshOfficePins()}
+            onNavigateHpo={onNavigateHpo}
+            onFatalError={(message) => {
+              setMapRendererFailed(true);
+              setError(`Using compatible map: ${message}`);
+            }}
+          />
+        )
       ) : null}
 
       {showBuilder && data ? (
