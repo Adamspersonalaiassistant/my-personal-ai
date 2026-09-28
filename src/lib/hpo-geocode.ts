@@ -39,21 +39,32 @@ function queries(address: string, city?: string | null) {
   return [...new Set(values.filter(Boolean))];
 }
 
-async function photon(query: string) {
-  const response = await fetch(
-    `https://photon.komoot.io/api/?limit=1&lang=en&q=${encodeURIComponent(query)}`,
-    {
+async function fetchJsonWithTimeout(url: string, timeoutMs = 3500) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
       headers: {
         "User-Agent": "EmeryPersonalAI/1.0 HPO-office-map",
         Accept: "application/json",
       },
-    },
-  );
-  if (!response.ok) return null;
-  const payload = (await response.json()) as {
-    features?: Array<{ geometry?: { coordinates?: unknown[] } }>;
-  };
-  const coordinates = payload.features?.[0]?.geometry?.coordinates;
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function photon(query: string) {
+  const payload = (await fetchJsonWithTimeout(
+    `https://photon.komoot.io/api/?limit=1&lang=en&q=${encodeURIComponent(query)}`,
+    3000,
+  )) as { features?: Array<{ geometry?: { coordinates?: unknown[] } }> } | null;
+  const coordinates = payload?.features?.[0]?.geometry?.coordinates;
   if (!Array.isArray(coordinates) || coordinates.length < 2) return null;
   const lon = Number(coordinates[0]);
   const lat = Number(coordinates[1]);
@@ -61,71 +72,46 @@ async function photon(query: string) {
 }
 
 async function census(query: string) {
-  const response = await fetch(
+  const payload = (await fetchJsonWithTimeout(
     "https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?benchmark=Public_AR_Current&format=json&address=" +
       encodeURIComponent(query),
-    {
-      headers: {
-        "User-Agent": "EmeryPersonalAI/1.0 HPO-office-map",
-        Accept: "application/json",
-      },
-    },
-  );
-  if (!response.ok) return null;
-  const payload = (await response.json()) as {
+    3500,
+  )) as {
     result?: { addressMatches?: Array<{ coordinates?: { x?: number; y?: number } }> };
-  };
-  const coordinates = payload.result?.addressMatches?.[0]?.coordinates;
+  } | null;
+  const coordinates = payload?.result?.addressMatches?.[0]?.coordinates;
   const lon = Number(coordinates?.x);
   const lat = Number(coordinates?.y);
   return validPoint(lat, lon) ? { lat, lon, provider: "census" as const } : null;
 }
 
 async function nominatim(query: string) {
-  const response = await fetch(
+  const rows = (await fetchJsonWithTimeout(
     "https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=us&limit=1&q=" +
       encodeURIComponent(query),
-    {
-      headers: {
-        "User-Agent": "EmeryPersonalAI/1.0 HPO-office-map",
-        Accept: "application/json",
-      },
-    },
-  );
-  if (!response.ok) return null;
-  const rows = (await response.json()) as Array<{ lat?: string; lon?: string }>;
-  const lat = Number(rows[0]?.lat);
-  const lon = Number(rows[0]?.lon);
+    3500,
+  )) as Array<{ lat?: string; lon?: string }> | null;
+  const lat = Number(rows?.[0]?.lat);
+  const lon = Number(rows?.[0]?.lon);
   return validPoint(lat, lon) ? { lat, lon, provider: "nominatim" as const } : null;
 }
 
 export async function geocodeHpoOfficeAddress(address: string, city?: string | null) {
   const candidates = queries(address, city);
-  for (const query of candidates) {
-    try {
-      const point = await photon(query);
-      if (point) return point;
-    } catch {
-      // Try the next normalized address before using the fallback provider.
-    }
+  for (const query of candidates.slice(0, 2)) {
+    const point = await photon(query);
+    if (point) return point;
   }
 
-  for (const query of candidates.slice().reverse()) {
-    try {
-      const point = await census(query);
-      if (point) return point;
-    } catch {
-      // Try the final fallback provider.
-    }
+  for (const query of candidates.slice().reverse().slice(0, 2)) {
+    const point = await census(query);
+    if (point) return point;
   }
 
-  for (const query of candidates.slice().reverse()) {
-    try {
-      const point = await nominatim(query);
-      if (point) return point;
-    } catch {
-      // A map refresh can safely retry unresolved records later.
-    }
+  const finalQuery = candidates[candidates.length - 1];
+  if (finalQuery) {
+    const point = await nominatim(finalQuery);
+    if (point) return point;
   }
   return null;
 }
