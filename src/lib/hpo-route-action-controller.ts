@@ -102,6 +102,7 @@ export async function processHpoRouteStopAction(input: {
   message: string;
   timezone?: string;
   sourceMessageId?: string | null;
+  requestId?: string | null;
   sourceChannel?: string;
 }): Promise<HpoRouteStopActionResult> {
   const outcome = requestedOutcome(input.message);
@@ -135,6 +136,11 @@ export async function processHpoRouteStopAction(input: {
 
   const db = input.db;
   const timezone = input.timezone ?? "America/New_York";
+  const requestPrefix = input.sourceMessageId
+    ? `message:${input.sourceMessageId}`
+    : input.requestId
+      ? `request:${input.requestId}`
+      : null;
   const today = localDate(timezone);
   const { data: routes, error: routeError } = await db
     .from("hpo_route_plans")
@@ -208,8 +214,8 @@ export async function processHpoRouteStopAction(input: {
         db,
         userId: input.userId,
         stopId: target.id,
-        idempotencyKey: input.sourceMessageId
-          ? `message:${input.sourceMessageId}:hpo.route_stop.arrive`
+        idempotencyKey: requestPrefix
+          ? `${requestPrefix}:hpo.route_stop.arrive`
           : `${input.sourceChannel ?? "text"}:${route.id}:${target.id}:arrive:${Date.now()}`,
         sourceChannel: input.sourceChannel ?? "text",
         sourceMessageId: input.sourceMessageId ?? null,
@@ -254,6 +260,11 @@ export async function processHpoRouteStopAction(input: {
         userId: input.userId,
         routeId: route.id,
         message: input.message,
+        idempotencyKey: requestPrefix
+          ? `${requestPrefix}:hpo.route_stop.log_visit`
+          : `${input.sourceChannel ?? "text"}:${route.id}:route-note:${Date.now()}`,
+        sourceChannel: input.sourceChannel ?? "text",
+        sourceMessageId: input.sourceMessageId ?? null,
       });
       if (!visit.ok) {
         return {
@@ -341,8 +352,8 @@ export async function processHpoRouteStopAction(input: {
     };
   }
 
-  const idempotencyKey = input.sourceMessageId
-    ? `message:${input.sourceMessageId}:hpo.route_stop.set_outcome`
+  const idempotencyKey = requestPrefix
+    ? `${requestPrefix}:hpo.route_stop.set_outcome`
     : `${input.sourceChannel ?? "text"}:${route.id}:${target.id}:${outcome.status}:${Date.now()}`;
 
   try {
