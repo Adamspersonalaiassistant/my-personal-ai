@@ -73,7 +73,7 @@ check(
   "Map V2 supports deterministic polygon area selection",
   v2.includes("pointInPolygon") &&
     v2.includes("hpo-selection-area") &&
-    v2.includes("Draw select") &&
+    v2.includes("Select Area") &&
     planner.includes("onSelectMany={selectManyMapOffices}"),
 );
 check(
@@ -92,7 +92,12 @@ check(
   v2.includes("hpo-route-line") && v2.includes("route_geometry"),
 );
 check("Map V2 preserves route-stop markers", v2.includes("hpo-route-stop-points"));
-check("Map V2 exposes current location control", v2.includes("GeolocateControl"));
+check(
+  "Map V2 exposes a custom current-location control without developer-demo map chrome",
+  v2.includes("function locateMe()") &&
+    v2.includes('aria-label="Center on my location"') &&
+    !v2.includes("NavigationControl"),
+);
 check(
   "OSRM routing remains unchanged",
   routeFns.includes("router.project-osrm.org/table/v1/driving"),
@@ -122,22 +127,29 @@ check(
     hpoEmerySheet.includes("same HPO accounts, routes and activity"),
 );
 check(
-  "Map route actions open Emery instead of forcing a separate route-builder workflow",
-  v2.includes("Add with Emery") &&
-    v2.includes("openHpoEmery") &&
-    v2.includes("Ask Emery"),
+  "Map route and relationship actions open Emery inside the map experience",
+  v2.includes("openHpoEmery") &&
+    v2.includes("Help me with the HPO map") &&
+    v2.includes("to my current HPO route"),
 );
 check(
-  "Map V2 uses a professional no-key vector basemap and blue pin markers",
+  "Map V2 uses a professional no-key vector basemap and blue teardrop pins",
   v2.includes('const PROFESSIONAL_MAP_STYLE = "https://tiles.openfreemap.org/styles/bright"') &&
     v2.includes("tile.openstreetmap.org") &&
     v2.includes("officeMarkersRef") &&
     v2.includes("new maplibregl.Marker") &&
     v2.includes("createOfficePinElement") &&
-    v2.includes('anchor: "bottom"') &&
-    v2.includes('viewMode') &&
-    v2.includes('MapIcon') &&
-    v2.includes('> List'),
+    v2.includes('viewBox="0 0 32 42"') &&
+    v2.includes('anchor: "bottom"'),
+);
+check(
+  "Map V2 is map-first with floating search, quick chips, compact controls, and a bottom sheet",
+  v2.includes("Search HPO accounts, offices or towns") &&
+    v2.includes("onNavigateHpo?.(\"today\")") &&
+    v2.includes("Follow-up Due") &&
+    v2.includes("Center on my location") &&
+    v2.includes("rounded-t-[1.7rem]") &&
+    v2.includes("Tap a blue pin"),
 );
 check(
   "Today uses a RepMove-style Daily Route date strip and ordered route list",
