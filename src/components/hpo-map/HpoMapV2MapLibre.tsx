@@ -259,7 +259,7 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       layout: {
         "text-field": ["get", "point_count_abbreviated"],
         "text-size": 12,
-        "text-font": ["Open Sans Bold"],
+        "text-font": ["Noto Sans Regular"],
       },
       paint: {
         "text-color": [
@@ -408,7 +408,7 @@ function setupSourcesAndLayers(map: MapLibreMap) {
       layout: {
         "text-field": ["to-string", ["get", "order"]],
         "text-size": 11,
-        "text-font": ["Open Sans Bold"],
+        "text-font": ["Noto Sans Regular"],
       },
       paint: { "text-color": "#ffffff" },
     });
