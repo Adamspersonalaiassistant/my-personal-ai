@@ -757,7 +757,7 @@ function OfficePlanningMap({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search offices, cities, specialties"
-              className="h-11 w-full rounded-xl border border-border/45 bg-background/55 pl-9 pr-3 text-sm outline-none focus:border-primary/30"
+              className="h-11 w-full rounded-xl border border-border/45 bg-background/55 pl-9 pr-3 text-base outline-none focus:border-primary/30"
             />
           </div>
           <div className="flex shrink-0 gap-1 rounded-xl border border-border/40 bg-background/45 p-1">
@@ -1472,17 +1472,11 @@ export function HpoRoutePlanner() {
 
   return (
     <div id="hpo-route-planner" className="space-y-4">
-      <section className="emery-glass rounded-[1.6rem] p-4 sm:p-5">
+      <section className="border-b border-border/60 pb-3">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="emery-kicker">Route Planner</p>
-            <h2 className="mt-1.5 text-xl font-semibold tracking-[-0.025em]">
-              Plan → optimize → visit → log.
-            </h2>
-            <p className="mt-1.5 max-w-xl text-sm leading-6 text-muted-foreground">
-              Map-first multi-stop planning inside Emery: build the day, optimize the driving order,
-              see every numbered stop on the map, then capture notes without leaving the route page.
-            </p>
+            <h2 className="text-lg font-semibold">Territory map</h2>
+            <p className="mt-1 text-xs text-muted-foreground">Select offices to build or update a route.</p>
           </div>
           <button
             type="button"
@@ -1524,13 +1518,8 @@ export function HpoRoutePlanner() {
             Fix Remaining
           </button>
         </div>
-        <div className="mt-2 flex min-h-12 items-center gap-3 rounded-2xl border border-primary/15 bg-primary/[0.035] px-3">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold">Talk to Emery</p>
-            <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
-              Ask about the day or say “Stop 3…” and dictate the visit note hands-free.
-            </p>
-          </div>
+        <div className="mt-2 flex min-h-11 items-center justify-between border-t border-border/50 pt-2">
+          <p className="text-xs text-muted-foreground">Voice route notes</p>
           <EmeryVoiceControl
             hpoRouteId={activeRoute?.id ?? null}
             onConversationChanged={() => void refresh(activeRoute?.id ?? null)}
@@ -2080,39 +2069,39 @@ function RouteBuilder({
           type="date"
           value={routeDate}
           onChange={(event) => setRouteDate(event.target.value)}
-          className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-sm outline-none focus:border-primary/30"
+          className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-base outline-none focus:border-primary/30"
         />
         <input
           value={area}
           onChange={(event) => setArea(event.target.value)}
           placeholder="Area — e.g. Jersey City / Hoboken"
-          className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-sm outline-none focus:border-primary/30"
+          className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-base outline-none focus:border-primary/30"
         />
         <input
           type="time"
           value={startWindow}
           onChange={(event) => setStartWindow(event.target.value)}
           aria-label="Route start time"
-          className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-sm outline-none focus:border-primary/30"
+          className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-base outline-none focus:border-primary/30"
         />
         <input
           type="time"
           value={endWindow}
           onChange={(event) => setEndWindow(event.target.value)}
           aria-label="Route end time"
-          className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-sm outline-none focus:border-primary/30"
+          className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-base outline-none focus:border-primary/30"
         />
         <input
           value={startAddress}
           onChange={(event) => setStartAddress(event.target.value)}
           placeholder="Starting address (optional)"
-          className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-sm outline-none focus:border-primary/30 sm:col-span-2"
+          className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-base outline-none focus:border-primary/30 sm:col-span-2"
         />
         <input
           value={endAddress}
           onChange={(event) => setEndAddress(event.target.value)}
           placeholder="Ending address (optional)"
-          className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-sm outline-none focus:border-primary/30 sm:col-span-2"
+          className="h-12 rounded-xl border border-border/55 bg-card/55 px-3 text-base outline-none focus:border-primary/30 sm:col-span-2"
         />
       </div>
 
@@ -2157,7 +2146,7 @@ function RouteBuilder({
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search accounts, prospects, city or address"
-            className="h-12 w-full rounded-xl border border-border/55 bg-card/55 pl-10 pr-3 text-sm outline-none focus:border-primary/30"
+            className="h-12 w-full rounded-xl border border-border/55 bg-card/55 pl-10 pr-3 text-base outline-none focus:border-primary/30"
           />
         </label>
         {search.trim() ? (
@@ -2195,20 +2184,20 @@ function RouteBuilder({
             value={customName}
             onChange={(event) => setCustomName(event.target.value)}
             placeholder="Office name"
-            className="h-11 rounded-xl border border-border/50 bg-card/55 px-3 text-sm outline-none focus:border-primary/30"
+            className="h-11 rounded-xl border border-border/50 bg-card/55 px-3 text-base outline-none focus:border-primary/30"
           />
           <input
             value={customAddress}
             onChange={(event) => setCustomAddress(event.target.value)}
             placeholder="Full street address"
-            className="h-11 rounded-xl border border-border/50 bg-card/55 px-3 text-sm outline-none focus:border-primary/30"
+            className="h-11 rounded-xl border border-border/50 bg-card/55 px-3 text-base outline-none focus:border-primary/30"
           />
           <div className="flex gap-2">
             <input
               value={customCity}
               onChange={(event) => setCustomCity(event.target.value)}
               placeholder="City"
-              className="h-11 min-w-0 flex-1 rounded-xl border border-border/50 bg-card/55 px-3 text-sm outline-none focus:border-primary/30"
+              className="h-11 min-w-0 flex-1 rounded-xl border border-border/50 bg-card/55 px-3 text-base outline-none focus:border-primary/30"
             />
             <button
               type="button"
@@ -2381,7 +2370,7 @@ function StopCard({
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
-            <p className="truncate text-sm font-semibold">{stop.office_name || "Route stop"}</p>
+            <p className="break-words text-sm font-semibold">{stop.office_name || "Route stop"}</p>
             <span
               className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold capitalize ${
                 completed
@@ -2407,7 +2396,7 @@ function StopCard({
             type="button"
             onClick={() => onMove(-1)}
             disabled={first || working}
-            className="emery-press flex size-9 items-center justify-center rounded-xl border border-border/40 text-muted-foreground disabled:opacity-25"
+            className="emery-press flex size-11 items-center justify-center rounded-xl border border-border/40 text-muted-foreground disabled:opacity-25"
             aria-label="Move stop up"
           >
             <ArrowUp className="size-3.5" />
@@ -2416,7 +2405,7 @@ function StopCard({
             type="button"
             onClick={() => onMove(1)}
             disabled={last || working}
-            className="emery-press flex size-9 items-center justify-center rounded-xl border border-border/40 text-muted-foreground disabled:opacity-25"
+            className="emery-press flex size-11 items-center justify-center rounded-xl border border-border/40 text-muted-foreground disabled:opacity-25"
             aria-label="Move stop down"
           >
             <ArrowDown className="size-3.5" />
@@ -2507,13 +2496,13 @@ function StopCard({
               value={visitOutcome}
               onChange={(event) => setVisitOutcome(event.target.value)}
               placeholder="Visit result"
-              className="h-11 rounded-xl border border-border/50 bg-card/50 px-3 text-sm outline-none focus:border-primary/30"
+              className="h-11 rounded-xl border border-border/50 bg-card/50 px-3 text-base outline-none focus:border-primary/30"
             />
             <input
               value={nextAction}
               onChange={(event) => setNextAction(event.target.value)}
               placeholder="Follow-up / next action"
-              className="h-11 rounded-xl border border-border/50 bg-card/50 px-3 text-sm outline-none focus:border-primary/30"
+              className="h-11 rounded-xl border border-border/50 bg-card/50 px-3 text-base outline-none focus:border-primary/30"
             />
           </div>
 

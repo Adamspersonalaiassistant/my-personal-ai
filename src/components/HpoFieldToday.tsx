@@ -12,8 +12,11 @@ import {
   Sparkles,
   Wifi,
   WifiOff,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { EmeryVoiceControl } from "@/components/EmeryVoiceControl";
+import { Button } from "@/components/ui/button";
 import {
   addHpoRouteStops,
   arriveHpoRouteStop,
@@ -21,6 +24,7 @@ import {
   getHpoFieldToday,
   getHpoNearbyBackups,
   reoptimizeHpoRouteRemaining,
+  reorderHpoRouteStopsCanonical,
 } from "@/lib/hpo-field.functions";
 import {
   setHpoRouteStopFollowup,
@@ -101,6 +105,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
   const addStops = useServerFn(addHpoRouteStops);
   const reoptimize = useServerFn(reoptimizeHpoRouteRemaining);
   const finishRoute = useServerFn(completeHpoRoute);
+  const reorder = useServerFn(reorderHpoRouteStopsCanonical);
 
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -614,6 +619,21 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
     }
   }
 
+  async function moveQueuedStop(stopId: string, delta: number) {
+    if (!route?.id || working || offline || pendingCount) return;
+    const ordered = [...(data?.stops ?? [])].sort((a: any, b: any) => a.stop_order - b.stop_order);
+    const from = ordered.findIndex((stop: any) => stop.id === stopId);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= ordered.length || TERMINAL.has(String(ordered[to]?.status))) return;
+    [ordered[from], ordered[to]] = [ordered[to], ordered[from]];
+    setWorking(true); setError(null);
+    try {
+      await reorder({ data: { routeId: route.id, stopIds: ordered.map((stop: any) => stop.id), idempotencyKey: `field:${crypto.randomUUID()}:hpo.route.reorder`, sourceChannel: "field_ui" } });
+      await load();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not reorder the route."); }
+    finally { setWorking(false); }
+  }
+
   async function copyTodayVisits() {
     if (!route) return;
     const completed = (data?.stops ?? [])
@@ -694,7 +714,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
 
   return (
     <div className="space-y-3">
-      <section className="overflow-hidden rounded-[1.6rem] border border-primary/18 bg-[linear-gradient(145deg,rgba(29,103,232,0.12),rgba(7,14,28,0.78))] p-4 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
+      <section className="border-b border-border/60 pb-3">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="emery-kicker">Today · Field Mode</p>
@@ -769,14 +789,14 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
 
       {nextStop ? (
         <>
-          <section className="emery-glass rounded-[1.6rem] p-4">
+          <section className="border-b border-border/60 pb-3">
             <div className="flex items-start gap-3">
               <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-sm font-bold text-primary-foreground">
                 {nextStop.stop_order}
               </span>
               <div className="min-w-0 flex-1">
                 <p className="emery-kicker">Next Stop</p>
-                <h3 className="mt-1 truncate text-lg font-semibold">{nextStop.office_name || "Route stop"}</h3>
+                <h3 className="mt-1 break-words text-lg font-semibold">{nextStop.office_name || "Route stop"}</h3>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
                   {[nextStop.address, nextStop.city].filter(Boolean).join(", ") || "Address not saved"}
                 </p>
@@ -864,7 +884,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
           </section>
 
           {accountContext ? (
-            <section className="emery-glass rounded-[1.55rem] p-4">
+            <section className="border-b border-border/60 pb-3">
               <p className="emery-kicker">Account Brief</p>
               <h3 className="mt-1.5 text-sm font-semibold">{accountContext.account?.name}</h3>
               <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-muted-foreground">
@@ -902,7 +922,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
           ) : null}
 
           {showNote ? (
-            <section className="emery-glass rounded-[1.55rem] p-4">
+            <section className="border-b border-border/60 pb-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold">Visit note</p>
@@ -943,14 +963,14 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                 value={followup}
                 onChange={(event) => setFollowup(event.target.value)}
                 placeholder="Optional next action"
-                className="mt-2 h-11 w-full rounded-xl border border-border/50 bg-card/50 px-3 text-sm outline-none focus:border-primary/30"
+                className="mt-2 h-11 w-full rounded-xl border border-border/50 bg-card/50 px-3 text-base outline-none focus:border-primary/30"
               />
               <input
                 type="date"
                 value={followupDue}
                 onChange={(event) => setFollowupDue(event.target.value)}
                 aria-label="Follow-up due date"
-                className="mt-2 h-11 w-full rounded-xl border border-border/50 bg-card/50 px-3 text-sm outline-none focus:border-primary/30"
+                className="mt-2 h-11 w-full rounded-xl border border-border/50 bg-card/50 px-3 text-base outline-none focus:border-primary/30"
               />
               <button
                 type="button"
@@ -974,7 +994,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
       )}
 
       {nearbyOptions.length ? (
-        <section className="emery-glass rounded-[1.55rem] p-4">
+        <section className="border-b border-border/60 pb-3">
           <p className="emery-kicker">Nearby Backup</p>
           <div className="mt-2 space-y-2">
             {nearbyOptions.slice(0, 3).map((option, index) => (
@@ -1005,6 +1025,20 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
           </div>
         </section>
       ) : null}
+
+      <section aria-label="Ordered route stops" className="border-y border-border/60 py-3">
+        <h3 className="mb-2 text-sm font-semibold">Route queue · {data.total} stops</h3>
+        <div className="divide-y divide-border/50">
+          {[...(data.stops ?? [])].sort((a: any, b: any) => a.stop_order - b.stop_order).map((stop: any, index: number, sorted: any[]) => {
+            const done = TERMINAL.has(String(stop.status));
+            return <div key={stop.id} className={`flex min-h-16 items-center gap-2 py-2 ${done ? "opacity-65" : ""}`}>
+              <span className={`flex size-8 shrink-0 items-center justify-center rounded-md text-xs font-semibold ${done ? "bg-muted text-muted-foreground" : "bg-primary/12 text-primary"}`}>{stop.stop_order}</span>
+              <div className="min-w-0 flex-1"><p className="break-words text-sm font-medium">{stop.office_name || "Route stop"}</p><p className="break-words text-xs text-muted-foreground">{[stop.address, stop.city].filter(Boolean).join(", ") || "Address not saved"} · {String(stop.status).replaceAll("_", " ")}</p>{done && stop.visit_summary && <p className="break-words text-xs text-muted-foreground">{stop.visit_summary}</p>}</div>
+              {!done && !offline && !pendingCount && <div className="flex shrink-0 gap-0.5"><Button size="icon" variant="ghost" className="size-11" disabled={working || index === 0 || TERMINAL.has(String(sorted[index - 1]?.status))} onClick={() => void moveQueuedStop(stop.id, -1)} aria-label={`Move ${stop.office_name || "stop"} earlier`}><ArrowUp /></Button><Button size="icon" variant="ghost" className="size-11" disabled={working || index === sorted.length - 1 || TERMINAL.has(String(sorted[index + 1]?.status))} onClick={() => void moveQueuedStop(stop.id, 1)} aria-label={`Move ${stop.office_name || "stop"} later`}><ArrowDown /></Button></div>}
+            </div>;
+          })}
+        </div>
+      </section>
 
       <section className="grid grid-cols-2 gap-2">
         <button
