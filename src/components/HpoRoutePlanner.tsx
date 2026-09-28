@@ -1064,7 +1064,11 @@ export function HpoRoutePlannerCompact({ onOpen }: { onOpen: () => void }) {
   );
 }
 
-export function HpoRoutePlanner() {
+export function HpoRoutePlanner({
+  onNavigateHpo,
+}: {
+  onNavigateHpo?: (view: "today" | "map" | "accounts" | "activity") => void;
+}) {
   const load = useServerFn(getHpoRoutePlanner);
   const createRoute = useServerFn(createHpoRoute);
   const optimize = useServerFn(optimizeHpoRoute);
@@ -1497,13 +1501,13 @@ export function HpoRoutePlanner() {
 
   if (loading)
     return (
-      <div className="emery-glass flex min-h-52 items-center justify-center rounded-[1.6rem] text-sm text-muted-foreground">
-        Opening Route Planner…
+      <div className="flex h-full min-h-0 items-center justify-center bg-[#eef2f7] text-sm text-slate-500">
+        Opening HPO map…
       </div>
     );
 
   return (
-    <div id="hpo-route-planner" className="space-y-4">
+    <div id="hpo-route-planner" className="relative h-full min-h-0 w-full overflow-hidden">
       {data || mapOffices.length ? (
         <HpoMapV2MapLibre
           offices={mapOffices}
@@ -1517,39 +1521,18 @@ export function HpoRoutePlanner() {
           onBuildRoute={startRouteFromMap}
           preparing={mapPreparing}
           onRefreshPins={() => void refreshOfficePins()}
+          onNavigateHpo={onNavigateHpo}
           onFatalError={(message) => setError(`Map renderer error: ${message}`)}
         />
       ) : null}
 
-      <section className="grid grid-cols-3 gap-2 rounded-2xl bg-white p-2.5 text-slate-900 shadow-[0_10px_28px_rgba(15,23,42,0.1)]">
-        <button
-          type="button"
-          onClick={() => {
-            setMapSeedStops([]);
-            setShowBuilder(true);
-          }}
-          className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-[#31486f] px-2 text-[10px] font-semibold text-white"
-        >
-          <Plus className="size-4" /> New Route
-        </button>
-        <button
-          type="button"
-          onClick={() => activeRoute && void optimizeActive(activeRoute.id)}
-          disabled={!activeRoute || optimizing}
-          className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-[#d9f4e9] px-2 text-[10px] font-semibold text-[#047857] disabled:opacity-40"
-        >
-          <Sparkles className="size-4" />
-          {optimizing ? "Working…" : "Optimize"}
-        </button>
-        <button
-          type="button"
-          onClick={() => activeRoute && void reoptimizeActiveRemaining(activeRoute.id)}
-          disabled={!activeRoute || optimizing || !nextStop}
-          className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 text-[10px] font-semibold text-[#31486f] disabled:opacity-40"
-        >
-          <Navigation className="size-4" /> Fix Route
-        </button>
-      </section>
+      {error ? (
+        <div className="pointer-events-none absolute left-3 right-3 top-3 z-[45]">
+          <div className="pointer-events-auto rounded-2xl border border-red-200 bg-white/96 px-4 py-3 text-xs text-red-600 shadow-xl backdrop-blur-xl">
+            {error}
+          </div>
+        </div>
+      ) : null}
 
       {mapAccountDetailId ? (
         <HpoAccountFieldDetail
@@ -1557,373 +1540,6 @@ export function HpoRoutePlanner() {
           onClose={() => setMapAccountDetailId(null)}
         />
       ) : null}
-
-      {activeRoute && mapSelectedOffices.length ? (
-        <section className="flex items-center gap-3 rounded-2xl border border-primary/16 bg-primary/[0.035] px-3 py-3">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold">
-              {mapSelectedOffices.length} selected for the active route
-            </p>
-            <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
-              Add them without rebuilding today's route.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => void addSelectedToActiveRoute()}
-            disabled={working}
-            className="emery-press min-h-11 shrink-0 rounded-xl bg-primary px-3 text-[11px] font-semibold text-primary-foreground disabled:opacity-40"
-          >
-            Add to Route
-          </button>
-        </section>
-      ) : null}
-
-      {error ? (
-        <div className="rounded-2xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
-      ) : null}
-
-      {showBuilder && data ? (
-        <div
-          className="fixed inset-0 z-[75] flex items-end bg-background/60 backdrop-blur-[3px]"
-          onClick={() => !working && setShowBuilder(false)}
-          role="presentation"
-        >
-          <div
-            className="emery-sheet-in max-h-[90dvh] w-full overflow-y-auto rounded-t-[1.7rem] border-t border-border/55 bg-background px-3 pb-[max(0.85rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-24px_70px_rgba(0,0,0,0.42)] sm:mx-auto sm:max-w-2xl"
-            onClick={(event) => event.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Build HPO daily route"
-          >
-            <div className="mx-auto mb-1 h-1 w-10 rounded-full bg-border/80" />
-            <RouteBuilder
-              data={data}
-              initialSelected={mapSeedStops}
-              onClose={() => setShowBuilder(false)}
-              onCreate={async (payload) => {
-                setWorking(true);
-                setError(null);
-                try {
-                  const result = await createRoute({ data: payload });
-                  setShowBuilder(false);
-                  setMapSelectedKeys([]);
-                  setMapSeedStops([]);
-                  try {
-                    await optimize({ data: { routeId: result.routeId } });
-                  } catch (optimizeCause) {
-                    setError(
-                      optimizeCause instanceof Error
-                        ? `Route saved. ${optimizeCause.message}`
-                        : "Route saved, but optimization needs attention.",
-                    );
-                  }
-                  await refresh(result.routeId);
-                } catch (cause) {
-                  setError(cause instanceof Error ? cause.message : "Couldn't create route.");
-                } finally {
-                  setWorking(false);
-                }
-              }}
-              working={working}
-            />
-          </div>
-        </div>
-      ) : null}
-
-      {data?.routes.length ? (
-        <label className="block text-xs font-medium text-muted-foreground">
-          Saved route
-          <select
-            value={activeRoute?.id ?? ""}
-            onChange={(event) => setActiveRouteId(event.target.value)}
-            className="mt-1 h-12 w-full rounded-xl border border-border/60 bg-card/55 px-3 text-base text-foreground outline-none focus:border-primary/35"
-          >
-            {data.routes.map((savedRoute) => {
-              const completed = savedRoute.stops.filter((stop) =>
-                terminalStatuses.has(stop.status),
-              ).length;
-              return (
-                <option key={savedRoute.id} value={savedRoute.id}>
-                  {formatDate(savedRoute.route_date)} · {savedRoute.area || "Marketing Route"} ·{" "}
-                  {completed}/{savedRoute.stops.length}
-                </option>
-              );
-            })}
-          </select>
-        </label>
-      ) : null}
-
-      {activeRoute ? (
-        <section className="space-y-4">
-          <div className="rounded-2xl border border-border/55 bg-card/30 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="emery-kicker">Daily Route Journal</p>
-                <h3 className="mt-1.5 truncate text-lg font-semibold">{routeTitle(activeRoute)}</h3>
-                <p className="mt-1 text-xs capitalize text-muted-foreground">
-                  {activeRoute.status} · {activeRoute.stops.length} stops
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => void copyExcel(activeRoute)}
-                className="emery-press flex min-h-11 shrink-0 items-center gap-2 rounded-xl border border-primary/20 bg-primary/[0.05] px-3 text-[11px] font-semibold text-primary"
-              >
-                {copied ? <Check className="size-3.5" /> : <Clipboard className="size-3.5" />}
-                {copied ? "Copied" : "Copy Tracker Rows"}
-              </button>
-            </div>
-
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              <Stat label="Stops" value={String(activeRoute.stops.length)} />
-              <Stat label="Drive" value={formatDuration(activeRoute.optimized_duration_seconds)} />
-              <Stat label="Distance" value={formatMiles(activeRoute.optimized_distance_meters)} />
-            </div>
-            {activeRoute.start_window || activeRoute.end_window ? (
-              <div className="mt-3 flex items-center gap-2 rounded-xl border border-primary/15 bg-primary/[0.035] px-3 py-2.5 text-xs">
-                <Clock3 className="size-3.5 text-primary" />
-                <span className="font-medium">
-                  Route block: {activeRoute.start_window || "—"}–{activeRoute.end_window || "—"}
-                </span>
-              </div>
-            ) : null}
-
-            {activeRoute.start_address || activeRoute.end_address ? (
-              <div className="mt-3 rounded-xl border border-border/40 px-3 py-2.5 text-[11px] leading-5 text-muted-foreground">
-                {activeRoute.start_address ? <p>Start: {activeRoute.start_address}</p> : null}
-                {activeRoute.end_address ? <p>End: {activeRoute.end_address}</p> : null}
-              </div>
-            ) : null}
-          </div>
-
-          <section className="overflow-hidden rounded-2xl border border-primary/20 bg-primary/[0.035] p-4">
-            <p className="emery-kicker">Now</p>
-            {nextStop ? (
-              <>
-                <div className="mt-2 flex items-start gap-3">
-                  <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-primary text-sm font-bold text-primary-foreground">
-                    {nextStop.stop_order}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="truncate text-base font-semibold">
-                      {nextStop.office_name || "Next HPO stop"}
-                    </h3>
-                    <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                      {locationText(nextStop) || "Address not saved"}
-                    </p>
-                    {nextStop.drive_seconds_from_previous ? (
-                      <p className="mt-1 text-[10px] font-medium text-primary">
-                        {formatDuration(nextStop.drive_seconds_from_previous)} ·{" "}
-                        {formatMiles(nextStop.distance_meters_from_previous)} from previous stop
-                      </p>
-                    ) : (
-                      <p className="mt-1 text-[10px] font-medium text-primary">
-                        Next unfinished stop on this route
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  {nextStop.address ? (
-                    <a
-                      href={`https://maps.apple.com/?daddr=${encodeURIComponent([nextStop.address, nextStop.city].filter(Boolean).join(", "))}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="emery-press flex min-h-11 items-center justify-center gap-2 rounded-xl border border-primary/20 bg-primary/[0.05] px-3 text-xs font-semibold text-primary"
-                    >
-                      <Navigation className="size-3.5" /> Navigate
-                    </a>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled
-                      className="min-h-11 rounded-xl border border-border/35 px-3 text-xs font-semibold text-muted-foreground opacity-40"
-                    >
-                      Address needed
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const element = document.getElementById(`route-stop-${nextStop.id}`);
-                      element?.scrollIntoView({ behavior: "smooth", block: "center" });
-                      window.setTimeout(() => {
-                        element
-                          ?.querySelector<HTMLButtonElement>("[data-route-note-toggle]")
-                          ?.click();
-                      }, 280);
-                    }}
-                    className="emery-press flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-3 text-xs font-semibold text-primary-foreground"
-                  >
-                    <CheckCircle2 className="size-3.5" /> Log this visit
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div className="mt-2 flex items-center gap-3">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                  <CheckCircle2 className="size-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold">Route complete</p>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    Every stop on this route has a final status. Review notes or copy the tracker
-                    rows.
-                  </p>
-                </div>
-              </div>
-            )}
-          </section>
-
-          <section className="rounded-[1.55rem] border border-primary/15 bg-primary/[0.035] p-4">
-            <div className="flex items-start gap-3">
-              <div className="emery-icon-well flex size-10 shrink-0 items-center justify-center rounded-2xl text-primary">
-                <Sparkles className="size-4" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold">Emery Route Notes</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  Speak naturally: “Stop 2 — spoke with Jenni, she’ll pass the information to the
-                  attorney. Follow up next week.” Emery attaches the raw note to the right stop.
-                </p>
-              </div>
-            </div>
-            <textarea
-              value={routeNote}
-              onChange={(event) => setRouteNote(event.target.value)}
-              placeholder="What happened at the stop?"
-              className="mt-3 min-h-24 w-full resize-none rounded-2xl border border-border/55 bg-card/55 px-3.5 py-3 text-[16px] leading-6 outline-none focus:border-primary/30"
-            />
-            <div className="mt-2 flex items-center justify-between gap-3">
-              <p className="min-w-0 text-[11px] text-muted-foreground">
-                {routeNoteResult ?? "Raw marketing note is preserved exactly as entered."}
-              </p>
-              <button
-                type="button"
-                disabled={!routeNote.trim() || working}
-                onClick={() => void submitRouteNote(activeRoute)}
-                className="emery-press flex min-h-11 shrink-0 items-center gap-2 rounded-xl bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-40"
-              >
-                <CheckCircle2 className="size-3.5" /> Save Note
-              </button>
-            </div>
-          </section>
-
-          <section className="rounded-[1.55rem] border border-border/45 bg-card/30 p-4">
-            <div className="flex items-start gap-3">
-              <div className="emery-icon-well flex size-10 shrink-0 items-center justify-center rounded-2xl text-primary">
-                <CalendarDays className="size-4" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold">Calendar fit</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  Emery uses your saved Calendar for this date so the field route does not compete
-                  with lunches, meetings or scheduled tasks.
-                </p>
-              </div>
-            </div>
-
-            {activeCalendar.length ? (
-              <div className="mt-3 space-y-2">
-                {activeCalendar.map((item) => (
-                  <div
-                    key={`${item.kind}-${item.id}`}
-                    className="emery-surface flex items-start gap-3 rounded-xl px-3 py-2.5"
-                  >
-                    <Clock3 className="mt-0.5 size-3.5 shrink-0 text-primary" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-semibold">{item.title}</p>
-                      <p className="mt-0.5 text-[10px] text-muted-foreground">
-                        {item.local_time}
-                        {item.local_end_time ? `–${item.local_end_time}` : ""} · {item.kind}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="mt-3 text-xs text-muted-foreground">
-                No timed Emery Calendar items are saved for this date yet.
-              </p>
-            )}
-
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => void syncActiveRouteCalendar(activeRoute)}
-                disabled={scheduleWorking || !activeRoute.start_window || !activeRoute.end_window}
-                className="emery-press min-h-11 rounded-xl border border-primary/20 bg-primary/[0.055] px-3 text-[11px] font-semibold text-primary disabled:opacity-40"
-              >
-                Add / Update Calendar
-              </button>
-              <button
-                type="button"
-                onClick={() => void askEmeryToFitRoute(activeRoute)}
-                disabled={scheduleWorking}
-                className="emery-press min-h-11 rounded-xl bg-primary px-3 text-[11px] font-semibold text-primary-foreground disabled:opacity-40"
-              >
-                {scheduleWorking ? "Working…" : "Ask Emery to Plan My Day"}
-              </button>
-            </div>
-
-            {calendarMessage ? (
-              <p className="mt-2 text-[11px] text-primary">{calendarMessage}</p>
-            ) : null}
-            {scheduleAdvice ? (
-              <div className="mt-3 whitespace-pre-wrap rounded-2xl border border-primary/15 bg-primary/[0.035] px-3.5 py-3 text-xs leading-5 text-foreground/88">
-                {scheduleAdvice}
-              </div>
-            ) : null}
-          </section>
-
-          <div className="space-y-2">
-            {[...activeRoute.stops]
-              .sort((a, b) => a.stop_order - b.stop_order)
-              .map((stop, index, ordered) => (
-                <StopCard
-                  key={`${stop.id}-${stop.updated_at}`}
-                  stop={stop}
-                  first={index === 0}
-                  last={index === ordered.length - 1}
-                  working={working}
-                  onMove={(delta) => void moveStop(activeRoute, stop.id, delta)}
-                  onRemove={() => void removeOpenStop(activeRoute, stop.id)}
-                  onSave={async (input) => {
-                    setWorking(true);
-                    setError(null);
-                    try {
-                      await updateStop({
-                        data: {
-                          stopId: stop.id,
-                          ...input,
-                          idempotencyKey: `ui:${crypto.randomUUID()}:hpo.route_stop.log_visit`,
-                          sourceChannel: "ui",
-                        },
-                      });
-                      await refresh(activeRoute.id);
-                    } catch (cause) {
-                      setError(cause instanceof Error ? cause.message : "Couldn't save stop.");
-                    } finally {
-                      setWorking(false);
-                    }
-                  }}
-                />
-              ))}
-          </div>
-        </section>
-      ) : (
-        <section className="emery-glass rounded-[1.6rem] p-6 text-center">
-          <MapPinned className="mx-auto size-7 text-primary" />
-          <p className="mt-3 text-sm font-semibold">Your Route Journal starts here</p>
-          <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-muted-foreground">
-            Create today's stop list. Emery will preserve the daily route, optimized order and
-            marketing notes so you can return to any field day later.
-          </p>
-        </section>
-      )}
     </div>
   );
 }
