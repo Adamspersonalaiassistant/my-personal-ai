@@ -55,6 +55,25 @@ function normalize(value: string) {
     .trim();
 }
 
+function locationAwareOfficeScore(phrase: string, row: any) {
+  const target = normalize(phrase);
+  let score = nameScore(officeTargetPhrase(phrase) || phrase, clean(row.name));
+  const address = normalize(clean(row.address));
+  const city = normalize(clean(row.city));
+  if (address && target.includes(address)) score += 60;
+  else if (address) {
+    const parts = address.split(" ").filter(Boolean);
+    const house = parts.find((part) => /^\d+[a-z-]*$/.test(part));
+    if (house && target.includes(house)) score += 24;
+    const streetHits = parts
+      .filter((part) => part.length >= 4 && !/^\d/.test(part))
+      .filter((part) => target.includes(part)).length;
+    score += Math.min(24, streetHits * 6);
+  }
+  if (city && target.includes(city)) score += 16;
+  return score;
+}
+
 function localDateParts(timeZone: string, date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone,
@@ -189,14 +208,14 @@ async function findOffice(db: any, userId: string, phrase: string) {
       .eq("user_id", userId)
       .eq("status", "active")
       .not("address", "is", null)
-      .limit(300),
+      .limit(1000),
     db
       .from("hpo_prospects")
-      .select("id,name,address,city,latitude,longitude,fit_status,verification_status,metadata")
+      .select("id,name,address,city,latitude,longitude,fit_status,verification_status,promoted_account_id,metadata")
       .eq("user_id", userId)
       .neq("fit_status", "rejected")
       .not("address", "is", null)
-      .limit(300),
+      .limit(1000),
   ]);
   if (accounts.error) throw accounts.error;
   if (prospects.error) throw prospects.error;
@@ -208,7 +227,7 @@ async function findOffice(db: any, userId: string, phrase: string) {
       )
       .filter((row: any) => !clean(row.owner_name) || normalize(row.owner_name) === "adam")
       .map((row: any) => ({
-        score: nameScore(officeTargetPhrase(phrase) || phrase, row.name),
+        score: locationAwareOfficeScore(phrase, row),
         accountId: row.id,
         prospectId: null,
         officeName: row.name,
@@ -218,17 +237,27 @@ async function findOffice(db: any, userId: string, phrase: string) {
         longitude: row.longitude,
         visitPriority: Number(row.priority ?? 0) >= 4 ? "high" : null,
       })),
-    ...(prospects.data ?? []).map((row: any) => ({
-      score: nameScore(officeTargetPhrase(phrase) || phrase, row.name),
-      accountId: null,
-      prospectId: row.id,
-      officeName: row.name,
-      address: row.address,
-      city: row.city,
-      latitude: row.latitude,
-      longitude: row.longitude,
-      visitPriority: Number(row.metadata?.internal_priority ?? 0) >= 4 ? "high" : null,
-    })),
+    ...(prospects.data ?? [])
+      .filter((row: any) => {
+        const metadata =
+          row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+            ? row.metadata
+            : {};
+        if (metadata.exclude_from_adam_route === true) return false;
+        if (!row.promoted_account_id) return true;
+        return metadata.map_as_location === true;
+      })
+      .map((row: any) => ({
+        score: locationAwareOfficeScore(phrase, row),
+        accountId: row.promoted_account_id ?? null,
+        prospectId: row.id,
+        officeName: row.name,
+        address: row.address,
+        city: row.city,
+        latitude: row.latitude,
+        longitude: row.longitude,
+        visitPriority: Number(row.metadata?.internal_priority ?? 0) >= 4 ? "high" : null,
+      })),
   ]
     .filter((row) => row.score >= 45)
     .sort(
@@ -253,14 +282,14 @@ async function chooseRouteCandidates(db: any, userId: string, message: string, c
       .eq("user_id", userId)
       .eq("status", "active")
       .not("address", "is", null)
-      .limit(400),
+      .limit(1000),
     db
       .from("hpo_prospects")
-      .select("id,name,address,city,latitude,longitude,fit_status,verification_status,metadata")
+      .select("id,name,address,city,latitude,longitude,fit_status,verification_status,promoted_account_id,metadata")
       .eq("user_id", userId)
       .neq("fit_status", "rejected")
       .not("address", "is", null)
-      .limit(400),
+      .limit(1000),
   ]);
   if (accounts.error) throw accounts.error;
   if (prospects.error) throw prospects.error;
@@ -312,6 +341,15 @@ async function chooseRouteCandidates(db: any, userId: string, message: string, c
       }),
     ...(prospects.data ?? [])
       .filter((row: any) => citySet.has(normalize(row.city ?? "")))
+      .filter((row: any) => {
+        const metadata =
+          row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+            ? row.metadata
+            : {};
+        if (metadata.exclude_from_adam_route === true) return false;
+        if (!row.promoted_account_id) return true;
+        return metadata.map_as_location === true;
+      })
       .map((row: any) => {
         const priority = Number(row.metadata?.internal_priority ?? 2);
         const score =
@@ -320,7 +358,7 @@ async function chooseRouteCandidates(db: any, userId: string, message: string, c
           (row.fit_status === "accepted" ? 14 : 0);
         return {
           score,
-          accountId: null,
+          accountId: row.promoted_account_id ?? null,
           prospectId: row.id,
           officeName: row.name,
           address: row.address,
