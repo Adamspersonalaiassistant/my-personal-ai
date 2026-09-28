@@ -87,6 +87,9 @@ check("conversational route wrap-up protects unfinished stops", routeCommands.in
 check("Voice route recovery can use current device location", voiceControl.includes("currentHpoVoiceLocation") && voiceControl.includes("latitude: location.latitude") && voiceControl.includes("longitude: location.longitude"));
 check("natural visit capture returns execution trace", routeFns.includes("executionRunId: execution.id") && routeActions.includes("visit.executionRunId"));
 check("field summary is deterministic", fieldRead.includes('"hpo.route.day_summary"') && fieldRead.includes("Today:"));
+check("arrival is canonical across Today text and Voice", fieldFns.includes("executeHpoRouteStopArriveCore") && routeActions.includes('"hpo.route_stop.arrive"') && routeActions.includes("executeHpoRouteStopArriveCore") && voice.includes('name: "execute_hpo_route_stop_action"') && voiceControl.includes('name === "execute_hpo_route_stop_action"'));
+check("natural route-stop actions use stable request ids in Voice", routeActions.includes("requestId?: string") && voiceControl.includes('requestId: `voice:'));
+
 
 
 
