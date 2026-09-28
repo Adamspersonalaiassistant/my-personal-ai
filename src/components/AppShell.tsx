@@ -115,6 +115,64 @@ export function AppShell({
 
   useEffect(() => setMoreOpen(false), [pathname]);
 
+  // A home-screen iOS web app can stay alive on an older JS bundle after a publish.
+  // Compare the currently running hashed script assets with fresh no-store HTML and
+  // reload once when production has a newer build.
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") return;
+
+    let cancelled = false;
+    let checking = false;
+
+    const currentScripts = () =>
+      [...document.querySelectorAll<HTMLScriptElement>('script[src]')]
+        .map((script) => new URL(script.src, window.location.href).pathname)
+        .filter((src) => src.includes("/assets/"))
+        .sort()
+        .join("|");
+
+    async function checkForFreshBuild() {
+      if (cancelled || checking || document.visibilityState !== "visible") return;
+      checking = true;
+      try {
+        const response = await fetch(window.location.href, {
+          cache: "no-store",
+          headers: { "x-emery-build-check": "1" },
+        });
+        if (!response.ok) return;
+        const html = await response.text();
+        const parsed = new DOMParser().parseFromString(html, "text/html");
+        const freshScripts = [...parsed.querySelectorAll<HTMLScriptElement>('script[src]')]
+          .map((script) => new URL(script.src, window.location.href).pathname)
+          .filter((src) => src.includes("/assets/"))
+          .sort()
+          .join("|");
+        const running = currentScripts();
+        if (freshScripts && running && freshScripts !== running) {
+          window.location.reload();
+        }
+      } catch {
+        // Never interrupt field work because the version check itself could not run.
+      } finally {
+        checking = false;
+      }
+    }
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void checkForFreshBuild();
+    };
+
+    void checkForFreshBuild();
+    document.addEventListener("visibilitychange", onVisible);
+    const timer = window.setInterval(() => void checkForFreshBuild(), 60_000);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(timer);
+    };
+  }, []);
+
   // AppShell owns the viewport. Pages scroll inside the shell so navigation never
   // disappears behind document scrolling on iPhone/PWA.
   useEffect(() => {
@@ -170,6 +228,7 @@ export function AppShell({
             <Link
               key={to}
               to={to}
+              reloadDocument={to === "/hpo"}
               onClick={() => {
                 if (to === "/chat") rememberEmeryHandoff();
               }}
@@ -245,6 +304,7 @@ export function AppShell({
             <Link
               key={to}
               to={to}
+              reloadDocument={to === "/hpo"}
               onClick={() => {
                 if (to === "/chat") rememberEmeryHandoff();
               }}
