@@ -573,7 +573,7 @@ export const getHpoRouteNextStop = createServerFn({ method: "POST" })
 export const prepareHpoOfficeMap = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { limit?: number }) => ({
-    limit: Math.max(1, Math.min(100, Number(input?.limit ?? 100) || 100)),
+    limit: Math.max(1, Math.min(500, Number(input?.limit ?? 500) || 500)),
   }))
   .handler(async ({ data, context }) => {
     const db = context.supabase as any;
@@ -729,7 +729,7 @@ export const getHpoRoutePlanner = createServerFn({ method: "GET" })
         .not("address", "is", null)
         .neq("fit_status", "rejected")
         .order("name", { ascending: true })
-        .limit(300),
+        .limit(1000),
       db
         .from("meetings")
         .select("id,title,meeting_at,end_at,participants,metadata")
