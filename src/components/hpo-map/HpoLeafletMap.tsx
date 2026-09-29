@@ -63,6 +63,8 @@ type Props = {
   onOpenAccount?: (accountId: string) => void;
   onToggleRouteStop: (office: HpoMapOffice) => void;
   onBuildRoute: () => void;
+  onOptimizeRoute?: (() => void) | undefined;
+  optimizing?: boolean;
   preparing: boolean;
   onRefreshPins: () => void;
   onNavigateHpo?: ((view: "today" | "planner" | "map" | "accounts" | "activity") => void) | undefined;
@@ -201,6 +203,8 @@ export function HpoLeafletMap({
   onOpenAccount,
   onToggleRouteStop,
   onBuildRoute,
+  onOptimizeRoute,
+  optimizing = false,
   preparing,
   onRefreshPins,
   onNavigateHpo,
@@ -860,20 +864,32 @@ export function HpoLeafletMap({
                   : "Search or tap offices, choose your stops, then optimize the route."}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() =>
-                openHpoEmery(
-                  route
-                    ? `Help me with the HPO route for ${route.route_date || "this route"}. Review the optimized stop order and help me change it if needed.`
-                    : "Help me build an HPO field route. Ask me for the date and territory if I haven't given them.",
-                  "HPO Route",
-                )
-              }
-              className="min-h-11 shrink-0 rounded-xl border border-primary/35 bg-primary/15 px-3 text-xs font-semibold text-primary"
-            >
-              Emery
-            </button>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {route && onOptimizeRoute ? (
+                <button
+                  type="button"
+                  onClick={onOptimizeRoute}
+                  disabled={optimizing}
+                  className="min-h-11 rounded-xl bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-45"
+                >
+                  {optimizing ? "Optimizing…" : "Optimize"}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() =>
+                  openHpoEmery(
+                    route
+                      ? `Help me with the HPO route for ${route.route_date || "this route"}. Review the optimized stop order and help me change it if needed.`
+                      : "Help me build an HPO field route. Ask me for the date and territory if I haven't given them.",
+                    "HPO Route",
+                  )
+                }
+                className="min-h-11 rounded-xl border border-primary/35 bg-primary/15 px-3 text-xs font-semibold text-primary"
+              >
+                Emery
+              </button>
+            </div>
           </div>
         )}
 
