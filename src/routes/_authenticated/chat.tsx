@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   FileText,
   Loader2,
+  MapPinned,
   Paperclip,
   Volume2,
   X,
@@ -174,6 +175,7 @@ function Chat() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [pending, setPending] = useState(false);
   const [voiceStudioState, setVoiceStudioState] = useState<VoiceStudioState | null>(null);
+  const [lastHpoRoute, setLastHpoRoute] = useState<{ routeId: string; action: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -392,6 +394,20 @@ function Chat() {
         voiceStudio.micUnlocked === true
       ) {
         window.dispatchEvent(new Event("emery-voice-profile-updated"));
+      }
+
+      const hpoRouteCommand = "hpoRouteCommand" in result ? (result as any).hpoRouteCommand : null;
+      if (
+        hpoRouteCommand?.performed &&
+        hpoRouteCommand?.routeId &&
+        ["hpo.route.create", "hpo.route.optimize", "hpo.route.reoptimize"].includes(
+          String(hpoRouteCommand.action),
+        )
+      ) {
+        setLastHpoRoute({
+          routeId: String(hpoRouteCommand.routeId),
+          action: String(hpoRouteCommand.action),
+        });
       }
 
       const serverUser = "userMessage" in result ? result.userMessage : null;
@@ -679,6 +695,31 @@ function Chat() {
                   </button>
                 </div>
               )}
+            </div>
+          ) : null}
+
+          {lastHpoRoute ? (
+            <div className="mx-auto mb-2 flex max-w-2xl items-center gap-3 rounded-2xl border border-primary/20 bg-primary/[0.055] px-3 py-2.5">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary">
+                <MapPinned className="size-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-foreground">HPO route ready</p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">
+                  Open the numbered optimized route on the HPO map.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  window.location.assign(
+                    `/hpo?routeId=${encodeURIComponent(lastHpoRoute.routeId)}`,
+                  )
+                }
+                className="min-h-10 shrink-0 rounded-xl bg-primary px-3 text-[11px] font-semibold text-primary-foreground"
+              >
+                View Map
+              </button>
             </div>
           ) : null}
 
