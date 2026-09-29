@@ -260,12 +260,10 @@ function HpoWorkspace() {
                 account?.name || "Account",
               )
             }
-            onFollowup={() =>
-              openHpoEmery(
-                `Set or update the follow-up for ${account?.name || "this HPO account"}.`,
-                account?.name || "Account",
-              )
-            }
+            onFollowup={() => {
+              setLogAccount(selected);
+              setSheet("followup");
+            }}
           />
         )}
         {sheet === "add" && (
@@ -797,7 +795,7 @@ function Sheet({
 }) {
   return (
     <div
-      className="fixed inset-0 z-[82] flex items-end justify-center bg-background/75 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[90] flex items-end justify-center bg-background/75 sm:items-center sm:p-4"
       role="presentation"
       onClick={onClose}
     >

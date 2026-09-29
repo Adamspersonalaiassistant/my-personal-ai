@@ -93,7 +93,7 @@ export function HpoAccountFieldDetail({
     [account?.address, singleLinkedLocation?.address].find(
       (address) => typeof address === "string" && /\d/.test(address),
     ) || "";
-  const routeCity = account?.city || singleLinkedLocation?.city || "";
+  const routeCity = routeAddress === account?.address ? account?.city : singleLinkedLocation?.city;
 
   return (
     <div
