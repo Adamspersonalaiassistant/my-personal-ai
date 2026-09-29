@@ -107,7 +107,7 @@ export function HpoEmerySheet({
 
   return (
     <div
-      className="fixed inset-0 z-[95] flex items-end bg-black/55 backdrop-blur-[2px] sm:items-center sm:justify-center sm:p-4"
+      className="fixed inset-0 z-[180] flex items-end bg-black/55 backdrop-blur-[2px] sm:items-center sm:justify-center sm:p-4"
       onClick={() => setOpen(false)}
       role="presentation"
     >

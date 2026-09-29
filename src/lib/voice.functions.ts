@@ -311,7 +311,7 @@ LIVE VOICE OPERATING CONTRACT:
 - Use the search_web tool for current, changing, recent, online, or fact-checking questions. Never pretend current knowledge came from live search if the tool was not used.
 - Use refresh_emery_context when Adam asks about a task, project, appointment, HPO item, memory, or other app state that may have changed since this voice session began.
 - Use execute_calendar_action whenever Adam explicitly asks to add/create/schedule/complete/move a task or internal Calendar event. Never claim a write unless the tool reports performed=true.
-- Use execute_hpo_action whenever Adam explicitly asks to create/add an HPO account, log a non-PHI HPO relationship touch, or set an HPO account follow-up. New accounts need a physical address so Emery can plot them on the HPO map. Never put patient names, medical/case details, or other PHI into HPO relationship records.
+- Use execute_hpo_action whenever Adam explicitly asks to create/add an HPO account, update the currently selected HPO account details, log a non-PHI HPO relationship touch, or set an HPO account follow-up. If an account is open in the app, phrases like “this account” refer to that selected account context supplied by the client. New accounts need a physical address so Emery can plot them on the HPO map. Never put patient names, medical/case details, or other PHI into HPO relationship records.
 - Use get_hpo_field_state whenever Adam asks what's next, where he left off, asks for a brief on the current/next office, asks what happened last time, or asks who he spoke to. This is a deterministic HPO read and should be preferred over guessing from session context.
 - Use execute_hpo_route_command when Adam explicitly asks to build an HPO route, add/remove a saved office, optimize the route, or reoptimize what remains. Only report success when the tool confirms the persisted route action.
 - For one request combining a scheduled commitment, today's route, and note readiness, send the complete original request once to execute_hpo_route_command. The shared Emery planner will coordinate Calendar/HPO reads, route writes, and Field Session context.
@@ -499,7 +499,7 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
           type: "function",
           name: "execute_hpo_action",
           description:
-            "Use Emery's canonical HPO relationship controller when Adam explicitly asks to add/create an HPO account, log a non-PHI account interaction, or set an account follow-up. New accounts require a physical address and are geocoded for the HPO map. The server enforces account matching, ownership context, PHI boundaries, and clarification rules.",
+            "Use Emery's canonical HPO relationship controller when Adam explicitly asks to add/create an HPO account, edit the selected account's non-PHI details, log a non-PHI account interaction, or set an account follow-up. New accounts require a physical address and are geocoded for the HPO map. The client supplies the selected account context when one is open. The server enforces account matching, ownership context, PHI boundaries, and clarification rules.",
           parameters: {
             type: "object",
             additionalProperties: false,
@@ -847,10 +847,11 @@ export const executeVoiceCalendarAction = createServerFn({ method: "POST" })
 
 export const executeVoiceHpoAction = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { request: string }) => ({
+  .inputValidator((input: { request: string; accountId?: string | null }) => ({
     request: String(input?.request ?? "")
       .trim()
       .slice(0, 3000),
+    accountId: input?.accountId ? String(input.accountId).trim().slice(0, 80) : null,
   }))
   .handler(async ({ data, context }) => {
     if (!data.request) {
@@ -874,6 +875,7 @@ export const executeVoiceHpoAction = createServerFn({ method: "POST" })
       message: data.request,
       recent: fresh.recent,
       timezone: fresh.profile?.timezone ?? "America/New_York",
+      selectedAccountId: data.accountId ?? null,
     });
     await recordRuntimeEvent(db, context.userId, {
       channel: "voice",

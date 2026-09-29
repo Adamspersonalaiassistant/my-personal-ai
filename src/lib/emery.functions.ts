@@ -67,6 +67,12 @@ function hpoConfirmation(result: any) {
     return result.dueAt
       ? `Updated ${result.accountName}: ${result.nextAction}.`
       : `Set the next action for ${result.accountName}: ${result.nextAction}.`;
+  if (result.action === "update_account") {
+    const fields = Array.isArray(result.changedFields) ? result.changedFields : [];
+    return fields.length
+      ? `Updated ${result.accountName}: ${fields.map((field: string) => field.replaceAll("_", " ")).join(", ")}.`
+      : `Updated ${result.accountName}.`;
+  }
   return "Updated the HPO relationship record.";
 }
 function hpoRouteStopConfirmation(result: any) {
@@ -703,6 +709,7 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
             recent: recent.filter((x: any) => x.id !== userMessage.id),
             timezone: profile?.timezone ?? "America/New_York",
             sourceMessageId: userMessage.id,
+            selectedAccountId: data.source.selectedAccountId ?? null,
           }).catch((error: any) => {
             console.error("HPO action controller failed", error);
             return {

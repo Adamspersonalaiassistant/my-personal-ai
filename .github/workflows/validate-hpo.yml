@@ -32,10 +32,15 @@ jobs:
         run: npm run build
       - name: TypeScript
         run: npx tsc --noEmit
+      - name: HPO account detail regression checks
+        run: npm run validate:hpo-account
       - name: Focused HPO lint
         run: >-
           npx eslint --rule 'prettier/prettier: off'
           src/components/AppShell.tsx
+          src/components/HpoAccountFieldDetail.tsx
+          src/components/HpoEmerySheet.tsx
+          src/components/EmeryVoiceControl.tsx
           src/lib/agent.functions.ts
           src/lib/emery-handoff.ts
           src/lib/emery.functions.ts
