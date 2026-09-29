@@ -357,7 +357,11 @@ export function HpoEmerySheet({
   useEffect(() => {
     if (!open) return;
     const frame = requestAnimationFrame(() => {
-      if (jumpToTopRef.current && recommendation) {
+      const lastMessage = messages[messages.length - 1];
+      if (
+        recommendation &&
+        (jumpToTopRef.current || Boolean(lastMessage?.recommendation))
+      ) {
         jumpToTopRef.current = false;
         scrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
         return;
