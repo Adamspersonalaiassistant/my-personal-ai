@@ -1301,7 +1301,10 @@ export async function executeHpoRouteOptimizeCore(input: {
       .eq("user_id", userId)
       .select("id,optimized_at,optimized_distance_meters,optimized_duration_seconds")
       .single();
-    if (updateError || !verifiedRoute || verifiedRoute.optimized_at !== optimizedAt) {
+    const optimizedTimestampMatches =
+      verifiedRoute?.optimized_at != null &&
+      new Date(verifiedRoute.optimized_at).getTime() === new Date(optimizedAt).getTime();
+    if (updateError || !verifiedRoute || !optimizedTimestampMatches) {
       throw updateError ?? new Error("Route optimization verification failed");
     }
 
