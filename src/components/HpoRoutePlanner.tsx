@@ -104,6 +104,8 @@ type Candidate = {
 
 type MapOffice = Candidate & {
   kind: "account" | "prospect";
+  accountType?: string | null;
+  prospectType?: string | null;
   specialty?: string | null;
   priority?: number | null;
   relationshipStage?: string | null;
@@ -1389,6 +1391,8 @@ export function HpoRoutePlanner({
       detail:
         [account.account_type, account.specialty].filter(Boolean).join(" · ") || "HPO account",
       kind: "account" as const,
+      accountType: account.account_type,
+      prospectType: null,
       specialty: account.specialty,
       priority: account.priority,
       relationshipStage: account.relationship_stage,
@@ -1413,6 +1417,8 @@ export function HpoRoutePlanner({
       detail:
         [prospect.prospect_type, prospect.specialty].filter(Boolean).join(" · ") || "Prospect",
       kind: prospect.promoted_account_id ? ("account" as const) : ("prospect" as const),
+      accountType: null,
+      prospectType: prospect.prospect_type,
       specialty: prospect.specialty,
       priority:
         typeof prospect.metadata?.internal_priority === "number"
