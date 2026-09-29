@@ -471,12 +471,16 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
     const db = context.supabase as any,
       userId = context.userId;
     const conversation = await mainConversation(db, userId);
-    const route = inferEmeryDomain(data.message);
+    const hpoSurface = String(data.source.surface ?? "").startsWith("hpo");
+    const inferredRoute = inferEmeryDomain(data.message);
+    const route =
+      hpoSurface && inferredRoute.domain === "general"
+        ? { ...inferredRoute, domain: "hpo" as const, reason: "Active HPO workspace context" }
+        : inferredRoute;
     const actionPlan = planEmeryRequest(data.message);
     const hpoPlanned = actionPlan.intents.some(
       (intent) => intent.capability.startsWith("hpo.") || intent.capability === "entities",
     );
-    const hpoSurface = String(data.source.surface ?? "").startsWith("hpo");
     let hpoEligible =
       route.domain === "hpo" || route.domain === "mixed" || hpoPlanned || hpoSurface;
     const sourceMetadata = { ...data.source, domain: route.domain, emery_identity: "central-v1" };
