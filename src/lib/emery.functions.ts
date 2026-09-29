@@ -508,12 +508,19 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
         })),
       );
     }
-    const memoryWrite = await persistDurableMemoryFromMessage({
-      supabase: db,
-      userId,
-      apiKey,
-      message: data.message,
-    });
+    const memoryWrite = data.source.hpoEphemeral
+      ? {
+          memorySaved: false,
+          memoryUpdated: false,
+          memoryError: null,
+          savedMemory: null,
+        }
+      : await persistDurableMemoryFromMessage({
+          supabase: db,
+          userId,
+          apiKey,
+          message: data.message,
+        });
     const recent = await history(db, userId, conversation.id);
     const nonEphemeralRecent = recent.filter(
       (turn: any) => turn.sourceMetadata?.hpoEphemeral !== true,
@@ -529,17 +536,24 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
     if (!hpoEligible && hasPendingHpoRouteClarification(hpoSessionHistory)) {
       hpoEligible = true;
     }
-    const workingState = await refreshRollingConversationState({
-      apiKey,
-      db,
-      userId,
-      conversation,
-      newestMessage: data.message,
-      recentHistory: turnRecent,
-    }).catch((error: any) => {
-      console.error("Rolling conversation state refresh failed", error);
-      return { summary: "", updatedAt: null, summarizedMessageId: null, summarizedMessageCount: 0 };
-    });
+    const workingState = data.source.hpoEphemeral
+      ? { summary: "", updatedAt: null, summarizedMessageId: null, summarizedMessageCount: 0 }
+      : await refreshRollingConversationState({
+          apiKey,
+          db,
+          userId,
+          conversation,
+          newestMessage: data.message,
+          recentHistory: turnRecent,
+        }).catch((error: any) => {
+          console.error("Rolling conversation state refresh failed", error);
+          return {
+            summary: "",
+            updatedAt: null,
+            summarizedMessageId: null,
+            summarizedMessageCount: 0,
+          };
+        });
     const voiceStudio = await processVoiceStudioTurn({
       db,
       userId,
