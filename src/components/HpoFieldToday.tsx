@@ -962,8 +962,8 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
           </button>
         </div>
 
-        <div className="border-b border-slate-200 px-3 py-3">
-          <p className="text-center text-sm font-semibold text-slate-800">
+        <div className="border-b border-border px-3 py-3">
+          <p className="text-center text-sm font-semibold text-foreground">
             {routeMonth(route.route_date)}
           </p>
           <div className="mt-2 grid grid-cols-7 gap-1">
@@ -971,7 +971,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
               const active = day.getDate() === activeRouteDay;
               return (
                 <div key={day.toISOString()} className="text-center">
-                  <p className="text-[9px] font-semibold uppercase text-slate-400">
+                  <p className="text-[9px] font-semibold uppercase text-muted-foreground">
                     {day.toLocaleDateString([], { weekday: "short" }).slice(0, 2)}
                   </p>
                   <span
@@ -992,10 +992,10 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
         <div className="px-3 pb-3 pt-3">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-slate-900">
+              <p className="truncate text-sm font-semibold text-foreground">
                 {route.area || "HPO Marketing Route"}
               </p>
-              <p className="mt-0.5 text-[11px] text-slate-500">
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
                 {data.completed}/{data.total} stops complete · {data.remaining} remaining
               </p>
             </div>
@@ -1004,7 +1004,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
             </span>
           </div>
 
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
             <div
               className="h-full rounded-full bg-primary transition-[width]"
               style={{ width: `${progressPercent}%` }}
@@ -1012,9 +1012,9 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
           </div>
 
           {data.lastCompletedStop || nextStop ? (
-            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+            <div className="mt-3 rounded-xl border border-border bg-muted/50 px-3 py-2.5">
               <p className="text-[9px] font-semibold uppercase text-primary">Route context</p>
-              <p className="mt-1 text-[11px] leading-5 text-slate-600">
+              <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
                 {data.lastCompletedStop
                   ? `Last: Stop ${data.lastCompletedStop.stop_order} · ${data.lastCompletedStop.office_name || "completed"}.`
                   : "No completed stops yet."}{" "}
@@ -1050,7 +1050,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
         aria-label="Ordered route stops"
         className="hpo-today-queue overflow-hidden rounded-2xl border border-border bg-card text-foreground shadow-sm"
       >
-        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2.5">
+        <div className="flex items-center justify-between border-b border-border bg-muted/50 px-3 py-2.5">
           <div>
             <p className="text-[10px] font-semibold uppercase text-primary">Daily Route</p>
             <h3 className="text-sm font-semibold">{data.total} scheduled stops</h3>
@@ -1069,21 +1069,21 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                   key={stop.id}
                   className={`flex min-h-[72px] items-center gap-2 px-2 py-2 ${done ? "bg-muted/50" : "bg-card"}`}
                 >
-                  <GripVertical className="size-5 shrink-0 text-slate-300" />
+                  <GripVertical className="size-5 shrink-0 text-muted-foreground/50" />
                   <span className="w-7 shrink-0 text-right text-sm font-bold text-primary">
                     {stop.stop_order}.
                   </span>
                   <div className="min-w-0 flex-1">
                     <p
-                      className={`break-words text-sm font-semibold ${done ? "text-slate-500" : "text-slate-900"}`}
+                      className={`break-words text-sm font-semibold ${done ? "text-muted-foreground" : "text-foreground"}`}
                     >
                       {stop.office_name || "Route stop"}
                     </p>
-                    <p className="mt-0.5 break-words text-[11px] text-slate-500">
+                    <p className="mt-0.5 break-words text-[11px] text-muted-foreground">
                       {[stop.address, stop.city].filter(Boolean).join(", ") || "Address not saved"}
                     </p>
                     {done && stop.visit_summary ? (
-                      <p className="mt-0.5 break-words text-[10px] text-slate-400">
+                      <p className="mt-0.5 break-words text-[10px] text-muted-foreground">
                         {stop.visit_summary}
                       </p>
                     ) : null}
@@ -1100,7 +1100,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="size-11 text-slate-500"
+                          className="size-11 text-muted-foreground"
                           disabled={
                             working ||
                             index === 0 ||
@@ -1114,7 +1114,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="size-11 text-slate-500"
+                          className="size-11 text-muted-foreground"
                           disabled={
                             working ||
                             index === sorted.length - 1 ||

@@ -288,14 +288,14 @@ function useInteractiveMap({
       if (!rect.width || !rect.height) return;
       setViewportSize((current) => {
         const next = { width: rect.width, height: rect.height };
-        return Math.abs(current.width - next.width) < 1 && Math.abs(current.height - next.height) < 1
+        return Math.abs(current.width - next.width) < 1 &&
+          Math.abs(current.height - next.height) < 1
           ? current
           : next;
       });
     };
     updateSize();
-    const observer =
-      typeof ResizeObserver !== "undefined" ? new ResizeObserver(updateSize) : null;
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(updateSize) : null;
     observer?.observe(element);
     window.addEventListener("resize", updateSize);
     return () => {
@@ -919,7 +919,11 @@ function OfficePlanningMap({
                 type="button"
                 onClick={() => {
                   onSelectOffice(office.key);
-                  officeMap.focus(Number(office.latitude), Number(office.longitude), Math.max(13, zoom));
+                  officeMap.focus(
+                    Number(office.latitude),
+                    Number(office.longitude),
+                    Math.max(13, zoom),
+                  );
                 }}
                 className="flex min-h-12 w-full items-center gap-3 border-b border-border/35 px-3 py-2 text-left last:border-b-0"
               >
@@ -1025,7 +1029,7 @@ function OfficePlanningMap({
         })}
 
         {tileIssue ? (
-          <div className="absolute inset-x-12 top-1/2 z-30 -translate-y-1/2 rounded-xl border border-amber-200 bg-white/95 p-3 text-center text-xs font-medium text-slate-700 shadow-xl">
+          <div className="absolute inset-x-12 top-1/2 z-30 -translate-y-1/2 rounded-xl border border-amber-400/40 bg-card/95 p-3 text-center text-xs font-medium text-foreground shadow-xl">
             Street tiles could not load. Office pins remain available; check your connection and
             retry.
           </div>
@@ -1137,9 +1141,7 @@ function OfficePlanningMap({
             </div>
           ) : null}
 
-          <div
-            className="mt-3 grid grid-cols-2 gap-2"
-          >
+          <div className="mt-3 grid grid-cols-2 gap-2">
             <a
               href={`https://maps.apple.com/?q=${encodeURIComponent([selectedOffice.officeName, selectedOffice.address, selectedOffice.city].filter(Boolean).join(", "))}`}
               target="_blank"
@@ -1172,9 +1174,14 @@ function OfficePlanningMap({
               type="button"
               onClick={() =>
                 openHpoEmery(
-                  `Use HPO context for ${selectedOffice.officeName} at ${[selectedOffice.address, selectedOffice.city]
+                  `Use HPO context for ${selectedOffice.officeName} at ${[
+                    selectedOffice.address,
+                    selectedOffice.city,
+                  ]
                     .filter(Boolean)
-                    .join(", ")}. Help me with this relationship, route, visit history, or follow-up.`,
+                    .join(
+                      ", ",
+                    )}. Help me with this relationship, route, visit history, or follow-up.`,
                   selectedOffice.officeName,
                 )
               }
@@ -1707,7 +1714,7 @@ export function HpoRoutePlanner({
 
   if (loading)
     return (
-      <div className="flex h-full min-h-0 items-center justify-center bg-[#eef2f7] text-sm text-slate-500">
+      <div className="flex h-full min-h-0 items-center justify-center bg-background text-sm text-muted-foreground">
         Opening HPO map…
       </div>
     );
@@ -1781,7 +1788,7 @@ export function HpoRoutePlanner({
 
       {error ? (
         <div className="pointer-events-none absolute left-3 right-3 top-3 z-[45]">
-          <div className="pointer-events-auto rounded-2xl border border-red-200 bg-white/96 px-4 py-3 text-xs text-red-600 shadow-xl backdrop-blur-xl">
+          <div className="pointer-events-auto rounded-2xl border border-destructive/40 bg-background/95 px-4 py-3 text-xs text-destructive shadow-xl backdrop-blur-xl">
             {error}
           </div>
         </div>

@@ -84,9 +84,9 @@ function pinIcon(office: HpoMapOffice, selected: boolean, focused: boolean) {
     html:
       '<div style="width:' +
       size +
-      'px;height:' +
+      "px;height:" +
       size +
-      'px;filter:drop-shadow(0 4px 5px rgba(15,23,42,.34));transform:' +
+      "px;filter:drop-shadow(0 4px 5px rgba(15,23,42,.34));transform:" +
       (focused ? "scale(1.08)" : "scale(1)") +
       ';transform-origin:50% 100%">' +
       '<svg viewBox="0 0 32 40" width="' +
@@ -138,14 +138,14 @@ function clusterIcon(offices: HpoMapOffice[]) {
     html:
       '<div style="width:' +
       size +
-      'px;height:' +
+      "px;height:" +
       size +
-      'px;border-radius:9999px;border:3px solid white;background:' +
+      "px;border-radius:9999px;border:3px solid white;background:" +
       background +
       ';display:grid;place-items:center;box-shadow:0 5px 16px rgba(15,23,42,.32)">' +
       '<div style="width:' +
       inner +
-      'px;height:' +
+      "px;height:" +
       inner +
       'px;border-radius:9999px;background:white;color:#0f172a;display:grid;place-items:center;font:800 11px system-ui,-apple-system,sans-serif">' +
       count +
@@ -268,8 +268,7 @@ export function HpoLeafletMap({
     tiles.addTo(map);
 
     const resize = () => map.invalidateSize({ pan: false, animate: false });
-    const observer =
-      typeof ResizeObserver !== "undefined" ? new ResizeObserver(resize) : null;
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(resize) : null;
     observer?.observe(containerRef.current);
     window.setTimeout(resize, 80);
     window.setTimeout(resize, 400);
@@ -305,19 +304,19 @@ export function HpoLeafletMap({
       const shouldCluster = valid.length > 70 && zoom < 11.25;
 
       const addOffice = (office: HpoMapOffice) => {
-        const marker = L.marker(
-          [Number(office.latitude), Number(office.longitude)],
+        const marker = L.marker([Number(office.latitude), Number(office.longitude)], {
+          icon: pinIcon(office, selectedSet.has(office.key), office.key === selectedOfficeKey),
+          keyboard: true,
+          riseOnHover: true,
+        });
+        marker.bindTooltip(
+          `${office.officeName} · ${PIN_CATEGORIES[officePinCategory(office)].label}`,
           {
-            icon: pinIcon(office, selectedSet.has(office.key), office.key === selectedOfficeKey),
-            keyboard: true,
-            riseOnHover: true,
+            direction: "top",
+            offset: [0, -34],
+            opacity: 0.92,
           },
         );
-        marker.bindTooltip(`${office.officeName} · ${PIN_CATEGORIES[officePinCategory(office)].label}`, {
-          direction: "top",
-          offset: [0, -34],
-          opacity: 0.92,
-        });
         marker.on("click", () => onSelectOffice(office.key));
         marker.addTo(layer);
       };
@@ -379,10 +378,7 @@ export function HpoLeafletMap({
     const valid = offices.filter(validOffice);
     if (!valid.length) return;
     const bounds = L.latLngBounds(
-      valid.map(
-        (office) =>
-          [Number(office.latitude), Number(office.longitude)] as L.LatLngTuple,
-      ),
+      valid.map((office) => [Number(office.latitude), Number(office.longitude)] as L.LatLngTuple),
     );
     map.fitBounds(bounds.pad(0.06), { maxZoom: 10, animate: false });
     fitDoneRef.current = true;
@@ -408,16 +404,13 @@ export function HpoLeafletMap({
       if (!Number.isFinite(stop.latitude) || !Number.isFinite(stop.longitude)) continue;
       const completed = TERMINAL.has(stop.status);
       const current = stop.id === currentId;
-      const marker = L.circleMarker(
-        [Number(stop.latitude), Number(stop.longitude)],
-        {
-          radius: current ? 10 : 8,
-          color: "#ffffff",
-          weight: 2.5,
-          fillColor: current ? "#0f4fb9" : completed ? "#8ab8f5" : "#1769e8",
-          fillOpacity: completed ? 0.72 : 1,
-        },
-      );
+      const marker = L.circleMarker([Number(stop.latitude), Number(stop.longitude)], {
+        radius: current ? 10 : 8,
+        color: "#ffffff",
+        weight: 2.5,
+        fillColor: current ? "#0f4fb9" : completed ? "#8ab8f5" : "#1769e8",
+        fillOpacity: completed ? 0.72 : 1,
+      });
       marker.bindTooltip(String(stop.stop_order), {
         permanent: true,
         direction: "center",
@@ -443,10 +436,7 @@ export function HpoLeafletMap({
     if (!map || !valid.length) return;
     map.fitBounds(
       L.latLngBounds(
-        valid.map(
-          (office) =>
-            [Number(office.latitude), Number(office.longitude)] as L.LatLngTuple,
-        ),
+        valid.map((office) => [Number(office.latitude), Number(office.longitude)] as L.LatLngTuple),
       ).pad(0.08),
       { maxZoom: 12, animate: true },
     );
@@ -476,21 +466,21 @@ export function HpoLeafletMap({
   }, [offices]);
 
   return (
-    <section className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#eef2f7]">
-      <div className="relative z-[1000] shrink-0 border-b border-slate-200/90 bg-white/96 px-3 pb-2 pt-3 shadow-sm">
+    <section className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background text-foreground">
+      <div className="relative z-[1000] shrink-0 border-b border-border bg-background/95 px-3 pb-2 pt-3 shadow-[0_10px_28px_rgba(0,0,0,0.24)] backdrop-blur-xl">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search HPO accounts, offices or towns"
-            className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-10 pr-10 text-base text-slate-900 shadow-sm outline-none focus:border-blue-300"
+            className="h-12 w-full rounded-2xl border border-border bg-card pl-10 pr-10 text-base text-foreground shadow-sm outline-none placeholder:text-muted-foreground focus:border-primary"
           />
           {query ? (
             <button
               type="button"
               onClick={() => setQuery("")}
-              className="absolute right-2 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-xl text-slate-500"
+              className="absolute right-2 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-xl text-muted-foreground"
               aria-label="Clear search"
             >
               <X className="size-4" />
@@ -499,19 +489,21 @@ export function HpoLeafletMap({
         </div>
 
         <div className="mt-2 flex items-center gap-2 overflow-x-auto pb-0.5">
-          {([
-            ["all", "All"],
-            ["account", "Accounts"],
-            ["prospect", "Prospects"],
-          ] as const).map(([value, label]) => (
+          {(
+            [
+              ["all", "All"],
+              ["account", "Accounts"],
+              ["prospect", "Prospects"],
+            ] as const
+          ).map(([value, label]) => (
             <button
               key={value}
               type="button"
               onClick={() => setFilter(value)}
               className={`min-h-10 shrink-0 rounded-full border px-4 text-xs font-semibold ${
                 filter === value
-                  ? "border-blue-600 bg-blue-600 text-white"
-                  : "border-slate-200 bg-white text-slate-700"
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
               }`}
             >
               {label}
@@ -520,7 +512,7 @@ export function HpoLeafletMap({
           <button
             type="button"
             onClick={() => setListMode((value) => !value)}
-            className="flex min-h-10 shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700"
+            className="flex min-h-10 shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-4 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <List className="size-3.5" />
             {listMode ? "Map" : "List"}
@@ -529,20 +521,20 @@ export function HpoLeafletMap({
             type="button"
             onClick={onRefreshPins}
             disabled={preparing}
-            className="flex size-10 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 disabled:opacity-40"
+            className="flex size-10 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
             aria-label="Refresh HPO offices"
           >
             <RefreshCw className={`size-3.5 ${preparing ? "animate-spin" : ""}`} />
           </button>
         </div>
 
-        <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-500">
+        <div className="mt-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
           <span>{totalMapped} mapped offices</span>
           <span>{selectedKeys.length} selected</span>
         </div>
 
         <div
-          className="mt-1.5 flex items-center gap-3 overflow-x-auto pb-0.5 text-[10px] font-semibold text-slate-600 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="mt-1.5 flex items-center gap-3 overflow-x-auto pb-0.5 text-[10px] font-semibold text-muted-foreground [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           aria-label="HPO account pin legend"
         >
           {PIN_CATEGORY_ORDER.map((category) => (
@@ -557,7 +549,7 @@ export function HpoLeafletMap({
         </div>
 
         {searchResults.length ? (
-          <div className="absolute left-3 right-3 top-full max-h-[min(14rem,40dvh)] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-lg">
+          <div className="absolute left-3 right-3 top-full max-h-[min(14rem,40dvh)] overflow-y-auto rounded-2xl border border-border bg-card shadow-lg">
             {searchResults.map((office) => (
               <button
                 key={office.key}
@@ -567,25 +559,25 @@ export function HpoLeafletMap({
                   setQuery("");
                   setListMode(false);
                 }}
-                className="flex min-h-14 w-full items-center gap-3 border-b border-slate-100 px-3 py-2 text-left last:border-0"
+                className="flex min-h-14 w-full items-center gap-3 border-b border-border/70 px-3 py-2 text-left hover:bg-muted/60 last:border-0"
               >
-                <MapPinned className="size-4 shrink-0 text-blue-600" />
+                <MapPinned className="size-4 shrink-0 text-primary" />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-slate-900">
+                  <span className="block truncate text-sm font-semibold text-foreground">
                     {office.officeName}
                   </span>
-                  <span className="block truncate text-[11px] text-slate-500">
+                  <span className="block truncate text-[11px] text-muted-foreground">
                     {[office.address, office.city].filter(Boolean).join(", ")}
                   </span>
                 </span>
-                <span className="text-[9px] font-semibold uppercase text-slate-400">
+                <span className="text-[9px] font-semibold uppercase text-muted-foreground">
                   {office.kind}
                 </span>
               </button>
             ))}
           </div>
         ) : query.trim() ? (
-          <div className="absolute left-3 right-3 top-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500 shadow-lg">
+          <div className="absolute left-3 right-3 top-full rounded-xl border border-border bg-card px-3 py-2 text-xs text-muted-foreground shadow-lg">
             No matching offices.
           </div>
         ) : null}
@@ -599,7 +591,7 @@ export function HpoLeafletMap({
         />
 
         {listMode ? (
-          <div className="absolute inset-0 z-10 overflow-y-auto bg-[#eef2f7] px-3 py-3 pb-40">
+          <div className="absolute inset-0 z-10 overflow-y-auto bg-background px-3 py-3 pb-40">
             <div className="space-y-2">
               {filtered.map((office) => (
                 <button
@@ -609,10 +601,10 @@ export function HpoLeafletMap({
                     onSelectOffice(office.key);
                     setListMode(false);
                   }}
-                  className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-sm"
+                  className="w-full rounded-2xl border border-border bg-card p-3 text-left shadow-sm transition-colors hover:bg-muted/60"
                 >
                   <div className="flex items-start gap-3">
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
                       {office.kind === "account" ? (
                         <Building2 className="size-4" />
                       ) : (
@@ -620,20 +612,20 @@ export function HpoLeafletMap({
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-slate-900">
+                      <p className="truncate text-sm font-semibold text-foreground">
                         {office.officeName}
                       </p>
-                      <p className="mt-0.5 text-[11px] leading-4 text-slate-500">
+                      <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
                         {[office.address, office.city].filter(Boolean).join(", ")}
                       </p>
                       {office.nextAction ? (
-                        <p className="mt-1 truncate text-[10px] font-medium text-blue-700">
+                        <p className="mt-1 truncate text-[10px] font-medium text-primary">
                           Next: {office.nextAction}
                         </p>
                       ) : null}
                     </div>
                     {selectedSet.has(office.key) ? (
-                      <Check className="size-4 shrink-0 text-blue-600" />
+                      <Check className="size-4 shrink-0 text-primary" />
                     ) : null}
                   </div>
                 </button>
@@ -647,7 +639,7 @@ export function HpoLeafletMap({
             <button
               type="button"
               onClick={fitOffices}
-              className="pointer-events-auto flex size-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-lg"
+              className="pointer-events-auto flex size-11 items-center justify-center rounded-2xl border border-border bg-card text-foreground shadow-lg"
               aria-label="Fit offices"
             >
               <MapPinned className="size-4" />
@@ -655,7 +647,7 @@ export function HpoLeafletMap({
             <button
               type="button"
               onClick={locateMe}
-              className="pointer-events-auto flex size-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-blue-600 shadow-lg"
+              className="pointer-events-auto flex size-11 items-center justify-center rounded-2xl border border-border bg-card text-primary shadow-lg"
               aria-label="Use my location"
             >
               <LocateFixed className="size-4" />
@@ -664,17 +656,18 @@ export function HpoLeafletMap({
         ) : null}
 
         {tileError && !listMode ? (
-          <div className="absolute left-4 right-4 top-4 z-[600] rounded-2xl border border-amber-200 bg-white/96 p-3 text-center text-xs font-medium text-slate-700 shadow-xl">
-            Street tiles are having trouble loading. Search and the office list still work while you retry.
+          <div className="absolute left-4 right-4 top-4 z-[600] rounded-2xl border border-amber-400/40 bg-amber-950/95 p-3 text-center text-xs font-medium text-amber-100 shadow-xl">
+            Street tiles are having trouble loading. Search and the office list still work while you
+            retry.
           </div>
         ) : null}
       </div>
 
-      <div className="shrink-0 border-t border-slate-200 bg-white px-3 pb-2 pt-2 shadow-[0_-10px_30px_rgba(15,23,42,.08)]">
+      <div className="shrink-0 border-t border-border bg-background/95 px-3 pb-2 pt-2 shadow-[0_-14px_34px_rgba(0,0,0,.3)] backdrop-blur-xl">
         {selectedOffice ? (
           <>
             <div className="flex items-start gap-3">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
                 {selectedOffice.kind === "account" ? (
                   <Building2 className="size-4" />
                 ) : (
@@ -682,30 +675,32 @@ export function HpoLeafletMap({
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-slate-900">
+                <p className="truncate text-sm font-semibold text-foreground">
                   {selectedOffice.officeName}
                 </p>
-                <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
                   {[selectedOffice.address, selectedOffice.city].filter(Boolean).join(", ")}
                 </p>
                 {selectedOffice.nextAction ? (
-                  <p className="mt-1 truncate text-[10px] font-medium text-blue-700">
+                  <p className="mt-1 truncate text-[10px] font-medium text-primary">
                     Next: {selectedOffice.nextAction}
                   </p>
                 ) : null}
               </div>
             </div>
 
-            <div className={`mt-2 grid gap-2 ${
-              selectedOffice.accountId ? "grid-cols-4" : "grid-cols-3"
-            }`}>
+            <div
+              className={`mt-2 grid gap-2 ${
+                selectedOffice.accountId ? "grid-cols-4" : "grid-cols-3"
+              }`}
+            >
               <a
                 href={`https://maps.apple.com/?daddr=${encodeURIComponent(
                   [selectedOffice.address, selectedOffice.city].filter(Boolean).join(", "),
                 )}`}
                 target="_blank"
                 rel="noreferrer"
-                className="flex min-h-11 items-center justify-center gap-1 rounded-xl border border-slate-200 text-[10px] font-semibold text-slate-700"
+                className="flex min-h-11 items-center justify-center gap-1 rounded-xl border border-border text-[10px] font-semibold text-foreground hover:bg-muted"
               >
                 <Navigation className="size-3.5" />
                 Go
@@ -714,7 +709,7 @@ export function HpoLeafletMap({
                 <button
                   type="button"
                   onClick={() => onOpenAccount?.(selectedOffice.accountId!)}
-                  className="min-h-11 rounded-xl border border-slate-200 text-[10px] font-semibold text-slate-700"
+                  className="min-h-11 rounded-xl border border-border text-[10px] font-semibold text-foreground hover:bg-muted"
                 >
                   Account
                 </button>
@@ -724,8 +719,8 @@ export function HpoLeafletMap({
                 onClick={() => onToggleRouteStop(selectedOffice)}
                 className={`min-h-11 rounded-xl px-2 text-[10px] font-semibold ${
                   selectedSet.has(selectedOffice.key)
-                    ? "border border-blue-200 bg-blue-50 text-blue-700"
-                    : "bg-blue-600 text-white"
+                    ? "border border-primary/35 bg-primary/15 text-primary"
+                    : "bg-primary text-primary-foreground"
                 }`}
               >
                 {selectedSet.has(selectedOffice.key) ? "Remove" : "Route"}
@@ -743,7 +738,7 @@ export function HpoLeafletMap({
                     selectedOffice.officeName,
                   )
                 }
-                className="flex min-h-11 items-center justify-center gap-1 rounded-xl border border-slate-200 text-[10px] font-semibold text-slate-700"
+                className="flex min-h-11 items-center justify-center gap-1 rounded-xl border border-border text-[10px] font-semibold text-foreground hover:bg-muted"
               >
                 <MessageCircle className="size-3.5" />
                 Emery
@@ -753,10 +748,10 @@ export function HpoLeafletMap({
         ) : (
           <div className="flex items-center gap-3">
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold text-slate-900">
+              <p className="text-xs font-semibold text-foreground">
                 {route ? `${route.stops.length} stops on today's route` : "Build today's route"}
               </p>
-              <p className="mt-0.5 truncate text-[10px] text-slate-500">
+              <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
                 Search or tap offices, then add them to your route.
               </p>
             </div>
@@ -770,7 +765,7 @@ export function HpoLeafletMap({
                   "HPO Route",
                 )
               }
-              className="min-h-11 shrink-0 rounded-xl border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-blue-700"
+              className="min-h-11 shrink-0 rounded-xl border border-primary/35 bg-primary/15 px-3 text-xs font-semibold text-primary"
             >
               Emery
             </button>
@@ -781,7 +776,7 @@ export function HpoLeafletMap({
           <button
             type="button"
             onClick={onBuildRoute}
-            className="mt-2 min-h-12 w-full rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm"
+            className="mt-2 min-h-12 w-full rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm"
           >
             {route ? `Add ${selectedKeys.length} to Today` : `Build Route · ${selectedKeys.length}`}
           </button>
@@ -791,7 +786,7 @@ export function HpoLeafletMap({
           <button
             type="button"
             onClick={() => onNavigateHpo?.("today")}
-            className="min-h-8 px-3 text-[10px] font-semibold text-slate-500"
+            className="min-h-8 px-3 text-[10px] font-semibold text-muted-foreground"
           >
             Open Today
           </button>
