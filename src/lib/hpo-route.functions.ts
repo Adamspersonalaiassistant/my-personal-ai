@@ -2240,6 +2240,29 @@ export async function captureHpoRouteNoteCore(input: {
   const rows = stops ?? [];
   if (!rows.length) throw new Error("This route has no stops");
 
+  const { data: routeRecord, error: routeRecordError } = await input.db
+    .from("hpo_route_plans")
+    .select("id,metadata")
+    .eq("id", input.routeId)
+    .eq("user_id", input.userId)
+    .maybeSingle();
+  if (routeRecordError) throw routeRecordError;
+  const routeMetadata =
+    routeRecord?.metadata && typeof routeRecord.metadata === "object" && !Array.isArray(routeRecord.metadata)
+      ? routeRecord.metadata
+      : {};
+  const fieldSession =
+    routeMetadata.field_session &&
+    typeof routeMetadata.field_session === "object" &&
+    !Array.isArray(routeMetadata.field_session)
+      ? routeMetadata.field_session
+      : {};
+  const armedStopId =
+    typeof fieldSession.expected_note_target_stop_id === "string" &&
+    fieldSession.expected_note_target_stop_id
+      ? fieldSession.expected_note_target_stop_id
+      : null;
+
   const numberMatch = message.match(/\bstop\s*#?\s*(\d{1,2})\b/i);
   const ordinalWords: Record<string, number> = {
     first: 1,
@@ -2308,6 +2331,14 @@ export async function captureHpoRouteNoteCore(input: {
       ) ?? null;
   }
 
+  if (!target && armedStopId) {
+    target =
+      rows.find(
+        (row: any) =>
+          row.id === armedStopId && !TERMINAL.has(String(row.status)),
+      ) ?? null;
+  }
+
   if (!target) {
     const active = rows.filter((row: any) => !TERMINAL.has(row.status));
     if (active.length === 1) target = active[0];
@@ -2356,6 +2387,16 @@ export async function captureHpoRouteNoteCore(input: {
   });
   const updated = visitExecution.stop;
   const routeStatus = visitExecution.routeStatus;
+
+  if (armedStopId && updated.id === armedStopId) {
+    const { error: consumeError } = await input.db.rpc("emery_hpo_consume_field_note_target", {
+      p_route_id: input.routeId,
+      p_stop_id: updated.id,
+    });
+    if (consumeError) {
+      console.error("Field-session note target could not be consumed", consumeError);
+    }
+  }
 
   const result = {
     ok: true,
