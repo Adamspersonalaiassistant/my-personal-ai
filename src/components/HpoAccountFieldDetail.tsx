@@ -5,6 +5,7 @@ import {
   ArrowUpRight,
   CalendarClock,
   History,
+  FileText,
   MapPin,
   MapPinned,
   MessageCircle,
@@ -29,14 +30,18 @@ function dateLabel(value: string | null | undefined) {
 
 export function HpoAccountFieldDetail({
   accountId,
+  revision,
   onClose,
   onChanged,
+  onNote,
   onLog,
   onFollowup,
 }: {
   accountId: string;
+  revision?: number;
   onClose: () => void;
   onChanged?: () => void;
+  onNote?: () => void;
   onLog?: () => void;
   onFollowup?: () => void;
 }) {
@@ -64,7 +69,7 @@ export function HpoAccountFieldDetail({
     return () => {
       cancelled = true;
     };
-  }, [accountId, load]);
+  }, [accountId, load, revision]);
 
   const account = data?.account;
   const contacts = data?.contacts ?? [];
@@ -72,48 +77,54 @@ export function HpoAccountFieldDetail({
   const routeStops = data?.routeStops ?? [];
   const officeLocations = (data?.officeLocations ?? []).filter(
     (location: any, index: number, rows: any[]) =>
-      location?.address &&
+      typeof location?.address === "string" &&
+      /\d/.test(location.address) &&
       location?.metadata?.map_as_location !== false &&
       rows.findIndex(
         (candidate: any) =>
           candidate?.metadata?.map_as_location !== false &&
-          String(candidate?.address ?? "").trim().toLowerCase() ===
-            String(location.address).trim().toLowerCase(),
+          String(candidate?.address ?? "")
+            .trim()
+            .toLowerCase() === String(location.address).trim().toLowerCase(),
       ) === index,
   );
   const singleLinkedLocation = officeLocations.length === 1 ? officeLocations[0] : null;
-  const routeAddress = account?.address || singleLinkedLocation?.address || "";
-  const routeCity = account?.city || singleLinkedLocation?.city || "";
+  const routeAddress =
+    [account?.address, singleLinkedLocation?.address].find(
+      (address) => typeof address === "string" && /\d/.test(address),
+    ) || "";
+  const routeCity = routeAddress === account?.address ? account?.city : singleLinkedLocation?.city;
 
   return (
     <div
-      className="fixed inset-0 z-[82] flex items-end bg-background/68 backdrop-blur-[4px] sm:items-center sm:justify-center sm:p-4"
+      className="hpo-crm fixed inset-0 z-[82] flex items-end bg-background/70 sm:items-center sm:justify-center sm:p-4"
       onClick={onClose}
       role="presentation"
     >
       <section
-        className="emery-sheet-in max-h-[92dvh] w-full overflow-y-auto rounded-t-lg border-t border-border/55 bg-background px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-24px_70px_rgba(0,0,0,0.42)] sm:max-w-xl sm:rounded-lg sm:border"
+        className="emery-sheet-in h-[min(95dvh,100dvh)] w-full min-w-0 overflow-y-auto overscroll-contain rounded-t-lg border-t border-border bg-card px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 text-foreground shadow-xl [-webkit-overflow-scrolling:touch] sm:h-auto sm:max-h-[90dvh] sm:max-w-xl sm:rounded-lg sm:border"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="HPO account field record"
       >
         <div className="mx-auto h-1 w-10 rounded-full bg-border/80 sm:hidden" />
-        <div className="sticky top-0 z-10 -mx-1 flex items-center justify-between gap-3 bg-background/95 px-1 pb-3 pt-3 backdrop-blur">
+        <div className="sticky top-0 z-10 -mx-4 flex items-center justify-between gap-3 border-b border-border bg-card/95 px-4 pb-3 pt-3 backdrop-blur">
           <div className="min-w-0">
-            <p className="emery-kicker">Field Account</p>
+            <p className="text-[11px] font-semibold uppercase text-primary">Field account</p>
             <h2 className="mt-1 break-words text-lg font-semibold">
               {account?.name ?? "Loading account…"}
             </h2>
           </div>
-          <button
+          <Button
+            variant="ghost"
             type="button"
             onClick={onClose}
-            className="emery-press flex size-11 shrink-0 items-center justify-center rounded-xl text-muted-foreground"
+            className="size-11 shrink-0"
             aria-label="Close account"
           >
             <X className="size-4" />
-          </button>
+          </Button>
         </div>
 
         {error ? (
@@ -126,6 +137,23 @@ export function HpoAccountFieldDetail({
           </div>
         ) : (
           <div className="space-y-3 pb-2">
+            <div className="min-w-0 border-b border-border py-2">
+              <p className="break-words text-xs text-muted-foreground">
+                {[account.city, account.account_type, account.specialty]
+                  .filter(Boolean)
+                  .join(" · ") || "Account"}
+              </p>
+              <p className="mt-1 text-xs font-semibold capitalize text-primary">
+                {account.relationship_stage || account.status || "Active"} · Priority{" "}
+                {account.priority}
+              </p>
+              <p className="mt-2 break-words text-sm font-medium">
+                {account.next_action || "No follow-up set"}
+                {account.next_action_due_at
+                  ? ` · Due ${dateLabel(account.next_action_due_at)}`
+                  : ""}
+              </p>
+            </div>
             <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {routeAddress ? (
                 <a
@@ -140,30 +168,41 @@ export function HpoAccountFieldDetail({
                   Navigate
                 </a>
               ) : null}
-              <button
+              {(routeAddress || officeLocations.length > 0) && (
+                <Button
+                  type="button"
+                  onClick={() => {
+                    openHpoEmery(
+                      routeAddress
+                        ? `Add ${account.name} at ${[routeAddress, routeCity]
+                            .filter(Boolean)
+                            .join(", ")} to today's HPO route.`
+                        : `Add ${account.name} to today's HPO route. This relationship has multiple office locations: ${officeLocations
+                            .map((location: any) =>
+                              [location.address, location.city].filter(Boolean).join(", "),
+                            )
+                            .join(" | ")}. Ask me which office only if I did not specify one.`,
+                      account.name,
+                    );
+                  }}
+                  variant="outline"
+                  className="flex h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-md px-2 text-xs"
+                >
+                  <MapPinned className="size-4" />
+                  Route
+                </Button>
+              )}
+              <Button
                 type="button"
-                disabled={!routeAddress && !officeLocations.length}
-                onClick={() => {
-                  if (!routeAddress && !officeLocations.length) return;
-                  openHpoEmery(
-                    routeAddress
-                      ? `Add ${account.name} at ${[routeAddress, routeCity]
-                          .filter(Boolean)
-                          .join(", ")} to today's HPO route.`
-                      : `Add ${account.name} to today's HPO route. This relationship has multiple office locations: ${officeLocations
-                          .map((location: any) =>
-                            [location.address, location.city].filter(Boolean).join(", "),
-                          )
-                          .join(" | ")}. Ask me which office only if I did not specify one.`,
-                    account.name,
-                  );
-                }}
-                className="flex min-h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-xl border border-primary/20 bg-primary/[0.055] px-2 text-[10px] font-semibold text-primary disabled:cursor-not-allowed disabled:opacity-35"
+                variant="outline"
+                onClick={onNote}
+                className="flex h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-md px-2 text-xs"
               >
-                <MapPinned className="size-4" />
-                {routeAddress || officeLocations.length ? "Route" : "No Address"}
-              </button>
-              <button
+                <FileText className="size-4" />
+                Note
+              </Button>
+              <Button
+                variant="outline"
                 type="button"
                 onClick={() =>
                   onLog
@@ -173,12 +212,13 @@ export function HpoAccountFieldDetail({
                         account.name,
                       )
                 }
-                className="flex min-h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-xl border border-border/50 bg-card/45 px-2 text-[10px] font-semibold text-foreground"
+                className="flex h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-md px-2 text-xs"
               >
                 <History className="size-4 text-primary" />
                 Log Visit
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="outline"
                 type="button"
                 onClick={() =>
                   onFollowup
@@ -188,24 +228,24 @@ export function HpoAccountFieldDetail({
                         account.name,
                       )
                 }
-                className="flex min-h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-xl border border-border/50 bg-card/45 px-2 text-[10px] font-semibold text-foreground"
+                className="flex h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-md px-2 text-xs"
               >
                 <CalendarClock className="size-4 text-primary" />
                 Follow-Up
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 onClick={() =>
                   openHpoEmery(
-                    `I'm working with ${account.name} in HPO. Use this account's live relationship history, route context, contacts, visits and follow-ups to help me with the next action.`,
+                    `I'm working with ${account.name} (HPO account ID ${accountId}). Use this account's live relationship history, route context, contacts, visits and follow-ups to help me with the next action.`,
                     account.name,
                   )
                 }
-                className="flex min-h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-xl bg-primary px-2 text-[10px] font-semibold text-primary-foreground"
+                className="flex h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-md px-2 text-xs"
               >
                 <MessageCircle className="size-4" />
                 Emery
-              </button>
+              </Button>
             </div>
             <Button
               variant="ghost"
@@ -348,13 +388,13 @@ export function HpoAccountFieldDetail({
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-2">
-                <div className="emery-surface rounded-xl p-2.5">
+                <div className="rounded-md border border-border bg-card p-2.5">
                   <p className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">
                     Last touch
                   </p>
                   <p className="mt-1 text-xs font-semibold">{dateLabel(account.last_touch_at)}</p>
                 </div>
-                <div className="emery-surface rounded-xl p-2.5">
+                <div className="rounded-md border border-border bg-card p-2.5">
                   <p className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">
                     Status
                   </p>
@@ -390,12 +430,10 @@ export function HpoAccountFieldDetail({
                 </div>
                 <div className="mt-2 space-y-2">
                   {officeLocations.map((location: any) => (
-                    <div key={location.id} className="emery-surface rounded-xl p-3">
+                    <div key={location.id} className="rounded-md border border-border bg-card p-3">
                       <div className="flex items-start gap-3">
                         <div className="min-w-0 flex-1">
-                          <p className="text-xs font-semibold">
-                            {location.city || account.name}
-                          </p>
+                          <p className="text-xs font-semibold">{location.city || account.name}</p>
                           <p className="mt-1 break-words text-[11px] leading-4 text-muted-foreground">
                             {location.address}
                           </p>
@@ -423,7 +461,9 @@ export function HpoAccountFieldDetail({
                               openHpoEmery(
                                 `Add ${account.name} — ${[location.address, location.city]
                                   .filter(Boolean)
-                                  .join(", ")} — to today's HPO route. Use this exact office location.`,
+                                  .join(
+                                    ", ",
+                                  )} — to today's HPO route. Use this exact office location.`,
                                 account.name,
                               )
                             }
@@ -516,7 +556,7 @@ export function HpoAccountFieldDetail({
                   <p className="text-xs text-muted-foreground">No contacts saved yet.</p>
                 )}
                 {contacts.slice(0, 8).map((contact: any) => (
-                  <div key={contact.id} className="emery-surface rounded-xl p-3">
+                  <div key={contact.id} className="rounded-md border border-border bg-card p-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate text-xs font-semibold">{contact.name}</p>
@@ -555,7 +595,7 @@ export function HpoAccountFieldDetail({
               </div>
             </section>
 
-            <section className="rounded-2xl border border-border/55 bg-card/30 p-4">
+            <section className="rounded-md border border-border bg-card p-3">
               <div className="flex items-center gap-2">
                 <History className="size-4 text-primary" />
                 <p className="text-sm font-semibold">Relationship history</p>
@@ -563,7 +603,10 @@ export function HpoAccountFieldDetail({
               {interactions.length ? (
                 <div className="mt-3 space-y-2">
                   {interactions.slice(0, 10).map((interaction: any) => (
-                    <div key={interaction.id} className="emery-surface rounded-xl p-3">
+                    <div
+                      key={interaction.id}
+                      className="rounded-md border border-border bg-card p-3"
+                    >
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-[10px] font-semibold capitalize text-primary">
                           {interaction.interaction_type || "interaction"}
@@ -598,7 +641,7 @@ export function HpoAccountFieldDetail({
               )}
             </section>
 
-            <section className="rounded-2xl border border-border/55 bg-card/30 p-4">
+            <section className="rounded-md border border-border bg-card p-3">
               <div className="flex items-center gap-2">
                 <CalendarClock className="size-4 text-primary" />
                 <p className="text-sm font-semibold">Route visit history</p>
@@ -606,7 +649,7 @@ export function HpoAccountFieldDetail({
               {routeStops.length ? (
                 <div className="mt-3 space-y-2">
                   {routeStops.slice(0, 8).map((stop: any) => (
-                    <div key={stop.id} className="emery-surface rounded-xl p-3">
+                    <div key={stop.id} className="rounded-md border border-border bg-card p-3">
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-[10px] font-semibold capitalize text-primary">
                           {String(stop.status).replaceAll("_", " ")}
