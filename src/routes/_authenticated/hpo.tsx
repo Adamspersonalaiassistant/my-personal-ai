@@ -22,6 +22,7 @@ import { HpoEmerySheet, openHpoEmery } from "@/components/HpoEmerySheet";
 import { createHpoAccount, logHpoInteraction } from "@/lib/hpo.functions";
 import { getHpoWorkspace, setHpoFieldAccountFollowup } from "@/lib/hpo-workspace.functions";
 import { getHpoFieldToday } from "@/lib/hpo-field.functions";
+import type { HpoAttentionState } from "@/lib/hpo-account-intelligence";
 import "@/components/hpo-accounts.css";
 
 type View = HpoFieldView;
@@ -32,6 +33,14 @@ const field =
   "min-h-12 w-full rounded-md border border-border/70 bg-card/60 px-3 text-base text-foreground outline-none focus:border-primary";
 const date = (value: string | null | undefined) =>
   value ? new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—";
+const attentionLabel = (value: HpoAttentionState) =>
+  ({
+    overdue: "Follow-up overdue",
+    due_soon: "Follow-up due soon",
+    never_visited: "Never visited",
+    stale: "Needs attention",
+    current: "Current",
+  })[value];
 
 export const Route = createFileRoute("/_authenticated/hpo")({
   head: () => ({
@@ -340,6 +349,7 @@ function Accounts({
   const [type, setType] = useState("all");
   const [stage, setStage] = useState("all");
   const [city, setCity] = useState("all");
+  const [attention, setAttention] = useState("all");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const types = useMemo(
     () => [...new Set(accounts.map((a) => a.account_type).filter(Boolean))].sort() as string[],
@@ -361,10 +371,11 @@ function Accounts({
       (!query || text.includes(query.toLowerCase())) &&
       (type === "all" || a.account_type === type) &&
       (stage === "all" || a.relationship_stage === stage) &&
-      (city === "all" || a.city === city)
+      (city === "all" || a.city === city) &&
+      (attention === "all" || a.attention_state === attention)
     );
   });
-  const activeFilters = [type, stage, city].filter((value) => value !== "all").length;
+  const activeFilters = [type, stage, city, attention].filter((value) => value !== "all").length;
   return (
     <section className="min-w-0 space-y-3">
       <div className="sticky top-0 z-10 -mx-3 space-y-2 border-b border-border bg-background/95 px-3 pb-3 pt-1 backdrop-blur-md sm:-mx-4 sm:px-4">
@@ -402,7 +413,14 @@ function Accounts({
         {activeFilters > 0 && (
           <div className="flex items-center gap-2 overflow-x-auto text-xs text-primary">
             <span className="truncate">
-              {[type, stage, city].filter((v) => v !== "all").join(" · ")}
+              {[
+                type,
+                stage,
+                city,
+                attention === "all" ? "all" : attentionLabel(attention as HpoAttentionState),
+              ]
+                .filter((v) => v !== "all")
+                .join(" · ")}
             </span>
             <Button
               type="button"
@@ -412,6 +430,7 @@ function Accounts({
                 setType("all");
                 setStage("all");
                 setCity("all");
+                setAttention("all");
               }}
             >
               Clear
@@ -419,10 +438,17 @@ function Accounts({
           </div>
         )}
         {filtersOpen && (
-          <div className="grid gap-2 rounded-md border border-border bg-card p-2 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2 rounded-md border border-border bg-card p-2 sm:grid-cols-4">
             <Filter value={type} onChange={setType} label="Type" options={types} />
             <Filter value={stage} onChange={setStage} label="Stage" options={stages} />
             <Filter value={city} onChange={setCity} label="City" options={cities} />
+            <Filter
+              value={attention}
+              onChange={setAttention}
+              label="Attention"
+              options={["overdue", "due_soon", "never_visited", "stale", "current"]}
+              formatOption={(value) => attentionLabel(value as HpoAttentionState)}
+            />
           </div>
         )}
       </div>
@@ -431,7 +457,7 @@ function Accounts({
       )}
       <div className="space-y-2">
         {shown.map((a) => {
-          const due = a.next_action_due_at && Date.parse(a.next_action_due_at) <= Date.now();
+          const due = a.attention_state === "overdue";
           const navigable = Boolean(a.address?.trim() && /\d/.test(a.address));
           return (
             <article
@@ -454,8 +480,27 @@ function Accounts({
                   <span className="mt-2 block break-words text-[11px] font-medium capitalize text-primary">
                     {a.relationship_stage || a.status || "Account"} · Priority {a.priority}
                   </span>
-                  <span className="mt-1 block text-[11px] font-normal text-muted-foreground">
-                    Last touch: {date(a.last_touch_at)}
+                  <span className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] font-normal text-muted-foreground">
+                    <span>
+                      Last visit:{" "}
+                      {a.days_since_visit === null
+                        ? "Never"
+                        : a.days_since_visit === 0
+                          ? "Today"
+                          : `${a.days_since_visit}d`}
+                    </span>
+                    <span>Last touch: {date(a.last_touch_at)}</span>
+                  </span>
+                  <span
+                    className={`mt-1 block text-[11px] font-semibold ${
+                      due
+                        ? "text-destructive"
+                        : a.attention_state === "due_soon" || a.attention_state === "stale"
+                          ? "text-primary"
+                          : "text-muted-foreground"
+                    }`}
+                  >
+                    {attentionLabel(a.attention_state)}
                   </span>
                   {a.next_action && (
                     <span
@@ -516,11 +561,13 @@ function Filter({
   onChange,
   label,
   options,
+  formatOption,
 }: {
   value: string;
   onChange: (value: string) => void;
   label: string;
   options: string[];
+  formatOption?: (value: string) => string;
 }) {
   return (
     <label className="min-w-0">
@@ -533,7 +580,7 @@ function Filter({
         <option value="all">{label}: All</option>
         {options.map((o) => (
           <option key={o} value={o}>
-            {o}
+            {formatOption ? formatOption(o) : o}
           </option>
         ))}
       </select>

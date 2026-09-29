@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { deriveHpoAccountIntelligence, latestHpoTimestamp } from "@/lib/hpo-account-intelligence";
 
 const pageInput = z.object({ page: z.number().int().min(0).max(1000).default(0) });
 const accountInput = z.object({
@@ -24,7 +25,7 @@ export const getHpoWorkspace = createServerFn({ method: "GET" })
   .inputValidator((input: { page?: number }) => pageInput.parse(input))
   .handler(async ({ context, data }) => {
     const db = context.supabase;
-    const [accounts, interactions, meetings] = await Promise.all([
+    const [accounts, interactions, meetings, visitInteractions, routeVisits] = await Promise.all([
       db
         .from("hpo_accounts")
         .select(
@@ -48,12 +49,44 @@ export const getHpoWorkspace = createServerFn({ method: "GET" })
         .gte("meeting_at", new Date().toISOString())
         .order("meeting_at")
         .limit(40),
+      db
+        .from("hpo_interactions")
+        .select("account_id,occurred_at")
+        .eq("user_id", context.userId)
+        .eq("interaction_type", "visit")
+        .not("account_id", "is", null)
+        .order("occurred_at", { ascending: false })
+        .range(0, 4999),
+      db
+        .from("hpo_route_stops")
+        .select("account_id,visited_at,updated_at,status")
+        .eq("user_id", context.userId)
+        .not("account_id", "is", null)
+        .in("status", ["completed", "visited", "closed"])
+        .order("visited_at", { ascending: false, nullsFirst: false })
+        .range(0, 4999),
     ]);
     if (accounts.error) throw accounts.error;
     if (interactions.error) throw interactions.error;
     if (meetings.error) throw meetings.error;
+    if (visitInteractions.error) throw visitInteractions.error;
+    if (routeVisits.error) throw routeVisits.error;
+    const lastVisitByAccount = new Map<string, string>();
+    const recordVisit = (accountId: string | null, timestamp: string | null) => {
+      if (!accountId || !timestamp) return;
+      const latest = latestHpoTimestamp([lastVisitByAccount.get(accountId), timestamp]);
+      if (latest) lastVisitByAccount.set(accountId, latest);
+    };
+    for (const visit of visitInteractions.data ?? [])
+      recordVisit(visit.account_id, visit.occurred_at);
+    for (const visit of routeVisits.data ?? [])
+      recordVisit(visit.account_id, visit.visited_at ?? visit.updated_at);
+    const now = Date.now();
     return {
-      accounts: accounts.data ?? [],
+      accounts: (accounts.data ?? []).map((account) => ({
+        ...account,
+        ...deriveHpoAccountIntelligence(account, lastVisitByAccount.get(account.id) ?? null, now),
+      })),
       interactions: interactions.data ?? [],
       hasMore: (interactions.data?.length ?? 0) === 50,
       meetings: (meetings.data ?? []).filter((row) => {

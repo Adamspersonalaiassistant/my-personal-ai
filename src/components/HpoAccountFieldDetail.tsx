@@ -20,6 +20,7 @@ import { getHpoAccountFieldContext } from "@/lib/hpo-field.functions";
 import { addHpoFieldContact, updateHpoFieldAccount } from "@/lib/hpo-workspace.functions";
 import { Button } from "@/components/ui/button";
 import { openHpoEmery } from "@/components/HpoEmerySheet";
+import { deriveHpoAccountIntelligence, latestHpoTimestamp } from "@/lib/hpo-account-intelligence";
 
 function dateLabel(value: string | null | undefined) {
   if (!value) return "Not recorded";
@@ -118,6 +119,15 @@ export function HpoAccountFieldDetail({
   const contacts = data?.contacts ?? [];
   const interactions = data?.interactions ?? [];
   const routeStops = data?.routeStops ?? [];
+  const lastVisitAt = latestHpoTimestamp([
+    ...interactions
+      .filter((interaction: any) => interaction.interaction_type === "visit")
+      .map((interaction: any) => interaction.occurred_at),
+    ...routeStops
+      .filter((stop: any) => ["completed", "visited", "closed"].includes(stop.status))
+      .map((stop: any) => stop.visited_at ?? stop.updated_at),
+  ]);
+  const intelligence = deriveHpoAccountIntelligence(account ?? {}, lastVisitAt);
   const officeLocations = (data?.officeLocations ?? []).filter(
     (location: any, index: number, rows: any[]) =>
       typeof location?.address === "string" &&
@@ -194,7 +204,11 @@ export function HpoAccountFieldDetail({
                 <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-primary">
                   Next relationship action
                 </p>
-                <p className="mt-1 break-words text-sm font-semibold">
+                <p
+                  className={`mt-1 break-words text-sm font-semibold ${
+                    intelligence.attention_state === "overdue" ? "text-destructive" : ""
+                  }`}
+                >
                   {account.next_action || "No follow-up set"}
                 </p>
                 {account.next_action_due_at ? (
@@ -443,16 +457,24 @@ export function HpoAccountFieldDetail({
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <div className="rounded-md border border-border bg-card p-2.5">
                   <p className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">
-                    Last touch
+                    Last visit
                   </p>
-                  <p className="mt-1 text-xs font-semibold">{dateLabel(account.last_touch_at)}</p>
+                  <p className="mt-1 text-xs font-semibold">{dateLabel(lastVisitAt)}</p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    {intelligence.days_since_visit === null
+                      ? "Never visited"
+                      : intelligence.days_since_visit === 0
+                        ? "Today"
+                        : `${intelligence.days_since_visit} days ago`}
+                  </p>
                 </div>
                 <div className="rounded-md border border-border bg-card p-2.5">
                   <p className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">
-                    Status
+                    Last touch
                   </p>
-                  <p className="mt-1 text-xs font-semibold capitalize">
-                    {account.relationship_stage || account.status || "active"}
+                  <p className="mt-1 text-xs font-semibold">{dateLabel(account.last_touch_at)}</p>
+                  <p className="mt-1 text-[10px] capitalize text-muted-foreground">
+                    {account.relationship_health || account.relationship_stage || "Not classified"}
                   </p>
                 </div>
               </div>
