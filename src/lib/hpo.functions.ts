@@ -219,6 +219,7 @@ export const listHpoAccounts = createServerFn({ method: "GET" })
         "id, name, account_type, specialty, territory, city, address, priority, owner_name, relationship_stage, status, notes, last_touch_at, next_action, next_action_due_at, metadata, created_at, updated_at",
       )
       .eq("user_id", context.userId)
+      .eq("status", "active")
       .order("priority", { ascending: false })
       .order("name", { ascending: true });
     if (error) throw error;
