@@ -1737,6 +1737,18 @@ export function HpoRoutePlanner({
           onOpenAccount={setMapAccountDetailId}
           onToggleRouteStop={toggleMapRouteStop}
           onBuildRoute={startRouteFromMap}
+          onOptimizeRoute={
+            activeRoute
+              ? () => {
+                  const hasCompleted = activeRoute.stops.some((stop) =>
+                    terminalStatuses.has(String(stop.status)),
+                  );
+                  if (hasCompleted) void reoptimizeActiveRemaining(activeRoute.id);
+                  else void optimizeActive(activeRoute.id);
+                }
+              : undefined
+          }
+          optimizing={optimizing}
           preparing={mapPreparing}
           onRefreshPins={() => void refreshOfficePins()}
           onNavigateHpo={onNavigateHpo}
