@@ -609,14 +609,22 @@ export function HpoEmerySheet({
                             const selected = selectedKeys.includes(key);
                             const recommended = recommendedKeys.has(key);
                             return (
-                              <button
+                              <div
                                 key={key}
-                                type="button"
+                                role="button"
+                                tabIndex={0}
+                                aria-pressed={selected}
                                 onClick={() => toggleCandidate(candidate)}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter" || event.key === " ") {
+                                    event.preventDefault();
+                                    toggleCandidate(candidate);
+                                  }
+                                }}
                                 className={
                                   selected
-                                    ? "w-full bg-primary/[0.055] px-3 py-3 text-left"
-                                    : "w-full px-3 py-3 text-left hover:bg-accent/25"
+                                    ? "w-full cursor-pointer bg-primary/[0.055] px-3 py-3 text-left"
+                                    : "w-full cursor-pointer px-3 py-3 text-left hover:bg-accent/25"
                                 }
                               >
                                 <div className="flex items-start gap-2.5">
@@ -704,7 +712,7 @@ export function HpoEmerySheet({
                                     ) : null}
                                   </div>
                                 </div>
-                              </button>
+                              </div>
                             );
                           })}
                         </div>
