@@ -352,6 +352,7 @@ type RouteSalesCandidate = {
   veinPriorityScore?: number | null;
   veinVisitStatus?: string | null;
   lunchTarget?: boolean;
+  tags?: string[];
 };
 
 function boundedText(value: unknown, max = 180) {
@@ -364,6 +365,50 @@ function dateDistanceDays(value: unknown, nowMs: number) {
   const parsed = Date.parse(clean(value));
   if (!Number.isFinite(parsed)) return null;
   return Math.floor((nowMs - parsed) / 86400000);
+}
+
+function routeDisplayTags(
+  row: any,
+  metadata: Record<string, any>,
+  veinTarget: boolean,
+  visitStatus: string | null,
+  relationshipStage?: string | null,
+) {
+  const result = new Set<string>();
+  const rawTags = Array.isArray(row?.tags) ? row.tags.map((tag: unknown) => clean(tag)) : [];
+  const hidden = new Set([
+    "prospect",
+    "pcp",
+    "attorney",
+    "provider_relationship",
+    "exclude_from_adam_route",
+    "vein_tracker",
+    "vein_target",
+    "vein_lunch_target",
+  ]);
+
+  for (const raw of rawTags) {
+    const tag = normalize(raw).replace(/\s+/g, "_");
+    if (!tag || hidden.has(tag)) continue;
+    if (tag === "vein_prospect") result.add("vein_prospect");
+    else if (tag === "lunch_target") result.add("lunch_target");
+    else if (tag === "lunch_set") result.add("lunch_set");
+    else if (tag === "need_to_visit") result.add("need_to_visit");
+    else if (tag === "warm_relationship") result.add("warm_relationship");
+    else result.add(tag);
+  }
+
+  if (veinTarget) {
+    result.add("vein_prospect");
+    if (metadata.vein_lunch_target === true || rawTags.includes("lunch_target")) {
+      result.add("lunch_target");
+    }
+  }
+  if (normalize(clean(visitStatus)) === "need to visit") result.add("need_to_visit");
+  if (normalize(clean(relationshipStage)) === "warm") result.add("warm_relationship");
+  if (metadata.lunch_date || rawTags.includes("lunch_set")) result.add("lunch_set");
+
+  return [...result];
 }
 
 function salesCategory(candidate: RouteSalesCandidate) {
@@ -511,9 +556,13 @@ async function recommendRouteCandidates(
       row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
         ? row.metadata
         : {};
+    const rawTags = Array.isArray(row.tags) ? row.tags : [];
+    const trackerSource = normalize(clean(metadata.source_workbook)).includes("vein");
     const veinTarget =
-      metadata.vein_tracker_active === true &&
-      metadata.vein_lunch_target === true &&
+      (metadata.vein_tracker_active === true ||
+        rawTags.includes("vein_prospect") ||
+        rawTags.includes("vein_target") ||
+        (trackerSource && Boolean(metadata.vein_fit))) &&
       !/not a vein target|rather than vein target/.test(
         normalize([row.notes, row.next_action].filter(Boolean).join(" ")),
       );
@@ -676,7 +725,14 @@ async function recommendRouteCandidates(
       veinFit,
       veinPriorityScore: Number.isFinite(veinPriorityScore) ? veinPriorityScore : null,
       veinVisitStatus,
-      lunchTarget: veinTarget,
+      lunchTarget: veinTarget && (metadata.vein_lunch_target === true || rawTags.includes("lunch_target")),
+      tags: routeDisplayTags(
+        row,
+        metadata,
+        veinTarget,
+        veinVisitStatus,
+        row.relationship_stage ?? null,
+      ),
     };
     candidate.reasons = reasons
       .sort((left, right) => Math.abs(right.weight) - Math.abs(left.weight))
@@ -695,8 +751,35 @@ async function recommendRouteCandidates(
     if (row.promoted_account_id && metadata.map_as_location !== true) continue;
 
     const reasons: Array<{ weight: number; text: string }> = [];
+    const prospectTrackerSource = normalize(clean(metadata.source_workbook)).includes("vein");
+    const prospectVeinTarget =
+      (metadata.vein_tracker_active === true ||
+        metadata.vein_lunch_target === true ||
+        (prospectTrackerSource && Boolean(metadata.vein_fit))) &&
+      !/not a vein target|rather than vein target/.test(normalize(clean(row.notes)));
+    const prospectVeinVisitStatus = clean(metadata.visit_status) || null;
+    const prospectVeinPriorityScore = Number(metadata.priority_score ?? 0);
     const internalPriority = Number(metadata.internal_priority ?? 2);
     let score = internalPriority * 13;
+    if (prospectVeinTarget) {
+      const boost = veinPlanningMode ? 42 : 18;
+      score += boost;
+      addReason(
+        reasons,
+        boost,
+        veinPlanningMode
+          ? "high-fit vein prospect for lunch/referral outreach"
+          : "current vein prospect",
+      );
+      if (prospectVeinPriorityScore >= 10) {
+        score += veinPlanningMode ? 18 : 8;
+        addReason(reasons, veinPlanningMode ? 18 : 8, "vein tracker marks this as a visit-first target");
+      }
+      if (normalize(prospectVeinVisitStatus) === "need to visit") {
+        score += 12;
+        addReason(reasons, 12, "vein tracker shows this office still needs a first visit");
+      }
+    }
     if (row.fit_status === "qualified") {
       score += 24;
       addReason(reasons, 24, "qualified prospect");
@@ -744,6 +827,20 @@ async function recommendRouteCandidates(
         .slice(0, 3)
         .map((reason) => reason.text),
       priorityLabel: "MEDIUM",
+      veinTarget: prospectVeinTarget,
+      veinFit: clean(metadata.vein_fit) || null,
+      veinPriorityScore: Number.isFinite(prospectVeinPriorityScore)
+        ? prospectVeinPriorityScore
+        : null,
+      veinVisitStatus: prospectVeinVisitStatus,
+      lunchTarget: prospectVeinTarget && metadata.vein_lunch_target === true,
+      tags: routeDisplayTags(
+        row,
+        metadata,
+        prospectVeinTarget,
+        prospectVeinVisitStatus,
+        "Prospect",
+      ),
     };
     candidate.priorityLabel = candidatePriorityLabel(score, candidate);
     scored.push(candidate);
