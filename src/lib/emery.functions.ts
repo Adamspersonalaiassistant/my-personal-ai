@@ -128,6 +128,11 @@ type SourceMetadata = {
   selectedProspectId?: string | null;
   hpoEphemeral?: boolean;
   hpoEphemeralSession?: string | null;
+  hpoPlanningArea?: string | null;
+  hpoPlanningAccountIds?: string[];
+  hpoPlanningProspectIds?: string[];
+  hpoPlanningSelectedAccountIds?: string[];
+  hpoPlanningSelectedProspectIds?: string[];
 };
 type ChatInput = { message?: string; attachments?: AttachmentInput[]; source?: SourceMetadata };
 type ChatAttachment = {
@@ -180,6 +185,101 @@ async function history(db: any, userId: string, conversationId: string) {
       sourceMetadata: x.source_metadata ?? null,
     }));
 }
+async function loadHpoPlanningSessionContext(
+  db: any,
+  userId: string,
+  source: SourceMetadata,
+) {
+  const accountIds = [...new Set(source.hpoPlanningAccountIds ?? [])].filter(Boolean);
+  const prospectIds = [...new Set(source.hpoPlanningProspectIds ?? [])].filter(Boolean);
+  if (!accountIds.length && !prospectIds.length) return null;
+
+  let accounts: any[] = [];
+  if (accountIds.length) {
+    const { data, error } = await db
+      .from("hpo_accounts")
+      .select(
+        "id,name,account_type,specialty,address,city,priority,relationship_stage,relationship_health,last_touch_at,next_action,next_action_due_at,opportunity,blockers,notes,status,owner_name",
+      )
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .in("id", accountIds);
+    if (error) throw error;
+    accounts = data ?? [];
+  }
+
+  let prospects: any[] = [];
+  if (prospectIds.length) {
+    const { data, error } = await db
+      .from("hpo_prospects")
+      .select(
+        "id,name,prospect_type,specialty,address,city,fit_status,verification_status,notes,metadata,promoted_account_id",
+      )
+      .eq("user_id", userId)
+      .in("id", prospectIds);
+    if (error) throw error;
+    prospects = data ?? [];
+  }
+
+  const interactionByAccount = new Map<string, any>();
+  if (accountIds.length) {
+    const { data, error } = await db
+      .from("hpo_interactions")
+      .select(
+        "account_id,occurred_at,summary,outcome,relationship_signal,next_action,next_action_due_at",
+      )
+      .eq("user_id", userId)
+      .in("account_id", accountIds)
+      .order("occurred_at", { ascending: false })
+      .limit(600);
+    if (error) throw error;
+    for (const interaction of data ?? []) {
+      if (!interactionByAccount.has(String(interaction.account_id))) {
+        interactionByAccount.set(String(interaction.account_id), interaction);
+      }
+    }
+  }
+
+  const selectedAccountIds = new Set(source.hpoPlanningSelectedAccountIds ?? []);
+  const selectedProspectIds = new Set(source.hpoPlanningSelectedProspectIds ?? []);
+
+  return {
+    area: source.hpoPlanningArea ?? null,
+    instruction:
+      "This is the exact live office pool currently shown in the HPO route game-plan UI. Use it to discuss, compare, prioritize, remove, or swap offices. Never say the territory has no accounts when rows are present here. Keep office lists in bullets grouped as Doctors / Medical, Attorneys, PT / Chiro, then Other. Do not claim a route was built unless a deterministic route receipt confirms it.",
+    accounts: accounts.map((row: any) => ({
+      id: row.id,
+      selected: selectedAccountIds.has(String(row.id)),
+      name: row.name,
+      type: row.account_type,
+      specialty: row.specialty,
+      city: row.city,
+      priority: row.priority,
+      relationship_stage: row.relationship_stage,
+      relationship_health: row.relationship_health,
+      last_touch_at: row.last_touch_at,
+      next_action: row.next_action,
+      next_action_due_at: row.next_action_due_at,
+      opportunity: row.opportunity,
+      blockers: row.blockers,
+      notes: row.notes,
+      latest_interaction: interactionByAccount.get(String(row.id)) ?? null,
+    })),
+    prospects: prospects.map((row: any) => ({
+      id: row.id,
+      selected: selectedProspectIds.has(String(row.id)),
+      name: row.name,
+      type: row.prospect_type,
+      specialty: row.specialty,
+      city: row.city,
+      fit_status: row.fit_status,
+      verification_status: row.verification_status,
+      notes: row.notes,
+      metadata: row.metadata,
+    })),
+  };
+}
+
 async function sign(db: any, rows: any[]): Promise<ChatAttachment[]> {
   return Promise.all(
     rows.map(async (r) => {
@@ -347,6 +447,19 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
       hpoEphemeralSession: raw.hpoEphemeralSession
         ? String(raw.hpoEphemeralSession).slice(0, 120)
         : null,
+      hpoPlanningArea: raw.hpoPlanningArea ? String(raw.hpoPlanningArea).slice(0, 180) : null,
+      hpoPlanningAccountIds: Array.isArray(raw.hpoPlanningAccountIds)
+        ? raw.hpoPlanningAccountIds.slice(0, 120).map((id) => String(id).slice(0, 80))
+        : [],
+      hpoPlanningProspectIds: Array.isArray(raw.hpoPlanningProspectIds)
+        ? raw.hpoPlanningProspectIds.slice(0, 120).map((id) => String(id).slice(0, 80))
+        : [],
+      hpoPlanningSelectedAccountIds: Array.isArray(raw.hpoPlanningSelectedAccountIds)
+        ? raw.hpoPlanningSelectedAccountIds.slice(0, 30).map((id) => String(id).slice(0, 80))
+        : [],
+      hpoPlanningSelectedProspectIds: Array.isArray(raw.hpoPlanningSelectedProspectIds)
+        ? raw.hpoPlanningSelectedProspectIds.slice(0, 30).map((id) => String(id).slice(0, 80))
+        : [],
     };
     if (!message && !attachments.length) throw new Error("Message or attachment is required");
     return { message, attachments, source };
@@ -452,6 +565,12 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
     const hpoContext = hpoEligible
       ? await loadHpoAgentContext(db, userId, data.message).catch((error: any) => {
           console.error("Central Emery HPO context failed", error);
+          return null;
+        })
+      : null;
+    const hpoPlanningContext = hpoEligible
+      ? await loadHpoPlanningSessionContext(db, userId, data.source).catch((error: any) => {
+          console.error("HPO planning-session context failed", error);
           return null;
         })
       : null;
@@ -1347,6 +1466,16 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
                 {
                   role: "system",
                   content: `CURRENT HPO OPERATING CONTEXT (bounded, non-PHI):\n${hpoBlock}\nUse only when this turn actually concerns HPO. Never infer or request PHI from this block.`,
+                },
+              ]
+            : []),
+          ...(hpoPlanningContext
+            ? [
+                {
+                  role: "system",
+                  content: `CURRENT HPO ROUTE GAME-PLAN CONTEXT (server-verified, non-PHI):\n${JSON.stringify(
+                    hpoPlanningContext,
+                  ).slice(0, 18000)}\nWork directly with these offices when Adam asks route-planning questions. Explain recommendations from the recorded relationship facts; distinguish saved facts from your judgment.`,
                 },
               ]
             : []),
