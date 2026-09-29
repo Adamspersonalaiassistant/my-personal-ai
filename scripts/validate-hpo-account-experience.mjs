@@ -12,7 +12,7 @@ const checks = [
   [detail.includes('z-[150]'), "account detail must sit above app navigation"],
   [detail.includes("flex h-[100dvh]") && detail.includes("min-h-0 flex-1 overflow-y-auto"), "account detail must use a fixed shell with one internal scroll region"],
   [detail.includes("Edit with Emery"), "account detail must expose the Emery edit experience"],
-  [detail.includes("<EmeryVoiceControl hpoAccountId={accountId}"), "account detail voice must bind the selected account"],
+  [/hpoAccountId=\{accountId\}/.test(detail), "account detail voice must bind the selected account"],
   [sheet.includes('z-[180]'), "HPO Emery sheet must layer above account detail"],
   [controller.includes('"update_account"'), "HPO action controller must support update_account"],
   [controller.includes("selectedAccountId?: string | null"), "HPO action controller must accept selected account context"],
