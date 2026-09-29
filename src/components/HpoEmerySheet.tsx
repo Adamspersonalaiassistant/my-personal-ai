@@ -11,6 +11,7 @@ const EVENT_NAME = "emery:hpo-chat";
 type HpoEmeryDetail = {
   prompt?: string;
   title?: string;
+  autoSend?: boolean;
 };
 
 type MiniMessage = {
@@ -19,11 +20,15 @@ type MiniMessage = {
   text: string;
 };
 
-export function openHpoEmery(prompt = "", title = "HPO") {
+export function openHpoEmery(
+  prompt = "",
+  title = "HPO",
+  options: { autoSend?: boolean } = {},
+) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
     new CustomEvent<HpoEmeryDetail>(EVENT_NAME, {
-      detail: { prompt, title },
+      detail: { prompt, title, autoSend: options.autoSend === true },
     }),
   );
 }
@@ -53,6 +58,7 @@ export function HpoEmerySheet({
   const [messages, setMessages] = useState<MiniMessage[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [autoPrompt, setAutoPrompt] = useState("");
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -62,7 +68,8 @@ export function HpoEmerySheet({
           ? crypto.randomUUID()
           : `hpo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       setTitle(detail.title || "HPO");
-      setDraft(detail.prompt || "");
+      setDraft(detail.autoSend ? "" : detail.prompt || "");
+      setAutoPrompt(detail.autoSend ? detail.prompt || "" : "");
       setMessages([]);
       setError("");
       setPending(false);
@@ -88,11 +95,23 @@ export function HpoEmerySheet({
     return () => cancelAnimationFrame(frame);
   }, [messages, pending, error, open]);
 
-  async function send() {
-    const clean = draft.trim();
+  useEffect(() => {
+    if (!open || !autoPrompt || pending) return;
+    const prompt = autoPrompt;
+    setAutoPrompt("");
+    const timer = window.setTimeout(() => {
+      void sendText(prompt, false);
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [autoPrompt, open, pending]);
+
+  async function sendText(text: string, showUser: boolean) {
+    const clean = text.trim();
     if (!clean || pending) return;
-    setMessages((current) => [...current, { role: "user", text: clean }]);
-    setDraft("");
+    if (showUser) {
+      setMessages((current) => [...current, { role: "user", text: clean }]);
+      setDraft("");
+    }
     setPending(true);
     setError("");
     try {
@@ -144,6 +163,12 @@ export function HpoEmerySheet({
       setPending(false);
       window.setTimeout(() => inputRef.current?.focus(), 60);
     }
+  }
+
+  async function send() {
+    const clean = draft.trim();
+    if (!clean || pending) return;
+    await sendText(clean, true);
   }
 
   if (!open || typeof document === "undefined") return null;
