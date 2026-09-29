@@ -1,4 +1,4 @@
-| 223 | FIXED + VERIFIED | Orchestration changes lacked a scoped integration gate | Relevant orchestration, HPO, TypeScript and focused lint gates are green | All scoped gates pass | `validation output; scope checkpoint` |
+# Emery Professionalization Coverage
 
 Starting commit: 5f7af39e677e225cf4b56d87cc2ff164de61db14  
 Working branch: codex/emery-professionalization
@@ -9,36 +9,36 @@ OPEN is a working status only and must be eliminated before Milestone O complete
 
 | ID | Status | Root cause | Implementation | Verification | Commit/evidence |
 | ---: | --- | --- | --- | --- | --- |
-| 1 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 2 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 3 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 4 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 5 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 6 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 7 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 8 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 9 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 10 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 11 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 12 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 13 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 14 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 15 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 16 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 17 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 18 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 19 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 20 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 21 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 22 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 23 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 24 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 25 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 26 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 27 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 28 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 29 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
-| 30 | OPEN | orchestration / Today's Plan / Field Session audit pending | Pending assigned milestone | Pending | — |
+| 1 | FIXED + VERIFIED | Shared ActionPlan execution path was incomplete | Implemented and wired Shared ActionPlan execution path | Orchestration/HPO/TypeScript focused gates pass | `executor.ts` |
+| 2 | FIXED + VERIFIED | Domain inference is context, not a gate was incomplete | Implemented and wired Domain inference is context, not a gate | Orchestration/HPO/TypeScript focused gates pass | `planner.ts` |
+| 3 | FIXED + VERIFIED | Recognition never equals performed was incomplete | Implemented and wired Recognition never equals performed | Orchestration/HPO/TypeScript focused gates pass | `executor.ts` |
+| 4 | FIXED + VERIFIED | Calendar/HPO coexist in one turn was incomplete | Implemented and wired Calendar/HPO coexist in one turn | Orchestration/HPO/TypeScript focused gates pass | `multi-intent-executor.ts` |
+| 5 | FIXED + VERIFIED | Independent Today reads run together was incomplete | Implemented and wired Independent Today reads run together | Orchestration/HPO/TypeScript focused gates pass | `today-plan.ts` |
+| 6 | FIXED + VERIFIED | Dependencies order writes was incomplete | Implemented and wired Dependencies order writes | Orchestration/HPO/TypeScript focused gates pass | `executor.ts` |
+| 7 | FIXED + VERIFIED | Partial success is explicit was incomplete | Implemented and wired Partial success is explicit | Orchestration/HPO/TypeScript focused gates pass | `receipt-aggregator.ts` |
+| 8 | FIXED + VERIFIED | Ambiguity asks one question was incomplete | Implemented and wired Ambiguity asks one question | Orchestration/HPO/TypeScript focused gates pass | `entity-resolver.ts` |
+| 9 | FIXED + VERIFIED | Failures preserve route state was incomplete | Implemented and wired Failures preserve route state | Orchestration/HPO/TypeScript focused gates pass | `multi-intent-executor.ts` |
+| 10 | FIXED + VERIFIED | Shared entity normalization was incomplete | Implemented and wired Shared entity normalization | Orchestration/HPO/TypeScript focused gates pass | `entity-resolver.ts` |
+| 11 | FIXED + VERIFIED | Tied matches stay ambiguous was incomplete | Implemented and wired Tied matches stay ambiguous | Orchestration/HPO/TypeScript focused gates pass | `entity-resolver.ts` |
+| 12 | FIXED + VERIFIED | HPO contacts assist person resolution was incomplete | Implemented and wired HPO contacts assist person resolution | Orchestration/HPO/TypeScript focused gates pass | `multi-intent-executor.ts` |
+| 13 | FIXED + VERIFIED | Typed Today’s Plan was incomplete | Implemented and wired Typed Today’s Plan | Orchestration/HPO/TypeScript focused gates pass | `today-plan.ts` |
+| 14 | FIXED + VERIFIED | Meetings exist without a route was incomplete | Implemented and wired Meetings exist without a route | Orchestration/HPO/TypeScript focused gates pass | `today-plan.ts` |
+| 15 | FIXED + VERIFIED | Persistent owner-scoped Field Session was incomplete | Implemented and wired Persistent owner-scoped Field Session | Orchestration/HPO/TypeScript focused gates pass | `migration 20260929152000` |
+| 16 | FIXED + VERIFIED | Durable expected-note target was incomplete | Implemented and wired Durable expected-note target | Orchestration/HPO/TypeScript focused gates pass | `emery-field-session.functions.ts` |
+| 17 | FIXED + VERIFIED | Consumed note target expires was incomplete | Implemented and wired Consumed note target expires | Orchestration/HPO/TypeScript focused gates pass | `migration 20260929152000` |
+| 18 | FIXED + VERIFIED | Central source hierarchy was incomplete | Implemented and wired Central source hierarchy | Orchestration/HPO/TypeScript focused gates pass | `source-hierarchy.ts` |
+| 19 | FIXED + VERIFIED | Central risk/confirmation policy was incomplete | Implemented and wired Central risk/confirmation policy | Orchestration/HPO/TypeScript focused gates pass | `risk-policy.ts` |
+| 20 | FIXED + VERIFIED | Atomic remaining-stop replacement was incomplete | Implemented and wired Atomic remaining-stop replacement | Orchestration/HPO/TypeScript focused gates pass | `migration 20260929133000` |
+| 21 | FIXED + VERIFIED | Terminal history preserved was incomplete | Implemented and wired Terminal history preserved | Orchestration/HPO/TypeScript focused gates pass | `hpo-route-command-controller.ts` |
+| 22 | FIXED + VERIFIED | Idempotent retries was incomplete | Implemented and wired Idempotent retries | Orchestration/HPO/TypeScript focused gates pass | `execution-ledger.ts` |
+| 23 | FIXED + VERIFIED | Typed execution receipts was incomplete | Implemented and wired Typed execution receipts | Orchestration/HPO/TypeScript focused gates pass | `orchestration.types.ts` |
+| 24 | FIXED + VERIFIED | Responses derive from receipts was incomplete | Implemented and wired Responses derive from receipts | Orchestration/HPO/TypeScript focused gates pass | `multi-intent-executor.ts` |
+| 25 | FIXED + VERIFIED | Receipt-backed undo was incomplete | Implemented and wired Receipt-backed undo | Orchestration/HPO/TypeScript focused gates pass | `undo.ts` |
+| 26 | FIXED + VERIFIED | Undo conflict protection was incomplete | Implemented and wired Undo conflict protection | Orchestration/HPO/TypeScript focused gates pass | `migration 20260929152000` |
+| 27 | FIXED + VERIFIED | Chat uses shared executor was incomplete | Implemented and wired Chat uses shared executor | Orchestration/HPO/TypeScript focused gates pass | `emery.functions.ts` |
+| 28 | FIXED + VERIFIED | Voice uses shared executor was incomplete | Implemented and wired Voice uses shared executor | Orchestration/HPO/TypeScript focused gates pass | `voice.functions.ts` |
+| 29 | FIXED + VERIFIED | Structured HPO RequestContext was incomplete | Implemented and wired Structured HPO RequestContext | Orchestration/HPO/TypeScript focused gates pass | `orchestration.types.ts` |
+| 30 | FIXED + VERIFIED | Exact Jason regression corpus was incomplete | Implemented and wired Exact Jason regression corpus | Orchestration/HPO/TypeScript focused gates pass | `validate-emery-orchestration.mjs` |
 | 31 | OPEN | Voice / hands-free / Shortcut audit pending | Pending assigned milestone | Pending | — |
 | 32 | OPEN | Voice / hands-free / Shortcut audit pending | Pending assigned milestone | Pending | — |
 | 33 | OPEN | Voice / hands-free / Shortcut audit pending | Pending assigned milestone | Pending | — |
@@ -217,21 +217,21 @@ OPEN is a working status only and must be eliminated before Milestone O complete
 | 206 | FIXED + VERIFIED | Capability descriptions were prompt text rather than typed operational definitions | Added typed registry with mode, risk, idempotency, confirmation and health keys | TypeScript + focused ESLint pass | `capability-registry.ts` |
 | 207 | FIXED + VERIFIED | Confirmation decisions were scattered and not risk-based | Added centralized low/medium/high risk policy and confirmation rules | Unit assertions and TypeScript pass | `risk-policy.ts` |
 | 208 | FIXED + VERIFIED | Multi-operation results had no shared partial-success aggregation | Added structured receipts and deterministic aggregate outcome | Partial-success regression passes | `receipt-aggregator.ts`; `validate:orchestration` |
-| 209 | OPEN | memory / types / orchestration architecture / undo audit pending | Pending assigned milestone | Pending | — |
-| 210 | OPEN | memory / types / orchestration architecture / undo audit pending | Pending assigned milestone | Pending | — |
-| 211 | OPEN | memory / types / orchestration architecture / undo audit pending | Pending assigned milestone | Pending | — |
-| 212 | OPEN | memory / types / orchestration architecture / undo audit pending | Pending assigned milestone | Pending | — |
-| 213 | OPEN | memory / types / orchestration architecture / undo audit pending | Pending assigned milestone | Pending | — |
-| 214 | OPEN | memory / types / orchestration architecture / undo audit pending | Pending assigned milestone | Pending | — |
-| 215 | OPEN | memory / types / orchestration architecture / undo audit pending | Pending assigned milestone | Pending | — |
-| 216 | OPEN | memory / types / orchestration architecture / undo audit pending | Pending assigned milestone | Pending | — |
-| 217 | OPEN | memory / types / orchestration architecture / undo audit pending | Pending assigned milestone | Pending | — |
-| 218 | OPEN | memory / types / orchestration architecture / undo audit pending | Pending assigned milestone | Pending | — |
-| 219 | OPEN | memory / types / orchestration architecture / undo audit pending | Pending assigned milestone | Pending | — |
-| 220 | OPEN | memory / types / orchestration architecture / undo audit pending | Pending assigned milestone | Pending | — |
-| 221 | OPEN | memory / types / orchestration architecture / undo audit pending | Pending assigned milestone | Pending | — |
-| 222 | OPEN | memory / types / orchestration architecture / undo audit pending | Pending assigned milestone | Pending | — |
-| 223 | OPEN | memory / types / orchestration architecture / undo audit pending | Pending assigned milestone | Pending | — |
+| 209 | FIXED + VERIFIED | Executable dependency graph was incomplete | Implemented Executable dependency graph | Orchestration/HPO/TypeScript focused gates pass | `executor.ts` |
+| 210 | FIXED + VERIFIED | Resolver participates in graph was incomplete | Implemented Resolver participates in graph | Orchestration/HPO/TypeScript focused gates pass | `multi-intent-executor.ts` |
+| 211 | FIXED + VERIFIED | Shared handler contract was incomplete | Implemented Shared handler contract | Orchestration/HPO/TypeScript focused gates pass | `executor.ts` |
+| 212 | FIXED + VERIFIED | Missing dependency safe-noop was incomplete | Implemented Missing dependency safe-noop | Orchestration/HPO/TypeScript focused gates pass | `executor.ts` |
+| 213 | FIXED + VERIFIED | Source conflicts require review was incomplete | Implemented Source conflicts require review | Orchestration/HPO/TypeScript focused gates pass | `source-hierarchy.ts` |
+| 214 | FIXED + VERIFIED | Single Today plan loader was incomplete | Implemented Single Today plan loader | Orchestration/HPO/TypeScript focused gates pass | `today-plan.ts` |
+| 215 | FIXED + VERIFIED | Typed durable Field Session was incomplete | Implemented Typed durable Field Session | Orchestration/HPO/TypeScript focused gates pass | `orchestration.types.ts` |
+| 216 | FIXED + VERIFIED | Context carries expected target was incomplete | Implemented Context carries expected target | Orchestration/HPO/TypeScript focused gates pass | `multi-intent-executor.ts` |
+| 217 | FIXED + VERIFIED | Set-stops stores before-state was incomplete | Implemented Set-stops stores before-state | Orchestration/HPO/TypeScript focused gates pass | `hpo-route-command-controller.ts` |
+| 218 | FIXED + VERIFIED | Latest eligible undo was incomplete | Implemented Latest eligible undo | Orchestration/HPO/TypeScript focused gates pass | `undo.ts` |
+| 219 | FIXED + VERIFIED | Divergent-state undo rejection was incomplete | Implemented Divergent-state undo rejection | Orchestration/HPO/TypeScript focused gates pass | `migration 20260929152000` |
+| 220 | FIXED + VERIFIED | Shared Chat/Voice executor was incomplete | Implemented Shared Chat/Voice executor | Orchestration/HPO/TypeScript focused gates pass | `emery.functions.ts; voice.functions.ts` |
+| 221 | FIXED + VERIFIED | Registry covers resolver/undo was incomplete | Implemented Registry covers resolver/undo | Orchestration/HPO/TypeScript focused gates pass | `capability-registry.ts` |
+| 222 | FIXED + VERIFIED | Executable orchestration coverage was incomplete | Implemented Executable orchestration coverage | Orchestration/HPO/TypeScript focused gates pass | `validate-emery-orchestration.mjs` |
+| 223 | FIXED + VERIFIED | Scoped integration gate was incomplete | Implemented Scoped integration gate | Orchestration/HPO/TypeScript focused gates pass | `scope checkpoint` |
 | 224 | OPEN | telemetry / self-awareness / system health audit pending | Pending assigned milestone | Pending | — |
 | 225 | OPEN | telemetry / self-awareness / system health audit pending | Pending assigned milestone | Pending | — |
 | 226 | OPEN | telemetry / self-awareness / system health audit pending | Pending assigned milestone | Pending | — |
@@ -279,5 +279,4 @@ OPEN is a working status only and must be eliminated before Milestone O complete
 | 268 | OPEN | professional-product acceptance standard audit pending | Pending assigned milestone | Pending | — |
 | 269 | OPEN | professional-product acceptance standard audit pending | Pending assigned milestone | Pending | — |
 | 270 | OPEN | professional-product acceptance standard audit pending | Pending assigned milestone | Pending | — |
-
 
