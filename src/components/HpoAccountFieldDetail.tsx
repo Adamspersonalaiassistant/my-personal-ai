@@ -57,7 +57,40 @@ export function HpoAccountFieldDetail({
   const [editError, setEditError] = useState("");
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLElement>(null);
   const historyRef = useRef<HTMLDetailsElement>(null);
+  const closeRef = useRef(onClose);
+
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const previousHtmlOverflow = html.style.overflow;
+    const previousBodyOverflow = body.style.overflow;
+    const previousBodyOverscroll = body.style.overscrollBehavior;
+    const pageScrollY = window.scrollY;
+    const frame = window.requestAnimationFrame(() =>
+      dialogRef.current?.scrollTo({ top: 0, left: 0 }),
+    );
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    body.style.overscrollBehavior = "none";
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeRef.current();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("keydown", handleKeyDown);
+      html.style.overflow = previousHtmlOverflow;
+      body.style.overflow = previousBodyOverflow;
+      body.style.overscrollBehavior = previousBodyOverscroll;
+      window.scrollTo({ top: pageScrollY, left: 0 });
+    };
+  }, [accountId]);
 
   useEffect(() => {
     if (revealHistory && data?.account) historyRef.current?.setAttribute("open", "");
@@ -65,6 +98,9 @@ export function HpoAccountFieldDetail({
 
   useEffect(() => {
     let cancelled = false;
+    setData(null);
+    setError(null);
+    dialogRef.current?.scrollTo({ top: 0, left: 0 });
     void load({ data: { accountId } })
       .then((result) => {
         if (!cancelled) setData(result);
@@ -104,22 +140,22 @@ export function HpoAccountFieldDetail({
 
   return (
     <div
-      className="hpo-crm fixed inset-0 z-[82] flex items-end bg-background/70 sm:items-center sm:justify-center sm:p-4"
+      className="hpo-crm fixed inset-0 z-[82] flex items-stretch bg-background/85 sm:items-center sm:justify-center sm:p-4"
       onClick={onClose}
       role="presentation"
     >
       <section
-        className="emery-sheet-in h-[min(95dvh,100dvh)] w-full min-w-0 overflow-y-auto overscroll-contain rounded-t-lg border-t border-border bg-card px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 text-foreground shadow-xl [-webkit-overflow-scrolling:touch] sm:h-auto sm:max-h-[90dvh] sm:max-w-xl sm:rounded-lg sm:border"
+        ref={dialogRef}
+        className="emery-sheet-in h-dvh max-h-dvh w-full min-w-0 overflow-y-auto overscroll-contain border-0 bg-background px-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-foreground shadow-xl [-webkit-overflow-scrolling:touch] sm:h-auto sm:max-h-[90dvh] sm:max-w-xl sm:rounded-lg sm:border sm:bg-card"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label="HPO account field record"
+        aria-labelledby="hpo-account-detail-title"
       >
-        <div className="mx-auto h-1 w-10 rounded-full bg-border/80 sm:hidden" />
-        <div className="sticky top-0 z-10 -mx-4 flex items-center justify-between gap-3 border-b border-border bg-card/95 px-4 pb-3 pt-3 backdrop-blur">
+        <div className="sticky top-0 z-20 -mx-4 flex items-center justify-between gap-3 border-b border-border bg-background/95 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur sm:bg-card/95 sm:pt-3">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase text-primary">Field account</p>
-            <h2 className="mt-1 break-words text-lg font-semibold">
+            <h2 id="hpo-account-detail-title" className="mt-1 break-words text-lg font-semibold">
               {account?.name ?? "Loading account…"}
             </h2>
           </div>
@@ -143,8 +179,8 @@ export function HpoAccountFieldDetail({
             Loading relationship context…
           </div>
         ) : (
-          <div className="space-y-3 pb-2">
-            <div className="min-w-0 border-b border-border py-2">
+          <div className="space-y-3 pb-2 pt-3">
+            <div className="min-w-0 border-b border-border pb-3">
               <p className="break-words text-xs text-muted-foreground">
                 {[account.city, account.account_type, account.specialty]
                   .filter(Boolean)
@@ -154,12 +190,19 @@ export function HpoAccountFieldDetail({
                 {account.relationship_stage || account.status || "Active"} · Priority{" "}
                 {account.priority}
               </p>
-              <p className="mt-2 break-words text-sm font-medium">
-                {account.next_action || "No follow-up set"}
-                {account.next_action_due_at
-                  ? ` · Due ${dateLabel(account.next_action_due_at)}`
-                  : ""}
-              </p>
+              <div className="mt-3 rounded-lg border border-primary/25 bg-primary/10 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-primary">
+                  Next relationship action
+                </p>
+                <p className="mt-1 break-words text-sm font-semibold">
+                  {account.next_action || "No follow-up set"}
+                </p>
+                {account.next_action_due_at ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Due {dateLabel(account.next_action_due_at)}
+                  </p>
+                ) : null}
+              </div>
             </div>
             <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
               {routeAddress ? (
@@ -371,6 +414,9 @@ export function HpoAccountFieldDetail({
               </div>
             )}
             <section className="border-b border-border/50 pb-3">
+              <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                Relationship overview
+              </p>
               <div className="flex items-start gap-3">
                 <div className="emery-icon-well flex size-10 shrink-0 items-center justify-center rounded-xl text-primary">
                   <MapPin className="size-4" />
@@ -409,20 +455,6 @@ export function HpoAccountFieldDetail({
                     {account.relationship_stage || account.status || "active"}
                   </p>
                 </div>
-              </div>
-
-              <div className="mt-2 rounded-xl border border-primary/15 bg-primary/[0.035] p-3">
-                <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-                  Next relationship action
-                </p>
-                <p className="mt-1 text-xs font-medium">
-                  {account.next_action || "No next action saved"}
-                </p>
-                {account.next_action_due_at ? (
-                  <p className="mt-1 text-[10px] text-primary">
-                    Due {dateLabel(account.next_action_due_at)}
-                  </p>
-                ) : null}
               </div>
             </section>
 
