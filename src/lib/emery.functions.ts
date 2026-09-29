@@ -18,7 +18,10 @@ import { processCalendarAction } from "@/lib/calendar-agent";
 import { processHpoAction } from "@/lib/hpo-action-controller";
 import { processHpoRouteStopAction } from "@/lib/hpo-route-action-controller";
 import { processHpoFieldReadCommand } from "@/lib/hpo-field-read-controller";
-import { processHpoRouteCommand } from "@/lib/hpo-route-command-controller";
+import {
+  hasPendingHpoRouteClarification,
+  processHpoRouteCommand,
+} from "@/lib/hpo-route-command-controller";
 import { recentExecutionReceipts } from "@/lib/execution-ledger";
 import { executionCapabilityPrompt } from "@/lib/execution-capabilities";
 import { executeCanonicalTaskCreate } from "@/lib/execution-kernel";
@@ -344,7 +347,7 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
       (intent) => intent.capability.startsWith("hpo.") || intent.capability === "entities",
     );
     const hpoSurface = String(data.source.surface ?? "").startsWith("hpo");
-    const hpoEligible =
+    let hpoEligible =
       route.domain === "hpo" || route.domain === "mixed" || hpoPlanned || hpoSurface;
     const sourceMetadata = { ...data.source, domain: route.domain, emery_identity: "central-v1" };
     const { data: userMessage, error: saveError } = await db
@@ -382,6 +385,9 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
       message: data.message,
     });
     const recent = await history(db, userId, conversation.id);
+    if (!hpoEligible && hasPendingHpoRouteClarification(recent)) {
+      hpoEligible = true;
+    }
     const workingState = await refreshRollingConversationState({
       apiKey,
       db,
@@ -629,6 +635,7 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
             sourceMessageId: userMessage.id,
             sourceChannel: String(data.source.entryPoint ?? "text"),
             routeId: data.source.hpoRouteId ?? null,
+            history: recent,
           }).catch((error: any) => {
             console.error("HPO route command controller failed", error);
             return {
