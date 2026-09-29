@@ -709,6 +709,7 @@ async function recommendRouteCandidates(
   const areaParts = [...matchedCities, ...matchedTerritories.filter((territory) => !matchedCities.includes(territory))];
   return {
     candidates: selected,
+    allCandidates: scored.slice(0, 120),
     area: areaParts.join(" / "),
     eligibleCount: scored.length,
     matchedCities,
@@ -936,6 +937,7 @@ export async function processHpoRouteCommand(input: {
   longitude?: number | null;
   sourceChannel: string;
   routeId?: string | null;
+  routeDateHint?: string | null;
   history?: RouteConversationTurn[] | null;
 }): Promise<HpoRouteCommandResult> {
   const commandMessage = continuationRouteMessage(input.message, input.history);
@@ -1173,7 +1175,11 @@ export async function processHpoRouteCommand(input: {
         });
       }
 
-      const routeDate = resolveDate(commandMessage, input.timezone);
+      const routeDate =
+        resolveDate(commandMessage, input.timezone) ??
+        (input.routeDateHint && /^\d{4}-\d{2}-\d{2}$/.test(input.routeDateHint)
+          ? input.routeDateHint
+          : null);
       const lines = recommendation.candidates.map((candidate, index) => {
         const why = candidate.reasons.length
           ? candidate.reasons.join("; ")
@@ -1206,6 +1212,7 @@ export async function processHpoRouteCommand(input: {
             requestedCount,
             eligibleCount: recommendation.eligibleCount,
             candidates: recommendation.candidates,
+            allCandidates: recommendation.allCandidates,
           },
         },
         reply,
@@ -1220,7 +1227,9 @@ export async function processHpoRouteCommand(input: {
       const routeDate =
         resolveDate(commandMessage, input.timezone) ??
         approvedRecommendation?.routeDate ??
-        null;
+        (input.routeDateHint && /^\d{4}-\d{2}-\d{2}$/.test(input.routeDateHint)
+          ? input.routeDateHint
+          : null);
       if (!routeDate) {
         return empty({
           needsClarification: true,
