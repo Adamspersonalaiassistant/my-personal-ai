@@ -119,6 +119,7 @@ function HpoWorkspace() {
   const [todayContext, setTodayContext] = useState<{ routeId: string | null; stopId: string | null }>({ routeId: null, stopId: null });
   const [plannerContext, setPlannerContext] = useState<{ routeId: string | null; stopId: string | null }>({ routeId: null, stopId: null });
   const [mapRouteId, setMapRouteId] = useState<string | null>(requestedRouteId);
+  const [mapContextRouteId, setMapContextRouteId] = useState<string | null>(requestedRouteId);
   const [mapRouteDate, setMapRouteDate] = useState<string | null>(null);
   const [mapOpenBuilder, setMapOpenBuilder] = useState(false);
 
@@ -268,6 +269,7 @@ function HpoWorkspace() {
                 initialRouteId={mapRouteId}
                 initialRouteDate={mapRouteDate}
                 openBuilderOnMount={mapOpenBuilder}
+                onRouteContextChange={setMapContextRouteId}
                 onNavigateHpo={(next) => {
                   setMapOpenBuilder(false);
                   setView(next);
@@ -414,8 +416,20 @@ function HpoWorkspace() {
               </Button>
             ) : null}
             <HpoEmerySheet
-              routeId={view === "planner" ? plannerContext.routeId : todayContext.routeId}
-              stopId={view === "planner" ? plannerContext.stopId : todayContext.stopId}
+              routeId={
+                view === "planner"
+                  ? plannerContext.routeId
+                  : view === "map"
+                    ? mapContextRouteId
+                    : todayContext.routeId
+              }
+              stopId={
+                view === "planner"
+                  ? plannerContext.stopId
+                  : view === "map"
+                    ? null
+                    : todayContext.stopId
+              }
               selectedAccountId={selected}
               surface={`hpo.${view}`}
               onChanged={() => {
