@@ -18,6 +18,40 @@ import { openHpoEmery } from "@/components/HpoEmerySheet";
 
 const TERMINAL = new Set(["completed", "visited", "skipped", "closed", "bad_address"]);
 type Filter = "all" | "account" | "prospect";
+type PinCategory = "attorney" | "doctor" | "chiro" | "chiro_pt" | "other";
+
+const PIN_CATEGORIES: Record<PinCategory, { label: string; color: string }> = {
+  attorney: { label: "Attorney", color: "#8b5cf6" },
+  doctor: { label: "Doctor", color: "#1769e8" },
+  chiro: { label: "Chiro", color: "#10b981" },
+  chiro_pt: { label: "Chiro/PT", color: "#f59e0b" },
+  other: { label: "Other", color: "#64748b" },
+};
+
+const PIN_CATEGORY_ORDER: PinCategory[] = ["doctor", "chiro", "chiro_pt", "attorney", "other"];
+
+function officePinCategory(office: HpoMapOffice): PinCategory {
+  const source = [office.accountType, office.prospectType, office.specialty, office.detail]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (/\b(attorney|law firm|law office|legal)\b/.test(source)) return "attorney";
+
+  const isChiro = /\b(chiro|chiropractor|chiropractic)\b/.test(source);
+  const isPt = /\b(pt|physical therapy|physical therapist)\b/.test(source);
+  if (isChiro && isPt) return "chiro_pt";
+  if (isChiro) return "chiro";
+
+  if (
+    /\b(primary care|pcp|family medicine|family practice|internal medicine|doctor|physician|medical doctor)\b/.test(
+      source,
+    )
+  )
+    return "doctor";
+
+  return "other";
+}
 
 type Props = {
   offices: HpoMapOffice[];
@@ -41,8 +75,9 @@ function validOffice(office: HpoMapOffice) {
   );
 }
 
-function pinIcon(selected: boolean, focused: boolean) {
-  const fill = selected || focused ? "#0f4fb9" : "#1769e8";
+function pinIcon(office: HpoMapOffice, selected: boolean, focused: boolean) {
+  const category = officePinCategory(office);
+  const fill = PIN_CATEGORIES[category].color;
   const size = focused ? 38 : 34;
   return L.divIcon({
     className: "hpo-leaflet-pin-wrap",
@@ -74,8 +109,30 @@ function pinIcon(selected: boolean, focused: boolean) {
   });
 }
 
-function clusterIcon(count: number) {
+function clusterIcon(offices: HpoMapOffice[]) {
+  const count = offices.length;
   const size = count >= 50 ? 48 : count >= 20 ? 44 : 40;
+  const counts = new Map<PinCategory, number>();
+  for (const office of offices) {
+    const category = officePinCategory(office);
+    counts.set(category, (counts.get(category) ?? 0) + 1);
+  }
+
+  let cursor = 0;
+  const segments: string[] = [];
+  for (const category of PIN_CATEGORY_ORDER) {
+    const categoryCount = counts.get(category) ?? 0;
+    if (!categoryCount) continue;
+    const next = cursor + (categoryCount / count) * 100;
+    segments.push(`${PIN_CATEGORIES[category].color} ${cursor.toFixed(1)}% ${next.toFixed(1)}%`);
+    cursor = next;
+  }
+  const background =
+    segments.length > 1
+      ? `conic-gradient(${segments.join(",")})`
+      : PIN_CATEGORIES[officePinCategory(offices[0]!)].color;
+  const inner = size - 10;
+
   return L.divIcon({
     className: "hpo-leaflet-cluster-wrap",
     html:
@@ -83,9 +140,16 @@ function clusterIcon(count: number) {
       size +
       'px;height:' +
       size +
-      'px;border-radius:9999px;border:3px solid white;background:#1769e8;color:white;display:grid;place-items:center;font:800 12px system-ui,-apple-system,sans-serif;box-shadow:0 5px 16px rgba(15,23,42,.32)">' +
+      'px;border-radius:9999px;border:3px solid white;background:' +
+      background +
+      ';display:grid;place-items:center;box-shadow:0 5px 16px rgba(15,23,42,.32)">' +
+      '<div style="width:' +
+      inner +
+      'px;height:' +
+      inner +
+      'px;border-radius:9999px;background:white;color:#0f172a;display:grid;place-items:center;font:800 11px system-ui,-apple-system,sans-serif">' +
       count +
-      "</div>",
+      "</div></div>",
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
   });
@@ -244,12 +308,12 @@ export function HpoLeafletMap({
         const marker = L.marker(
           [Number(office.latitude), Number(office.longitude)],
           {
-            icon: pinIcon(selectedSet.has(office.key), office.key === selectedOfficeKey),
+            icon: pinIcon(office, selectedSet.has(office.key), office.key === selectedOfficeKey),
             keyboard: true,
             riseOnHover: true,
           },
         );
-        marker.bindTooltip(office.officeName, {
+        marker.bindTooltip(`${office.officeName} · ${PIN_CATEGORIES[officePinCategory(office)].label}`, {
           direction: "top",
           offset: [0, -34],
           opacity: 0.92,
@@ -292,7 +356,7 @@ export function HpoLeafletMap({
           bucket.reduce((sum, office) => sum + Number(office.latitude), 0) / bucket.length;
         const lon =
           bucket.reduce((sum, office) => sum + Number(office.longitude), 0) / bucket.length;
-        const marker = L.marker([lat, lon], { icon: clusterIcon(bucket.length), keyboard: true });
+        const marker = L.marker([lat, lon], { icon: clusterIcon(bucket), keyboard: true });
         marker.on("click", () => {
           map.setView([lat, lon], Math.min(15, map.getZoom() + 2), { animate: true });
         });
@@ -396,6 +460,20 @@ export function HpoLeafletMap({
 
   const searchResults = query.trim() ? filtered.slice(0, 10) : [];
   const totalMapped = offices.filter(validOffice).length;
+  const categoryCounts = useMemo(() => {
+    const counts: Record<PinCategory, number> = {
+      attorney: 0,
+      doctor: 0,
+      chiro: 0,
+      chiro_pt: 0,
+      other: 0,
+    };
+    for (const office of offices) {
+      if (!validOffice(office)) continue;
+      counts[officePinCategory(office)] += 1;
+    }
+    return counts;
+  }, [offices]);
 
   return (
     <section className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#eef2f7]">
@@ -461,6 +539,21 @@ export function HpoLeafletMap({
         <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-500">
           <span>{totalMapped} mapped offices</span>
           <span>{selectedKeys.length} selected</span>
+        </div>
+
+        <div
+          className="mt-1.5 flex items-center gap-3 overflow-x-auto pb-0.5 text-[10px] font-semibold text-slate-600 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          aria-label="HPO account pin legend"
+        >
+          {PIN_CATEGORY_ORDER.map((category) => (
+            <span key={category} className="flex shrink-0 items-center gap-1.5">
+              <span
+                className="size-2.5 rounded-full ring-1 ring-white"
+                style={{ backgroundColor: PIN_CATEGORIES[category].color }}
+              />
+              {PIN_CATEGORIES[category].label} {categoryCounts[category]}
+            </span>
+          ))}
         </div>
 
         {searchResults.length ? (
