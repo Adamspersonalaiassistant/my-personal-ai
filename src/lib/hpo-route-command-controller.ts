@@ -501,6 +501,71 @@ function requestedAction(message: string): HpoRouteCommandAction {
   return "none";
 }
 
+
+type RouteConversationTurn = {
+  role: string;
+  text: string;
+};
+
+function continuationRouteMessage(
+  message: string,
+  history: RouteConversationTurn[] | null | undefined,
+) {
+  if (requestedAction(message) !== "none") return message;
+  const turns = Array.isArray(history) ? history : [];
+  if (turns.length < 2) return message;
+
+  const currentIndex = turns.length - 1;
+  const priorAssistantIndex = (() => {
+    for (let index = currentIndex - 1; index >= 0; index -= 1) {
+      if (turns[index]?.role === "assistant") return index;
+      if (turns[index]?.role === "user") break;
+    }
+    return -1;
+  })();
+  if (priorAssistantIndex < 0) return message;
+
+  const prompt = normalize(turns[priorAssistantIndex]?.text ?? "");
+  const isTerritoryClarification =
+    /which city or hpo territory should i build the route around/.test(prompt);
+  const isDateClarification = /what day should i build the hpo route for/.test(prompt);
+  if (!isTerritoryClarification && !isDateClarification) return message;
+
+  let originalRequest = "";
+  for (let index = priorAssistantIndex - 1; index >= 0; index -= 1) {
+    const turn = turns[index];
+    if (turn?.role !== "user") continue;
+    if (requestedAction(turn.text) === "hpo.route.create") {
+      originalRequest = turn.text;
+      break;
+    }
+  }
+  if (!originalRequest) return message;
+
+  return isTerritoryClarification
+    ? `${originalRequest}\nTerritory: ${message}`
+    : `${originalRequest}\nRoute date: ${message}`;
+}
+
+export function hasPendingHpoRouteClarification(
+  history: RouteConversationTurn[] | null | undefined,
+) {
+  const turns = Array.isArray(history) ? history : [];
+  if (turns.length < 2) return false;
+  const currentIndex = turns.length - 1;
+  for (let index = currentIndex - 1; index >= 0; index -= 1) {
+    const turn = turns[index];
+    if (turn?.role === "user") return false;
+    if (turn?.role !== "assistant") continue;
+    const prompt = normalize(turn.text);
+    return (
+      /which city or hpo territory should i build the route around/.test(prompt) ||
+      /what day should i build the hpo route for/.test(prompt)
+    );
+  }
+  return false;
+}
+
 export async function processHpoRouteCommand(input: {
   db: any;
   userId: string;
@@ -512,8 +577,10 @@ export async function processHpoRouteCommand(input: {
   longitude?: number | null;
   sourceChannel: string;
   routeId?: string | null;
+  history?: RouteConversationTurn[] | null;
 }): Promise<HpoRouteCommandResult> {
-  const action = requestedAction(input.message);
+  const commandMessage = continuationRouteMessage(input.message, input.history);
+  const action = requestedAction(commandMessage);
   const requestPrefix = input.sourceMessageId
     ? `message:${input.sourceMessageId}`
     : input.requestId
@@ -536,9 +603,9 @@ export async function processHpoRouteCommand(input: {
 
   try {
     if (action === "hpo.route.set_stops") {
-      const target = await findOffice(input.db, input.userId, input.message);
+      const target = await findOffice(input.db, input.userId, commandMessage);
       if (target.ambiguous) {
-        const who = personTargetPhrase(input.message);
+        const who = personTargetPhrase(commandMessage);
         return empty({
           needsClarification: true,
           question: who
@@ -550,7 +617,7 @@ export async function processHpoRouteCommand(input: {
         });
       }
       if (!target.match) {
-        const who = personTargetPhrase(input.message);
+        const who = personTargetPhrase(commandMessage);
         return empty({
           needsClarification: true,
           question: who
@@ -714,7 +781,7 @@ export async function processHpoRouteCommand(input: {
     }
 
     if (action === "hpo.route.create") {
-      const routeDate = resolveDate(input.message, input.timezone);
+      const routeDate = resolveDate(commandMessage, input.timezone);
       if (!routeDate) {
         return empty({
           needsClarification: true,
@@ -722,12 +789,12 @@ export async function processHpoRouteCommand(input: {
           reply: "What day should I build the HPO route for?",
         });
       }
-      const countMatch = input.message.match(/\b(\d{1,2})\s+(?:stops?|offices?)\b/i);
+      const countMatch = commandMessage.match(/\b(\d{1,2})\s+(?:stops?|offices?)\b/i);
       const requestedCount = countMatch ? Number(countMatch[1]) : 12;
       const selected = await chooseRouteCandidates(
         input.db,
         input.userId,
-        input.message,
+        commandMessage,
         requestedCount,
       );
       if (!selected.area) {
@@ -744,7 +811,7 @@ export async function processHpoRouteCommand(input: {
           reply: `I don't have eligible saved offices mapped in ${selected.area} yet. Want to choose the stops manually from Map?`,
         });
       }
-      const window = resolveWindow(input.message);
+      const window = resolveWindow(commandMessage);
       const created = await executeHpoRouteCreateCore({
         db: input.db,
         userId: input.userId,
@@ -753,7 +820,7 @@ export async function processHpoRouteCommand(input: {
           area: selected.area,
           startWindow: window.startWindow,
           endWindow: window.endWindow,
-          syncToCalendar: /\b(calendar|schedule it|put .* calendar)\b/i.test(input.message),
+          syncToCalendar: /\b(calendar|schedule it|put .* calendar)\b/i.test(commandMessage),
           stops: selected.candidates,
           idempotencyKey: requestPrefix
             ? `${requestPrefix}:hpo.route.create`
@@ -783,7 +850,7 @@ export async function processHpoRouteCommand(input: {
     const route = await activeRoute(input.db, input.userId, input.timezone, input.routeId);
     if (!route) {
       if (action === "hpo.route.add_stops") {
-        const match = await findOffice(input.db, input.userId, input.message);
+        const match = await findOffice(input.db, input.userId, commandMessage);
         if (match.ambiguous) {
           return empty({
             needsClarification: true,
@@ -872,8 +939,8 @@ export async function processHpoRouteCommand(input: {
     }
 
     if (action === "hpo.nearby.find") {
-      const withinMatch = input.message.match(/\bwithin\s+(\d{1,2})\s+minutes?\b/i);
-      const availableMatch = input.message.match(
+      const withinMatch = commandMessage.match(/\bwithin\s+(\d{1,2})\s+minutes?\b/i);
+      const availableMatch = commandMessage.match(
         /\b(?:i have|got)\s+(\d{1,3})\s+minutes?(?:\s+left)?\b/i,
       );
       const availableMinutes = availableMatch ? Number(availableMatch[1]) : null;
@@ -992,7 +1059,7 @@ export async function processHpoRouteCommand(input: {
         });
       }
 
-      const normalized = normalize(input.message);
+      const normalized = normalize(commandMessage);
       const relation = normalized.match(/\b(first|last|before|after)\b/)?.[1] ?? null;
       const rawTarget =
         relation && relation !== "before" && relation !== "after"
@@ -1001,7 +1068,7 @@ export async function processHpoRouteCommand(input: {
               .replace(/\s+/g, " ")
               .trim()
           : relation
-            ? normalize(input.message.split(new RegExp(`\\b${relation}\\b`, "i"))[0] ?? "")
+            ? normalize(commandMessage.split(new RegExp(`\\b${relation}\\b`, "i"))[0] ?? "")
                 .replace(/\b(put|move|make|the|stop|office|route|please)\b/g, " ")
                 .replace(/\s+/g, " ")
                 .trim()
@@ -1028,7 +1095,7 @@ export async function processHpoRouteCommand(input: {
       } else if (relation === "last") {
         orderedOpen = [...withoutTarget, targetId];
       } else if (relation === "before" || relation === "after") {
-        const pieces = input.message.split(new RegExp(`\\b${relation}\\b`, "i"));
+        const pieces = commandMessage.split(new RegExp(`\\b${relation}\\b`, "i"));
         const referencePhrase = normalize(pieces[1] ?? "")
           .replace(/\b(the|stop|office|route|please)\b/g, " ")
           .replace(/\s+/g, " ")
@@ -1087,7 +1154,7 @@ export async function processHpoRouteCommand(input: {
     }
 
     if (action === "hpo.route.remove_stop") {
-      const text = normalize(input.message);
+      const text = normalize(commandMessage);
       let stop: any | null = null;
       if (/\b(last|last office|last stop)\b/.test(text)) {
         stop = [...stops].reverse().find((row: any) => !TERMINAL.has(String(row.status))) ?? null;
@@ -1097,7 +1164,7 @@ export async function processHpoRouteCommand(input: {
           .map((row: any) => ({
             row,
             score: nameScore(
-              officeTargetPhrase(input.message) || input.message,
+              officeTargetPhrase(commandMessage) || commandMessage,
               row.office_name ?? "",
             ),
           }))
@@ -1142,7 +1209,7 @@ export async function processHpoRouteCommand(input: {
     }
 
     if (action === "hpo.route.add_stops") {
-      const match = await findOffice(input.db, input.userId, input.message);
+      const match = await findOffice(input.db, input.userId, commandMessage);
       if (match.ambiguous) {
         return empty({
           needsClarification: true,
