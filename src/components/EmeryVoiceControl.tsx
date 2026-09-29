@@ -60,9 +60,13 @@ type RealtimeEvent = {
 export function EmeryVoiceControl({
   onConversationChanged,
   hpoRouteId,
+  hpoStopId,
+  hpoAccountId,
 }: {
   onConversationChanged?: () => void;
   hpoRouteId?: string | null;
+  hpoStopId?: string | null;
+  hpoAccountId?: string | null;
 }) {
   const readReadiness = useServerFn(getVoiceReadiness);
   const mintSecret = useServerFn(createRealtimeClientSecret);
@@ -261,6 +265,8 @@ export function EmeryVoiceControl({
             data: {
               request: String(args.request ?? ""),
               requestId: `voice:${sessionIdRef.current ?? "session"}:${callId}`,
+              routeId: hpoRouteId ?? null,
+              stopId: hpoStopId ?? null,
             },
           });
           sendToolOutput(callId, JSON.stringify(result));
@@ -273,6 +279,7 @@ export function EmeryVoiceControl({
             data: {
               request: String(args.request ?? ""),
               routeId: hpoRouteId ?? null,
+              stopId: hpoStopId ?? null,
               requestId: `voice:${sessionIdRef.current ?? "session"}:${callId}`,
             },
           });
@@ -371,7 +378,7 @@ export function EmeryVoiceControl({
         sendToolOutput(callId, "That tool is temporarily unavailable. Answer without inventing its result.");
       }
     },
-    [executeCalendarAction, executeHpoAction, executeHpoFieldRead, executeHpoRouteCommand, executeHpoRouteStopAction, executeHpoRouteNote, hpoRouteId, onConversationChanged, refreshContext, searchWeb, sendToolOutput, updateVoiceDelivery],
+    [executeCalendarAction, executeHpoAction, executeHpoFieldRead, executeHpoRouteCommand, executeHpoRouteStopAction, executeHpoRouteNote, hpoRouteId, hpoStopId, hpoAccountId, onConversationChanged, refreshContext, searchWeb, sendToolOutput, updateVoiceDelivery],
   );
 
   const handleRealtimeEvent = useCallback(

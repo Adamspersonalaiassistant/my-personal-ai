@@ -294,7 +294,9 @@ check(
   "remaining route reoptimization preserves terminal history",
   fieldFns.includes('"hpo.route.reoptimize"') &&
     fieldFns.includes("const open = stops.filter") &&
-    fieldFns.includes("openSlots"),
+    fieldFns.includes("const finalOrder = currentOrdered.map") &&
+    fieldFns.includes("if (TERMINAL.has(String(stop.status))) return stop.id") &&
+    fieldFns.includes('db.rpc("emery_hpo_apply_route_order"'),
 );
 check(
   "nearby backup ranking is deterministic",

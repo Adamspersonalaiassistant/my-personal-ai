@@ -4,6 +4,7 @@ import {
   executeHpoRouteOptimizeCore,
   executeHpoRouteSyncCalendarCore,
 } from "@/lib/hpo-route.functions";
+import { beginExecution, completeExecution, failExecution } from "@/lib/execution-ledger";
 import {
   executeHpoRouteAddStopsCore,
   executeHpoRouteCompleteCore,
@@ -17,6 +18,7 @@ import {
 export type HpoRouteCommandAction =
   | "none"
   | "hpo.route.create"
+  | "hpo.route.set_stops"
   | "hpo.route.add_stops"
   | "hpo.route.remove_stop"
   | "hpo.route.reorder"
@@ -35,6 +37,7 @@ export type HpoRouteCommandResult = {
   action: HpoRouteCommandAction;
   routeId: string | null;
   executionRunId: string | null;
+  receiptData: any | null;
   reply: string | null;
   error: string | null;
 };
@@ -193,6 +196,14 @@ async function routeStops(db: any, userId: string, routeId: string) {
   return data ?? [];
 }
 
+function personTargetPhrase(message: string) {
+  const match =
+    message.match(
+      /\b(?:lunch|meeting|appointment)?\s*(?:today\s+)?with\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/,
+    ) ?? message.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)(?:'s| is)\s+(?:the only|my only)/);
+  return clean(match?.[1] ?? "");
+}
+
 function officeTargetPhrase(message: string) {
   return normalize(message)
     .replace(/\b(add|put|remove|take|route|stop|office|out|off|from|to|the|my|please)\b/g, " ")
@@ -201,7 +212,7 @@ function officeTargetPhrase(message: string) {
 }
 
 async function findOffice(db: any, userId: string, phrase: string) {
-  const [accounts, prospects] = await Promise.all([
+  const [accounts, prospects, contacts] = await Promise.all([
     db
       .from("hpo_accounts")
       .select("id,name,address,city,latitude,longitude,priority,status,tags,owner_name")
@@ -211,14 +222,33 @@ async function findOffice(db: any, userId: string, phrase: string) {
       .limit(1000),
     db
       .from("hpo_prospects")
-      .select("id,name,address,city,latitude,longitude,fit_status,verification_status,promoted_account_id,metadata")
+      .select(
+        "id,name,address,city,latitude,longitude,fit_status,verification_status,promoted_account_id,metadata",
+      )
       .eq("user_id", userId)
       .not("fit_status", "in", "(not_fit,closed,duplicate)")
       .not("address", "is", null)
       .limit(1000),
+    db
+      .from("hpo_contacts")
+      .select("id,account_id,name,role_title")
+      .eq("user_id", userId)
+      .limit(1000),
   ]);
   if (accounts.error) throw accounts.error;
   if (prospects.error) throw prospects.error;
+  if (contacts.error) throw contacts.error;
+
+  const personPhrase = personTargetPhrase(phrase);
+  const contactScoreByAccount = new Map<string, number>();
+  for (const contact of contacts.data ?? []) {
+    const score = nameScore(personPhrase || phrase, clean(contact.name));
+    if (score < 45) continue;
+    contactScoreByAccount.set(
+      contact.account_id,
+      Math.max(contactScoreByAccount.get(contact.account_id) ?? 0, score + 20),
+    );
+  }
 
   const candidates = [
     ...(accounts.data ?? [])
@@ -227,7 +257,10 @@ async function findOffice(db: any, userId: string, phrase: string) {
       )
       .filter((row: any) => !clean(row.owner_name) || normalize(row.owner_name) === "adam")
       .map((row: any) => ({
-        score: locationAwareOfficeScore(phrase, row),
+        score: Math.max(
+          locationAwareOfficeScore(phrase, row),
+          contactScoreByAccount.get(row.id) ?? 0,
+        ),
         accountId: row.id,
         prospectId: null,
         officeName: row.name,
@@ -285,7 +318,9 @@ async function chooseRouteCandidates(db: any, userId: string, message: string, c
       .limit(1000),
     db
       .from("hpo_prospects")
-      .select("id,name,address,city,latitude,longitude,fit_status,verification_status,promoted_account_id,metadata")
+      .select(
+        "id,name,address,city,latitude,longitude,fit_status,verification_status,promoted_account_id,metadata",
+      )
       .eq("user_id", userId)
       .not("fit_status", "in", "(not_fit,closed,duplicate)")
       .not("address", "is", null)
@@ -321,11 +356,11 @@ async function chooseRouteCandidates(db: any, userId: string, message: string, c
             : false;
         const daysSinceTouch = row.last_touch_at
           ? Math.max(0, Math.floor((now - Date.parse(row.last_touch_at)) / 86400000))
-          : 120;
+          : null;
         const score =
           Number(row.priority ?? 3) * 12 +
           (overdue ? 35 : 0) +
-          Math.min(30, Math.floor(daysSinceTouch / 10) * 3) +
+          (daysSinceTouch == null ? 0 : Math.min(30, Math.floor(daysSinceTouch / 10) * 3)) +
           18;
         return {
           score,
@@ -355,7 +390,7 @@ async function chooseRouteCandidates(db: any, userId: string, message: string, c
         const score =
           priority * 10 +
           (row.verification_status === "verified" ? 10 : 0) +
-          (row.fit_status === "accepted" ? 14 : 0);
+          (row.fit_status === "qualified" ? 14 : 0);
         return {
           score,
           accountId: row.promoted_account_id ?? null,
@@ -474,6 +509,7 @@ export async function processHpoRouteCommand(input: {
     action,
     routeId: null,
     executionRunId: null,
+    receiptData: null,
     reply: null,
     error: null,
     ...overrides,
@@ -481,6 +517,184 @@ export async function processHpoRouteCommand(input: {
   if (action === "none") return empty({ recognized: false });
 
   try {
+    if (action === "hpo.route.set_stops") {
+      const target = await findOffice(input.db, input.userId, input.message);
+      if (target.ambiguous) {
+        const who = personTargetPhrase(input.message);
+        return empty({
+          needsClarification: true,
+          question: who
+            ? `I found more than one office connected to ${who}. Which firm or office should I use?`
+            : "I found more than one matching HPO office. Which one should be your only remaining stop?",
+          reply: who
+            ? `I found more than one office connected to ${who}. Which firm or office should I use?`
+            : "I found more than one matching HPO office. Which one should be your only remaining stop?",
+        });
+      }
+      if (!target.match) {
+        const who = personTargetPhrase(input.message);
+        return empty({
+          needsClarification: true,
+          question: who
+            ? `I found your plan for ${who}, but I don't have ${who} linked to an HPO office yet. Which firm or office should I use?`
+            : "Which saved HPO office or prospect should be your only remaining stop today?",
+          reply: who
+            ? `I found your plan for ${who}, but I don't have ${who} linked to an HPO office yet. Which firm or office should I use?`
+            : "Which saved HPO office or prospect should be your only remaining stop today?",
+        });
+      }
+
+      let route = await activeRoute(input.db, input.userId, input.timezone);
+      if (!route) {
+        const routeDate = dateKey(input.timezone);
+        const created = await executeHpoRouteCreateCore({
+          db: input.db,
+          userId: input.userId,
+          payload: {
+            routeDate,
+            area: target.match.city ?? null,
+            syncToCalendar: false,
+            stops: [target.match],
+            idempotencyKey: requestPrefix
+              ? `${requestPrefix}:hpo.route.set_stops:create`
+              : `hpo-route:${routeDate}:set-stops:${Date.now()}`,
+            sourceChannel: input.sourceChannel,
+            sourceMessageId: input.sourceMessageId ?? null,
+          },
+        });
+        route = { id: created.routeId };
+      }
+
+      const [
+        { data: beforeStops, error: beforeStopsError },
+        { data: beforeRoute, error: beforeRouteError },
+      ] = await Promise.all([
+        input.db
+          .from("hpo_route_stops")
+          .select("*")
+          .eq("user_id", input.userId)
+          .eq("route_id", route.id)
+          .not("status", "in", "(completed,visited,skipped,closed,bad_address)")
+          .order("stop_order", { ascending: true }),
+        input.db
+          .from("hpo_route_plans")
+          .select("metadata")
+          .eq("user_id", input.userId)
+          .eq("id", route.id)
+          .single(),
+      ]);
+      if (beforeStopsError) throw beforeStopsError;
+      if (beforeRouteError) throw beforeRouteError;
+      const beforeMetadata =
+        beforeRoute?.metadata &&
+        typeof beforeRoute.metadata === "object" &&
+        !Array.isArray(beforeRoute.metadata)
+          ? beforeRoute.metadata
+          : {};
+      const previousFieldSession =
+        beforeMetadata["field_session"] &&
+        typeof beforeMetadata["field_session"] === "object" &&
+        !Array.isArray(beforeMetadata["field_session"])
+          ? beforeMetadata["field_session"]
+          : null;
+
+      const run = await beginExecution({
+        db: input.db,
+        userId: input.userId,
+        domain: "hpo_route",
+        action: "hpo.route.set_stops",
+        sourceMessageId: input.sourceMessageId ?? null,
+        idempotencyKey: requestPrefix ? `${requestPrefix}:hpo.route.set_stops` : null,
+        targetType: "hpo_route",
+        targetId: route.id,
+        requestPayload: {
+          routeId: route.id,
+          accountId: target.match.accountId,
+          prospectId: target.match.prospectId,
+          officeName: target.match.officeName,
+          armNoteTarget: true,
+        },
+      });
+
+      if (run.reused && run.status === "completed" && run.resultPayload["setStops"]) {
+        const reused = run.resultPayload["setStops"] as any;
+        return empty({
+          performed: true,
+          routeId: route.id,
+          executionRunId: run.id,
+          receiptData: reused,
+          reply: `${target.match.officeName} is already your only remaining stop today. I'm ready for your notes afterward.`,
+        });
+      }
+
+      try {
+        const { data: rpcData, error: rpcError } = await input.db.rpc(
+          "emery_hpo_set_remaining_route_stops",
+          {
+            p_route_id: route.id,
+            p_target_account_id: target.match.accountId,
+            p_target_prospect_id: target.match.prospectId,
+            p_office_name: target.match.officeName,
+            p_address: target.match.address,
+            p_city: target.match.city,
+            p_latitude: target.match.latitude,
+            p_longitude: target.match.longitude,
+            p_visit_priority: target.match.visitPriority,
+            p_arm_note_target: true,
+          },
+        );
+        if (rpcError) throw rpcError;
+        const result =
+          rpcData && typeof rpcData === "object" && !Array.isArray(rpcData) ? rpcData : {};
+        const { data: afterStops, error: afterStopsError } = await input.db
+          .from("hpo_route_stops")
+          .select("id")
+          .eq("user_id", input.userId)
+          .eq("route_id", route.id)
+          .not("status", "in", "(completed,visited,skipped,closed,bad_address)")
+          .order("stop_order", { ascending: true });
+        if (afterStopsError) throw afterStopsError;
+        const receiptData = {
+          ...result,
+          previous_open_stops: beforeStops ?? [],
+          previous_field_session: previousFieldSession,
+          current_open_stop_ids: (afterStops ?? []).map((stop: any) => stop.id),
+        };
+        await completeExecution({
+          db: input.db,
+          userId: input.userId,
+          runId: run.id,
+          resultPayload: { setStops: receiptData },
+          targetType: "hpo_route",
+          targetId: route.id,
+        });
+        return empty({
+          performed: true,
+          routeId: route.id,
+          executionRunId: run.id,
+          receiptData,
+          reply: `Got it. ${target.match.officeName} is your only remaining stop today. I preserved completed visits, and I'm ready for your notes afterward.`,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : JSON.stringify(error);
+        await failExecution({
+          db: input.db,
+          userId: input.userId,
+          runId: run.id,
+          errorCode: "hpo_route_set_stops_failed",
+          errorMessage: message,
+          retryable: true,
+          resultPayload: { routeId: route.id, officeName: target.match.officeName },
+        }).catch(() => undefined);
+        return empty({
+          routeId: route.id,
+          executionRunId: run.id,
+          error: "hpo_route_set_stops_failed",
+          reply: `I kept your existing route unchanged because I couldn't safely make ${target.match.officeName} the only remaining stop. You can retry without losing completed visits.`,
+        });
+      }
+    }
+
     if (action === "hpo.route.create") {
       const routeDate = resolveDate(input.message, input.timezone);
       if (!routeDate) {

@@ -2,6 +2,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { MODEL_POLICY } from "@/lib/model-policy";
+import { serializeError } from "@/lib/emery/error-serializer";
 import {
   beginExecution,
   clarifyExecution,
@@ -122,22 +123,6 @@ function miles(meters: number | null | undefined) {
 
 function secondsToMinutes(seconds: number | null | undefined) {
   return seconds == null ? null : Math.round(seconds / 60);
-}
-
-async function stageRouteStopOrders(db: any, userId: string, routeId: string, stops: any[]) {
-  const offset = stops.length + 1000;
-  for (const stop of stops) {
-    const { error } = await db
-      .from("hpo_route_stops")
-      .update({
-        stop_order: Number(stop.stop_order) + offset,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", stop.id)
-      .eq("route_id", routeId)
-      .eq("user_id", userId);
-    if (error) throw error;
-  }
 }
 
 function extractNextAction(note: string) {
@@ -1164,6 +1149,7 @@ export async function executeHpoRouteOptimizeCore(input: {
     };
   }
 
+  let originalStopIds: string[] = [];
   try {
     const db = input.db;
     const userId = input.userId;
@@ -1184,6 +1170,13 @@ export async function executeHpoRouteOptimizeCore(input: {
     if (stopError) throw stopError;
     const stops: any[] = stopRows ?? [];
     if (!stops.length) throw new Error("This route has no stops");
+
+    originalStopIds = stops.map((stop: any) => String(stop.id));
+    if (stops.some((stop: any) => TERMINAL.has(String(stop.status)))) {
+      throw new Error(
+        "This route already has completed field history. Reoptimize the remaining stops instead.",
+      );
+    }
 
     const unresolved: any[] = [];
     for (const stop of stops) {
@@ -1261,11 +1254,12 @@ export async function executeHpoRouteOptimizeCore(input: {
     const stopByNode = new Map<number, any>();
     stops.forEach((stop: any, index: number) => stopByNode.set(stopOffset + index, stop));
 
-    await stageRouteStopOrders(db, userId, route.id, stops);
-
     let previousNode = startIndex;
     let totalDistance = 0;
     let totalDuration = 0;
+    const orderedStopIds: string[] = [];
+    const orderedDistances: Array<number | null> = [];
+    const orderedDrives: Array<number | null> = [];
     for (let index = 0; index < optimized.length; index += 1) {
       const nodeIndex = optimized[index]!;
       const stop = stopByNode.get(nodeIndex);
@@ -1276,19 +1270,19 @@ export async function executeHpoRouteOptimizeCore(input: {
         previousNode == null ? 0 : Number(durations[previousNode]?.[nodeIndex] ?? 0);
       totalDistance += segmentDistance;
       totalDuration += segmentDuration;
-      const { error } = await db
-        .from("hpo_route_stops")
-        .update({
-          stop_order: index + 1,
-          distance_meters_from_previous: Math.round(segmentDistance),
-          drive_seconds_from_previous: Math.round(segmentDuration),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", stop.id)
-        .eq("user_id", userId);
-      if (error) throw error;
+      orderedStopIds.push(String(stop.id));
+      orderedDistances.push(Math.round(segmentDistance));
+      orderedDrives.push(Math.round(segmentDuration));
       previousNode = nodeIndex;
     }
+
+    const { error: orderError } = await db.rpc("emery_hpo_apply_route_order", {
+      p_route_id: route.id,
+      p_stop_ids: orderedStopIds,
+      p_distance_meters: orderedDistances,
+      p_drive_seconds: orderedDrives,
+    });
+    if (orderError) throw orderError;
     if (previousNode != null && endIndex != null) {
       totalDistance += Number(distances[previousNode]?.[endIndex] ?? 0);
       totalDuration += Number(durations[previousNode]?.[endIndex] ?? 0);
@@ -1360,15 +1354,33 @@ export async function executeHpoRouteOptimizeCore(input: {
     });
     return result;
   } catch (error) {
+    const serialized = serializeError(error, {
+      capability: "hpo.route",
+      operation: "optimize",
+    });
+    let restored = false;
+    if (originalStopIds.length) {
+      const rollback = await input.db.rpc("emery_hpo_apply_route_order", {
+        p_route_id: input.routeId,
+        p_stop_ids: originalStopIds,
+        p_distance_meters: originalStopIds.map(() => null),
+        p_drive_seconds: originalStopIds.map(() => null),
+      });
+      restored = !rollback.error;
+    }
+    const safeMessage = restored
+      ? `Route optimization failed, and the original stop order was restored. ${serialized.message}`
+      : serialized.message;
     await failExecution({
       db: input.db,
       userId: input.userId,
       runId: execution.id,
       errorCode: "hpo_route_optimize_failed",
-      errorMessage: error instanceof Error ? error.message : String(error),
+      errorMessage: safeMessage,
       retryable: true,
+      resultPayload: { originalOrderRestored: restored },
     }).catch(() => undefined);
-    throw error;
+    throw new Error(safeMessage);
   }
 }
 
@@ -1405,28 +1417,13 @@ export const reorderHpoRouteStops = createServerFn({ method: "POST" })
   }))
   .handler(async ({ data, context }) => {
     const db = context.supabase as any;
-    const { data: currentStops, error: currentStopsError } = await db
-      .from("hpo_route_stops")
-      .select("id,stop_order")
-      .eq("route_id", data.routeId)
-      .eq("user_id", context.userId)
-      .order("stop_order", { ascending: true });
-    if (currentStopsError) throw currentStopsError;
-    await stageRouteStopOrders(db, context.userId, data.routeId, currentStops ?? []);
-    for (let index = 0; index < data.stopIds.length; index += 1) {
-      const { error } = await db
-        .from("hpo_route_stops")
-        .update({
-          stop_order: index + 1,
-          distance_meters_from_previous: null,
-          drive_seconds_from_previous: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", data.stopIds[index])
-        .eq("route_id", data.routeId)
-        .eq("user_id", context.userId);
-      if (error) throw error;
-    }
+    const { error: reorderError } = await db.rpc("emery_hpo_apply_route_order", {
+      p_route_id: data.routeId,
+      p_stop_ids: data.stopIds,
+      p_distance_meters: data.stopIds.map(() => null),
+      p_drive_seconds: data.stopIds.map(() => null),
+    });
+    if (reorderError) throw reorderError;
     await db
       .from("hpo_route_plans")
       .update({
@@ -2203,6 +2200,7 @@ export async function captureHpoRouteNoteCore(input: {
   idempotencyKey?: string | null;
   sourceChannel?: string | null;
   sourceMessageId?: string | null;
+  preferredStopId?: string | null;
 }) {
   const message = clean(input.message);
   if (!message) throw new Error("Tell Emery what happened at the stop");
@@ -2219,6 +2217,7 @@ export async function captureHpoRouteNoteCore(input: {
       routeId: input.routeId,
       message,
       sourceChannel: input.sourceChannel ?? "route_note",
+      preferredStopId: input.preferredStopId ?? null,
     },
   });
   if (
@@ -2237,6 +2236,29 @@ export async function captureHpoRouteNoteCore(input: {
   if (error) throw error;
   const rows = stops ?? [];
   if (!rows.length) throw new Error("This route has no stops");
+
+  const { data: routeRecord, error: routeRecordError } = await input.db
+    .from("hpo_route_plans")
+    .select("id,metadata")
+    .eq("id", input.routeId)
+    .eq("user_id", input.userId)
+    .maybeSingle();
+  if (routeRecordError) throw routeRecordError;
+  const routeMetadata =
+    routeRecord?.metadata && typeof routeRecord.metadata === "object" && !Array.isArray(routeRecord.metadata)
+      ? routeRecord.metadata
+      : {};
+  const fieldSession =
+    routeMetadata.field_session &&
+    typeof routeMetadata.field_session === "object" &&
+    !Array.isArray(routeMetadata.field_session)
+      ? routeMetadata.field_session
+      : {};
+  const armedStopId =
+    typeof fieldSession.expected_note_target_stop_id === "string" &&
+    fieldSession.expected_note_target_stop_id
+      ? fieldSession.expected_note_target_stop_id
+      : null;
 
   const numberMatch = message.match(/\bstop\s*#?\s*(\d{1,2})\b/i);
   const ordinalWords: Record<string, number> = {
@@ -2298,6 +2320,22 @@ export async function captureHpoRouteNoteCore(input: {
     if (!target && best && best.score >= 0.5) target = best.row;
   }
 
+  if (!target && input.preferredStopId) {
+    target =
+      rows.find(
+        (row: any) =>
+          row.id === input.preferredStopId && !TERMINAL.has(String(row.status)),
+      ) ?? null;
+  }
+
+  if (!target && armedStopId) {
+    target =
+      rows.find(
+        (row: any) =>
+          row.id === armedStopId && !TERMINAL.has(String(row.status)),
+      ) ?? null;
+  }
+
   if (!target) {
     const active = rows.filter((row: any) => !TERMINAL.has(row.status));
     if (active.length === 1) target = active[0];
@@ -2346,6 +2384,16 @@ export async function captureHpoRouteNoteCore(input: {
   });
   const updated = visitExecution.stop;
   const routeStatus = visitExecution.routeStatus;
+
+  if (armedStopId && updated.id === armedStopId) {
+    const { error: consumeError } = await input.db.rpc("emery_hpo_consume_field_note_target", {
+      p_route_id: input.routeId,
+      p_stop_id: updated.id,
+    });
+    if (consumeError) {
+      console.error("Field-session note target could not be consumed", consumeError);
+    }
+  }
 
   const result = {
     ok: true,

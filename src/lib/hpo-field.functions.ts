@@ -858,9 +858,6 @@ export async function executeHpoRouteReorderCore(input: {
       throw new Error("Manual reorder must include every current route stop exactly once");
     }
 
-    const terminalById = new Map(
-      current.map((row: any) => [row.id, TERMINAL.has(String(row.status))]),
-    );
     const currentOrdered = [...current].sort(
       (left: any, right: any) => left.stop_order - right.stop_order,
     );
@@ -873,27 +870,13 @@ export async function executeHpoRouteReorderCore(input: {
       }
     }
 
-    // The route has a unique (route_id, stop_order) constraint. Move open
-    // stops out of the final range before assigning their new positions so a
-    // swap cannot collide with the row that still owns the destination slot.
-    await stageOpenStopOrders(db, input.userId, input.routeId, currentOrdered);
-
-    for (let index = 0; index < input.stopIds.length; index += 1) {
-      const stopId = input.stopIds[index]!;
-      if (terminalById.get(stopId)) continue;
-      const { error } = await db
-        .from("hpo_route_stops")
-        .update({
-          stop_order: index + 1,
-          distance_meters_from_previous: null,
-          drive_seconds_from_previous: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", stopId)
-        .eq("route_id", input.routeId)
-        .eq("user_id", input.userId);
-      if (error) throw error;
-    }
+    const { error: reorderError } = await db.rpc("emery_hpo_apply_route_order", {
+      p_route_id: input.routeId,
+      p_stop_ids: input.stopIds,
+      p_distance_meters: input.stopIds.map(() => null),
+      p_drive_seconds: input.stopIds.map(() => null),
+    });
+    if (reorderError) throw reorderError;
     await clearRouteOptimization(db, input.userId, input.routeId);
     const verified = await loadStops(db, input.userId, input.routeId);
     const verifiedIds = verified
@@ -1072,15 +1055,10 @@ export async function executeHpoRouteReoptimizeCore(input: {
     const stopByNode = new Map<number, any>();
     open.forEach((stop: any, index: number) => stopByNode.set(stopOffset + index, stop));
     const orderedOpen = optimizedIndexes.map((index) => stopByNode.get(index)).filter(Boolean);
-    const openSlots = open
-      .map((stop: any) => Number(stop.stop_order))
-      .sort((left: number, right: number) => left - right);
-
-    await stageOpenStopOrders(db, input.userId, route.id, open);
-
     let previousNode = startIndex;
     let totalDistance = 0;
     let totalDuration = 0;
+    const metricsByStop = new Map<string, { distance: number; duration: number }>();
     for (let index = 0; index < orderedOpen.length; index += 1) {
       const stop = orderedOpen[index]!;
       const node = optimizedIndexes[index]!;
@@ -1088,19 +1066,36 @@ export async function executeHpoRouteReoptimizeCore(input: {
       const duration = previousNode == null ? 0 : Number(durations[previousNode]?.[node] ?? 0);
       totalDistance += distance;
       totalDuration += duration;
-      const { error } = await db
-        .from("hpo_route_stops")
-        .update({
-          stop_order: openSlots[index],
-          distance_meters_from_previous: Math.round(distance),
-          drive_seconds_from_previous: Math.round(duration),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", stop.id)
-        .eq("user_id", input.userId);
-      if (error) throw error;
+      metricsByStop.set(stop.id, {
+        distance: Math.round(distance),
+        duration: Math.round(duration),
+      });
       previousNode = node;
     }
+
+    const currentOrdered = [...stops].sort(
+      (left: any, right: any) => Number(left.stop_order) - Number(right.stop_order),
+    );
+    let openCursor = 0;
+    const finalOrder = currentOrdered.map((stop: any) => {
+      if (TERMINAL.has(String(stop.status))) return stop.id as string;
+      const replacement = orderedOpen[openCursor]?.id as string | undefined;
+      openCursor += 1;
+      return replacement ?? stop.id;
+    });
+    const distancePayload = finalOrder.map((stopId: string) =>
+      metricsByStop.has(stopId) ? metricsByStop.get(stopId)!.distance : null,
+    );
+    const drivePayload = finalOrder.map((stopId: string) =>
+      metricsByStop.has(stopId) ? metricsByStop.get(stopId)!.duration : null,
+    );
+    const { error: orderError } = await db.rpc("emery_hpo_apply_route_order", {
+      p_route_id: route.id,
+      p_stop_ids: finalOrder,
+      p_distance_meters: distancePayload,
+      p_drive_seconds: drivePayload,
+    });
+    if (orderError) throw orderError;
     if (previousNode != null && endIndex != null) {
       totalDistance += Number(distances[previousNode]?.[endIndex] ?? 0);
       totalDuration += Number(durations[previousNode]?.[endIndex] ?? 0);
@@ -1260,7 +1255,7 @@ export async function getHpoNearbyBackupsCore(input: {
     db
       .from("hpo_accounts")
       .select(
-        "id,name,account_type,specialty,address,city,latitude,longitude,priority,owner_name,last_touch_at,next_action,next_action_due_at,tags,status",
+        "id,name,account_type,specialty,address,city,latitude,longitude,priority,owner_name,last_touch_at,next_action,next_action_due_at,tags,status,relationship_stage,relationship_health,source_origin",
       )
       .eq("user_id", input.userId)
       .eq("status", "active")
@@ -1304,7 +1299,11 @@ export async function getHpoNearbyBackupsCore(input: {
         lastTouchAt: row.last_touch_at,
         nextAction: row.next_action,
         nextActionDueAt: row.next_action_due_at,
-        detail: [row.account_type, row.specialty].filter(Boolean).join(" · "),
+        relationshipStage: row.relationship_stage,
+        relationshipHealth: row.relationship_health,
+        sourceOrigin: row.source_origin,
+        historyKnown: Boolean(row.last_touch_at) || !["prospect", "prospecting"].includes(String(row.relationship_stage ?? "").toLowerCase()),
+        detail: [row.account_type, row.specialty, row.relationship_stage].filter(Boolean).join(" · "),
         directMiles: haversineMiles(
           origin.lat,
           origin.lon,
@@ -1352,32 +1351,61 @@ export async function getHpoNearbyBackupsCore(input: {
       })),
   ]
     .sort((a, b) => a.directMiles - b.directMiles)
-    .slice(0, 18);
+    // Road time, not straight-line distance, decides the recommendation. Keep a
+    // broad geographic safety pool and evaluate it in bounded matrix batches.
+    .slice(0, 72);
 
   if (!rough.length) return { origin, options: [], recommended: null };
-  const { durations, distances } = await roadMatrix([
-    origin,
-    ...rough.map((row) => ({ lat: row.latitude, lon: row.longitude })),
-  ]);
+
+  const roadMetrics = new Map<string, { seconds: number; meters: number }>();
+  for (let offset = 0; offset < rough.length; offset += 18) {
+    const batch = rough.slice(offset, offset + 18);
+    const { durations, distances } = await roadMatrix([
+      origin,
+      ...batch.map((row) => ({ lat: row.latitude, lon: row.longitude })),
+    ]);
+    batch.forEach((row, index) => {
+      roadMetrics.set(row.key, {
+        seconds: Number(durations[0]?.[index + 1] ?? Number.POSITIVE_INFINITY),
+        meters: Number(distances[0]?.[index + 1] ?? Number.POSITIVE_INFINITY),
+      });
+    });
+  }
 
   const options = rough
-    .map((row, index) => {
-      const seconds = Number(durations[0]?.[index + 1] ?? Number.POSITIVE_INFINITY);
-      const meters = Number(distances[0]?.[index + 1] ?? Number.POSITIVE_INFINITY);
+    .map((row) => {
+      const metric = roadMetrics.get(row.key);
+      const seconds = Number(metric?.seconds ?? Number.POSITIVE_INFINITY);
+      const meters = Number(metric?.meters ?? Number.POSITIVE_INFINITY);
       const driveMinutes = Math.round(seconds / 60);
       const overdue = row.nextActionDueAt && Date.parse(row.nextActionDueAt) < now ? 1 : 0;
       const daysSinceTouch = row.lastTouchAt
         ? Math.max(0, Math.floor((now - Date.parse(row.lastTouchAt)) / 86400000))
-        : row.kind === "account"
-          ? 120
-          : 0;
+        : null;
+      const stage = String((row as any).relationshipStage ?? "").toLowerCase();
+      const health = String((row as any).relationshipHealth ?? "").toLowerCase();
+      const relationshipBoost =
+        stage === "key_account" || stage === "key account" ? 24 :
+        stage === "active" || stage === "established" ? 18 :
+        stage === "warm" || stage === "reactivation" ? 12 :
+        stage === "dormant" ? 8 : 0;
+      const healthBoost =
+        health === "at_risk" || health === "at risk" ? 12 :
+        health === "strong" ? 8 :
+        health === "healthy" ? 6 : 0;
+      const knownHistoryBoost =
+        row.kind === "account" && (row as any).historyKnown ? 6 : 0;
+      const recencyOpportunity =
+        daysSinceTouch == null ? 0 : Math.min(24, Math.floor(daysSinceTouch / 10) * 3);
       const score =
         row.priority * 12 +
         overdue * 35 +
-        (row.kind === "account" ? 14 : 0) +
-        Math.min(24, Math.floor(daysSinceTouch / 10) * 3) +
-        (row.kind === "prospect" && (row as any).verified ? 6 : 0) +
-        (row.kind === "prospect" && (row as any).prospectFit === "accepted" ? 8 : 0) -
+        relationshipBoost +
+        healthBoost +
+        knownHistoryBoost +
+        recencyOpportunity +
+        (row.kind === "prospect" && (row as any).verified ? 10 : 0) +
+        (row.kind === "prospect" && (row as any).prospectFit === "qualified" ? 12 : 0) -
         driveMinutes * 2;
       return {
         ...row,
@@ -1386,9 +1414,13 @@ export async function getHpoNearbyBackupsCore(input: {
         score,
         reasons: [
           overdue ? "follow-up overdue" : null,
-          row.kind === "account" && daysSinceTouch >= 30
+          row.kind === "account" && daysSinceTouch !== null && daysSinceTouch >= 30
             ? `${daysSinceTouch} days since touch`
             : null,
+          row.kind === "account" && daysSinceTouch === null ? "relationship recency unknown" : null,
+          stage && !["prospect", "prospecting"].includes(stage) ? `${stage.replaceAll("_", " ")} relationship` : null,
+          row.kind === "prospect" && (row as any).verified ? "verified prospect" : null,
+          row.kind === "prospect" && (row as any).prospectFit === "qualified" ? "qualified prospect" : null,
           row.priority >= 4 ? "high priority" : null,
           `${driveMinutes} min away`,
         ].filter(Boolean),

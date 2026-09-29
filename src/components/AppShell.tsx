@@ -105,6 +105,7 @@ export function AppShell({
   const onHpo = pathname.startsWith("/hpo");
   const [lastReturn, setLastReturn] = useState<EmeryReturnPath | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
   const moreActive = moreItems.some((item) => pathname.startsWith(item.to));
 
   useEffect(() => {
@@ -115,15 +116,13 @@ export function AppShell({
 
   useEffect(() => setMoreOpen(false), [pathname]);
 
-  // A home-screen iOS web app can stay alive on an older JS bundle after a publish.
-  // Compare the currently running hashed script assets with fresh no-store HTML and
-  // reload once when production has a newer build.
+  // Check for a newer published bundle without interrupting active field work.
+  // A professional field app must never hard-refresh notes/routes underneath Adam.
   useEffect(() => {
     if (typeof window === "undefined" || typeof document === "undefined") return;
 
     let cancelled = false;
     let checking = false;
-
     const currentScripts = () =>
       [...document.querySelectorAll<HTMLScriptElement>('script[src]')]
         .map((script) => new URL(script.src, window.location.href).pathname)
@@ -148,11 +147,9 @@ export function AppShell({
           .sort()
           .join("|");
         const running = currentScripts();
-        if (freshScripts && running && freshScripts !== running) {
-          window.location.reload();
-        }
+        if (freshScripts && running && freshScripts !== running) setUpdateAvailable(true);
       } catch {
-        // Never interrupt field work because the version check itself could not run.
+        // Update discovery is advisory and must never interrupt field work.
       } finally {
         checking = false;
       }
@@ -161,11 +158,9 @@ export function AppShell({
     const onVisible = () => {
       if (document.visibilityState === "visible") void checkForFreshBuild();
     };
-
     void checkForFreshBuild();
     document.addEventListener("visibilitychange", onVisible);
-    const timer = window.setInterval(() => void checkForFreshBuild(), 60_000);
-
+    const timer = window.setInterval(() => void checkForFreshBuild(), 15 * 60_000);
     return () => {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisible);
@@ -228,7 +223,6 @@ export function AppShell({
             <Link
               key={to}
               to={to}
-              reloadDocument={to === "/hpo"}
               onClick={() => {
                 if (to === "/chat") rememberEmeryHandoff();
               }}
@@ -286,6 +280,19 @@ export function AppShell({
           </div>
         </header>
 
+        {updateAvailable ? (
+          <div className="z-30 flex min-h-11 shrink-0 items-center justify-between gap-3 border-b border-primary/15 bg-primary/[0.055] px-3 text-xs sm:px-5">
+            <span className="text-muted-foreground">A newer Emery build is ready.</span>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="min-h-10 shrink-0 rounded-lg px-3 font-semibold text-primary hover:bg-primary/[0.08]"
+            >
+              Update when ready
+            </button>
+          </div>
+        ) : null}
+
         <main
           className={`emery-route-enter relative min-h-0 flex-1 ${
             padded
@@ -304,7 +311,6 @@ export function AppShell({
             <Link
               key={to}
               to={to}
-              reloadDocument={to === "/hpo"}
               onClick={() => {
                 if (to === "/chat") rememberEmeryHandoff();
               }}

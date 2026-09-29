@@ -73,7 +73,7 @@ function requestedOutcome(message: string) {
   return null;
 }
 
-function resolveStopFromMessage(rows: any[], message: string) {
+function resolveStopFromMessage(rows: any[], message: string, preferredStopId?: string | null) {
   const numberMatch = message.match(/\bstop\s*#?\s*(\d{1,2})\b/i);
   if (numberMatch) {
     const order = Number(numberMatch[1]);
@@ -93,6 +93,10 @@ function resolveStopFromMessage(rows: any[], message: string) {
     if (!best || score > best.score) best = { row, score };
   }
   if (best && best.score >= 0.5) return best.row;
+  if (preferredStopId) {
+    const preferred = rows.find((row) => row.id === preferredStopId && !TERMINAL.has(String(row.status)));
+    if (preferred) return preferred;
+  }
   return rows.find((row) => !TERMINAL.has(String(row.status))) ?? null;
 }
 
@@ -104,6 +108,8 @@ export async function processHpoRouteStopAction(input: {
   sourceMessageId?: string | null;
   requestId?: string | null;
   sourceChannel?: string;
+  routeId?: string | null;
+  stopId?: string | null;
 }): Promise<HpoRouteStopActionResult> {
   const outcome = requestedOutcome(input.message);
   const arrivalSignal =
@@ -153,11 +159,15 @@ export async function processHpoRouteStopAction(input: {
   if (routeError) throw routeError;
 
   const routeRows = routes ?? [];
+  const hintedRoute = input.routeId
+    ? routeRows.find((route: any) => route.id === input.routeId) ?? null
+    : null;
   const todayRoutes = routeRows.filter((route: any) => route.route_date === today);
   const activeRoutes = routeRows.filter((route: any) =>
     ["active", "in_progress"].includes(String(route.status)),
   );
   const route =
+    hintedRoute ??
     (todayRoutes.length === 1 ? todayRoutes[0] : null) ??
     (activeRoutes.length === 1 ? activeRoutes[0] : null) ??
     (routeRows.length === 1 ? routeRows[0] : null);
@@ -191,7 +201,7 @@ export async function processHpoRouteStopAction(input: {
       .eq("route_id", route.id)
       .order("stop_order", { ascending: true });
     if (stopError) throw stopError;
-    const target = resolveStopFromMessage(stops ?? [], input.message);
+    const target = resolveStopFromMessage(stops ?? [], input.message, input.stopId);
     if (!target) {
       return {
         recognized: true,
@@ -265,6 +275,7 @@ export async function processHpoRouteStopAction(input: {
           : `${input.sourceChannel ?? "text"}:${route.id}:route-note:${Date.now()}`,
         sourceChannel: input.sourceChannel ?? "text",
         sourceMessageId: input.sourceMessageId ?? null,
+        preferredStopId: input.stopId ?? null,
       });
       if (!visit.ok) {
         return {
@@ -334,7 +345,7 @@ export async function processHpoRouteStopAction(input: {
     .order("stop_order", { ascending: true });
   if (stopError) throw stopError;
   const rows = stops ?? [];
-  const target = resolveStopFromMessage(rows, input.message);
+  const target = resolveStopFromMessage(rows, input.message, input.stopId);
   if (!target) {
     return {
       recognized: true,

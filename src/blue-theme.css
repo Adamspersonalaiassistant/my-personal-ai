@@ -211,24 +211,6 @@ select:focus-visible {
   animation: none;
 }
 
-[class*="text-emerald-"],
-[class*="text-green-"],
-[class*="text-teal-"] {
-  color: var(--color-primary) !important;
-}
-
-[class*="bg-emerald-"],
-[class*="bg-green-"],
-[class*="bg-teal-"] {
-  background-color: oklch(0.62 0.18 248 / 0.14) !important;
-}
-
-[class*="border-emerald-"],
-[class*="border-green-"],
-[class*="border-teal-"] {
-  border-color: oklch(0.72 0.16 248 / 0.24) !important;
-}
-
 @media (pointer: fine) {
   .emery-press:hover {
     transition-duration: 140ms;

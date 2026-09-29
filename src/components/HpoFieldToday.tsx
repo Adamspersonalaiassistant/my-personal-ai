@@ -900,12 +900,18 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
   if (!route) {
     return (
       <div className="space-y-3">
-        <header>
-          <h1 className="text-lg font-semibold">Today</h1>
-          <p className="text-xs text-muted-foreground">
-            {new Date().toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" })}{" "}
-            · No route planned
-          </p>
+        <header className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-lg font-semibold">Today</h1>
+            <p className="text-xs text-muted-foreground">
+              {new Date().toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" })}{" "}
+              · No route planned
+            </p>
+          </div>
+          <div className="flex min-h-11 shrink-0 items-center gap-2 rounded-xl border border-primary/20 bg-primary/[0.05] px-2.5">
+            <span className="text-xs font-semibold text-primary">Talk to Emery</span>
+            <EmeryVoiceControl />
+          </div>
         </header>
         <section className="rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
           <RouteIcon className="mx-auto size-7 text-primary" />
@@ -927,12 +933,23 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
 
   return (
     <div className="hpo-today flex flex-col gap-3">
-      <header>
-        <h1 className="text-lg font-semibold">Today</h1>
-        <p className="text-xs text-muted-foreground">
-          {dateOnly(route.route_date)} · {data.remaining} remaining ·{" "}
-          {String(route.status).replaceAll("_", " ")}
-        </p>
+      <header className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold">Today</h1>
+          <p className="text-xs text-muted-foreground">
+            {dateOnly(route.route_date)} · {data.remaining} remaining ·{" "}
+            {String(route.status).replaceAll("_", " ")}
+          </p>
+        </div>
+        <div className="flex min-h-11 shrink-0 items-center gap-2 rounded-xl border border-primary/20 bg-primary/[0.05] px-2.5">
+          <span className="text-xs font-semibold text-primary">Talk to Emery</span>
+          <EmeryVoiceControl
+            hpoRouteId={route.id}
+            hpoStopId={nextStop?.id ?? null}
+            hpoAccountId={nextStop?.account_id ?? null}
+            onConversationChanged={() => void load()}
+          />
+        </div>
       </header>
       <section className="hpo-today-overview overflow-hidden rounded-2xl border border-border bg-card text-foreground shadow-sm">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-border bg-muted px-3 py-3">
@@ -1327,6 +1344,8 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                 </div>
                 <EmeryVoiceControl
                   hpoRouteId={route.id}
+                  hpoStopId={nextStop?.id ?? null}
+                  hpoAccountId={nextStop?.account_id ?? null}
                   onConversationChanged={() => void load()}
                 />
               </div>

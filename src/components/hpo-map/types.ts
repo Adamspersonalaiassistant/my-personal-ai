@@ -21,6 +21,7 @@ export type HpoMapOffice = {
   nextActionDueAt?: string | null;
   fitStatus?: string | null;
   verificationStatus?: string | null;
+  excludedFromRoute?: boolean;
   mapped: boolean;
 };
 
