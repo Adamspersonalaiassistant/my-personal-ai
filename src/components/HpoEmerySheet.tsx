@@ -10,6 +10,7 @@ import {
   Circle,
   MapPin,
   Route as RouteIcon,
+  Search,
   Stethoscope,
   X,
 } from "lucide-react";
@@ -238,6 +239,7 @@ export function HpoEmerySheet({
   const [recommendation, setRecommendation] = useState<RouteRecommendation | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [showAll, setShowAll] = useState(true);
+  const [officeQuery, setOfficeQuery] = useState("");
   const [openGroups, setOpenGroups] = useState<Record<RecommendationGroup, boolean>>({
     "Doctors / Medical": true,
     Attorneys: true,
@@ -260,6 +262,7 @@ export function HpoEmerySheet({
       setRecommendation(null);
       setSelectedKeys([]);
       setShowAll(true);
+      setOfficeQuery("");
       setError("");
       setPending(false);
       setBuilding(false);
@@ -318,9 +321,26 @@ export function HpoEmerySheet({
     [recommendation],
   );
 
-  const visibleCandidates = showAll
+  const visibleCandidates = (showAll
     ? allCandidates
-    : allCandidates.filter((candidate) => recommendedKeys.has(candidateKey(candidate)));
+    : allCandidates.filter((candidate) => recommendedKeys.has(candidateKey(candidate)))
+  ).filter((candidate) => {
+    const needle = officeQuery.trim().toLowerCase();
+    if (!needle) return true;
+    return [
+      candidate.officeName,
+      candidate.city,
+      candidate.accountType,
+      candidate.specialty,
+      candidate.relationshipStage,
+      candidate.latestNote,
+      ...(candidate.reasons ?? []),
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(needle);
+  });
 
   const grouped = useMemo(() => {
     const result: Record<RecommendationGroup, RouteRecommendationCandidate[]> = {
@@ -664,6 +684,44 @@ export function HpoEmerySheet({
                         Select top {count}
                       </button>
                     ))}
+                </div>
+
+                <div className="mt-3 flex min-h-11 items-center gap-2 rounded-xl border border-border bg-background/45 px-3">
+                  <Search className="size-4 shrink-0 text-muted-foreground" />
+                  <input
+                    value={officeQuery}
+                    onChange={(event) => setOfficeQuery(event.target.value)}
+                    placeholder="Search offices, town, type or note"
+                    className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
+                  />
+                  {officeQuery ? (
+                    <button
+                      type="button"
+                      onClick={() => setOfficeQuery("")}
+                      className="text-[10px] font-semibold text-primary"
+                    >
+                      Clear
+                    </button>
+                  ) : null}
+                </div>
+
+                <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                  {[
+                    "Compare my selected offices and tell me which ones matter most.",
+                    "Which of these offices have I visited before and what happened?",
+                    "Which attorneys in this territory should I prioritize and why?",
+                    "Which offices have overdue follow-ups or a clear next action?",
+                  ].map((prompt, index) => (
+                    <button
+                      key={prompt}
+                      type="button"
+                      disabled={pending || building}
+                      onClick={() => void sendText(prompt, true)}
+                      className="min-h-9 shrink-0 rounded-xl border border-border bg-background/40 px-3 text-[10px] font-semibold text-foreground disabled:opacity-40"
+                    >
+                      {["Compare selected", "Prior visits", "Best attorneys", "Follow-ups"][index]}
+                    </button>
+                  ))}
                 </div>
               </div>
 
