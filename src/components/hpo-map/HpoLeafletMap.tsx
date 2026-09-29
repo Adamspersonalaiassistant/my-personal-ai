@@ -888,7 +888,7 @@ export function HpoLeafletMap({
                   openHpoEmery(
                     route
                       ? `Help me with the HPO route for ${route.route_date || "this route"}. Review the optimized stop order and help me change it if needed.`
-                      : "Help me build an HPO field route. Ask me for the date and territory if I haven't given them.",
+                      : "I want to build an HPO field route. Ask me for the date and towns/territory if I haven't given them. Review my saved relationship notes and target history, rank the best offices with why-now reasons, let me approve the shortlist, then build and optimize it.",
                     "HPO Route",
                   )
                 }
