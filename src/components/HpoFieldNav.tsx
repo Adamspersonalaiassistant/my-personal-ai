@@ -18,7 +18,10 @@ export function HpoFieldNav({
   onChange: (view: HpoFieldView) => void;
 }) {
   return (
-    <nav aria-label="HPO field areas" className="hpo-field-nav shrink-0 border-b border-border bg-background px-3 py-2 sm:px-4">
+    <nav
+      aria-label="HPO field areas"
+      className="hpo-field-nav shrink-0 border-b border-border bg-background px-3 py-2 sm:px-4"
+    >
       <div className="mx-auto grid max-w-5xl grid-cols-4 gap-1.5">
         {areas.map(({ key, label, icon: Icon }) => (
           <Button

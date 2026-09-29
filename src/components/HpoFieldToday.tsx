@@ -900,28 +900,40 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
   if (!route) {
     return (
       <div className="space-y-3">
-      <header><h1 className="text-lg font-semibold">Today</h1><p className="text-xs text-muted-foreground">{new Date().toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" })} · No route planned</p></header>
-      <section className="rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
-        <RouteIcon className="mx-auto size-7 text-primary" />
-        <h2 className="mt-3 text-base font-semibold">No route yet today</h2>
-        <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-muted-foreground">
-          Build a route from the Map. Today will automatically become your field execution screen.
-        </p>
-        <Button
-          type="button"
-          onClick={onOpenMap}
-          className="mt-4 min-h-11 rounded-xl px-4 text-sm font-semibold"
-        >
-          Build Route
-        </Button>
-      </section>
+        <header>
+          <h1 className="text-lg font-semibold">Today</h1>
+          <p className="text-xs text-muted-foreground">
+            {new Date().toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" })}{" "}
+            · No route planned
+          </p>
+        </header>
+        <section className="rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
+          <RouteIcon className="mx-auto size-7 text-primary" />
+          <h2 className="mt-3 text-base font-semibold">No route yet today</h2>
+          <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-muted-foreground">
+            Build a route from the Map. Today will automatically become your field execution screen.
+          </p>
+          <Button
+            type="button"
+            onClick={onOpenMap}
+            className="mt-4 min-h-11 rounded-xl px-4 text-sm font-semibold"
+          >
+            Build Route
+          </Button>
+        </section>
       </div>
     );
   }
 
   return (
     <div className="hpo-today flex flex-col gap-3">
-      <header><h1 className="text-lg font-semibold">Today</h1><p className="text-xs text-muted-foreground">{dateOnly(route.route_date)} · {data.remaining} remaining · {String(route.status).replaceAll("_", " ")}</p></header>
+      <header>
+        <h1 className="text-lg font-semibold">Today</h1>
+        <p className="text-xs text-muted-foreground">
+          {dateOnly(route.route_date)} · {data.remaining} remaining ·{" "}
+          {String(route.status).replaceAll("_", " ")}
+        </p>
+      </header>
       <section className="hpo-today-overview overflow-hidden rounded-2xl border border-border bg-card text-foreground shadow-sm">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-border bg-muted px-3 py-3">
           <div className="min-w-0">
@@ -937,9 +949,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
             </span>
           </div>
           <div className="text-center">
-            <p className="text-[10px] font-semibold uppercase text-primary">
-              HPO Field
-            </p>
+            <p className="text-[10px] font-semibold uppercase text-primary">HPO Field</p>
             <h2 className="mt-0.5 text-lg font-bold text-foreground">Daily Route</h2>
           </div>
           <button
@@ -966,7 +976,9 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                   </p>
                   <span
                     className={`mx-auto mt-1 flex size-9 items-center justify-center rounded-full text-xs font-semibold ${
-                       active ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground"
+                      active
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground"
                     }`}
                   >
                     {day.getDate()}
@@ -1140,7 +1152,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
 
       {nextStop ? (
         <>
-           <section className="hpo-today-next rounded-2xl border border-border bg-card p-3 shadow-sm">
+          <section className="hpo-today-next rounded-2xl border border-border bg-card p-3 shadow-sm">
             <div className="flex items-start gap-3">
               <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-sm font-bold text-primary-foreground">
                 {nextStop.stop_order}

@@ -19,11 +19,25 @@
   color-scheme: light;
 }
 
-.hpo-crm .hpo-today > header { order: 0; }
-.hpo-crm .hpo-today-overview { order: 1; }
-.hpo-crm .hpo-today-next { order: 2; }
-.hpo-crm .hpo-today-queue { order: 3; }
-.hpo-crm .hpo-today > :not(header):not(.hpo-today-overview):not(.hpo-today-next):not(.hpo-today-queue) { order: 4; }
+.hpo-crm .hpo-today > header {
+  order: 0;
+}
+.hpo-crm .hpo-today-overview {
+  order: 1;
+}
+.hpo-crm .hpo-today-next {
+  order: 2;
+}
+.hpo-crm .hpo-today-queue {
+  order: 3;
+}
+.hpo-crm
+  .hpo-today
+  > :not(header):not(.hpo-today-overview):not(.hpo-today-next):not(.hpo-today-queue) {
+  order: 4;
+}
 
 /* Persistent area navigation replaces the redundant map-tray Today shortcut. */
-.hpo-crm #hpo-route-planner > section > div:last-child > div:last-child:has(> button) { display: none; }
+.hpo-crm #hpo-route-planner > section > div:last-child > div:last-child:has(> button) {
+  display: none;
+}
