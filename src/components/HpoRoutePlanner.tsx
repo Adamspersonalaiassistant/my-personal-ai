@@ -1284,13 +1284,11 @@ export function HpoRoutePlanner({
   initialRouteId = null,
   initialRouteDate = null,
   openBuilderOnMount = false,
-  returnViewAfterCreate = "today",
 }: {
   onNavigateHpo?: ((view: "today" | "planner" | "map" | "accounts" | "activity") => void) | undefined;
   initialRouteId?: string | null;
   initialRouteDate?: string | null;
   openBuilderOnMount?: boolean;
-  returnViewAfterCreate?: "today" | "planner";
 }) {
   const load = useServerFn(getHpoRoutePlanner);
   const createRoute = useServerFn(createHpoRoute);
@@ -1739,6 +1737,18 @@ export function HpoRoutePlanner({
           onOpenAccount={setMapAccountDetailId}
           onToggleRouteStop={toggleMapRouteStop}
           onBuildRoute={startRouteFromMap}
+          onOptimizeRoute={
+            activeRoute
+              ? () => {
+                  const hasCompleted = activeRoute.stops.some((stop) =>
+                    terminalStatuses.has(String(stop.status)),
+                  );
+                  if (hasCompleted) void reoptimizeActiveRemaining(activeRoute.id);
+                  else void optimizeActive(activeRoute.id);
+                }
+              : undefined
+          }
+          optimizing={optimizing}
           preparing={mapPreparing}
           onRefreshPins={() => void refreshOfficePins()}
           onNavigateHpo={onNavigateHpo}
@@ -1782,7 +1792,7 @@ export function HpoRoutePlanner({
                     );
                   }
                   await refresh(result.routeId);
-                  onNavigateHpo?.(returnViewAfterCreate);
+                  setSelectedMapOfficeKey(null);
                 } catch (cause) {
                   setError(cause instanceof Error ? cause.message : "Couldn't create route.");
                 } finally {
