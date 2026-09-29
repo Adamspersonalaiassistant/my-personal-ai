@@ -70,6 +70,13 @@ type Props = {
   onNavigateHpo?: ((view: "today" | "planner" | "map" | "accounts" | "activity") => void) | undefined;
 };
 
+function localDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function validOffice(office: HpoMapOffice) {
   return (
     office.mapped &&
@@ -906,10 +913,16 @@ export function HpoLeafletMap({
         <div className="mt-1.5 flex justify-center">
           <button
             type="button"
-            onClick={() => onNavigateHpo?.("today")}
+            onClick={() =>
+              onNavigateHpo?.(
+                route?.route_date && route.route_date !== localDateKey() ? "planner" : "today",
+              )
+            }
             className="min-h-8 px-3 text-[10px] font-semibold text-muted-foreground"
           >
-            Open Today
+            {route?.route_date && route.route_date !== localDateKey()
+              ? "Open Planner"
+              : "Open Today"}
           </button>
         </div>
       </div>
