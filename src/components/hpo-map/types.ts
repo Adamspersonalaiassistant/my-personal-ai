@@ -30,13 +30,18 @@ export type HpoMapRouteStop = {
   stop_order: number;
   status: string;
   office_name: string | null;
+  address?: string | null;
+  city?: string | null;
   latitude: number | null;
   longitude: number | null;
+  distance_meters_from_previous?: number | null;
+  drive_seconds_from_previous?: number | null;
 };
 
 export type HpoMapRoute = {
   id: string;
   route_date?: string | null;
+  area?: string | null;
   optimized_at: string | null;
   optimized_distance_meters?: number | null;
   optimized_duration_seconds?: number | null;
