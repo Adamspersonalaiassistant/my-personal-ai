@@ -347,6 +347,11 @@ type RouteSalesCandidate = {
   latestNote: string | null;
   reasons: string[];
   priorityLabel: string;
+  veinTarget?: boolean;
+  veinFit?: string | null;
+  veinPriorityScore?: number | null;
+  veinVisitStatus?: string | null;
+  lunchTarget?: boolean;
 };
 
 function boundedText(value: unknown, max = 180) {
@@ -436,6 +441,9 @@ async function recommendRouteCandidates(
 
   const rows = [...(accounts.data ?? []), ...(prospects.data ?? [])];
   const normalizedMessage = normalize(message);
+  const veinPlanningMode = /\b(?:vein|veins|vascular|varicose|venous)\b/.test(
+    normalizedMessage,
+  );
   const cities = [
     ...new Set(rows.map((row: any) => clean(row.city)).filter(Boolean)),
   ];
@@ -499,6 +507,47 @@ async function recommendRouteCandidates(
     const latest = latestByAccount.get(row.id) ?? null;
     const reasons: Array<{ weight: number; text: string }> = [];
     let score = Number(row.priority ?? 3) * 14;
+    const metadata =
+      row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+        ? row.metadata
+        : {};
+    const veinTarget =
+      metadata.vein_tracker_active === true &&
+      metadata.vein_lunch_target === true &&
+      !/not a vein target|rather than vein target/.test(
+        normalize([row.notes, row.next_action].filter(Boolean).join(" ")),
+      );
+    const veinFit = clean(metadata.vein_fit) || null;
+    const veinPriorityScore = Number(metadata.priority_score ?? 0);
+    const veinVisitStatus = clean(metadata.visit_status) || null;
+
+    if (veinTarget) {
+      const boost = veinPlanningMode ? 42 : 18;
+      score += boost;
+      addReason(
+        reasons,
+        boost,
+        veinPlanningMode
+          ? "high-fit vein tracker target for lunch/referral outreach"
+          : "current vein/lunch outreach target",
+      );
+      if (veinPriorityScore >= 10) {
+        const priorityBoost = veinPlanningMode ? 18 : 8;
+        score += priorityBoost;
+        addReason(reasons, priorityBoost, "vein tracker marks this as a visit-first target");
+      } else if (veinPriorityScore >= 8) {
+        const priorityBoost = veinPlanningMode ? 10 : 4;
+        score += priorityBoost;
+        addReason(reasons, priorityBoost, "vein tracker marks this as a strong target");
+      }
+      if (
+        normalize(veinVisitStatus) === "need to visit" &&
+        !row.last_touch_at
+      ) {
+        score += 12;
+        addReason(reasons, 12, "vein tracker shows this office still needs a first visit");
+      }
+    }
 
     if (Number(row.priority ?? 0) >= 5) addReason(reasons, 16, "high-priority target account");
     else if (Number(row.priority ?? 0) >= 4) addReason(reasons, 10, "above-average account priority");
@@ -552,7 +601,7 @@ async function recommendRouteCandidates(
       addReason(reasons, -8, "recently visited, so another stop may be premature");
     }
 
-    const historicalReferrals = Number(row.metadata?.historical_referral_count ?? 0);
+    const historicalReferrals = Number(metadata.historical_referral_count ?? 0);
     if (historicalReferrals > 0) {
       const referralBoost = Math.min(24, 6 + Math.round(Math.log2(historicalReferrals + 1) * 4));
       score += referralBoost;
@@ -623,6 +672,11 @@ async function recommendRouteCandidates(
       latestNote: latest?.summary ?? row.notes ?? null,
       reasons: [],
       priorityLabel: "MEDIUM",
+      veinTarget,
+      veinFit,
+      veinPriorityScore: Number.isFinite(veinPriorityScore) ? veinPriorityScore : null,
+      veinVisitStatus,
+      lunchTarget: veinTarget,
     };
     candidate.reasons = reasons
       .sort((left, right) => Math.abs(right.weight) - Math.abs(left.weight))
