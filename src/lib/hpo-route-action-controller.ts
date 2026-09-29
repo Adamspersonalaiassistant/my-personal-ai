@@ -229,7 +229,6 @@ export async function processHpoRouteStopAction(input: {
           : `${input.sourceChannel ?? "text"}:${route.id}:${target.id}:arrive:${Date.now()}`,
         sourceChannel: input.sourceChannel ?? "text",
         sourceMessageId: input.sourceMessageId ?? null,
-        preferredStopId: input.stopId ?? null,
       });
       return {
         recognized: true,
@@ -276,6 +275,7 @@ export async function processHpoRouteStopAction(input: {
           : `${input.sourceChannel ?? "text"}:${route.id}:route-note:${Date.now()}`,
         sourceChannel: input.sourceChannel ?? "text",
         sourceMessageId: input.sourceMessageId ?? null,
+        preferredStopId: input.stopId ?? null,
       });
       if (!visit.ok) {
         return {
