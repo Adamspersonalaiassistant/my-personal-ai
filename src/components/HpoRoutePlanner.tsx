@@ -1747,16 +1747,16 @@ export function HpoRoutePlanner({
 
       {showBuilder && data ? (
         <div
-          className="fixed inset-0 z-[75] flex items-end bg-slate-950/50 backdrop-blur-[3px]"
+          className="fixed inset-0 z-[2500] flex items-stretch bg-background sm:items-end sm:bg-slate-950/55 sm:backdrop-blur-[3px]"
           onClick={() => !working && setShowBuilder(false)}
           role="presentation"
         >
           <div
-            className="emery-sheet-in max-h-[90dvh] w-full overflow-y-auto rounded-t-[1.7rem] border-t border-border/55 bg-background px-3 pb-[max(0.85rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-24px_70px_rgba(0,0,0,0.42)] sm:mx-auto sm:max-w-2xl"
+            className="emery-sheet-in h-[100dvh] max-h-[100dvh] w-full overflow-y-auto bg-background px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(0.5rem,env(safe-area-inset-top))] shadow-[0_-24px_70px_rgba(0,0,0,0.42)] sm:mx-auto sm:h-auto sm:max-h-[90dvh] sm:max-w-2xl sm:rounded-t-[1.7rem] sm:border-t sm:border-border/55 sm:pt-2"
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"
-            aria-label="Build HPO daily route"
+            aria-label="Build HPO route"
           >
             <div className="mx-auto mb-1 h-1 w-10 rounded-full bg-border/80" />
             <RouteBuilder
@@ -1937,10 +1937,10 @@ function RouteBuilder({
     <section className="emery-glass rounded-[1.6rem] p-4 sm:p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="emery-kicker">Field route</p>
-          <h3 className="mt-1 text-lg font-semibold">Choose offices, then optimize.</h3>
+          <p className="emery-kicker">Build Route · {formatDate(routeDate)}</p>
+          <h3 className="mt-1 text-lg font-semibold">Choose your stops</h3>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            Add the offices you want to visit. Emery will calculate the best driving order.
+            Select saved HPO target offices for this day. When your stop list is ready, Emery will optimize the driving order and save the route.
           </p>
         </div>
         <button
@@ -1958,9 +1958,9 @@ function RouteBuilder({
         onClick={() => setShowSettings((value) => !value)}
         className="mt-4 flex min-h-11 w-full items-center justify-between rounded-xl border border-border/45 bg-card/35 px-3 text-left text-xs font-semibold"
       >
-        <span>Route settings</span>
+        <span>1 · Day & route settings</span>
         <span className="text-[10px] font-normal text-muted-foreground">
-          {routeDate === data.today ? "Today" : formatDate(routeDate)} · Optional
+          {routeDate === data.today ? "Today" : formatDate(routeDate)}
         </span>
       </button>
 
@@ -2105,7 +2105,7 @@ function RouteBuilder({
       ) : null}
 
       <div className="mt-4">
-        <p className="text-xs font-semibold">Planned stops · {selected.length}</p>
+        <p className="text-xs font-semibold">2 · Planned stops · {selected.length}</p>
         {selected.length ? (
           <div className="mt-2 space-y-2">
             {selected.map((stop, index) => (
@@ -2171,7 +2171,7 @@ function RouteBuilder({
           </div>
         ) : (
           <p className="mt-2 text-xs text-muted-foreground">
-            Add the offices you want to visit today.
+            Search above and add the offices you want on this route.
           </p>
         )}
       </div>
