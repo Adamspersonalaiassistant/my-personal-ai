@@ -15,7 +15,15 @@ Last updated: 2026-09-29
 
 ## Current branch checkpoint
 
-At handoff preparation, the branch includes commits through:
+The current scoped checkpoint includes:
+- HPO Field OS regression validator repaired to follow the collision-safe atomic reorder implementation.
+- Planner → resolver → dependency-aware executor → typed receipt path used by both Chat and Voice for multi-intent day-plan requests.
+- Calendar/HPO coexistence for the exact Jason request and three natural variants.
+- Typed Today’s Plan plus persistent owner-scoped Field Session and expected-note target.
+- Bounded, idempotent set-stops undo backed by execution-ledger before-state and conflict detection.
+- Central source hierarchy protecting explicit/live relationship truth from lower-authority research, memory, or inference.
+
+Earlier branch checkpoints include:
 - `9ad44ff0` — atomic HPO set-remaining-stops / Field Session RPC migration
 - `20c40e4f` — safe “only remaining stop” route command + HPO contact-assisted resolution
 - `517a51f6` — planner wired into Emery multi-intent HPO orchestration
@@ -32,16 +40,16 @@ Always inspect current branch history before editing because additional commits 
 | --- | --- | --- |
 | A — baseline, ledgers, regression reproduction | COMPLETE | 270-row coverage ledger exists; Calendar-recognition gate reproduced. |
 | B — typed context/plan/capabilities/risk/receipts | COMPLETE | RequestContext, ActionPlan, capability registry, risk policy, safe errors, receipt aggregation and orchestration validator exist. |
-| C — multi-intent planner/entity resolver/Jason regression | PARTIAL | Planner is now wired into `sendEmeryMessage`; Calendar no longer universally suppresses HPO. Must still prove exact Jason flow end-to-end against realistic fixtures/runtime. |
-| D — Today’s Plan/Field Session/safe set-stops | PARTIAL | Atomic authenticated set-remaining-stops RPC, completed-stop preservation and expected-note target metadata exist. Need full Today/meeting/entity/Field Session UX + tests. |
-| E — shared Voice context/Talk to Emery/audition | PENDING/PARTIAL FOUNDATION | Realtime Voice foundation exists from main. Must finish shared planner/entity resolution, explicit route/stop/account context, prominent Today entry, field note binding and acoustic audition workflow. |
+| C — multi-intent planner/entity resolver/Jason regression | COMPLETE | Exact Jason sentence plus three variants pass planner/executor dependency tests; Calendar reads and HPO writes coexist without recognition gating. |
+| D — Today’s Plan/Field Session/safe set-stops | COMPLETE | Typed Today’s Plan, owner-scoped persistent Field Session, atomic remaining-stop replacement, note targeting, idempotency and bounded undo are implemented and validated. |
+| E — shared Voice context/Talk to Emery/audition | PARTIAL | Chat and Realtime Voice now use the same multi-intent planner/executor and structured HPO context. The separate Voice UX/audition items remain for rows 31–50. |
 | F — route reliability/errors/scoring | PARTIAL | Nearby scoring improved. Reorder/optimization error handling, transactional safety and regression tests remain. |
 | G — CRM normalization/safe research bridge | PENDING | Existing safe prospect write layer on main must be extended, not replaced. |
 | H — map/geocoding/multi-location | PARTIAL | Route-eligibility metadata/filter groundwork added. Full filters/geocoding/multi-location requirements remain. |
 | I — CRM intelligence/timeline/follow-up links | PENDING | — |
 | J — navigation/PWA/offline/mobile/accessibility | PARTIAL | Accessibility viewport and semantic-color improvements landed; broad navigation/PWA/offline/mobile work remains. |
 | K — integrations/notifications/performance/streaming | PENDING | — |
-| L — hybrid/entity memory/source hierarchy | PENDING | — |
+| L — hybrid/entity memory/source hierarchy | PARTIAL | Central source-authority policy is implemented and tested; semantic/hybrid retrieval remains for its later assigned scope. |
 | M — capability health/self-improvement wiring | PENDING | Existing telemetry/backlog/self-evaluation foundations should be reused. |
 | N — executable QA/CI | PARTIAL | Orchestration validator exists; full unit/integration/E2E/a11y/visual/performance/network tests remain. |
 | O — 270 coverage/full production gate/deploy | PENDING | No merge/publish until all 270 rows have final allowed status and final gate is green. |
@@ -74,7 +82,8 @@ Do not regress:
 
 ## Database/migrations
 
-New professionalization migration currently includes atomic authenticated set-remaining-stops/Field Session behavior. Before applying or extending migrations:
+Professionalization migrations now include atomic authenticated set-remaining-stops behavior plus
+`20260929152000_emery_field_sessions_and_route_undo.sql`, which adds owner-scoped Field Session persistence, route metadata synchronization and conflict-safe bounded undo. Before applying or extending migrations:
 - inspect live schema/RLS;
 - preserve authenticated owner scoping;
 - preserve completed route history;
@@ -84,7 +93,13 @@ New professionalization migration currently includes atomic authenticated set-re
 
 ## Tests and CI
 
-Existing gates include build, TypeScript, lint, phase0/behavior validators, HPO Field OS validator, CRM-write validator and orchestration validator.
+Scoped verification at this checkpoint:
+- `npm run validate:orchestration` — PASS
+- `npm run validate:hpo-field-os` — PASS
+- `npx tsc --noEmit` — PASS
+- focused ESLint for changed orchestration/HPO files — PASS
+
+Existing broader gates include build, phase0/behavior validators and CRM-write validation.
 
 The branch has a draft PR, so GitHub Actions run on branch pushes. Historical failures during iteration are not a blocker by themselves; the final branch must be green.
 
@@ -121,4 +136,4 @@ Only after the 270 ledger contains no OPEN rows and the final gate is green:
 
 ## Next exact action
 
-Read `docs/CHATGPT-WORK-RESUME.md`, inspect all branch commits newer than the last documented checkpoint, reconcile `EMERY-PROFESSIONALIZATION-COVERAGE.md` with actual code/tests, run the focused orchestration + TypeScript + lint gates, fix any failures, then continue automatically from the first genuinely incomplete dependency milestone. Do not return a progress-only response.
+Continue with coverage rows 31–71 only: finish the remaining Voice/hands-free items and route-reliability items, beginning from the shared planner/Field Session foundation recorded here. Do not reopen rows 1–30 or 204–223 unless a regression test proves they failed.

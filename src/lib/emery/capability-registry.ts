@@ -11,24 +11,28 @@ export type CapabilityHealthKey =
   | "memory.retrieve"
   | "voice.session";
 
-export type CapabilityDefinition<TInput extends Record<string, unknown> = Record<string, unknown>> = {
-  name: string;
-  action: string;
-  description: string;
-  mode: CapabilityMode;
-  risk: ActionRisk;
-  idempotent: boolean;
-  confirmation: "never" | "when_ambiguous" | "when_destructive";
-  healthKey: CapabilityHealthKey;
-  validate: (value: unknown) => TInput;
-};
+export type CapabilityDefinition<TInput extends Record<string, unknown> = Record<string, unknown>> =
+  {
+    name: string;
+    action: string;
+    description: string;
+    mode: CapabilityMode;
+    risk: ActionRisk;
+    idempotent: boolean;
+    confirmation: "never" | "when_ambiguous" | "when_destructive";
+    healthKey: CapabilityHealthKey;
+    validate: (value: unknown) => TInput;
+  };
 
 function objectInput(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Capability input must be an object");
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("Capability input must be an object");
   return value as Record<string, unknown>;
 }
 
-function definition(input: Omit<CapabilityDefinition, "risk" | "validate"> & { risk?: ActionRisk }): CapabilityDefinition {
+function definition(
+  input: Omit<CapabilityDefinition, "risk" | "validate"> & { risk?: ActionRisk },
+): CapabilityDefinition {
   return {
     ...input,
     risk: input.risk ?? "medium",
@@ -37,6 +41,16 @@ function definition(input: Omit<CapabilityDefinition, "risk" | "validate"> & { r
 }
 
 export const CAPABILITY_REGISTRY = {
+  "entity.resolve": definition({
+    name: "Entity resolution",
+    action: "entity.resolve",
+    description: "Resolve people and offices from structured Calendar and HPO evidence.",
+    mode: "read",
+    risk: "low",
+    idempotent: true,
+    confirmation: "when_ambiguous",
+    healthKey: "hpo.route.read",
+  }),
   "calendar.read": definition({
     name: "Calendar read",
     action: "calendar.read",
@@ -60,7 +74,8 @@ export const CAPABILITY_REGISTRY = {
   "hpo.route.set_stops": definition({
     name: "Set remaining route stops",
     action: "hpo.route.set_stops",
-    description: "Atomically replace only unfinished route stops while preserving completed history.",
+    description:
+      "Atomically replace only unfinished route stops while preserving completed history.",
     mode: "write",
     risk: "high",
     idempotent: true,
@@ -70,7 +85,8 @@ export const CAPABILITY_REGISTRY = {
   "hpo.field_session.arm_note_target": definition({
     name: "Arm expected field note target",
     action: "hpo.field_session.arm_note_target",
-    description: "Persist the route stop or relationship expected to receive the next field report.",
+    description:
+      "Persist the route stop or relationship expected to receive the next field report.",
     mode: "write",
     risk: "low",
     idempotent: true,
@@ -96,6 +112,17 @@ export const CAPABILITY_REGISTRY = {
     idempotent: true,
     confirmation: "when_ambiguous",
     healthKey: "hpo.crm.write",
+  }),
+  "execution.undo": definition({
+    name: "Undo latest reversible action",
+    action: "execution.undo",
+    description:
+      "Restore the bounded before-state stored by the latest eligible execution receipt.",
+    mode: "write",
+    risk: "medium",
+    idempotent: true,
+    confirmation: "when_ambiguous",
+    healthKey: "hpo.route.write",
   }),
 } satisfies Record<string, CapabilityDefinition>;
 

@@ -12,6 +12,8 @@ const ACTION_RISK: Record<string, ActionRisk> = {
   "hpo.route.set_stops": "high",
   "hpo.prospect.merge": "high",
   "hpo.prospect.promote": "high",
+  "hpo.field_session.arm_note_target": "low",
+  "execution.undo": "medium",
 };
 
 export function riskForAction(action: string): ActionRisk {

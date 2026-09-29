@@ -37,6 +37,7 @@ export type HpoRouteCommandResult = {
   action: HpoRouteCommandAction;
   routeId: string | null;
   executionRunId: string | null;
+  receiptData: any | null;
   reply: string | null;
   error: string | null;
 };
@@ -197,8 +198,9 @@ async function routeStops(db: any, userId: string, routeId: string) {
 
 function personTargetPhrase(message: string) {
   const match =
-    message.match(/\b(?:lunch|meeting|appointment)?\s*(?:today\s+)?with\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/) ??
-    message.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)(?:'s| is)\s+(?:the only|my only)/);
+    message.match(
+      /\b(?:lunch|meeting|appointment)?\s*(?:today\s+)?with\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/,
+    ) ?? message.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)(?:'s| is)\s+(?:the only|my only)/);
   return clean(match?.[1] ?? "");
 }
 
@@ -220,7 +222,9 @@ async function findOffice(db: any, userId: string, phrase: string) {
       .limit(1000),
     db
       .from("hpo_prospects")
-      .select("id,name,address,city,latitude,longitude,fit_status,verification_status,promoted_account_id,metadata")
+      .select(
+        "id,name,address,city,latitude,longitude,fit_status,verification_status,promoted_account_id,metadata",
+      )
       .eq("user_id", userId)
       .not("fit_status", "in", "(not_fit,closed,duplicate)")
       .not("address", "is", null)
@@ -314,7 +318,9 @@ async function chooseRouteCandidates(db: any, userId: string, message: string, c
       .limit(1000),
     db
       .from("hpo_prospects")
-      .select("id,name,address,city,latitude,longitude,fit_status,verification_status,promoted_account_id,metadata")
+      .select(
+        "id,name,address,city,latitude,longitude,fit_status,verification_status,promoted_account_id,metadata",
+      )
       .eq("user_id", userId)
       .not("fit_status", "in", "(not_fit,closed,duplicate)")
       .not("address", "is", null)
@@ -503,6 +509,7 @@ export async function processHpoRouteCommand(input: {
     action,
     routeId: null,
     executionRunId: null,
+    receiptData: null,
     reply: null,
     error: null,
     ...overrides,
@@ -558,6 +565,39 @@ export async function processHpoRouteCommand(input: {
         route = { id: created.routeId };
       }
 
+      const [
+        { data: beforeStops, error: beforeStopsError },
+        { data: beforeRoute, error: beforeRouteError },
+      ] = await Promise.all([
+        input.db
+          .from("hpo_route_stops")
+          .select("*")
+          .eq("user_id", input.userId)
+          .eq("route_id", route.id)
+          .not("status", "in", "(completed,visited,skipped,closed,bad_address)")
+          .order("stop_order", { ascending: true }),
+        input.db
+          .from("hpo_route_plans")
+          .select("metadata")
+          .eq("user_id", input.userId)
+          .eq("id", route.id)
+          .single(),
+      ]);
+      if (beforeStopsError) throw beforeStopsError;
+      if (beforeRouteError) throw beforeRouteError;
+      const beforeMetadata =
+        beforeRoute?.metadata &&
+        typeof beforeRoute.metadata === "object" &&
+        !Array.isArray(beforeRoute.metadata)
+          ? beforeRoute.metadata
+          : {};
+      const previousFieldSession =
+        beforeMetadata["field_session"] &&
+        typeof beforeMetadata["field_session"] === "object" &&
+        !Array.isArray(beforeMetadata["field_session"])
+          ? beforeMetadata["field_session"]
+          : null;
+
       const run = await beginExecution({
         db: input.db,
         userId: input.userId,
@@ -576,16 +616,13 @@ export async function processHpoRouteCommand(input: {
         },
       });
 
-      if (
-        run.reused &&
-        run.status === "completed" &&
-        run.resultPayload["setStops"]
-      ) {
+      if (run.reused && run.status === "completed" && run.resultPayload["setStops"]) {
         const reused = run.resultPayload["setStops"] as any;
         return empty({
           performed: true,
           routeId: route.id,
           executionRunId: run.id,
+          receiptData: reused,
           reply: `${target.match.officeName} is already your only remaining stop today. I'm ready for your notes afterward.`,
         });
       }
@@ -609,11 +646,25 @@ export async function processHpoRouteCommand(input: {
         if (rpcError) throw rpcError;
         const result =
           rpcData && typeof rpcData === "object" && !Array.isArray(rpcData) ? rpcData : {};
+        const { data: afterStops, error: afterStopsError } = await input.db
+          .from("hpo_route_stops")
+          .select("id")
+          .eq("user_id", input.userId)
+          .eq("route_id", route.id)
+          .not("status", "in", "(completed,visited,skipped,closed,bad_address)")
+          .order("stop_order", { ascending: true });
+        if (afterStopsError) throw afterStopsError;
+        const receiptData = {
+          ...result,
+          previous_open_stops: beforeStops ?? [],
+          previous_field_session: previousFieldSession,
+          current_open_stop_ids: (afterStops ?? []).map((stop: any) => stop.id),
+        };
         await completeExecution({
           db: input.db,
           userId: input.userId,
           runId: run.id,
-          resultPayload: { setStops: result },
+          resultPayload: { setStops: receiptData },
           targetType: "hpo_route",
           targetId: route.id,
         });
@@ -621,6 +672,7 @@ export async function processHpoRouteCommand(input: {
           performed: true,
           routeId: route.id,
           executionRunId: run.id,
+          receiptData,
           reply: `Got it. ${target.match.officeName} is your only remaining stop today. I preserved completed visits, and I'm ready for your notes afterward.`,
         });
       } catch (error) {

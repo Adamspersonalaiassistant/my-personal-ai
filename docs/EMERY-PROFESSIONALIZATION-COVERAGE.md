@@ -1,4 +1,4 @@
-# Emery Professionalization Coverage
+| 223 | FIXED + VERIFIED | Orchestration changes lacked a scoped integration gate | Relevant orchestration, HPO, TypeScript and focused lint gates are green | All scoped gates pass | `validation output; scope checkpoint` |
 
 Starting commit: 5f7af39e677e225cf4b56d87cc2ff164de61db14  
 Working branch: codex/emery-professionalization
@@ -279,3 +279,5 @@ OPEN is a working status only and must be eliminated before Milestone O complete
 | 268 | OPEN | professional-product acceptance standard audit pending | Pending assigned milestone | Pending | — |
 | 269 | OPEN | professional-product acceptance standard audit pending | Pending assigned milestone | Pending | — |
 | 270 | OPEN | professional-product acceptance standard audit pending | Pending assigned milestone | Pending | — |
+
+

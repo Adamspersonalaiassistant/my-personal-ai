@@ -26,6 +26,32 @@ export type RequestContext = {
   capabilityHealth: Record<string, "healthy" | "degraded" | "unavailable" | "unknown">;
 };
 
+export type FieldSession = {
+  id: string;
+  sessionDate: string;
+  status: "active" | "completed" | "cancelled";
+  routeId: string | null;
+  currentStopId: string | null;
+  expectedNoteStopId: string | null;
+  expectedNoteAccountId: string | null;
+  expectedNoteProspectId: string | null;
+  expectedNoteMeetingId: string | null;
+  optionalProspecting: boolean;
+};
+
+export type TodaysPlan = {
+  date: string;
+  timezone: string;
+  meetings: Array<{ id: string; title: string; startsAt: string }>;
+  route: {
+    id: string;
+    completed: number;
+    remaining: number;
+    nextStopId: string | null;
+  } | null;
+  fieldSession: FieldSession | null;
+};
+
 export type PlannedIntent = {
   id: string;
   capability: string;

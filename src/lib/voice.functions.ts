@@ -5,7 +5,11 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { ASSISTANT_IDENTITY } from "@/lib/assistant-identity";
 import { persistDurableMemoryFromMessage } from "@/lib/chat.functions";
 import { inferEmeryDomain, domainPrompt } from "@/lib/emery-domain";
-import { selectRelevantMemories, buildExecutiveFocus, readConversationState } from "@/lib/emery-intelligence";
+import {
+  selectRelevantMemories,
+  buildExecutiveFocus,
+  readConversationState,
+} from "@/lib/emery-intelligence";
 import { processCalendarAction } from "@/lib/calendar-agent";
 import { processHpoAction } from "@/lib/hpo-action-controller";
 import { processHpoFieldReadCommand } from "@/lib/hpo-field-read-controller";
@@ -16,13 +20,13 @@ import { MODEL_POLICY } from "@/lib/model-policy";
 import { recordRuntimeEvent } from "@/lib/runtime-telemetry";
 import { loadHpoAgentContext } from "@/lib/hpo-agent-context";
 import { VOICE_PROFILE_CONTRACT, isUsableVoiceId } from "@/lib/voice-profile";
+import { processEmeryMultiIntentDayPlan } from "@/lib/emery/multi-intent-executor";
 
 const REALTIME_MODEL = MODEL_POLICY.realtime;
 
 function realtimeSafetyIdentifier(userId: string) {
   return "emery_" + createHash("sha256").update(userId).digest("hex").slice(0, 32);
 }
-
 
 async function mainConversation(db: any, userId: string) {
   const { data: existing, error } = await db
@@ -46,7 +50,8 @@ async function mainConversation(db: any, userId: string) {
     })
     .select("id, metadata")
     .single();
-  if (createError || !created) throw createError ?? new Error("Could not create Emery conversation");
+  if (createError || !created)
+    throw createError ?? new Error("Could not create Emery conversation");
   return created;
 }
 
@@ -91,7 +96,9 @@ async function loadVoiceContext(db: any, userId: string, query = "current voice 
       .maybeSingle(),
     db
       .from("tasks")
-      .select("id,title,details,status,priority,due_at,scheduled_start_at,scheduled_end_at,reminder_at,estimated_minutes,metadata,project_id")
+      .select(
+        "id,title,details,status,priority,due_at,scheduled_start_at,scheduled_end_at,reminder_at,estimated_minutes,metadata,project_id",
+      )
       .eq("user_id", userId)
       .neq("status", "completed")
       .order("priority", { ascending: false })
@@ -120,16 +127,20 @@ async function loadVoiceContext(db: any, userId: string, query = "current voice 
       .limit(16),
   ]);
 
-  const recent = (recentResult.data ?? [])
-    .reverse()
-    .map((row: any) => ({
-      role: row.role as "user" | "assistant",
-      text: String(row.content ?? ""),
-      createdAt: row.created_at as string,
-    }));
+  const recent = (recentResult.data ?? []).reverse().map((row: any) => ({
+    role: row.role as "user" | "assistant",
+    text: String(row.content ?? ""),
+    createdAt: row.created_at as string,
+  }));
 
-  const memoryMaxItems = Math.min(30, Math.max(6, Number(configResult.data?.memory_max_items ?? 16)));
-  const memoryMaxCharacters = Math.min(12000, Math.max(2000, Number(configResult.data?.memory_max_characters ?? 6500)));
+  const memoryMaxItems = Math.min(
+    30,
+    Math.max(6, Number(configResult.data?.memory_max_items ?? 16)),
+  );
+  const memoryMaxCharacters = Math.min(
+    12000,
+    Math.max(2000, Number(configResult.data?.memory_max_characters ?? 6500)),
+  );
   const selected = selectRelevantMemories(memoryResult.data ?? [], query, recent, {
     maxItems: memoryMaxItems,
     maxCharacters: memoryMaxCharacters,
@@ -141,9 +152,7 @@ async function loadVoiceContext(db: any, userId: string, query = "current voice 
     tasks: voiceTasks,
     task_pool: voiceTasks.filter((task: any) => !task.scheduled_start_at),
     scheduled_tasks: voiceTasks.filter((task: any) => Boolean(task.scheduled_start_at)),
-    overdue_tasks: voiceTasks.filter(
-      (task: any) => task.due_at && Date.parse(task.due_at) < nowMs,
-    ),
+    overdue_tasks: voiceTasks.filter((task: any) => task.due_at && Date.parse(task.due_at) < nowMs),
     missed_time_blocks: voiceTasks.filter((task: any) => {
       const end = task.scheduled_end_at ?? task.scheduled_start_at;
       return end && Date.parse(end) < nowMs;
@@ -209,24 +218,34 @@ function voiceStyleInstruction(profile: any) {
         ? "- Accent intensity: extremely subtle. Do not consciously perform an accent; let only a faint natural Caribbean/Dominican musicality remain."
         : `- Accent intensity target: ${Math.round(Math.max(0, Math.min(1, accentIntensity)) * 100)}% — controlled, never theatrical.`
       : null,
-    stable?.english_fluency
-      ? `- English delivery: ${stable.english_fluency}.`
-      : null,
+    stable?.english_fluency ? `- English delivery: ${stable.english_fluency}.` : null,
     stable?.presence ? `- Presence: ${stable.presence}.` : null,
-    stable?.refinement_note ? `- Latest explicit voice refinement: ${stable.refinement_note}.` : null,
-    stable?.avoid ? `- Avoid: ${Array.isArray(stable.avoid) ? stable.avoid.join(", ") : String(stable.avoid)}.` : null,
+    stable?.refinement_note
+      ? `- Latest explicit voice refinement: ${stable.refinement_note}.`
+      : null,
+    stable?.avoid
+      ? `- Avoid: ${Array.isArray(stable.avoid) ? stable.avoid.join(", ") : String(stable.avoid)}.`
+      : null,
     Number.isFinite(Number(delivery?.pace)) && Number(delivery.pace) <= 0.86
       ? "- Pacing: relaxed and human. Speak slowly enough to feel present. Use brief natural pauses between clauses and a slightly longer beat between ideas. Never rush, compress words, or use rapid-fire cadence."
       : null,
     Object.keys(delivery).length ? `- Delivery preferences: ${JSON.stringify(delivery)}.` : null,
     Object.keys(contextual).length ? `- Contextual delivery: ${JSON.stringify(contextual)}.` : null,
-    Object.keys(pronunciation).length ? `- Pronunciation preferences: ${JSON.stringify(pronunciation)}.` : null,
+    Object.keys(pronunciation).length
+      ? `- Pronunciation preferences: ${JSON.stringify(pronunciation)}.`
+      : null,
   ].filter(Boolean);
 
   return lines.join("\n");
 }
 
-async function snapshotVoiceProfile(db: any, userId: string, profile: any, request: string, source: string) {
+async function snapshotVoiceProfile(
+  db: any,
+  userId: string,
+  profile: any,
+  request: string,
+  source: string,
+) {
   if (!profile?.id) return;
   const { error } = await db.from("voice_profile_versions").insert({
     user_id: userId,
@@ -295,6 +314,7 @@ LIVE VOICE OPERATING CONTRACT:
 - Use execute_hpo_action whenever Adam explicitly asks to create/add an HPO account, log a non-PHI HPO relationship touch, or set an HPO account follow-up. New accounts need a physical address so Emery can plot them on the HPO map. Never put patient names, medical/case details, or other PHI into HPO relationship records.
 - Use get_hpo_field_state whenever Adam asks what's next, where he left off, asks for a brief on the current/next office, asks what happened last time, or asks who he spoke to. This is a deterministic HPO read and should be preferred over guessing from session context.
 - Use execute_hpo_route_command when Adam explicitly asks to build an HPO route, add/remove a saved office, optimize the route, or reoptimize what remains. Only report success when the tool confirms the persisted route action.
+- For one request combining a scheduled commitment, today's route, and note readiness, send the complete original request once to execute_hpo_route_command. The shared Emery planner will coordinate Calendar/HPO reads, route writes, and Field Session context.
 - Use execute_hpo_route_note whenever Adam is on a field route and explicitly tells you what happened at a numbered stop or office, or asks you to save a route/marketing note. Preserve his wording and let the server identify the route stop. If the tool asks which stop, ask exactly that question.
 - Casual planning is not write permission. If the calendar tool asks a clarification question, ask exactly that concise question and do not invent missing details.
 - Tool results are private working context. Answer Adam naturally rather than narrating tool mechanics.
@@ -371,7 +391,11 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
     if (!apiKey) return { error: "The AI service isn't configured yet." } as const;
 
     const db = context.supabase as any;
-    const voiceContext = await loadVoiceContext(db, context.userId, "start live Emery voice session");
+    const voiceContext = await loadVoiceContext(
+      db,
+      context.userId,
+      "start live Emery voice session",
+    );
     const voiceProfile = voiceContext.voiceProfile;
     if (!isUsableVoiceId(voiceProfile?.base_voice_id) || !voiceProfile?.approved_at) {
       return {
@@ -436,9 +460,20 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
               expressiveness: { type: "number", description: "Desired expressiveness, 0 to 1." },
               energy: { type: "number", description: "Desired energy, 0 to 1." },
               brevity: { type: "number", description: "Desired spoken brevity, 0 to 1." },
-              accent_intensity: { type: "number", description: "Desired subtle-accent strength, 0 to 1." },
-              accent_description: { type: "string", description: "Updated accent delivery description, if Adam explicitly requests one." },
-              style_note: { type: "string", description: "Any other explicit voice-style refinement Adam requested, stated concisely." },
+              accent_intensity: {
+                type: "number",
+                description: "Desired subtle-accent strength, 0 to 1.",
+              },
+              accent_description: {
+                type: "string",
+                description:
+                  "Updated accent delivery description, if Adam explicitly requests one.",
+              },
+              style_note: {
+                type: "string",
+                description:
+                  "Any other explicit voice-style refinement Adam requested, stated concisely.",
+              },
             },
             required: ["request"],
           },
@@ -471,7 +506,8 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
             properties: {
               request: {
                 type: "string",
-                description: "Adam's exact HPO relationship-action request from the active voice turn.",
+                description:
+                  "Adam's exact HPO relationship-action request from the active voice turn.",
               },
             },
             required: ["request"],
@@ -539,7 +575,8 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
             properties: {
               request: {
                 type: "string",
-                description: "Adam's exact field-route note or visit update from the active voice turn.",
+                description:
+                  "Adam's exact field-route note or visit update from the active voice turn.",
               },
             },
             required: ["request"],
@@ -591,7 +628,8 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
       expires_at?: number;
       session?: { id?: string };
     };
-    if (!payload.value) return { error: "The voice service returned an invalid session token." } as const;
+    if (!payload.value)
+      return { error: "The voice service returned an invalid session token." } as const;
 
     return {
       clientSecret: payload.value,
@@ -605,18 +643,28 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
 export const persistVoiceTranscript = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
-    (input: { role: "user" | "assistant"; text: string; eventKey: string; sessionId?: string | null }) => {
+    (input: {
+      role: "user" | "assistant";
+      text: string;
+      eventKey: string;
+      sessionId?: string | null;
+    }) => {
       const role = input?.role === "assistant" ? ("assistant" as const) : ("user" as const);
       return {
         role,
-        text: String(input?.text ?? "").trim().slice(0, 12000),
-        eventKey: String(input?.eventKey ?? "").trim().slice(0, 200),
+        text: String(input?.text ?? "")
+          .trim()
+          .slice(0, 12000),
+        eventKey: String(input?.eventKey ?? "")
+          .trim()
+          .slice(0, 200),
         sessionId: input?.sessionId ? String(input.sessionId).trim().slice(0, 120) : null,
       };
     },
   )
   .handler(async ({ data, context }) => {
-    if (!data.text || !data.eventKey) return { ok: false, error: "Empty voice transcript." } as const;
+    if (!data.text || !data.eventKey)
+      return { ok: false, error: "Empty voice transcript." } as const;
     const db = context.supabase as any;
     const conversation = await mainConversation(db, context.userId);
 
@@ -715,8 +763,14 @@ export const persistVoiceTranscript = createServerFn({ method: "POST" })
         metadata: {
           memorySaved: Boolean((memoryWrite as any)?.memorySaved),
           memoryUpdated: Boolean((memoryWrite as any)?.memoryUpdated),
-          userCorrectionSignal: /\b(actually|correction|no[, ]+i meant|i meant|not that|i said|that's wrong|that is wrong|instead)\b/.test(lower),
-          userReversalSignal: /\b(undo|revert|cancel that|move it back|put it back|change it back|never mind|nevermind)\b/.test(lower),
+          userCorrectionSignal:
+            /\b(actually|correction|no[, ]+i meant|i meant|not that|i said|that's wrong|that is wrong|instead)\b/.test(
+              lower,
+            ),
+          userReversalSignal:
+            /\b(undo|revert|cancel that|move it back|put it back|change it back|never mind|nevermind)\b/.test(
+              lower,
+            ),
           transcriptCharacters: data.text.length,
         },
       });
@@ -733,8 +787,12 @@ export const persistVoiceTranscript = createServerFn({ method: "POST" })
 export const executeVoiceCalendarAction = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { request: string; idempotencyKey?: string | null }) => ({
-    request: String(input?.request ?? "").trim().slice(0, 2000),
-    idempotencyKey: input?.idempotencyKey ? String(input.idempotencyKey).trim().slice(0, 240) : null,
+    request: String(input?.request ?? "")
+      .trim()
+      .slice(0, 2000),
+    idempotencyKey: input?.idempotencyKey
+      ? String(input.idempotencyKey).trim().slice(0, 240)
+      : null,
   }))
   .handler(async ({ data, context }) => {
     if (!data.request) {
@@ -768,7 +826,13 @@ export const executeVoiceCalendarAction = createServerFn({ method: "POST" })
       eventType: "calendar_action",
       domain: fresh.route.domain,
       action: result.action,
-      status: result.needsClarification ? "clarification" : result.performed ? "ok" : result.error ? "error" : "skipped",
+      status: result.needsClarification
+        ? "clarification"
+        : result.performed
+          ? "ok"
+          : result.error
+            ? "error"
+            : "skipped",
       durationMs: Date.now() - startedAt,
       model: MODEL_POLICY.action,
       metadata: {
@@ -784,7 +848,9 @@ export const executeVoiceCalendarAction = createServerFn({ method: "POST" })
 export const executeVoiceHpoAction = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { request: string }) => ({
-    request: String(input?.request ?? "").trim().slice(0, 3000),
+    request: String(input?.request ?? "")
+      .trim()
+      .slice(0, 3000),
   }))
   .handler(async ({ data, context }) => {
     if (!data.request) {
@@ -814,7 +880,13 @@ export const executeVoiceHpoAction = createServerFn({ method: "POST" })
       eventType: "hpo_action",
       domain: "hpo",
       action: result.action,
-      status: result.needsClarification ? "clarification" : result.performed ? "ok" : result.error ? "error" : "skipped",
+      status: result.needsClarification
+        ? "clarification"
+        : result.performed
+          ? "ok"
+          : result.error
+            ? "error"
+            : "skipped",
       durationMs: Date.now() - startedAt,
       model: MODEL_POLICY.action,
       metadata: {
@@ -831,7 +903,9 @@ export const executeVoiceHpoAction = createServerFn({ method: "POST" })
 export const executeVoiceHpoFieldRead = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { request: string }) => ({
-    request: String(input?.request ?? "").trim().slice(0, 2000),
+    request: String(input?.request ?? "")
+      .trim()
+      .slice(0, 2000),
   }))
   .handler(async ({ data, context }) => {
     if (!data.request) {
@@ -869,17 +943,21 @@ export const executeVoiceHpoFieldRead = createServerFn({ method: "POST" })
 
 export const executeVoiceHpoRouteCommand = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: {
-    request: string;
-    requestId?: string | null;
-    latitude?: number | null;
-    longitude?: number | null;
-  }) => ({
-    request: String(input?.request ?? "").trim().slice(0, 4000),
-    requestId: input?.requestId ? String(input.requestId).trim().slice(0, 240) : null,
-    latitude: Number.isFinite(input?.latitude) ? Number(input.latitude) : null,
-    longitude: Number.isFinite(input?.longitude) ? Number(input.longitude) : null,
-  }))
+  .inputValidator(
+    (input: {
+      request: string;
+      requestId?: string | null;
+      latitude?: number | null;
+      longitude?: number | null;
+    }) => ({
+      request: String(input?.request ?? "")
+        .trim()
+        .slice(0, 4000),
+      requestId: input?.requestId ? String(input.requestId).trim().slice(0, 240) : null,
+      latitude: Number.isFinite(input?.latitude) ? Number(input.latitude) : null,
+      longitude: Number.isFinite(input?.longitude) ? Number(input.longitude) : null,
+    }),
+  )
   .handler(async ({ data, context }) => {
     if (!data.request) {
       return {
@@ -897,12 +975,57 @@ export const executeVoiceHpoRouteCommand = createServerFn({ method: "POST" })
       .eq("user_id", context.userId)
       .maybeSingle();
     const startedAt = Date.now();
+    const sourceMessageId = data.requestId ?? `voice:${context.userId}:${Date.now().toString(36)}`;
+    const multiIntent = await processEmeryMultiIntentDayPlan({
+      db,
+      userId: context.userId,
+      message: data.request,
+      timezone: profile?.timezone ?? "America/New_York",
+      sourceMessageId,
+      sourceChannel: "voice",
+    });
+    if (multiIntent.handled) {
+      await recordRuntimeEvent(db, context.userId, {
+        channel: "voice",
+        eventType: "hpo_route_command",
+        domain: "mixed",
+        action: "execute_action_plan",
+        status: multiIntent.needsClarification
+          ? "clarification"
+          : multiIntent.performed
+            ? "ok"
+            : "error",
+        durationMs: Date.now() - startedAt,
+        model: null,
+        metadata: {
+          routeId: multiIntent.routeId,
+          receiptCount: multiIntent.receipts.length,
+          sharedPlanner: true,
+          deterministicAfterIntent: true,
+        },
+      });
+      return {
+        recognized: true,
+        performed: multiIntent.performed,
+        needsClarification: multiIntent.needsClarification,
+        question: multiIntent.needsClarification ? multiIntent.reply : null,
+        action: "emery.action_plan",
+        routeId: multiIntent.routeId,
+        executionRunId: multiIntent.receipts.find((receipt) => receipt.performed)?.id ?? null,
+        reply: multiIntent.reply,
+        receiptIds: multiIntent.receipts.map((receipt) => receipt.id),
+        error:
+          multiIntent.performed || multiIntent.needsClarification
+            ? null
+            : "emery_action_plan_failed",
+      } as const;
+    }
     const result = await processHpoRouteCommand({
       db,
       userId: context.userId,
       message: data.request,
       timezone: profile?.timezone ?? "America/New_York",
-      requestId: data.requestId,
+      requestId: sourceMessageId,
       latitude: data.latitude,
       longitude: data.longitude,
       sourceChannel: "voice",
@@ -912,7 +1035,13 @@ export const executeVoiceHpoRouteCommand = createServerFn({ method: "POST" })
       eventType: "hpo_route_command",
       domain: "hpo",
       action: result.action,
-      status: result.needsClarification ? "clarification" : result.performed ? "ok" : result.error ? "error" : "skipped",
+      status: result.needsClarification
+        ? "clarification"
+        : result.performed
+          ? "ok"
+          : result.error
+            ? "error"
+            : "skipped",
       durationMs: Date.now() - startedAt,
       model: null,
       metadata: {
@@ -927,17 +1056,21 @@ export const executeVoiceHpoRouteCommand = createServerFn({ method: "POST" })
 
 export const executeVoiceHpoRouteStopAction = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: {
-    request: string;
-    requestId?: string | null;
-    routeId?: string | null;
-    stopId?: string | null;
-  }) => ({
-    request: String(input?.request ?? "").trim().slice(0, 5000),
-    requestId: input?.requestId ? String(input.requestId).trim().slice(0, 240) : null,
-    routeId: input?.routeId ? String(input.routeId).trim() : null,
-    stopId: input?.stopId ? String(input.stopId).trim() : null,
-  }))
+  .inputValidator(
+    (input: {
+      request: string;
+      requestId?: string | null;
+      routeId?: string | null;
+      stopId?: string | null;
+    }) => ({
+      request: String(input?.request ?? "")
+        .trim()
+        .slice(0, 5000),
+      requestId: input?.requestId ? String(input.requestId).trim().slice(0, 240) : null,
+      routeId: input?.routeId ? String(input.routeId).trim() : null,
+      stopId: input?.stopId ? String(input.stopId).trim() : null,
+    }),
+  )
   .handler(async ({ data, context }) => {
     if (!data.request) {
       return {
@@ -970,7 +1103,13 @@ export const executeVoiceHpoRouteStopAction = createServerFn({ method: "POST" })
       eventType: "hpo_route_stop_action",
       domain: "hpo",
       action: result.action,
-      status: result.needsClarification ? "clarification" : result.performed ? "ok" : result.error ? "error" : "skipped",
+      status: result.needsClarification
+        ? "clarification"
+        : result.performed
+          ? "ok"
+          : result.error
+            ? "error"
+            : "skipped",
       durationMs: Date.now() - startedAt,
       model: null,
       metadata: {
@@ -986,17 +1125,21 @@ export const executeVoiceHpoRouteStopAction = createServerFn({ method: "POST" })
 
 export const executeVoiceHpoRouteNote = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: {
-    request: string;
-    routeId?: string | null;
-    stopId?: string | null;
-    requestId?: string | null;
-  }) => ({
-    request: String(input?.request ?? "").trim().slice(0, 5000),
-    routeId: input?.routeId ? String(input.routeId).trim() : null,
-    stopId: input?.stopId ? String(input.stopId).trim() : null,
-    requestId: input?.requestId ? String(input.requestId).trim().slice(0, 240) : null,
-  }))
+  .inputValidator(
+    (input: {
+      request: string;
+      routeId?: string | null;
+      stopId?: string | null;
+      requestId?: string | null;
+    }) => ({
+      request: String(input?.request ?? "")
+        .trim()
+        .slice(0, 5000),
+      routeId: input?.routeId ? String(input.routeId).trim() : null,
+      stopId: input?.stopId ? String(input.stopId).trim() : null,
+      requestId: input?.requestId ? String(input.requestId).trim().slice(0, 240) : null,
+    }),
+  )
   .handler(async ({ data, context }) => {
     if (!data.request) {
       return {
@@ -1057,7 +1200,8 @@ export const executeVoiceHpoRouteNote = createServerFn({ method: "POST" })
       return {
         ok: false,
         needsClarification: true,
-        question: "Which route are you updating? Open that Route Planner day, then tell me the stop note again.",
+        question:
+          "Which route are you updating? Open that Route Planner day, then tell me the stop note again.",
       } as const;
     }
 
@@ -1095,7 +1239,9 @@ export const executeVoiceHpoRouteNote = createServerFn({ method: "POST" })
 export const searchWebForVoice = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { query: string }) => ({
-    query: String(input?.query ?? "").trim().slice(0, 1200),
+    query: String(input?.query ?? "")
+      .trim()
+      .slice(0, 1200),
   }))
   .handler(async ({ data }) => {
     const apiKey = process.env["OPENAI_API_KEY"];
@@ -1155,15 +1301,23 @@ export const updateVoiceDeliveryFromLive = createServerFn({ method: "POST" })
         return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : undefined;
       };
       return {
-        request: String(input?.request ?? "").trim().slice(0, 500),
+        request: String(input?.request ?? "")
+          .trim()
+          .slice(0, 500),
         pace: bounded(input?.pace, 0.75, 1.25),
         warmth: bounded(input?.warmth),
         expressiveness: bounded(input?.expressiveness),
         energy: bounded(input?.energy),
         brevity: bounded(input?.brevity),
         accentIntensity: bounded(input?.accentIntensity),
-        accentDescription: String(input?.accentDescription ?? "").trim().slice(0, 300) || undefined,
-        styleNote: String(input?.styleNote ?? "").trim().slice(0, 300) || undefined,
+        accentDescription:
+          String(input?.accentDescription ?? "")
+            .trim()
+            .slice(0, 300) || undefined,
+        styleNote:
+          String(input?.styleNote ?? "")
+            .trim()
+            .slice(0, 300) || undefined,
       };
     },
   )
@@ -1202,8 +1356,10 @@ export const updateVoiceDeliveryFromLive = createServerFn({ method: "POST" })
     const requestLower = data.request.toLowerCase();
     let accentIntensity = data.accentIntensity;
     if (accentIntensity == null) {
-      if (/accent.*(lighter|less|subtler|more subtle)|less.*accent/.test(requestLower)) accentIntensity = 0.18;
-      if (/accent.*(stronger|more|noticeable)|more.*accent/.test(requestLower)) accentIntensity = 0.38;
+      if (/accent.*(lighter|less|subtler|more subtle)|less.*accent/.test(requestLower))
+        accentIntensity = 0.18;
+      if (/accent.*(stronger|more|noticeable)|more.*accent/.test(requestLower))
+        accentIntensity = 0.38;
     }
     const accentDescription =
       data.accentDescription ||
@@ -1211,7 +1367,12 @@ export const updateVoiceDeliveryFromLive = createServerFn({ method: "POST" })
         ? "Fluent natural English with a subtle Dominican Latina accent; audible but light, never exaggerated or theatrical."
         : undefined);
 
-    if (!Object.keys(patch).length && accentIntensity == null && !accentDescription && !data.styleNote) {
+    if (
+      !Object.keys(patch).length &&
+      accentIntensity == null &&
+      !accentDescription &&
+      !data.styleNote
+    ) {
       return { ok: false, error: "No supported voice-delivery change was supplied." } as const;
     }
 
@@ -1266,7 +1427,9 @@ export const updateVoiceDeliveryFromLive = createServerFn({ method: "POST" })
 export const refreshVoiceContext = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { query: string }) => ({
-    query: String(input?.query ?? "").trim().slice(0, 1200),
+    query: String(input?.query ?? "")
+      .trim()
+      .slice(0, 1200),
   }))
   .handler(async ({ data, context }) => {
     const db = context.supabase as any;
@@ -1276,7 +1439,10 @@ export const refreshVoiceContext = createServerFn({ method: "POST" })
       data.query || "refresh current Emery context",
     );
     const memories = current.memories
-      .map((item: any) => `[${item.memory_type}] ${item.title ? `${item.title}: ` : ""}${item.content}`)
+      .map(
+        (item: any) =>
+          `[${item.memory_type}] ${item.title ? `${item.title}: ` : ""}${item.content}`,
+      )
       .join("\n");
     return {
       result: [

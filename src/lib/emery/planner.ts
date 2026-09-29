@@ -57,6 +57,31 @@ export function planEmeryRequest(message: string): ActionPlan {
       text,
     );
   const routeLanguage = /\b(route|stop|visiting|visit)\b/.test(text) || requestsOnlyStop;
+  const requestsUndo = /\b(undo that|undo the last|revert that|put (?:my|the) route back)\b/.test(
+    text,
+  );
+
+  if (requestsUndo) {
+    intents.push(
+      intent(
+        "execution",
+        "execution.undo",
+        "write",
+        "Undo the latest eligible reversible receipt without reconstructing state from model memory",
+      ),
+    );
+    writes.push("execution.undo");
+    return {
+      version: 1,
+      goal: message.trim(),
+      intents,
+      entities: [],
+      reads,
+      writes,
+      clarifications: [],
+      expectedReceipts: ["execution.undo"],
+    };
+  }
 
   if (hasScheduledCommitment || referencesToday || requestsOnlyStop) {
     intents.push(
@@ -113,7 +138,11 @@ export function planEmeryRequest(message: string): ActionPlan {
     writes.push("hpo.route.set_stops");
   }
   if (requestsNoteReadiness) {
-    const dependencies = people.length ? ["entities:entity.resolve"] : ["hpo.route:hpo.route.read"];
+    const dependencies = requestsOnlyStop
+      ? ["hpo.route:hpo.route.set_stops"]
+      : people.length
+        ? ["entities:entity.resolve"]
+        : ["hpo.route:hpo.route.read"];
     intents.push(
       intent(
         "hpo.field_session",
