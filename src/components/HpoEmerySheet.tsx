@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowUp, X } from "lucide-react";
 import brainImage from "@/assets/neural-brain.png";
 import { EmeryVoiceControl } from "@/components/EmeryVoiceControl";
-import { getMainConversation, sendEmeryMessage } from "@/lib/emery.functions";
+import { sendEmeryMessage } from "@/lib/emery.functions";
 
 const EVENT_NAME = "emery:hpo-chat";
 
@@ -30,61 +30,48 @@ export function openHpoEmery(prompt = "", title = "HPO") {
 
 export function HpoEmerySheet({
   onChanged,
+  onRouteBuilt,
   routeId,
   stopId,
   selectedAccountId,
   surface = "hpo",
 }: {
   onChanged?: () => void;
+  onRouteBuilt?: (routeId: string) => void;
   routeId?: string | null;
   stopId?: string | null;
   selectedAccountId?: string | null;
   surface?: string;
 }) {
   const askEmery = useServerFn(sendEmeryMessage);
-  const loadConversation = useServerFn(getMainConversation);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const endRef = useRef<HTMLDivElement | null>(null);
+  const sessionRef = useRef<string>("");
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("HPO");
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<MiniMessage[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
-  const [historyLoading, setHistoryLoading] = useState(false);
-
-  const syncSharedConversation = useCallback(async () => {
-    setHistoryLoading(true);
-    try {
-      const result = await loadConversation({});
-      setMessages(
-        (result?.messages ?? [])
-          .slice(-18)
-          .map((message: any) => ({
-            id: message.id,
-            role: message.role === "user" ? "user" : "assistant",
-            text: message.text,
-          })),
-      );
-    } catch {
-      // Keep the HPO sheet usable even if history refresh fails.
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, [loadConversation]);
 
   useEffect(() => {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<HpoEmeryDetail>).detail ?? {};
+      sessionRef.current =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `hpo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       setTitle(detail.title || "HPO");
       setDraft(detail.prompt || "");
+      setMessages([]);
       setError("");
+      setPending(false);
       setOpen(true);
-      void syncSharedConversation();
       window.setTimeout(() => inputRef.current?.focus(), 80);
     };
     window.addEventListener(EVENT_NAME, handler);
     return () => window.removeEventListener(EVENT_NAME, handler);
-  }, [syncSharedConversation]);
+  }, []);
 
   useEffect(() => {
     const textarea = inputRef.current;
@@ -92,6 +79,14 @@ export function HpoEmerySheet({
     textarea.style.height = "auto";
     textarea.style.height = `${Math.min(textarea.scrollHeight, 112)}px`;
   }, [draft, open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const frame = requestAnimationFrame(() => {
+      endRef.current?.scrollIntoView({ block: "end", behavior: pending ? "smooth" : "auto" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [messages, pending, error, open]);
 
   async function send() {
     const clean = draft.trim();
@@ -112,14 +107,37 @@ export function HpoEmerySheet({
             hpoRouteId: routeId ?? null,
             hpoStopId: stopId ?? null,
             selectedAccountId: selectedAccountId ?? null,
+            hpoEphemeral: true,
+            hpoEphemeralSession: sessionRef.current || null,
           },
         },
       });
       if (!("reply" in result) || !result.reply) {
         throw new Error(("error" in result && result.error) || "Emery couldn't complete that.");
       }
-      await syncSharedConversation();
+      setMessages((current) => [
+        ...current,
+        {
+          id: "assistantMessage" in result ? result.assistantMessage?.id : undefined,
+          role: "assistant",
+          text: result.reply,
+        },
+      ]);
       onChanged?.();
+
+      const routeCommand =
+        "hpoRouteCommand" in result ? (result as any).hpoRouteCommand : null;
+      if (
+        routeCommand?.performed &&
+        routeCommand?.action === "hpo.route.create" &&
+        routeCommand?.routeId
+      ) {
+        const builtRouteId = String(routeCommand.routeId);
+        window.setTimeout(() => {
+          setOpen(false);
+          onRouteBuilt?.(builtRouteId);
+        }, 650);
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Emery couldn't complete that.");
     } finally {
@@ -151,7 +169,7 @@ export function HpoEmerySheet({
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold">Emery</p>
             <p className="truncate text-[11px] text-muted-foreground">
-              {title} · same Emery conversation, memory and HPO tools
+              {title} · quick HPO session · same Emery brain and tools
             </p>
           </div>
           <button
@@ -165,11 +183,9 @@ export function HpoEmerySheet({
         </div>
 
         <div className="max-h-[42dvh] min-h-24 space-y-3 overflow-y-auto px-4 py-3">
-          {historyLoading && !messages.length ? (
-            <p className="text-xs text-muted-foreground">Loading your shared Emery conversation…</p>
-          ) : !messages.length ? (
+          {!messages.length ? (
             <p className="text-sm leading-6 text-muted-foreground">
-              Tell Emery what you want done. Messages here are saved to the same main Emery conversation, with the current HPO route and account context attached.
+              This is a focused HPO work session. Tell Emery what you want to plan or change; she still uses your HPO history, notes, memory and route tools underneath.
             </p>
           ) : null}
           {messages.map((message, index) => (
@@ -190,6 +206,7 @@ export function HpoEmerySheet({
           ))}
           {pending ? <p className="text-xs text-muted-foreground">Emery is working…</p> : null}
           {error ? <p className="text-xs text-destructive">{error}</p> : null}
+          <div ref={endRef} aria-hidden="true" className="h-px" />
         </div>
 
         <div className="border-t border-border/45 bg-background/96 px-3 pb-[max(0.7rem,env(safe-area-inset-bottom))] pt-2">
@@ -207,8 +224,10 @@ export function HpoEmerySheet({
               hpoStopId={stopId ?? null}
               hpoAccountId={selectedAccountId ?? null}
               onConversationChanged={() => {
-                void syncSharedConversation();
                 onChanged?.();
+                window.setTimeout(() => {
+                  endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+                }, 80);
               }}
             />
             <button
