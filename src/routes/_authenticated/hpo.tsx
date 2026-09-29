@@ -191,10 +191,7 @@ function HpoWorkspace() {
           <HpoFieldToday key={`today-${revision}`} onOpenMap={() => setView("map")} />
         ) : null}
         {view === "map" && initialResolved ? (
-          <HpoRoutePlanner
-            key={`map-${revision}`}
-            onNavigateHpo={(next) => setView(next)}
-          />
+          <HpoRoutePlanner key={`map-${revision}`} onNavigateHpo={(next) => setView(next)} />
         ) : null}
         {((view === "accounts" || view === "activity") && loading) ||
         ((view === "today" || view === "map") && !initialResolved) ? (
@@ -204,8 +201,16 @@ function HpoWorkspace() {
           <Accounts
             accounts={data.accounts}
             limited={data.accountLimitReached}
-            onNote={(id) => { setLogAccount(id); setSheet("note"); }}
-            onEmery={(a) => openHpoEmery(`I'm working with HPO account ${a.name} (account ID ${a.id}). Use its live relationship history, contacts, visits, and follow-ups to advise me on this account.`, a.name)}
+            onNote={(id) => {
+              setLogAccount(id);
+              setSheet("note");
+            }}
+            onEmery={(a) =>
+              openHpoEmery(
+                `I'm working with HPO account ${a.name} (account ID ${a.id}). Use its live relationship history, contacts, visits, and follow-ups to advise me on this account.`,
+                a.name,
+              )
+            }
             onAdd={() =>
               openHpoEmery(
                 "Add a new HPO account. Ask me only for the office name and physical street address if I haven't given them yet, then save it to HPO and plot it on the map.",
@@ -245,7 +250,10 @@ function HpoWorkspace() {
             revision={revision}
             onClose={() => setSelected(null)}
             onChanged={() => void refresh()}
-            onNote={() => { setLogAccount(selected); setSheet("note"); }}
+            onNote={() => {
+              setLogAccount(selected);
+              setSheet("note");
+            }}
             onLog={() =>
               openHpoEmery(
                 `Log a visit for ${account?.name || "this HPO account"}. Ask me what happened and who I spoke with, then save it.`,
@@ -318,7 +326,6 @@ function HpoWorkspace() {
           </Button>
         ) : null}
         <HpoEmerySheet onChanged={() => void refresh()} />
-
       </div>
     </AppShell>
   );
@@ -376,54 +383,140 @@ function Accounts({
             <h1 className="text-lg font-semibold">Accounts</h1>
             <p className="text-xs text-muted-foreground">{shown.length} offices</p>
           </div>
-          <Button onClick={onAdd} className="min-h-11 shrink-0 px-3"><Plus className="size-4" /> Add</Button>
+          <Button onClick={onAdd} className="min-h-11 shrink-0 px-3">
+            <Plus className="size-4" /> Add
+          </Button>
         </div>
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
           <label className="relative min-w-0">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <span className="sr-only">Search accounts</span>
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Office, specialty, city…" className="min-h-11 w-full rounded-md border border-border bg-card pl-10 pr-2 text-base text-foreground outline-none focus:border-primary" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Office, specialty, city…"
+              className="min-h-11 w-full rounded-md border border-border bg-card pl-10 pr-2 text-base text-foreground outline-none focus:border-primary"
+            />
           </label>
-          <Button type="button" variant="outline" onClick={() => setFiltersOpen((open) => !open)} aria-expanded={filtersOpen} className="min-h-11 shrink-0 gap-1 px-2 text-xs">
-            <SlidersHorizontal className="size-4" /> Filters{activeFilters ? ` · ${activeFilters}` : ""}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setFiltersOpen((open) => !open)}
+            aria-expanded={filtersOpen}
+            className="min-h-11 shrink-0 gap-1 px-2 text-xs"
+          >
+            <SlidersHorizontal className="size-4" /> Filters
+            {activeFilters ? ` · ${activeFilters}` : ""}
           </Button>
         </div>
-        {activeFilters > 0 && <div className="flex items-center gap-2 overflow-x-auto text-xs text-primary">
-          <span className="truncate">{[type, stage, city].filter((v) => v !== "all").join(" · ")}</span>
-          <Button type="button" variant="ghost" className="min-h-11 shrink-0 px-2 text-xs" onClick={() => { setType("all"); setStage("all"); setCity("all"); }}>Clear</Button>
-        </div>}
-        {filtersOpen && <div className="grid gap-2 rounded-md border border-border bg-card p-2 sm:grid-cols-3">
-          <Filter value={type} onChange={setType} label="Type" options={types} />
-          <Filter value={stage} onChange={setStage} label="Stage" options={stages} />
-          <Filter value={city} onChange={setCity} label="City" options={cities} />
-        </div>}
+        {activeFilters > 0 && (
+          <div className="flex items-center gap-2 overflow-x-auto text-xs text-primary">
+            <span className="truncate">
+              {[type, stage, city].filter((v) => v !== "all").join(" · ")}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              className="min-h-11 shrink-0 px-2 text-xs"
+              onClick={() => {
+                setType("all");
+                setStage("all");
+                setCity("all");
+              }}
+            >
+              Clear
+            </Button>
+          </div>
+        )}
+        {filtersOpen && (
+          <div className="grid gap-2 rounded-md border border-border bg-card p-2 sm:grid-cols-3">
+            <Filter value={type} onChange={setType} label="Type" options={types} />
+            <Filter value={stage} onChange={setStage} label="Stage" options={stages} />
+            <Filter value={city} onChange={setCity} label="City" options={cities} />
+          </div>
+        )}
       </div>
-      {limited && <p className="text-xs text-muted-foreground">Showing the first 1,000 accounts.</p>}
+      {limited && (
+        <p className="text-xs text-muted-foreground">Showing the first 1,000 accounts.</p>
+      )}
       <div className="space-y-2">
         {shown.map((a) => {
           const due = a.next_action_due_at && Date.parse(a.next_action_due_at) <= Date.now();
           const navigable = Boolean(a.address?.trim() && /\d/.test(a.address));
-          return <article key={a.id} className="min-w-0 overflow-hidden rounded-md border border-border bg-card shadow-sm">
-            <Button type="button" variant="ghost" onClick={() => onOpen(a.id)} className="h-auto min-h-24 w-full justify-between gap-2 rounded-none px-3 py-3 text-left text-foreground hover:bg-muted/40">
-              <span className="min-w-0 flex-1 whitespace-normal">
-                <span className="block break-words text-sm font-semibold leading-5">{a.name}</span>
-                <span className="mt-1 block break-words text-xs font-normal text-muted-foreground">{[a.city, a.account_type, a.specialty].filter(Boolean).join(" · ") || "Account"}</span>
-                <span className="mt-2 block break-words text-[11px] font-medium capitalize text-primary">{a.relationship_stage || a.status || "Account"} · Priority {a.priority}</span>
-                <span className="mt-1 block text-[11px] font-normal text-muted-foreground">Last touch: {date(a.last_touch_at)}</span>
-                {a.next_action && <span className={`mt-1 block break-words text-xs font-medium ${due ? "text-destructive" : "text-foreground"}`}>
-                  {due ? "Due · " : "Next · "}{a.next_action}{a.next_action_due_at ? ` · ${date(a.next_action_due_at)}` : ""}
-                </span>}
-              </span>
-              <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-            </Button>
-            <div className="flex min-w-0 items-center gap-1 border-t border-border px-1.5 py-1">
-              <Button type="button" variant="ghost" className="min-h-11 flex-1 gap-1 px-1 text-xs" onClick={() => onNote(a.id)}><FileText className="size-4" /> Note</Button>
-              <Button type="button" variant="ghost" className="min-h-11 flex-1 gap-1 px-1 text-xs" onClick={() => onEmery(a)}><MessageCircle className="size-4" /> Emery</Button>
-              {navigable && <a href={`https://maps.apple.com/?daddr=${encodeURIComponent([a.address, a.city].filter(Boolean).join(", "))}`} target="_blank" rel="noreferrer" className="flex min-h-11 flex-1 items-center justify-center gap-1 rounded-md text-xs font-medium text-primary hover:bg-muted"><Navigation className="size-4" /> Go</a>}
-            </div>
-          </article>;
+          return (
+            <article
+              key={a.id}
+              className="min-w-0 overflow-hidden rounded-md border border-border bg-card shadow-sm"
+            >
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => onOpen(a.id)}
+                className="h-auto min-h-24 w-full justify-between gap-2 rounded-none px-3 py-3 text-left text-foreground hover:bg-muted/40"
+              >
+                <span className="min-w-0 flex-1 whitespace-normal">
+                  <span className="block break-words text-sm font-semibold leading-5">
+                    {a.name}
+                  </span>
+                  <span className="mt-1 block break-words text-xs font-normal text-muted-foreground">
+                    {[a.city, a.account_type, a.specialty].filter(Boolean).join(" · ") || "Account"}
+                  </span>
+                  <span className="mt-2 block break-words text-[11px] font-medium capitalize text-primary">
+                    {a.relationship_stage || a.status || "Account"} · Priority {a.priority}
+                  </span>
+                  <span className="mt-1 block text-[11px] font-normal text-muted-foreground">
+                    Last touch: {date(a.last_touch_at)}
+                  </span>
+                  {a.next_action && (
+                    <span
+                      className={`mt-1 block break-words text-xs font-medium ${due ? "text-destructive" : "text-foreground"}`}
+                    >
+                      {due ? "Due · " : "Next · "}
+                      {a.next_action}
+                      {a.next_action_due_at ? ` · ${date(a.next_action_due_at)}` : ""}
+                    </span>
+                  )}
+                </span>
+                <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+              </Button>
+              <div className="flex min-w-0 items-center gap-1 border-t border-border px-1.5 py-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="min-h-11 flex-1 gap-1 px-1 text-xs"
+                  onClick={() => onNote(a.id)}
+                >
+                  <FileText className="size-4" /> Note
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="min-h-11 flex-1 gap-1 px-1 text-xs"
+                  onClick={() => onEmery(a)}
+                >
+                  <MessageCircle className="size-4" /> Emery
+                </Button>
+                {navigable && (
+                  <a
+                    href={`https://maps.apple.com/?daddr=${encodeURIComponent([a.address, a.city].filter(Boolean).join(", "))}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex min-h-11 flex-1 items-center justify-center gap-1 rounded-md text-xs font-medium text-primary hover:bg-muted"
+                  >
+                    <Navigation className="size-4" /> Go
+                  </a>
+                )}
+              </div>
+            </article>
+          );
         })}
-        {!shown.length && <p className="py-12 text-center text-sm text-muted-foreground">{accounts.length ? "No accounts match these filters." : "No accounts yet. Add your first office."}</p>}
+        {!shown.length && (
+          <p className="py-12 text-center text-sm text-muted-foreground">
+            {accounts.length
+              ? "No accounts match these filters."
+              : "No accounts yet. Add your first office."}
+          </p>
+        )}
       </div>
     </section>
   );
@@ -457,7 +550,11 @@ function Filter({
     </label>
   );
 }
-function QuickNoteSheet({ account, onClose, onSave }: {
+function QuickNoteSheet({
+  account,
+  onClose,
+  onSave,
+}: {
   account: Account | undefined;
   onClose: () => void;
   onSave: (summary: string) => Promise<void>;
@@ -465,16 +562,73 @@ function QuickNoteSheet({ account, onClose, onSave }: {
   const [summary, setSummary] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  return <div className="hpo-crm fixed inset-0 z-[90] flex items-end justify-center bg-background/70 sm:items-center sm:p-4" role="presentation" onClick={onClose}>
-    <section role="dialog" aria-modal="true" aria-label={`Quick note for ${account?.name || "account"}`} onClick={(event) => event.stopPropagation()} className="w-full max-w-lg rounded-t-lg border border-border bg-card px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 shadow-xl sm:rounded-lg">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2"><div className="min-w-0"><h2 className="text-base font-semibold">Quick note</h2><p className="truncate text-xs text-muted-foreground">{account?.name}</p></div><Button type="button" size="icon" variant="ghost" className="size-11" aria-label="Close note" onClick={onClose}><X className="size-5" /></Button></div>
-      <form className="mt-3 space-y-3" onSubmit={async (event) => { event.preventDefault(); setSaving(true); setError(""); try { await onSave(summary.trim()); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save note."); } finally { setSaving(false); } }}>
-        <label className="block text-xs font-medium">Note<textarea autoFocus required value={summary} onChange={(event) => setSummary(event.target.value)} placeholder="What should you remember about this office?" className="mt-1 min-h-32 w-full rounded-md border border-border bg-card p-3 text-base text-foreground outline-none focus:border-primary" /></label>
-        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        <Button type="submit" disabled={saving || !summary.trim()} className="min-h-12 w-full">{saving ? "Saving…" : "Save note"}</Button>
-      </form>
-    </section>
-  </div>;
+  return (
+    <div
+      className="hpo-crm fixed inset-0 z-[90] flex items-end justify-center bg-background/70 sm:items-center sm:p-4"
+      role="presentation"
+      onClick={onClose}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Quick note for ${account?.name || "account"}`}
+        onClick={(event) => event.stopPropagation()}
+        className="w-full max-w-lg rounded-t-lg border border-border bg-card px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 shadow-xl sm:rounded-lg"
+      >
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold">Quick note</h2>
+            <p className="truncate text-xs text-muted-foreground">{account?.name}</p>
+          </div>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-11"
+            aria-label="Close note"
+            onClick={onClose}
+          >
+            <X className="size-5" />
+          </Button>
+        </div>
+        <form
+          className="mt-3 space-y-3"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            setSaving(true);
+            setError("");
+            try {
+              await onSave(summary.trim());
+            } catch (cause) {
+              setError(cause instanceof Error ? cause.message : "Could not save note.");
+            } finally {
+              setSaving(false);
+            }
+          }}
+        >
+          <label className="block text-xs font-medium">
+            Note
+            <textarea
+              autoFocus
+              required
+              value={summary}
+              onChange={(event) => setSummary(event.target.value)}
+              placeholder="What should you remember about this office?"
+              className="mt-1 min-h-32 w-full rounded-md border border-border bg-card p-3 text-base text-foreground outline-none focus:border-primary"
+            />
+          </label>
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
+          <Button type="submit" disabled={saving || !summary.trim()} className="min-h-12 w-full">
+            {saving ? "Saving…" : "Save note"}
+          </Button>
+        </form>
+      </section>
+    </div>
+  );
 }
 function ActivityView({
   data,
