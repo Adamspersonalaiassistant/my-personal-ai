@@ -356,11 +356,11 @@ async function chooseRouteCandidates(db: any, userId: string, message: string, c
             : false;
         const daysSinceTouch = row.last_touch_at
           ? Math.max(0, Math.floor((now - Date.parse(row.last_touch_at)) / 86400000))
-          : 120;
+          : null;
         const score =
           Number(row.priority ?? 3) * 12 +
           (overdue ? 35 : 0) +
-          Math.min(30, Math.floor(daysSinceTouch / 10) * 3) +
+          (daysSinceTouch == null ? 0 : Math.min(30, Math.floor(daysSinceTouch / 10) * 3)) +
           18;
         return {
           score,
@@ -390,7 +390,7 @@ async function chooseRouteCandidates(db: any, userId: string, message: string, c
         const score =
           priority * 10 +
           (row.verification_status === "verified" ? 10 : 0) +
-          (row.fit_status === "accepted" ? 14 : 0);
+          (row.fit_status === "qualified" ? 14 : 0);
         return {
           score,
           accountId: row.promoted_account_id ?? null,
