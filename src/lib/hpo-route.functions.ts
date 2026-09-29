@@ -918,6 +918,19 @@ export async function executeHpoRouteCreateCore(input: {
   }
 
   try {
+    const existingRouteQuery = await input.db
+      .from("hpo_route_plans")
+      .select("id")
+      .eq("user_id", input.userId)
+      .eq("route_date", data.routeDate)
+      .in("status", ["planned", "active", "in_progress"])
+      .limit(1)
+      .maybeSingle();
+    if (existingRouteQuery.error) throw existingRouteQuery.error;
+    if (existingRouteQuery.data) {
+      throw new Error("An open HPO route already exists for this date.");
+    }
+
     const { data: route, error: routeError } = await input.db
       .from("hpo_route_plans")
       .insert({
