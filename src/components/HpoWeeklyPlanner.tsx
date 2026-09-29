@@ -71,6 +71,14 @@ function dayName(value: string) {
   return prettyDate(value, { weekday: "short" });
 }
 
+function mondayForKey(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year!, month! - 1, day!, 12));
+  const weekday = date.getUTCDay();
+  const delta = weekday === 0 ? -6 : 1 - weekday;
+  return addDaysKey(value, delta);
+}
+
 function weekLabel(start: string, end: string) {
   const startDate = new Date(start + "T12:00:00");
   const endDate = new Date(end + "T12:00:00");
@@ -109,6 +117,8 @@ function statusLabel(value: string) {
 export function HpoWeeklyPlanner({
   onOpenMap,
   onRouteContextChange,
+  focusDate = null,
+  focusRouteId = null,
 }: {
   onOpenMap: (input: {
     routeDate: string;
@@ -116,6 +126,8 @@ export function HpoWeeklyPlanner({
     build?: boolean;
   }) => void;
   onRouteContextChange?: (routeId: string | null, stopId: string | null) => void;
+  focusDate?: string | null;
+  focusRouteId?: string | null;
 }) {
   const load = useServerFn(getHpoWeeklyPlanner);
   const [data, setData] = useState<PlannerData | null>(null);
@@ -141,16 +153,22 @@ export function HpoWeeklyPlanner({
 
   useEffect(() => {
     let cancelled = false;
-    void load({ data: { weekStart: null } })
+    setLoading(true);
+    const requestedWeek =
+      focusDate && /^\d{4}-\d{2}-\d{2}$/.test(focusDate) ? mondayForKey(focusDate) : null;
+    void load({ data: { weekStart: requestedWeek } })
       .then((result) => {
         if (cancelled) return;
         const next = result as PlannerData;
         setData(next);
         setSelectedDate(
-          next.today >= next.weekStart && next.today <= next.weekEnd
-            ? next.today
-            : next.routes[0]?.route_date ?? next.weekStart,
+          focusDate && focusDate >= next.weekStart && focusDate <= next.weekEnd
+            ? focusDate
+            : next.today >= next.weekStart && next.today <= next.weekEnd
+              ? next.today
+              : next.routes[0]?.route_date ?? next.weekStart,
         );
+        setError("");
       })
       .catch((cause) => {
         if (!cancelled)
@@ -162,7 +180,7 @@ export function HpoWeeklyPlanner({
     return () => {
       cancelled = true;
     };
-  }, [load]);
+  }, [focusDate, load]);
 
   const weekDays = useMemo(
     () => (data ? Array.from({ length: 7 }, (_, index) => addDaysKey(data.weekStart, index)) : []),
@@ -178,7 +196,8 @@ export function HpoWeeklyPlanner({
     return map;
   }, [data]);
   const selectedRoutes = selectedDate ? routesByDate.get(selectedDate) ?? [] : [];
-  const selectedRoute = selectedRoutes[0] ?? null;
+  const selectedRoute =
+    selectedRoutes.find((route) => route.id === focusRouteId) ?? selectedRoutes[0] ?? null;
 
   useEffect(() => {
     onRouteContextChange?.(selectedRoute?.id ?? null, null);
@@ -230,7 +249,7 @@ export function HpoWeeklyPlanner({
     openHpoEmery(
       `I want to build an HPO marketing route for ${date}. Ask me which towns or territory if I have not given them yet. Before creating anything, review my active HPO targets, prior visit notes, relationship history, follow-ups and prospect quality. Rank the best offices to visit with a short why-now reason and visit objective. Let me approve or adjust the shortlist, then build and optimize the route. Do not invent offices.`,
       `Build Route · ${prettyDate(date)}`,
-      { autoSend: true },
+      { autoSend: true, routeDate: date },
     );
   }
 
@@ -420,7 +439,11 @@ export function HpoWeeklyPlanner({
               return (
                 <article
                   key={route.id}
-                  className="overflow-hidden rounded-2xl border border-border/55 bg-card/35"
+                  className={
+                    route.id === focusRouteId
+                      ? "overflow-hidden rounded-2xl border border-primary/45 bg-primary/[0.045] shadow-[0_8px_30px_rgba(0,0,0,0.12)]"
+                      : "overflow-hidden rounded-2xl border border-border/55 bg-card/35"
+                  }
                 >
                   <div className="border-b border-border/45 p-4">
                     <div className="flex items-start justify-between gap-3">
@@ -453,6 +476,33 @@ export function HpoWeeklyPlanner({
                         <p className="text-xs leading-5 text-muted-foreground">{route.notes}</p>
                       </div>
                     ) : null}
+
+                    <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                      <div className="rounded-xl border border-primary/20 bg-primary/[0.05] px-3 py-2.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-primary">
+                          {route.optimized_at ? "Optimized route" : "Saved route"}
+                        </p>
+                        <p className="mt-1 text-xs text-foreground">
+                          {route.optimized_at
+                            ? `${orderedStops.length} stops · ${duration(route.optimized_duration_seconds) || "drive time pending"} · ${miles(route.optimized_distance_meters) || "mileage pending"}`
+                            : `${orderedStops.length} stops · open Map to optimize driving order`}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        className="min-h-12 gap-2"
+                        onClick={() =>
+                          onOpenMap({
+                            routeDate: route.route_date,
+                            routeId: route.id,
+                            build: false,
+                          })
+                        }
+                      >
+                        <MapPinned className="size-4" />
+                        View optimized map
+                      </Button>
+                    </div>
                   </div>
 
                   <div className="divide-y divide-border/40">
