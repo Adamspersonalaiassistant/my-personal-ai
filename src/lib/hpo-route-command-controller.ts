@@ -878,7 +878,8 @@ function continuationRouteMessage(
 
   const prompt = normalize(turns[priorAssistantIndex]?.text ?? "");
   const isTerritoryClarification =
-    /which city or hpo territory should i build the route around/.test(prompt);
+    /which city or hpo territory should i build the route around/.test(prompt) ||
+    /which towns cities or hpo territory do you want me to review/.test(prompt);
   const isDateClarification = /what day should i build the hpo route for/.test(prompt);
   if (!isTerritoryClarification && !isDateClarification) return message;
 
@@ -886,7 +887,12 @@ function continuationRouteMessage(
   for (let index = priorAssistantIndex - 1; index >= 0; index -= 1) {
     const turn = turns[index];
     if (turn?.role !== "user") continue;
-    if (requestedAction(turn.text) === "hpo.route.create") {
+    const priorAction = requestedAction(turn.text);
+    if (
+      priorAction === "hpo.route.create" ||
+      priorAction === "hpo.route.recommend" ||
+      recommendationApproval(turn.text)
+    ) {
       originalRequest = turn.text;
       break;
     }
@@ -911,6 +917,7 @@ export function hasPendingHpoRouteClarification(
     const prompt = normalize(turn.text);
     return (
       /which city or hpo territory should i build the route around/.test(prompt) ||
+      /which towns cities or hpo territory do you want me to review/.test(prompt) ||
       /what day should i build the hpo route for/.test(prompt)
     );
   }
@@ -936,7 +943,7 @@ export async function processHpoRouteCommand(input: {
   if (
     action === "none" &&
     pendingRecommendation &&
-    recommendationApproval(input.message)
+    recommendationApproval(commandMessage)
   ) {
     action = "hpo.route.create";
   }
@@ -1206,7 +1213,7 @@ export async function processHpoRouteCommand(input: {
 
     if (action === "hpo.route.create") {
       const approvedRecommendation =
-        pendingRecommendation && recommendationApproval(input.message)
+        pendingRecommendation && recommendationApproval(commandMessage)
           ? pendingRecommendation
           : null;
       const routeDate =
