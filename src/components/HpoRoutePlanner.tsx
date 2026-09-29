@@ -708,6 +708,7 @@ function OfficePlanningMap({
   onOpenAccount,
   onToggleRouteStop,
   onBuildRoute,
+  hasActiveRoute,
   preparing,
   onRefreshPins,
 }: {
@@ -718,6 +719,7 @@ function OfficePlanningMap({
   onOpenAccount: (accountId: string) => void;
   onToggleRouteStop: (office: MapOffice) => void;
   onBuildRoute: () => void;
+  hasActiveRoute: boolean;
   preparing: boolean;
   onRefreshPins: () => void;
 }) {
@@ -770,6 +772,7 @@ function OfficePlanningMap({
   const width = Math.max(1, officeMap.viewportSize.width);
   const height = Math.max(1, officeMap.viewportSize.height);
   const zoom = officeMap.zoom;
+  const searchResults = query.trim() ? mapped.slice(0, 8) : [];
   const projected = points.map((point) => ({
     ...point,
     ...projectToWorld(point.lat, point.lon, zoom),
@@ -855,15 +858,11 @@ function OfficePlanningMap({
   return (
     <section className="overflow-hidden rounded-[1.6rem] border border-primary/18 bg-card/25 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
       <div className="border-b border-border/35 p-4">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="emery-kicker">Office Map · Account Tracker</p>
-            <h3 className="mt-1 text-lg font-semibold">
-              See the territory before you build the route.
-            </h3>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              Drag the map like Google Maps, pinch or scroll to zoom, and tap any office pin to
-              inspect the account or add it to a route.
+            <p className="text-sm font-semibold">HPO Territory</p>
+            <p className="mt-0.5 text-[10px] text-muted-foreground">
+              Search, select offices, and build or update today&apos;s route.
             </p>
           </div>
           <button
@@ -908,6 +907,37 @@ function OfficePlanningMap({
             ))}
           </div>
         </div>
+
+        {searchResults.length ? (
+          <div className="mt-2 overflow-hidden rounded-xl border border-border/45 bg-background/95 shadow-sm">
+            {searchResults.map((office) => (
+              <button
+                key={office.key}
+                type="button"
+                onClick={() => {
+                  onSelectOffice(office.key);
+                  officeMap.focus(Number(office.latitude), Number(office.longitude), Math.max(13, zoom));
+                }}
+                className="flex min-h-12 w-full items-center gap-3 border-b border-border/35 px-3 py-2 text-left last:border-b-0"
+              >
+                <MapPinned className="size-4 shrink-0 text-primary" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-semibold">{office.officeName}</span>
+                  <span className="block truncate text-[10px] text-muted-foreground">
+                    {[office.address, office.city].filter(Boolean).join(", ")}
+                  </span>
+                </span>
+                <span className="shrink-0 text-[9px] font-semibold uppercase text-muted-foreground">
+                  {office.kind}
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : query.trim() ? (
+          <div className="mt-2 rounded-xl border border-border/45 bg-background/75 px-3 py-2 text-xs text-muted-foreground">
+            No offices match that search.
+          </div>
+        ) : null}
 
         <div className="mt-2 flex items-center justify-between gap-3 text-[10px] text-muted-foreground">
           <span>
@@ -1154,7 +1184,7 @@ function OfficePlanningMap({
           disabled={!selectedCount}
           className="emery-press min-h-11 shrink-0 rounded-xl bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-35"
         >
-          Build Route
+          {hasActiveRoute ? "Add to Today" : "Build Route"}
         </button>
       </div>
     </section>
@@ -1414,6 +1444,11 @@ export function HpoRoutePlanner({
   }
 
   function startRouteFromMap() {
+    if (!mapSelectedOffices.length) return;
+    if (activeRoute) {
+      void addSelectedToActiveRoute();
+      return;
+    }
     const stops = mapSelectedOffices.map((office) => ({
       key: office.key,
       accountId: office.accountId,
@@ -1681,6 +1716,7 @@ export function HpoRoutePlanner({
               onOpenAccount={setMapAccountDetailId}
               onToggleRouteStop={toggleMapRouteStop}
               onBuildRoute={startRouteFromMap}
+              hasActiveRoute={Boolean(activeRoute)}
               preparing={mapPreparing}
               onRefreshPins={() => void refreshOfficePins()}
             />
