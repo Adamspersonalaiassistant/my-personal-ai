@@ -122,6 +122,7 @@ type SourceMetadata = {
   shortcutName?: string;
   surface?: string;
   hpoRouteId?: string | null;
+  hpoRouteDate?: string | null;
   hpoStopId?: string | null;
   selectedAccountId?: string | null;
   selectedProspectId?: string | null;
@@ -333,6 +334,10 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
       shortcutName: raw.shortcutName ? String(raw.shortcutName).slice(0, 100) : undefined,
       surface: raw.surface ? String(raw.surface).slice(0, 120) : undefined,
       hpoRouteId: raw.hpoRouteId ? String(raw.hpoRouteId).slice(0, 80) : null,
+      hpoRouteDate:
+        raw.hpoRouteDate && /^\d{4}-\d{2}-\d{2}$/.test(String(raw.hpoRouteDate))
+          ? String(raw.hpoRouteDate)
+          : null,
       hpoStopId: raw.hpoStopId ? String(raw.hpoStopId).slice(0, 80) : null,
       selectedAccountId: raw.selectedAccountId ? String(raw.selectedAccountId).slice(0, 80) : null,
       selectedProspectId: raw.selectedProspectId
@@ -397,7 +402,14 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
       message: data.message,
     });
     const recent = await history(db, userId, conversation.id);
-    if (!hpoEligible && hasPendingHpoRouteClarification(recent)) {
+    const hpoSessionHistory =
+      data.source.hpoEphemeral && data.source.hpoEphemeralSession
+        ? recent.filter(
+            (turn: any) =>
+              turn.sourceMetadata?.hpoEphemeralSession === data.source.hpoEphemeralSession,
+          )
+        : recent;
+    if (!hpoEligible && hasPendingHpoRouteClarification(hpoSessionHistory)) {
       hpoEligible = true;
     }
     const workingState = await refreshRollingConversationState({
@@ -649,7 +661,8 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
             sourceMessageId: userMessage.id,
             sourceChannel: String(data.source.entryPoint ?? "text"),
             routeId: data.source.hpoRouteId ?? null,
-            history: recent,
+            routeDateHint: data.source.hpoRouteDate ?? null,
+            history: hpoSessionHistory,
           }).catch((error: any) => {
             console.error("HPO route command controller failed", error);
             return {
