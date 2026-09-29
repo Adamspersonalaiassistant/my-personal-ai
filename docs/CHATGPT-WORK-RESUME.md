@@ -6,10 +6,10 @@ Updated 2026-09-29 for the next sustained Work run.
 Finish the existing 270-gap Emery professionalization job. Do not restart it, do not return a plan, and do not stop after one milestone. Emery is Adam's ONE private personal AI assistant; HPO CRM, Calendar, Tasks, memory, Voice, files, routes, research and integrations are capabilities of the same assistant.
 
 ## Source of truth
-1. Current branch: `codex/emery-professionalization`
+1. Current branch: `codex/emery-professionalization-continue`
 2. Draft PR: #7
 3. Baseline production/main at start: `5f7af39e677e225cf4b56d87cc2ff164de61db14`
-4. Current branch head when this handoff was prepared: `f6e2d8adf2f617c0a6328a5738be90cac74eb432`
+4. Current production checkpoint: `bf9d9035176b4fa2f6ba3415e36e6defcb4dd6b3`; continuation branch begins from that release
 5. Read `docs/EMERY-PROFESSIONALIZATION-STATE.md` first.
 6. Read `docs/EMERY-PROFESSIONALIZATION-COVERAGE.md` second. It is the mandatory 1–270 status ledger.
 7. Read `docs/EMERY-270-REQUIREMENTS-001-100.md`, `docs/EMERY-270-REQUIREMENTS-101-200.md`, and `docs/EMERY-270-REQUIREMENTS-201-270.md`. They persist the exact acceptance intent of all 270 requirements so you do not need to reconstruct them from chat context.
@@ -137,4 +137,4 @@ Prioritize completion over narration:
 - if a hard Work/runtime limit is reached, leave the branch BUILDABLE, commit current safe work, update STATE with the exact next action, and continue from that checkpoint when execution resumes. Never reconstruct from scratch.
 
 ## Immediate next action
-Read the latest branch commit history after `f6e2d8ad...`, reconcile STATE/COVERAGE against actual code, run the focused orchestration/TypeScript/lint gate, then continue from the first genuinely incomplete dependency milestone. Do not return a progress-only response.
+Start from rows 31–71 only. The published checkpoint already closed 1–30 and 204–223. Finish Voice/hands-free + route reliability, run focused tests and CI, update STATE/COVERAGE, commit, then stop for the next scoped prompt.
