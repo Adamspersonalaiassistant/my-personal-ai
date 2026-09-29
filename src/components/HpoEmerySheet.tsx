@@ -1,10 +1,22 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowUp, Building2, Check, MapPin, X } from "lucide-react";
+import {
+  ArrowUp,
+  BriefcaseBusiness,
+  Building2,
+  Check,
+  ChevronDown,
+  Circle,
+  MapPin,
+  Route as RouteIcon,
+  Stethoscope,
+  X,
+} from "lucide-react";
 import brainImage from "@/assets/neural-brain.png";
 import { EmeryVoiceControl } from "@/components/EmeryVoiceControl";
 import { sendEmeryMessage } from "@/lib/emery.functions";
+import { buildHpoRouteFromSelection } from "@/lib/hpo-route-session.functions";
 
 const EVENT_NAME = "emery:hpo-chat";
 
@@ -12,17 +24,27 @@ type HpoEmeryDetail = {
   prompt?: string;
   title?: string;
   autoSend?: boolean;
+  routeDate?: string | null;
 };
 
 type RouteRecommendationCandidate = {
+  score?: number;
+  accountId?: string | null;
+  prospectId?: string | null;
   officeName: string;
+  address?: string | null;
   city?: string | null;
   priorityLabel?: string | null;
   kind?: "account" | "prospect";
   accountType?: string | null;
   specialty?: string | null;
   relationshipStage?: string | null;
+  relationshipHealth?: string | null;
   nextAction?: string | null;
+  nextActionDueAt?: string | null;
+  lastTouchAt?: string | null;
+  latestOutcome?: string | null;
+  latestSignal?: string | null;
   latestNote?: string | null;
   reasons?: string[];
 };
@@ -33,6 +55,7 @@ type RouteRecommendation = {
   requestedCount?: number | null;
   eligibleCount?: number | null;
   candidates: RouteRecommendationCandidate[];
+  allCandidates?: RouteRecommendationCandidate[];
 };
 
 type MiniMessage = {
@@ -42,16 +65,77 @@ type MiniMessage = {
   recommendation?: RouteRecommendation | null;
 };
 
+type RecommendationGroup = "Doctors / Medical" | "Attorneys" | "PT / Chiro" | "Other";
+
 export function openHpoEmery(
   prompt = "",
   title = "HPO",
-  options: { autoSend?: boolean } = {},
+  options: { autoSend?: boolean; routeDate?: string | null } = {},
 ) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
     new CustomEvent<HpoEmeryDetail>(EVENT_NAME, {
-      detail: { prompt, title, autoSend: options.autoSend === true },
+      detail: {
+        prompt,
+        title,
+        autoSend: options.autoSend === true,
+        routeDate: options.routeDate ?? null,
+      },
     }),
+  );
+}
+
+function candidateKey(candidate: RouteRecommendationCandidate) {
+  if (candidate.accountId) return `account:${candidate.accountId}`;
+  if (candidate.prospectId) return `prospect:${candidate.prospectId}`;
+  return `office:${candidate.officeName}:${candidate.city ?? ""}`;
+}
+
+function categoryFor(candidate: RouteRecommendationCandidate): RecommendationGroup {
+  const type = [
+    candidate.accountType,
+    candidate.specialty,
+    candidate.kind === "prospect" ? candidate.accountType : null,
+    candidate.officeName,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (/attorney|law\b|law firm|legal/.test(type)) return "Attorneys";
+  if (/chiropr|physical therapy|\bpt\b|physiotherap/.test(type)) return "PT / Chiro";
+  if (
+    /primary care|\bpcp\b|provider|doctor|physician|medical|family medicine|internal medicine|urgent care|clinic|health/.test(
+      type,
+    )
+  )
+    return "Doctors / Medical";
+  return "Other";
+}
+
+function categoryIcon(group: RecommendationGroup) {
+  if (group === "Doctors / Medical") return Stethoscope;
+  if (group === "Attorneys") return BriefcaseBusiness;
+  if (group === "PT / Chiro") return Building2;
+  return Building2;
+}
+
+function cleanMarkdown(text: string) {
+  return text.replace(/\*\*/g, "").replace(/^[-•]\s*/gm, "• ");
+}
+
+function PlainMessage({ text }: { text: string }) {
+  const cleaned = cleanMarkdown(text);
+  const lines = cleaned.split(/\n+/).filter((line) => line.trim());
+  if (lines.length <= 1) return <>{cleaned}</>;
+  return (
+    <div className="space-y-1.5">
+      {lines.map((line, index) => (
+        <p key={`${index}-${line.slice(0, 20)}`} className="leading-6">
+          {line}
+        </p>
+      ))}
+    </div>
   );
 }
 
@@ -64,23 +148,36 @@ export function HpoEmerySheet({
   surface = "hpo",
 }: {
   onChanged?: () => void;
-  onRouteBuilt?: (routeId: string) => void;
+  onRouteBuilt?: (routeId: string, routeDate: string) => void;
   routeId?: string | null;
   stopId?: string | null;
   selectedAccountId?: string | null;
   surface?: string;
 }) {
   const askEmery = useServerFn(sendEmeryMessage);
+  const buildSelection = useServerFn(buildHpoRouteFromSelection);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const sessionRef = useRef<string>("");
+
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("HPO");
+  const [sessionRouteDate, setSessionRouteDate] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<MiniMessage[]>([]);
   const [pending, setPending] = useState(false);
+  const [building, setBuilding] = useState(false);
   const [error, setError] = useState("");
   const [autoPrompt, setAutoPrompt] = useState("");
+  const [recommendation, setRecommendation] = useState<RouteRecommendation | null>(null);
+  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+  const [showAll, setShowAll] = useState(true);
+  const [openGroups, setOpenGroups] = useState<Record<RecommendationGroup, boolean>>({
+    "Doctors / Medical": true,
+    Attorneys: true,
+    "PT / Chiro": true,
+    Other: true,
+  });
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -90,11 +187,16 @@ export function HpoEmerySheet({
           ? crypto.randomUUID()
           : `hpo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       setTitle(detail.title || "HPO");
+      setSessionRouteDate(detail.routeDate ?? null);
       setDraft(detail.autoSend ? "" : detail.prompt || "");
       setAutoPrompt(detail.autoSend ? detail.prompt || "" : "");
       setMessages([]);
+      setRecommendation(null);
+      setSelectedKeys([]);
+      setShowAll(true);
       setError("");
       setPending(false);
+      setBuilding(false);
       setOpen(true);
       window.setTimeout(() => inputRef.current?.focus(), 80);
     };
@@ -112,10 +214,13 @@ export function HpoEmerySheet({
   useEffect(() => {
     if (!open) return;
     const frame = requestAnimationFrame(() => {
-      endRef.current?.scrollIntoView({ block: "end", behavior: pending ? "smooth" : "auto" });
+      endRef.current?.scrollIntoView({
+        block: "end",
+        behavior: pending || building ? "smooth" : "auto",
+      });
     });
     return () => cancelAnimationFrame(frame);
-  }, [messages, pending, error, open]);
+  }, [messages, pending, building, error, open, recommendation]);
 
   useEffect(() => {
     if (!open || !autoPrompt || pending) return;
@@ -127,9 +232,58 @@ export function HpoEmerySheet({
     return () => window.clearTimeout(timer);
   }, [autoPrompt, open, pending]);
 
+  const allCandidates = useMemo(() => {
+    if (!recommendation) return [];
+    const source =
+      recommendation.allCandidates?.length
+        ? recommendation.allCandidates
+        : recommendation.candidates ?? [];
+    const seen = new Set<string>();
+    return source.filter((candidate) => {
+      const key = candidateKey(candidate);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [recommendation]);
+
+  const recommendedKeys = useMemo(
+    () => new Set((recommendation?.candidates ?? []).map(candidateKey)),
+    [recommendation],
+  );
+
+  const visibleCandidates = showAll
+    ? allCandidates
+    : allCandidates.filter((candidate) => recommendedKeys.has(candidateKey(candidate)));
+
+  const grouped = useMemo(() => {
+    const result: Record<RecommendationGroup, RouteRecommendationCandidate[]> = {
+      "Doctors / Medical": [],
+      Attorneys: [],
+      "PT / Chiro": [],
+      Other: [],
+    };
+    for (const candidate of visibleCandidates) result[categoryFor(candidate)].push(candidate);
+    return result;
+  }, [visibleCandidates]);
+
+  const selectedCandidates = useMemo(() => {
+    const selectedSet = new Set(selectedKeys);
+    return allCandidates.filter((candidate) => selectedSet.has(candidateKey(candidate)));
+  }, [allCandidates, selectedKeys]);
+
+  function installRecommendation(next: RouteRecommendation) {
+    const pool = next.allCandidates?.length ? next.allCandidates : next.candidates;
+    setRecommendation({ ...next, allCandidates: pool });
+    const initial = (next.candidates ?? []).map(candidateKey);
+    setSelectedKeys(initial);
+    if (next.routeDate) setSessionRouteDate(next.routeDate);
+    setShowAll(true);
+  }
+
   async function sendText(text: string, showUser: boolean) {
     const clean = text.trim();
-    if (!clean || pending) return;
+    if (!clean || pending || building) return;
     if (showUser) {
       setMessages((current) => [...current, { role: "user", text: clean }]);
       setDraft("");
@@ -146,6 +300,7 @@ export function HpoEmerySheet({
             inputMode: "typed",
             surface,
             hpoRouteId: routeId ?? null,
+            hpoRouteDate: sessionRouteDate,
             hpoStopId: stopId ?? null,
             selectedAccountId: selectedAccountId ?? null,
             hpoEphemeral: true,
@@ -158,31 +313,43 @@ export function HpoEmerySheet({
       }
       const routeCommand =
         "hpoRouteCommand" in result ? (result as any).hpoRouteCommand : null;
-      const recommendation =
+      const nextRecommendation =
         routeCommand?.action === "hpo.route.recommend" &&
         routeCommand?.receiptData?.recommendation
           ? (routeCommand.receiptData.recommendation as RouteRecommendation)
           : null;
+
+      if (nextRecommendation) installRecommendation(nextRecommendation);
+
       setMessages((current) => [
         ...current,
         {
           id: "assistantMessage" in result ? result.assistantMessage?.id : undefined,
           role: "assistant",
-          text: result.reply,
-          recommendation,
+          text: nextRecommendation
+            ? `I reviewed the territory and ranked the offices below. Tap any office to include or remove it from your route.`
+            : result.reply,
+          recommendation: nextRecommendation,
         },
       ]);
       onChanged?.();
+
       if (
         routeCommand?.performed &&
         routeCommand?.action === "hpo.route.create" &&
         routeCommand?.routeId
       ) {
         const builtRouteId = String(routeCommand.routeId);
-        window.setTimeout(() => {
-          setOpen(false);
-          onRouteBuilt?.(builtRouteId);
-        }, 650);
+        const builtDate =
+          routeCommand?.receiptData?.routeDate ??
+          recommendation?.routeDate ??
+          sessionRouteDate;
+        if (builtDate) {
+          window.setTimeout(() => {
+            setOpen(false);
+            onRouteBuilt?.(builtRouteId, String(builtDate));
+          }, 500);
+        }
       }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Emery couldn't complete that.");
@@ -194,8 +361,73 @@ export function HpoEmerySheet({
 
   async function send() {
     const clean = draft.trim();
-    if (!clean || pending) return;
+    if (!clean || pending || building) return;
     await sendText(clean, true);
+  }
+
+  function toggleCandidate(candidate: RouteRecommendationCandidate) {
+    const key = candidateKey(candidate);
+    setSelectedKeys((current) =>
+      current.includes(key) ? current.filter((item) => item !== key) : [...current, key],
+    );
+  }
+
+  function selectTop(count: number) {
+    setSelectedKeys(allCandidates.slice(0, count).map(candidateKey));
+  }
+
+  function selectGroup(group: RecommendationGroup) {
+    const keys = grouped[group].map(candidateKey);
+    const allSelected = keys.length > 0 && keys.every((key) => selectedKeys.includes(key));
+    setSelectedKeys((current) => {
+      const set = new Set(current);
+      for (const key of keys) {
+        if (allSelected) set.delete(key);
+        else set.add(key);
+      }
+      return [...set];
+    });
+  }
+
+  async function buildRoute() {
+    if (!recommendation || !selectedCandidates.length || building || pending) return;
+    const routeDate = recommendation.routeDate || sessionRouteDate;
+    if (!routeDate) {
+      setError("Choose the route day from Planner first so I know where to save this route.");
+      return;
+    }
+
+    setBuilding(true);
+    setError("");
+    try {
+      const result = await buildSelection({
+        data: {
+          routeDate,
+          area: recommendation.area ?? null,
+          sessionId: sessionRef.current || null,
+          selected: selectedCandidates.map((candidate) => ({
+            accountId: candidate.accountId ?? null,
+            prospectId: candidate.prospectId ?? null,
+          })),
+        },
+      });
+      setMessages((current) => [
+        ...current,
+        {
+          role: "assistant",
+          text: `Built and optimized ${result.stopCount} stops for ${routeDate}. Estimated driving: ${result.driveMinutes ?? "—"} minutes · ${result.distanceMiles != null ? Number(result.distanceMiles).toFixed(1) : "—"} miles. Opening it in Planner now.`,
+        },
+      ]);
+      onChanged?.();
+      window.setTimeout(() => {
+        setOpen(false);
+        onRouteBuilt?.(String(result.routeId), String(result.routeDate));
+      }, 450);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "I couldn't build that route safely.");
+    } finally {
+      setBuilding(false);
+    }
   }
 
   if (!open || typeof document === "undefined") return null;
@@ -211,17 +443,17 @@ export function HpoEmerySheet({
         aria-modal="true"
         aria-label="Ask Emery"
         onClick={(event) => event.stopPropagation()}
-        className="w-full max-w-xl overflow-hidden rounded-t-[1.6rem] border border-border/60 bg-background shadow-[0_-24px_70px_rgba(0,0,0,0.45)] sm:rounded-[1.4rem]"
+        className="flex max-h-[94dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-[1.6rem] border border-border/60 bg-background shadow-[0_-24px_70px_rgba(0,0,0,0.45)] sm:rounded-[1.4rem]"
       >
-        <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-border/80 sm:hidden" />
-        <div className="flex items-center gap-3 border-b border-border/45 px-4 py-3">
+        <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border/80 sm:hidden" />
+        <div className="flex shrink-0 items-center gap-3 border-b border-border/45 px-4 py-3">
           <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-primary/15 bg-primary/[0.05]">
             <img src={brainImage} alt="" className="emery-blue-brain size-9 object-cover" />
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold">Emery</p>
             <p className="truncate text-[11px] text-muted-foreground">
-              {title} · quick HPO session · same Emery brain and tools
+              {title} · route game plan
             </p>
           </div>
           <button
@@ -234,179 +466,303 @@ export function HpoEmerySheet({
           </button>
         </div>
 
-        <div className="max-h-[58dvh] min-h-24 space-y-3 overflow-y-auto px-4 py-3">
-          {!messages.length ? (
-            <p className="text-sm leading-6 text-muted-foreground">
-              This is a focused HPO work session. Tell Emery what you want to plan or change; she still uses your HPO history, notes, memory and route tools underneath.
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
+          {!messages.length && !pending ? (
+            <p className="px-1 text-sm leading-6 text-muted-foreground">
+              Emery is reviewing your HPO relationship history and target offices for this route.
             </p>
           ) : null}
-          {messages.map((message, index) => (
-            <div
-              key={`${message.role}-${index}`}
-              className={message.role === "user" ? "flex justify-end" : "flex justify-start"}
-            >
-              {message.role === "assistant" && message.recommendation ? (
-                <div className="w-full space-y-2.5">
-                  <div className="rounded-2xl rounded-bl-md bg-card px-3.5 py-3 text-sm leading-6 text-foreground">
-                    <p className="font-semibold">
-                      Best offices to prioritize
-                      {message.recommendation.area ? ` · ${message.recommendation.area}` : ""}
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      I reviewed {message.recommendation.eligibleCount ?? "your"} eligible HPO targets
-                      {message.recommendation.routeDate
-                        ? ` for ${new Date(
-                            `${message.recommendation.routeDate}T12:00:00`,
+
+          {messages.map((message, index) => {
+            if (message.recommendation) {
+              return (
+                <div key={`recommendation-${index}`} className="rounded-2xl bg-card px-3.5 py-3 text-sm text-foreground">
+                  {message.text}
+                </div>
+              );
+            }
+            return (
+              <div
+                key={`${message.role}-${index}`}
+                className={message.role === "user" ? "flex justify-end" : "flex justify-start"}
+              >
+                <div
+                  className={
+                    message.role === "user"
+                      ? "max-w-[88%] rounded-2xl rounded-br-md bg-primary px-3.5 py-2.5 text-sm leading-6 text-primary-foreground"
+                      : "max-w-[94%] rounded-2xl rounded-bl-md bg-card px-3.5 py-2.5 text-sm leading-6 text-foreground"
+                  }
+                >
+                  <PlainMessage text={message.text} />
+                </div>
+              </div>
+            );
+          })}
+
+          {recommendation ? (
+            <section className="space-y-3">
+              <div className="rounded-2xl border border-primary/20 bg-primary/[0.05] p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Office game plan</p>
+                    <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
+                      {recommendation.area || "Selected territory"}
+                      {recommendation.routeDate || sessionRouteDate
+                        ? ` · ${new Date(
+                            `${recommendation.routeDate || sessionRouteDate}T12:00:00`,
                           ).toLocaleDateString([], {
                             weekday: "short",
                             month: "short",
                             day: "numeric",
                           })}`
-                        : ""}. Ranked for sales value first; driving order comes after you approve.
+                        : ""}
+                      {" · "}
+                      {recommendation.eligibleCount ?? allCandidates.length} eligible offices
                     </p>
                   </div>
+                  <span className="shrink-0 rounded-full bg-primary px-2.5 py-1 text-[10px] font-bold text-primary-foreground">
+                    {selectedKeys.length} selected
+                  </span>
+                </div>
 
-                  <div className="space-y-2">
-                    {message.recommendation.candidates.map((candidate, candidateIndex) => (
-                      <article
-                        key={`${candidate.officeName}-${candidateIndex}`}
-                        className="rounded-2xl border border-border/60 bg-card/80 p-3 shadow-sm"
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAll(false)}
+                    className={
+                      !showAll
+                        ? "min-h-9 rounded-xl bg-primary px-3 text-[11px] font-semibold text-primary-foreground"
+                        : "min-h-9 rounded-xl border border-border px-3 text-[11px] font-semibold text-muted-foreground"
+                    }
+                  >
+                    Recommended {recommendation.candidates.length}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAll(true)}
+                    className={
+                      showAll
+                        ? "min-h-9 rounded-xl bg-primary px-3 text-[11px] font-semibold text-primary-foreground"
+                        : "min-h-9 rounded-xl border border-border px-3 text-[11px] font-semibold text-muted-foreground"
+                    }
+                  >
+                    All offices {allCandidates.length}
+                  </button>
+                  {[5, 8, 10, 15]
+                    .filter((count) => count <= allCandidates.length)
+                    .map((count) => (
+                      <button
+                        key={count}
+                        type="button"
+                        onClick={() => selectTop(count)}
+                        className="min-h-9 rounded-xl border border-primary/25 bg-background/40 px-3 text-[11px] font-semibold text-primary"
                       >
-                        <div className="flex items-start gap-3">
-                          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-                            {candidateIndex + 1}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <p className="text-sm font-semibold leading-5 text-foreground">
-                                  {candidate.officeName}
-                                </p>
-                                <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
-                                  {candidate.city ? (
-                                    <span className="inline-flex items-center gap-1">
-                                      <MapPin className="size-3" />
-                                      {candidate.city}
-                                    </span>
-                                  ) : null}
-                                  <span className="inline-flex items-center gap-1">
-                                    <Building2 className="size-3" />
-                                    {candidate.kind === "prospect"
-                                      ? "Prospect"
-                                      : candidate.accountType || candidate.relationshipStage || "Account"}
-                                  </span>
-                                </p>
-                              </div>
-                              <span
+                        Select top {count}
+                      </button>
+                    ))}
+                </div>
+              </div>
+
+              {(["Doctors / Medical", "Attorneys", "PT / Chiro", "Other"] as RecommendationGroup[]).map(
+                (group) => {
+                  const candidates = grouped[group];
+                  if (!candidates.length) return null;
+                  const Icon = categoryIcon(group);
+                  const allGroupSelected = candidates.every((candidate) =>
+                    selectedKeys.includes(candidateKey(candidate)),
+                  );
+                  return (
+                    <div key={group} className="overflow-hidden rounded-2xl border border-border/60 bg-card/50">
+                      <div className="flex items-center gap-2 border-b border-border/45 px-3 py-2.5">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setOpenGroups((current) => ({
+                              ...current,
+                              [group]: !current[group],
+                            }))
+                          }
+                          className="flex min-h-10 min-w-0 flex-1 items-center gap-2 text-left"
+                        >
+                          <Icon className="size-4 shrink-0 text-primary" />
+                          <span className="min-w-0 flex-1 text-sm font-semibold">{group}</span>
+                          <span className="text-[10px] text-muted-foreground">{candidates.length}</span>
+                          <ChevronDown
+                            className={`size-4 text-muted-foreground transition-transform ${
+                              openGroups[group] ? "rotate-180" : ""
+                            }`}
+                          />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => selectGroup(group)}
+                          className="min-h-9 shrink-0 rounded-xl border border-border px-2.5 text-[10px] font-semibold text-primary"
+                        >
+                          {allGroupSelected ? "Clear" : "Select all"}
+                        </button>
+                      </div>
+
+                      {openGroups[group] ? (
+                        <div className="divide-y divide-border/40">
+                          {candidates.map((candidate) => {
+                            const key = candidateKey(candidate);
+                            const selected = selectedKeys.includes(key);
+                            const recommended = recommendedKeys.has(key);
+                            return (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={() => toggleCandidate(candidate)}
                                 className={
-                                  candidate.priorityLabel === "GO NOW"
-                                    ? "shrink-0 rounded-full border border-primary/35 bg-primary/15 px-2 py-1 text-[9px] font-bold text-primary"
-                                    : candidate.priorityLabel === "HIGH"
-                                      ? "shrink-0 rounded-full border border-border bg-background/60 px-2 py-1 text-[9px] font-bold text-foreground"
-                                      : "shrink-0 rounded-full border border-border bg-background/40 px-2 py-1 text-[9px] font-semibold text-muted-foreground"
+                                  selected
+                                    ? "w-full bg-primary/[0.055] px-3 py-3 text-left"
+                                    : "w-full px-3 py-3 text-left hover:bg-accent/25"
                                 }
                               >
-                                {candidate.priorityLabel || "PRIORITY"}
-                              </span>
-                            </div>
+                                <div className="flex items-start gap-2.5">
+                                  <div
+                                    className={
+                                      selected
+                                        ? "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"
+                                        : "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground"
+                                    }
+                                  >
+                                    {selected ? <Check className="size-3.5" /> : <Circle className="size-3" />}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="min-w-0">
+                                        <p className="text-sm font-semibold leading-5 text-foreground">
+                                          {candidate.officeName}
+                                        </p>
+                                        <p className="mt-0.5 flex flex-wrap gap-x-2 text-[10px] text-muted-foreground">
+                                          {candidate.city ? (
+                                            <span className="inline-flex items-center gap-1">
+                                              <MapPin className="size-3" />
+                                              {candidate.city}
+                                            </span>
+                                          ) : null}
+                                          {candidate.relationshipStage ? (
+                                            <span>{candidate.relationshipStage}</span>
+                                          ) : null}
+                                        </p>
+                                      </div>
+                                      <div className="flex shrink-0 flex-col items-end gap-1">
+                                        <span
+                                          className={
+                                            candidate.priorityLabel === "GO NOW"
+                                              ? "rounded-full bg-primary px-2 py-1 text-[9px] font-bold text-primary-foreground"
+                                              : "rounded-full border border-border px-2 py-1 text-[9px] font-semibold text-foreground"
+                                          }
+                                        >
+                                          {candidate.priorityLabel || "TARGET"}
+                                        </span>
+                                        {recommended ? (
+                                          <span className="text-[9px] font-semibold text-primary">Recommended</span>
+                                        ) : null}
+                                      </div>
+                                    </div>
 
-                            {candidate.reasons?.length ? (
-                              <div className="mt-2">
-                                <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-primary">
-                                  Why now
-                                </p>
-                                <ul className="mt-1 space-y-1">
-                                  {candidate.reasons.slice(0, 3).map((reason) => (
-                                    <li
-                                      key={reason}
-                                      className="flex items-start gap-1.5 text-[11px] leading-4 text-foreground/90"
-                                    >
-                                      <Check className="mt-0.5 size-3 shrink-0 text-primary" />
-                                      <span>{reason}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            ) : null}
+                                    {candidate.reasons?.length ? (
+                                      <ul className="mt-2 space-y-1">
+                                        {candidate.reasons.slice(0, 3).map((reason) => (
+                                          <li
+                                            key={reason}
+                                            className="flex items-start gap-1.5 text-[11px] leading-4 text-foreground/90"
+                                          >
+                                            <span className="mt-[6px] size-1 shrink-0 rounded-full bg-primary" />
+                                            <span>{reason}</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    ) : null}
 
-                            <div className="mt-2 rounded-xl bg-background/45 px-2.5 py-2">
-                              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-                                Visit objective
-                              </p>
-                              <p className="mt-1 text-[11px] leading-4 text-foreground/90">
-                                {candidate.nextAction ||
-                                  (candidate.kind === "prospect"
-                                    ? "Qualify the relationship and identify the right decision-maker."
-                                    : "Advance the relationship and leave with a clear next step.")}
-                              </p>
-                            </div>
+                                    <div className="mt-2 rounded-lg bg-background/45 px-2.5 py-2">
+                                      <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                                        Visit objective
+                                      </p>
+                                      <p className="mt-1 text-[11px] leading-4 text-foreground/90">
+                                        {candidate.nextAction ||
+                                          (candidate.kind === "prospect"
+                                            ? "Qualify the relationship and identify the right decision-maker."
+                                            : "Advance the relationship and leave with a clear next step.")}
+                                      </p>
+                                    </div>
 
-                            {candidate.latestNote ? (
-                              <details className="mt-2">
-                                <summary className="cursor-pointer text-[10px] font-semibold text-primary">
-                                  View recent note
-                                </summary>
-                                <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
-                                  {candidate.latestNote}
-                                </p>
-                              </details>
-                            ) : null}
-                          </div>
+                                    {candidate.latestNote ? (
+                                      <details
+                                        className="mt-2"
+                                        onClick={(event) => event.stopPropagation()}
+                                      >
+                                        <summary className="cursor-pointer text-[10px] font-semibold text-primary">
+                                          Recent note
+                                        </summary>
+                                        <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                                          {candidate.latestNote}
+                                        </p>
+                                      </details>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          })}
                         </div>
-                      </article>
-                    ))}
-                  </div>
-
-                  <div className="rounded-2xl border border-primary/20 bg-primary/[0.05] p-3">
-                    <p className="text-[11px] font-semibold text-foreground">
-                      Ready to build?
-                    </p>
-                    <p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">
-                      Approve the shortlist or choose how many of the top offices to use.
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {[5, 8, 10]
-                        .filter((count) => count <= message.recommendation!.candidates.length)
-                        .map((count) => (
-                          <button
-                            key={count}
-                            type="button"
-                            disabled={pending}
-                            onClick={() => void sendText(`Use the top ${count} and build the route.`, true)}
-                            className="min-h-9 rounded-xl border border-primary/30 bg-primary/10 px-3 text-[11px] font-semibold text-primary disabled:opacity-40"
-                          >
-                            Use top {count}
-                          </button>
-                        ))}
+                      ) : null}
                     </div>
-                  </div>
-                </div>
-              ) : (
-                <div
-                  className={
-                    message.role === "user"
-                      ? "max-w-[88%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-primary px-3.5 py-2.5 text-sm leading-6 text-primary-foreground"
-                      : "max-w-[92%] whitespace-pre-wrap rounded-2xl rounded-bl-md bg-card px-3.5 py-2.5 text-sm leading-6 text-foreground"
-                  }
-                >
-                  {message.text}
-                </div>
+                  );
+                },
               )}
+            </section>
+          ) : null}
+
+          {pending ? <p className="px-1 text-xs text-muted-foreground">Emery is reviewing…</p> : null}
+          {building ? (
+            <p className="px-1 text-xs font-medium text-primary">
+              Building and optimizing the approved route…
+            </p>
+          ) : null}
+          {error ? (
+            <div className="rounded-xl border border-destructive/35 bg-destructive/[0.04] px-3 py-2 text-xs leading-5 text-destructive">
+              {error}
             </div>
-          ))}
-          {pending ? <p className="text-xs text-muted-foreground">Emery is working…</p> : null}
-          {error ? <p className="text-xs text-destructive">{error}</p> : null}
+          ) : null}
           <div ref={endRef} aria-hidden="true" className="h-px" />
         </div>
 
-        <div className="border-t border-border/45 bg-background/96 px-3 pb-[max(0.7rem,env(safe-area-inset-bottom))] pt-2">
+        {recommendation ? (
+          <div className="shrink-0 border-t border-border/45 bg-background/98 px-3 py-2">
+            <button
+              type="button"
+              onClick={() => void buildRoute()}
+              disabled={!selectedCandidates.length || pending || building}
+              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm disabled:opacity-35"
+            >
+              <RouteIcon className="size-4" />
+              {building
+                ? "Building & optimizing…"
+                : `Build this route · ${selectedCandidates.length} stop${
+                    selectedCandidates.length === 1 ? "" : "s"
+                  }`}
+            </button>
+            <p className="mt-1 text-center text-[9px] leading-4 text-muted-foreground">
+              Emery will optimize road order after your office choices are locked.
+            </p>
+          </div>
+        ) : null}
+
+        <div className="shrink-0 border-t border-border/45 bg-background/96 px-3 pb-[max(0.7rem,env(safe-area-inset-bottom))] pt-2">
           <div className="flex items-end gap-1.5 rounded-xl border border-input bg-card p-1.5">
             <textarea
               ref={inputRef}
               rows={1}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
-              placeholder="Tell Emery what to do…"
+              placeholder={
+                recommendation
+                  ? "Ask Emery about an office or adjust the game plan…"
+                  : "Tell Emery the towns or territory…"
+              }
               className="max-h-28 min-h-11 min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-base leading-6 outline-none placeholder:text-muted-foreground/60"
             />
             <EmeryVoiceControl
@@ -423,7 +779,7 @@ export function HpoEmerySheet({
             <button
               type="button"
               onClick={() => void send()}
-              disabled={!draft.trim() || pending}
+              disabled={!draft.trim() || pending || building}
               className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground disabled:opacity-35"
               aria-label="Send to Emery"
             >
