@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { deriveHpoAccountIntelligence, latestHpoTimestamp } from "@/lib/hpo-account-intelligence";
+import { geocodeHpoOfficeAddress } from "@/lib/hpo-geocode";
 
 const pageInput = z.object({ page: z.number().int().min(0).max(1000).default(0) });
 const accountInput = z.object({
@@ -108,6 +109,23 @@ export const updateHpoFieldAccount = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: z.input<typeof accountInput>) => accountInput.parse(input))
   .handler(async ({ context, data }) => {
+    const { data: existing, error: existingError } = await context.supabase
+      .from("hpo_accounts")
+      .select("id,address,city")
+      .eq("id", data.accountId)
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    if (existingError) throw existingError;
+    if (!existing) throw new Error("Account not found");
+
+    const addressChanged =
+      String(existing.address ?? "").trim() !== String(data.address ?? "").trim() ||
+      String(existing.city ?? "").trim() !== String(data.city ?? "").trim();
+    const point =
+      addressChanged && data.address
+        ? await geocodeHpoOfficeAddress(data.address, data.city).catch(() => null)
+        : null;
+
     const { data: account, error } = await context.supabase
       .from("hpo_accounts")
       .update({
@@ -123,6 +141,14 @@ export const updateHpoFieldAccount = createServerFn({ method: "POST" })
         opportunity: data.opportunity || null,
         blockers: data.blockers || null,
         notes: data.notes || null,
+        ...(addressChanged
+          ? {
+              latitude: point?.lat ?? null,
+              longitude: point?.lon ?? null,
+              geocoded_at: point ? new Date().toISOString() : null,
+            }
+          : {}),
+        updated_at: new Date().toISOString(),
       })
       .eq("id", data.accountId)
       .eq("user_id", context.userId)
