@@ -553,11 +553,15 @@ export async function executeHpoRouteAddStopsCore(input: {
     const existing = await loadStops(input.db, input.userId, input.routeId);
     const accountIds = new Set(existing.map((stop: any) => stop.account_id).filter(Boolean));
     const prospectIds = new Set(existing.map((stop: any) => stop.prospect_id).filter(Boolean));
-    const eligible = input.stops.filter(
-      (stop) =>
-        (!stop.accountId || !accountIds.has(stop.accountId)) &&
-        (!stop.prospectId || !prospectIds.has(stop.prospectId)),
-    );
+    const eligible = input.stops.filter((stop) => {
+      if (stop.prospectId) return !prospectIds.has(stop.prospectId);
+      if (stop.accountId) return !accountIds.has(stop.accountId);
+      return !existing.some(
+        (row: any) =>
+          clean(row.office_name).toLowerCase() === clean(stop.officeName).toLowerCase() &&
+          clean(row.address).toLowerCase() === clean(stop.address).toLowerCase(),
+      );
+    });
     if (!eligible.length) {
       const result = {
         ok: true,
