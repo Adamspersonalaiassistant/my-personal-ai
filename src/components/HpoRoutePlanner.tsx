@@ -1231,7 +1231,7 @@ export function HpoRoutePlannerCompact({ onOpen }: { onOpen: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, [load]);
+  }, [initialRouteId, load]);
 
   const todayRoute =
     data?.routes.find(
@@ -1281,8 +1281,16 @@ export function HpoRoutePlannerCompact({ onOpen }: { onOpen: () => void }) {
 
 export function HpoRoutePlanner({
   onNavigateHpo,
+  initialRouteId = null,
+  initialRouteDate = null,
+  openBuilderOnMount = false,
+  returnViewAfterCreate = "today",
 }: {
-  onNavigateHpo?: ((view: "today" | "map" | "accounts" | "activity") => void) | undefined;
+  onNavigateHpo?: ((view: "today" | "planner" | "map" | "accounts" | "activity") => void) | undefined;
+  initialRouteId?: string | null;
+  initialRouteDate?: string | null;
+  openBuilderOnMount?: boolean;
+  returnViewAfterCreate?: "today" | "planner";
 }) {
   const load = useServerFn(getHpoRoutePlanner);
   const createRoute = useServerFn(createHpoRoute);
@@ -1301,7 +1309,7 @@ export function HpoRoutePlanner({
   const [data, setData] = useState<PlannerData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeRouteId, setActiveRouteId] = useState<string | null>(null);
-  const [showBuilder, setShowBuilder] = useState(false);
+  const [showBuilder, setShowBuilder] = useState(openBuilderOnMount);
   const [optimizing, setOptimizing] = useState(false);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1333,7 +1341,7 @@ export function HpoRoutePlanner({
         if (cancelled) return;
         const next = result as PlannerData;
         setData(next);
-        setActiveRouteId(currentRouteId(next.routes, next.today));
+        setActiveRouteId(currentRouteId(next.routes, next.today, initialRouteId));
       })
       .catch(async (cause) => {
         if (cancelled) return;
@@ -1754,6 +1762,7 @@ export function HpoRoutePlanner({
             <RouteBuilder
               data={data}
               initialSelected={mapSeedStops}
+              initialRouteDate={initialRouteDate}
               onClose={() => setShowBuilder(false)}
               onCreate={async (payload) => {
                 setWorking(true);
@@ -1773,7 +1782,7 @@ export function HpoRoutePlanner({
                     );
                   }
                   await refresh(result.routeId);
-                  onNavigateHpo?.("today");
+                  onNavigateHpo?.(returnViewAfterCreate);
                 } catch (cause) {
                   setError(cause instanceof Error ? cause.message : "Couldn't create route.");
                 } finally {
@@ -1816,12 +1825,14 @@ function Stat({ label, value }: { label: string; value: string }) {
 function RouteBuilder({
   data,
   initialSelected,
+  initialRouteDate,
   onClose,
   onCreate,
   working,
 }: {
   data: PlannerData;
   initialSelected: Candidate[];
+  initialRouteDate?: string | null;
   onClose: () => void;
   onCreate: (payload: {
     routeDate: string;
@@ -1845,7 +1856,7 @@ function RouteBuilder({
   }) => Promise<void>;
   working: boolean;
 }) {
-  const [routeDate, setRouteDate] = useState(data.today);
+  const [routeDate, setRouteDate] = useState(initialRouteDate || data.today);
   const [area, setArea] = useState("");
   const [startAddress, setStartAddress] = useState("");
   const [endAddress, setEndAddress] = useState("");
@@ -1926,7 +1937,7 @@ function RouteBuilder({
     <section className="emery-glass rounded-[1.6rem] p-4 sm:p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="emery-kicker">Today's field route</p>
+          <p className="emery-kicker">Field route</p>
           <h3 className="mt-1 text-lg font-semibold">Choose offices, then optimize.</h3>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
             Add the offices you want to visit. Emery will calculate the best driving order.
