@@ -1231,7 +1231,7 @@ export function HpoRoutePlannerCompact({ onOpen }: { onOpen: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, [initialRouteId, load]);
+  }, [load]);
 
   const todayRoute =
     data?.routes.find(
@@ -1361,7 +1361,7 @@ export function HpoRoutePlanner({
     return () => {
       cancelled = true;
     };
-  }, [load]);
+  }, [initialRouteId, load]);
 
   useEffect(() => {
     if (!data || mapPreparedOnce || mapPreparing) return;
