@@ -229,7 +229,10 @@ export function EmeryVoiceControl({
 
         if (name === "execute_hpo_action") {
           const result = await executeHpoAction({
-            data: { request: String(args.request ?? "") },
+            data: {
+              request: String(args.request ?? ""),
+              accountId: hpoAccountId ?? null,
+            },
           });
           sendToolOutput(callId, JSON.stringify(result));
           onConversationChanged?.();
