@@ -10,4 +10,5 @@
 <!-- LOVABLE:END -->
 
 - Keep HPO field UI under its authenticated HPO route/components and owner-scoped HPO server functions; reuse canonical route/visit/offline/controller actions so the four field views share one record system.
-- Keep the four HPO areas inside one light, height-constrained field shell with one shared navigation above them; this preserves map sizing and consistent switching without modifying the global app shell.
+- Keep the four HPO areas inside one dark midnight-Emery, height-constrained field shell with one shared navigation above them; preserve the working Leaflet map, map sizing, and consistent switching without modifying the global app shell.
+- For long professionalization work, continue from docs/EMERY-PROFESSIONALIZATION-STATE.md and docs/EMERY-PROFESSIONALIZATION-COVERAGE.md; use focused normal commits and never rewrite pushed history.
