@@ -792,14 +792,20 @@ function requestedAction(message: string): HpoRouteCommandAction {
   )
     return "hpo.route.sync_calendar";
   if (
-    /\b(i want to|help me|lets|let us|plan)\b.*\b(build|plan|make)\b.*\broute\b/.test(text) ||
+    /\b(build|create) this route\b/.test(text) ||
+    /\b(build|create) (?:the )?(?:approved|selected|final) route\b/.test(text) ||
+    /\b(?:go ahead|looks good|approved|approve)\b.*\bbuild\b/.test(text) ||
+    /\buse (?:the )?top \d{1,2}\b/.test(text)
+  )
+    return "hpo.route.create";
+  if (
+    /\b(?:build|plan|make|create)\b.*\broute\b/.test(text) ||
+    /\broute\b.*\b(?:hoboken|jersey city|town|city|territory|offices?|accounts?|prospects?)\b/.test(text) ||
     /\b(?:which|what|top|best)\b.*\b(?:offices?|accounts?|prospects?)\b.*\b(?:visit|see|route)\b/.test(text) ||
     /\b(?:top|best|good)\b.*\b(?:prospects?|accounts?|offices?)\b.*\b(?:in|around)\b/.test(text) ||
     /\bwhere should i (?:go|visit) in\b/.test(text)
   )
     return "hpo.route.recommend";
-  if (/\b(build me|create|make)\b.*\broute\b/.test(text)) return "hpo.route.create";
-  if (/^build\b.*\broute\b/.test(text)) return "hpo.route.create";
   if (
     /\b(wrap up|wrap today|finish (?:the )?(?:route|day)|complete (?:the )?route|end (?:the )?route)\b/.test(
       text,
