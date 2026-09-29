@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 /* eslint-disable @typescript-eslint/no-explicit-any -- Existing field-context payloads include dynamic account metadata. */
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -222,9 +223,11 @@ export function HpoAccountFieldDetail({
       account?.name ? `Edit · ${account.name}` : "Edit account",
     );
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div
-      className="hpo-crm fixed inset-0 z-[150] flex bg-background sm:items-center sm:justify-center sm:bg-black/70 sm:p-4"
+      className="hpo-crm fixed inset-0 z-[260] flex bg-background sm:items-center sm:justify-center sm:bg-black/70 sm:p-4"
       role="presentation"
       onClick={(event) => {
         if (event.currentTarget === event.target && window.innerWidth >= 640) onClose();
@@ -903,6 +906,7 @@ export function HpoAccountFieldDetail({
           )}
         </div>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }
