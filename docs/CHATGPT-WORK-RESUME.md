@@ -11,9 +11,10 @@ Finish the existing 270-gap Emery professionalization job. Do not restart it, do
 3. Baseline production/main at start: `5f7af39e677e225cf4b56d87cc2ff164de61db14`
 4. Current branch head when this handoff was prepared: `f6e2d8adf2f617c0a6328a5738be90cac74eb432`
 5. Read `docs/EMERY-PROFESSIONALIZATION-STATE.md` first.
-6. Read `docs/EMERY-PROFESSIONALIZATION-COVERAGE.md` second. It is the mandatory 1–270 ledger.
-7. Inspect commits on this branch after the last state-file checkpoint before editing anything. The state file may lag code.
-8. Current repo/schema/runtime/telemetry beats stale prose.
+6. Read `docs/EMERY-PROFESSIONALIZATION-COVERAGE.md` second. It is the mandatory 1–270 status ledger.
+7. Read `docs/EMERY-270-REQUIREMENTS-001-100.md`, `docs/EMERY-270-REQUIREMENTS-101-200.md`, and `docs/EMERY-270-REQUIREMENTS-201-270.md`. They persist the exact acceptance intent of all 270 requirements so you do not need to reconstruct them from chat context.
+8. Inspect commits on this branch after the last state-file checkpoint before editing anything. The state file may lag code.
+9. Current repo/schema/runtime/telemetry beats stale prose.
 
 ## Work already on this branch
 Do not redo it blindly. Verify it, reconcile the ledger, and build on it:
