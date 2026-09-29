@@ -509,6 +509,8 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
             replyTo: data.source.entryPoint,
             domain: "mixed",
             emery_identity: "central-v2",
+            hpoEphemeral: data.source.hpoEphemeral === true,
+            hpoEphemeralSession: data.source.hpoEphemeralSession ?? null,
             action_plan: multiIntent.plan,
             execution_receipts: multiIntent.receipts,
           },
@@ -824,6 +826,8 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
             replyTo: data.source.entryPoint,
             domain: hpoEligible ? "hpo" : route.domain,
             emery_identity: "central-v1",
+            hpoEphemeral: data.source.hpoEphemeral === true,
+            hpoEphemeralSession: data.source.hpoEphemeralSession ?? null,
             action_plan: actionPlan,
             calendar_action: calendarAction,
             hpo_field_read: hpoFieldRead,
@@ -923,6 +927,8 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
             replyTo: data.source.entryPoint,
             domain: route.domain,
             emery_identity: "central-v1",
+            hpoEphemeral: data.source.hpoEphemeral === true,
+            hpoEphemeralSession: data.source.hpoEphemeralSession ?? null,
             calendar_action: calendarAction,
           },
         })
@@ -1363,6 +1369,8 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
           replyTo: data.source.entryPoint,
           domain: route.domain,
           emery_identity: "central-v1",
+          hpoEphemeral: data.source.hpoEphemeral === true,
+          hpoEphemeralSession: data.source.hpoEphemeralSession ?? null,
         },
       })
       .select("id,created_at")
@@ -1438,18 +1446,19 @@ export const getMainConversation = createServerFn({ method: "GET" })
       .select("id,role,content,created_at,source_metadata")
       .eq("user_id", context.userId)
       .eq("conversation_id", c.id)
-      .not("source_metadata->>hpoEphemeral", "eq", "true")
       .order("created_at", { ascending: true })
       .limit(500);
     return {
       conversationId: c.id,
-      messages: (data ?? []).map((x: any) => ({
-        id: x.id,
-        role: x.role,
-        text: x.content,
-        createdAt: x.created_at,
-        attachments: [],
-      })),
+      messages: (data ?? [])
+        .filter((x: any) => x.source_metadata?.hpoEphemeral !== true)
+        .map((x: any) => ({
+          id: x.id,
+          role: x.role,
+          text: x.content,
+          createdAt: x.created_at,
+          attachments: [],
+        })),
     };
   });
 export const getMainConversationPage = createServerFn({ method: "GET" })
@@ -1468,12 +1477,14 @@ export const getMainConversationPage = createServerFn({ method: "GET" })
       .select("id,role,content,created_at,source_metadata")
       .eq("user_id", context.userId)
       .eq("conversation_id", c.id)
-      .not("source_metadata->>hpoEphemeral", "eq", "true")
       .order("created_at", { ascending: false })
       .limit(data.limit + 1);
     if (data.before) q = q.lt("created_at", data.before);
     const { data: rows } = await q;
-    const page = (rows ?? []).slice(0, data.limit).reverse();
+    const visibleRows = (rows ?? []).filter(
+      (row: any) => row.source_metadata?.hpoEphemeral !== true,
+    );
+    const page = visibleRows.slice(0, data.limit).reverse();
     const cursor = page[0]?.created_at ?? null;
     return {
       conversationId: c.id,
@@ -1484,7 +1495,7 @@ export const getMainConversationPage = createServerFn({ method: "GET" })
         createdAt: x.created_at,
         attachments: [],
       })),
-      hasMore: (rows ?? []).length > data.limit,
+      hasMore: visibleRows.length > data.limit || (rows ?? []).length > data.limit,
       nextBefore: cursor,
       nextCursor: cursor,
     };
