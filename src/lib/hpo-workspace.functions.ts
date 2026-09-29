@@ -33,6 +33,7 @@ export const getHpoWorkspace = createServerFn({ method: "GET" })
           "id,name,account_type,specialty,territory,city,address,priority,owner_name,relationship_stage,relationship_health,status,notes,last_touch_at,next_action,next_action_due_at,opportunity,blockers,updated_at",
         )
         .eq("user_id", context.userId)
+        .eq("status", "active")
         .order("name")
         .range(0, 999),
       db
