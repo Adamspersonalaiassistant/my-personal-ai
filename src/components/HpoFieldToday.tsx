@@ -1492,13 +1492,6 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
         </button>
         <button
           type="button"
-          onClick={onOpenMap}
-          className="emery-press flex min-h-12 items-center justify-center gap-2 rounded-xl border border-border/45 px-3 text-xs font-semibold text-muted-foreground"
-        >
-          <RouteIcon className="size-4" /> Open Map
-        </button>
-        <button
-          type="button"
           onClick={() => void wrapUp()}
           disabled={working}
           className="emery-press min-h-12 rounded-xl bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-40"
