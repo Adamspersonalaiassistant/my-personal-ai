@@ -33,7 +33,7 @@ import {
   syncHpoRouteToCalendar,
   updateHpoRouteStop,
 } from "@/lib/hpo-route.functions";
-import { HpoMapV2MapLibre } from "@/components/hpo-map/HpoMapV2MapLibre";
+import { HpoLeafletMap } from "@/components/hpo-map/HpoLeafletMap";
 import { HpoAccountFieldDetail } from "@/components/HpoAccountFieldDetail";\nimport { openHpoEmery } from "@/components/HpoEmerySheet";
 import { loadHpoOfficeSnapshots, saveHpoOfficeSnapshots } from "@/lib/hpo-field-offline";
 import {
@@ -1308,7 +1308,6 @@ export function HpoRoutePlanner({
   const [mapPreparedOnce, setMapPreparedOnce] = useState(false);
   const [mapAccountDetailId, setMapAccountDetailId] = useState<string | null>(null);
   const [offlineMapOffices, setOfflineMapOffices] = useState<MapOffice[]>([]);
-  const [mapRendererFailed, setMapRendererFailed] = useState(false);
 
   async function refresh(preferredRouteId?: string | null) {
     const result = (await load({})) as PlannerData;
@@ -1709,55 +1708,19 @@ export function HpoRoutePlanner({
   return (
     <div id="hpo-route-planner" className="relative h-full min-h-0 w-full overflow-hidden">
       {data || mapOffices.length ? (
-        mapRendererFailed ? (
-          <div className="h-full min-h-0 overflow-y-auto bg-[#eef2f7] p-2 pb-28 sm:p-3">
-            <div className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-blue-200 bg-white px-3 py-2 text-[11px] text-slate-600 shadow-sm">
-              <span>Compatible street map active.</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setMapRendererFailed(false);
-                  setError(null);
-                }}
-                className="min-h-9 shrink-0 rounded-lg bg-blue-50 px-3 font-semibold text-[#1769e8]"
-              >
-                Retry
-              </button>
-            </div>
-            <OfficePlanningMap
-              offices={mapOffices}
-              selectedKeys={mapSelectedKeys}
-              selectedOfficeKey={selectedMapOfficeKey}
-              onSelectOffice={setSelectedMapOfficeKey}
-              onOpenAccount={setMapAccountDetailId}
-              onToggleRouteStop={toggleMapRouteStop}
-              onBuildRoute={startRouteFromMap}
-              hasActiveRoute={Boolean(activeRoute)}
-              preparing={mapPreparing}
-              onRefreshPins={() => void refreshOfficePins()}
-            />
-          </div>
-        ) : (
-          <HpoMapV2MapLibre
-            offices={mapOffices}
-            selectedKeys={mapSelectedKeys}
-            selectedOfficeKey={selectedMapOfficeKey}
-            route={activeRoute}
-            onSelectOffice={setSelectedMapOfficeKey}
-            onSelectMany={selectManyMapOffices}
-            onOpenAccount={setMapAccountDetailId}
-            onToggleRouteStop={toggleMapRouteStop}
-            onBuildRoute={startRouteFromMap}
-            preparing={mapPreparing}
-            onRefreshPins={() => void refreshOfficePins()}
-            onNavigateHpo={onNavigateHpo}
-            onFatalError={(message) => {
-              setMapRendererFailed(true);
-              setError(null);
-              console.warn("HPO MapLibre renderer unavailable; using compatible map.", message);
-            }}
-          />
-        )
+        <HpoLeafletMap
+          offices={mapOffices}
+          selectedKeys={mapSelectedKeys}
+          selectedOfficeKey={selectedMapOfficeKey}
+          route={activeRoute}
+          onSelectOffice={setSelectedMapOfficeKey}
+          onOpenAccount={setMapAccountDetailId}
+          onToggleRouteStop={toggleMapRouteStop}
+          onBuildRoute={startRouteFromMap}
+          preparing={mapPreparing}
+          onRefreshPins={() => void refreshOfficePins()}
+          onNavigateHpo={onNavigateHpo}
+        />
       ) : null}
 
       {showBuilder && data ? (
