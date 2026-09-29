@@ -166,7 +166,24 @@ function nameScore(needle: string, name: string) {
   return Math.round((hits / tokens.length) * 70);
 }
 
-async function activeRoute(db: any, userId: string, timeZone: string) {
+async function activeRoute(
+  db: any,
+  userId: string,
+  timeZone: string,
+  routeId?: string | null,
+) {
+  if (routeId) {
+    const { data: hinted, error: hintedError } = await db
+      .from("hpo_route_plans")
+      .select("*")
+      .eq("id", routeId)
+      .eq("user_id", userId)
+      .in("status", ["active", "in_progress", "planned", "draft"])
+      .maybeSingle();
+    if (hintedError) throw hintedError;
+    if (hinted) return hinted;
+  }
+
   const today = dateKey(timeZone);
   const { data, error } = await db
     .from("hpo_route_plans")
@@ -494,6 +511,7 @@ export async function processHpoRouteCommand(input: {
   latitude?: number | null;
   longitude?: number | null;
   sourceChannel: string;
+  routeId?: string | null;
 }): Promise<HpoRouteCommandResult> {
   const action = requestedAction(input.message);
   const requestPrefix = input.sourceMessageId
@@ -544,7 +562,7 @@ export async function processHpoRouteCommand(input: {
         });
       }
 
-      let route = await activeRoute(input.db, input.userId, input.timezone);
+      let route = await activeRoute(input.db, input.userId, input.timezone, input.routeId);
       if (!route) {
         const routeDate = dateKey(input.timezone);
         const created = await executeHpoRouteCreateCore({
@@ -762,7 +780,7 @@ export async function processHpoRouteCommand(input: {
       });
     }
 
-    const route = await activeRoute(input.db, input.userId, input.timezone);
+    const route = await activeRoute(input.db, input.userId, input.timezone, input.routeId);
     if (!route) {
       if (action === "hpo.route.add_stops") {
         const match = await findOffice(input.db, input.userId, input.message);
