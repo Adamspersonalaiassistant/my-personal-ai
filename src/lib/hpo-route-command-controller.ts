@@ -818,7 +818,45 @@ function requestedAction(message: string): HpoRouteCommandAction {
 type RouteConversationTurn = {
   role: string;
   text: string;
+  sourceMetadata?: Record<string, any> | null;
 };
+
+function latestRouteRecommendation(
+  history: RouteConversationTurn[] | null | undefined,
+) {
+  const turns = Array.isArray(history) ? history : [];
+  for (let index = turns.length - 1; index >= 0; index -= 1) {
+    const metadata = turns[index]?.sourceMetadata;
+    const command = metadata?.["hpo_route_command"];
+    const recommendation = command?.receiptData?.recommendation;
+    if (
+      recommendation &&
+      typeof recommendation === "object" &&
+      Array.isArray(recommendation.candidates) &&
+      recommendation.candidates.length
+    ) {
+      return recommendation as {
+        area: string;
+        routeDate?: string | null;
+        requestedCount?: number | null;
+        eligibleCount?: number | null;
+        candidates: RouteSalesCandidate[];
+      };
+    }
+  }
+  return null;
+}
+
+function recommendationApproval(message: string) {
+  const text = normalize(message);
+  return (
+    /\b(build it|create it|make it|use these|use them|go with these|go with them|looks good|approved|approve|go ahead)\b/.test(
+      text,
+    ) ||
+    /\buse (?:the )?top \d{1,2}\b/.test(text) ||
+    /^build(?: the)? route(?: tomorrow| today| on .+)?$/.test(text)
+  );
+}
 
 function continuationRouteMessage(
   message: string,
@@ -893,7 +931,15 @@ export async function processHpoRouteCommand(input: {
   history?: RouteConversationTurn[] | null;
 }): Promise<HpoRouteCommandResult> {
   const commandMessage = continuationRouteMessage(input.message, input.history);
-  const action = requestedAction(commandMessage);
+  const pendingRecommendation = latestRouteRecommendation(input.history);
+  let action = requestedAction(commandMessage);
+  if (
+    action === "none" &&
+    pendingRecommendation &&
+    recommendationApproval(input.message)
+  ) {
+    action = "hpo.route.create";
+  }
   const requestPrefix = input.sourceMessageId
     ? `message:${input.sourceMessageId}`
     : input.requestId
@@ -1093,51 +1139,166 @@ export async function processHpoRouteCommand(input: {
       }
     }
 
-    if (action === "hpo.route.create") {
-      const routeDate = resolveDate(commandMessage, input.timezone);
-      if (!routeDate) {
-        return empty({
-          needsClarification: true,
-          question: "What day should I build the HPO route for?",
-          reply: "What day should I build the HPO route for?",
-        });
-      }
-      const countMatch = commandMessage.match(/\b(\d{1,2})\s+(?:stops?|offices?)\b/i);
-      const requestedCount = countMatch ? Number(countMatch[1]) : 12;
-      const selected = await chooseRouteCandidates(
+    if (action === "hpo.route.recommend") {
+      const countMatch =
+        commandMessage.match(/\btop\s+(\d{1,2})\b/i) ??
+        commandMessage.match(/\b(\d{1,2})\s+(?:stops?|offices?|accounts?|prospects?)\b/i);
+      const requestedCount = countMatch ? Number(countMatch[1]) : 10;
+      const recommendation = await recommendRouteCandidates(
         input.db,
         input.userId,
         commandMessage,
         requestedCount,
       );
-      if (!selected.area) {
+      if (!recommendation.area) {
+        return empty({
+          needsClarification: true,
+          question: "Which towns, cities, or HPO territory do you want me to review?",
+          reply: "Which towns, cities, or HPO territory do you want me to review?",
+        });
+      }
+      if (!recommendation.candidates.length) {
+        return empty({
+          needsClarification: true,
+          question: `I don't have eligible saved HPO targets in ${recommendation.area}. Want me to review a nearby territory instead?`,
+          reply: `I don't have eligible saved HPO targets in ${recommendation.area}. Want me to review a nearby territory instead?`,
+        });
+      }
+
+      const routeDate = resolveDate(commandMessage, input.timezone);
+      const lines = recommendation.candidates.map((candidate, index) => {
+        const why = candidate.reasons.length
+          ? candidate.reasons.join("; ")
+          : "strong fit within the requested territory";
+        const objective = candidate.nextAction
+          ? ` Objective: ${boundedText(candidate.nextAction, 110)}.`
+          : candidate.kind === "prospect"
+            ? " Objective: qualify the relationship and identify the right decision-maker."
+            : " Objective: advance the relationship and leave with a clear next step.";
+        const note = candidate.latestNote
+          ? ` Recent note: ${boundedText(candidate.latestNote, 125)}`
+          : "";
+        return `${index + 1}. ${candidate.officeName} — ${candidate.priorityLabel}. Why now: ${why}.${objective}${note}`;
+      });
+      const dateLine = routeDate ? ` for ${routeDate}` : "";
+      const reply =
+        `I reviewed ${recommendation.eligibleCount} eligible HPO targets in ${recommendation.area}${dateLine} using your saved relationship history, prior visit notes, follow-ups and prospect quality. My sales-priority shortlist is:\n\n${lines.join(
+          "\n\n",
+        )}\n\nI would choose the offices for business value first, then optimize the driving order after you approve the shortlist. Say “Use the top ${Math.min(
+          requestedCount,
+          recommendation.candidates.length,
+        )}${routeDate ? "" : " tomorrow"}” or tell me what you want swapped before I build it.`;
+
+      return empty({
+        performed: false,
+        receiptData: {
+          recommendation: {
+            area: recommendation.area,
+            routeDate,
+            requestedCount,
+            eligibleCount: recommendation.eligibleCount,
+            candidates: recommendation.candidates,
+          },
+        },
+        reply,
+      });
+    }
+
+    if (action === "hpo.route.create") {
+      const approvedRecommendation =
+        pendingRecommendation && recommendationApproval(input.message)
+          ? pendingRecommendation
+          : null;
+      const routeDate =
+        resolveDate(commandMessage, input.timezone) ??
+        approvedRecommendation?.routeDate ??
+        null;
+      if (!routeDate) {
+        return empty({
+          needsClarification: true,
+          question: "What day should I build the HPO route for?",
+          receiptData: approvedRecommendation
+            ? { recommendation: approvedRecommendation }
+            : null,
+          reply: "What day should I build the HPO route for?",
+        });
+      }
+
+      const countMatch =
+        commandMessage.match(/\btop\s+(\d{1,2})\b/i) ??
+        commandMessage.match(/\b(\d{1,2})\s+(?:stops?|offices?)\b/i);
+      const requestedCount = countMatch
+        ? Number(countMatch[1])
+        : Number(approvedRecommendation?.requestedCount ?? 12);
+
+      let selectedArea: string | null = null;
+      let selectedCandidates: Array<{
+        score?: number;
+        accountId: string | null;
+        prospectId: string | null;
+        officeName: string;
+        address: string;
+        city: string | null;
+        latitude: number | null;
+        longitude: number | null;
+        visitPriority: string | null;
+      }> = [];
+
+      if (approvedRecommendation) {
+        selectedArea = approvedRecommendation.area;
+        selectedCandidates = approvedRecommendation.candidates
+          .slice(0, Math.max(1, Math.min(30, requestedCount)))
+          .map((candidate) => ({
+            score: candidate.score,
+            accountId: candidate.accountId,
+            prospectId: candidate.prospectId,
+            officeName: candidate.officeName,
+            address: candidate.address,
+            city: candidate.city,
+            latitude: candidate.latitude,
+            longitude: candidate.longitude,
+            visitPriority: candidate.visitPriority,
+          }));
+      } else {
+        const selected = await chooseRouteCandidates(
+          input.db,
+          input.userId,
+          commandMessage,
+          requestedCount,
+        );
+        selectedArea = selected.area;
+        selectedCandidates = selected.candidates;
+      }
+
+      if (!selectedArea) {
         return empty({
           needsClarification: true,
           question: "Which city or HPO territory should I build the route around?",
           reply: "Which city or HPO territory should I build the route around?",
         });
       }
-      if (!selected.candidates.length) {
+      if (!selectedCandidates.length) {
         return empty({
           needsClarification: true,
-          question: `I don't have eligible saved offices mapped in ${selected.area} yet. Want to choose the stops manually from Map?`,
-          reply: `I don't have eligible saved offices mapped in ${selected.area} yet. Want to choose the stops manually from Map?`,
+          question: `I don't have eligible saved offices mapped in ${selectedArea} yet. Want to choose the stops manually from Map?`,
+          reply: `I don't have eligible saved offices mapped in ${selectedArea} yet. Want to choose the stops manually from Map?`,
         });
       }
+
       const window = resolveWindow(commandMessage);
       const created = await executeHpoRouteCreateCore({
         db: input.db,
         userId: input.userId,
         payload: {
           routeDate,
-          area: selected.area,
+          area: selectedArea,
           startWindow: window.startWindow,
           endWindow: window.endWindow,
           syncToCalendar: /\b(calendar|schedule it|put .* calendar)\b/i.test(commandMessage),
-          stops: selected.candidates,
+          stops: selectedCandidates,
           idempotencyKey: requestPrefix
             ? `${requestPrefix}:hpo.route.create`
-            : `hpo-route:${routeDate}:${normalize(selected.area)}:create:${Date.now()}`,
+            : `hpo-route:${routeDate}:${normalize(selectedArea)}:create:${Date.now()}`,
           sourceChannel: input.sourceChannel,
           sourceMessageId: input.sourceMessageId ?? null,
         },
@@ -1156,7 +1317,12 @@ export async function processHpoRouteCommand(input: {
         performed: true,
         routeId: created.routeId,
         executionRunId: created.executionRunId,
-        reply: `Your ${selected.area} route is saved for ${routeDate} with ${created.stopCount} stops. I optimized it to about ${optimized.driveMinutes} minutes of driving across ${Number(optimized.distanceMiles ?? 0).toFixed(1)} miles.`,
+        receiptData: approvedRecommendation
+          ? { approvedRecommendation: { area: selectedArea, requestedCount, candidates: selectedCandidates } }
+          : null,
+        reply: `Your ${selectedArea} route is saved for ${routeDate} with ${created.stopCount} stops. I chose the stops using your sales-priority history, then optimized the driving order to about ${optimized.driveMinutes} minutes across ${Number(
+          optimized.distanceMiles ?? 0,
+        ).toFixed(1)} miles.`,
       });
     }
 
