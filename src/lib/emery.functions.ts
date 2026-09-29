@@ -162,14 +162,20 @@ async function mainConversation(db: any, userId: string) {
 async function history(db: any, userId: string, conversationId: string) {
   const { data } = await db
     .from("conversation_messages")
-    .select("id,role,content,created_at")
+    .select("id,role,content,created_at,source_metadata")
     .eq("user_id", userId)
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
     .limit(24);
   return (data ?? [])
     .reverse()
-    .map((x: any) => ({ id: x.id, role: x.role, text: x.content, createdAt: x.created_at }));
+    .map((x: any) => ({
+      id: x.id,
+      role: x.role,
+      text: x.content,
+      createdAt: x.created_at,
+      sourceMetadata: x.source_metadata ?? null,
+    }));
 }
 async function sign(db: any, rows: any[]): Promise<ChatAttachment[]> {
   return Promise.all(
