@@ -99,6 +99,10 @@ function HpoWorkspace() {
   const createAccount = useServerFn(createHpoAccount);
   const logTouch = useServerFn(logHpoInteraction);
   const setFollowup = useServerFn(setHpoFieldAccountFollowup);
+  const requestedRouteId =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("routeId")
+      : null;
   const [view, setView] = useState<View>("map");
   const [data, setData] = useState<Workspace | null>(null);
   const [loading, setLoading] = useState(true);
@@ -114,7 +118,7 @@ function HpoWorkspace() {
   const [initialResolved, setInitialResolved] = useState(false);
   const [todayContext, setTodayContext] = useState<{ routeId: string | null; stopId: string | null }>({ routeId: null, stopId: null });
   const [plannerContext, setPlannerContext] = useState<{ routeId: string | null; stopId: string | null }>({ routeId: null, stopId: null });
-  const [mapRouteId, setMapRouteId] = useState<string | null>(null);
+  const [mapRouteId, setMapRouteId] = useState<string | null>(requestedRouteId);
   const [mapRouteDate, setMapRouteDate] = useState<string | null>(null);
   const [mapOpenBuilder, setMapOpenBuilder] = useState(false);
 
@@ -144,6 +148,7 @@ function HpoWorkspace() {
           stopId: result.nextStop?.id ?? null,
         });
         if (
+          !requestedRouteId &&
           result.route &&
           (result.route.route_date === result.today ||
             ["active", "in_progress"].includes(result.route.status))
@@ -155,7 +160,7 @@ function HpoWorkspace() {
     return () => {
       cancelled = true;
     };
-  }, [readToday, initialResolved]);
+  }, [readToday, initialResolved, requestedRouteId]);
 
   async function loadMore() {
     if (!data || moreLoading || !data.hasMore) return;
