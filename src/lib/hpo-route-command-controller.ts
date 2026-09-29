@@ -361,6 +361,21 @@ function dateDistanceDays(value: unknown, nowMs: number) {
   return Math.floor((nowMs - parsed) / 86400000);
 }
 
+function salesCategory(candidate: RouteSalesCandidate) {
+  const value = normalize(
+    [candidate.accountType, candidate.specialty, candidate.officeName].filter(Boolean).join(" "),
+  );
+  if (/attorney|law\b|law firm|legal/.test(value)) return "Attorneys";
+  if (/chiropr|physical therapy|\bpt\b|physiotherap/.test(value)) return "PT / Chiro";
+  if (
+    /primary care|\bpcp\b|provider|doctor|physician|medical|family medicine|internal medicine|clinic|health/.test(
+      value,
+    )
+  )
+    return "Doctors / Medical";
+  return "Other";
+}
+
 function candidatePriorityLabel(score: number, candidate: Partial<RouteSalesCandidate>) {
   const signal = normalize(clean(candidate.latestSignal));
   const stage = normalize(clean(candidate.relationshipStage));
@@ -1180,28 +1195,34 @@ export async function processHpoRouteCommand(input: {
         (input.routeDateHint && /^\d{4}-\d{2}-\d{2}$/.test(input.routeDateHint)
           ? input.routeDateHint
           : null);
-      const lines = recommendation.candidates.map((candidate, index) => {
-        const why = candidate.reasons.length
-          ? candidate.reasons.join("; ")
-          : "strong fit within the requested territory";
-        const objective = candidate.nextAction
-          ? ` Objective: ${boundedText(candidate.nextAction, 110)}.`
-          : candidate.kind === "prospect"
-            ? " Objective: qualify the relationship and identify the right decision-maker."
-            : " Objective: advance the relationship and leave with a clear next step.";
-        const note = candidate.latestNote
-          ? ` Recent note: ${boundedText(candidate.latestNote, 125)}`
-          : "";
-        return `${index + 1}. ${candidate.officeName} — ${candidate.priorityLabel}. Why now: ${why}.${objective}${note}`;
-      });
+      const grouped = new Map<string, RouteSalesCandidate[]>();
+      for (const candidate of recommendation.candidates) {
+        const category = salesCategory(candidate);
+        grouped.set(category, [...(grouped.get(category) ?? []), candidate]);
+      }
+      const sections = ["Doctors / Medical", "Attorneys", "PT / Chiro", "Other"]
+        .map((category) => {
+          const rows = grouped.get(category) ?? [];
+          if (!rows.length) return null;
+          const bullets = rows.map((candidate) => {
+            const why = candidate.reasons.length
+              ? candidate.reasons.join("; ")
+              : "strong fit within the requested territory";
+            const objective = candidate.nextAction
+              ? boundedText(candidate.nextAction, 110)
+              : candidate.kind === "prospect"
+                ? "Qualify the relationship and identify the right decision-maker."
+                : "Advance the relationship and leave with a clear next step.";
+            return `• ${candidate.officeName} — ${candidate.priorityLabel}\n  • Why now: ${why}\n  • Visit objective: ${objective}`;
+          });
+          return `${category}\n${bullets.join("\n")}`;
+        })
+        .filter(Boolean);
       const dateLine = routeDate ? ` for ${routeDate}` : "";
       const reply =
-        `I reviewed ${recommendation.eligibleCount} eligible HPO targets in ${recommendation.area}${dateLine} using your saved relationship history, prior visit notes, follow-ups and prospect quality. My sales-priority shortlist is:\n\n${lines.join(
+        `I reviewed ${recommendation.eligibleCount} eligible HPO targets in ${recommendation.area}${dateLine} using your saved relationship history, prior visit notes, follow-ups and prospect quality.\n\n${sections.join(
           "\n\n",
-        )}\n\nI would choose the offices for business value first, then optimize the driving order after you approve the shortlist. Say “Use the top ${Math.min(
-          requestedCount,
-          recommendation.candidates.length,
-        )}${routeDate ? "" : " tomorrow"}” or tell me what you want swapped before I build it.`;
+        )}\n\nPick the offices you want, then build the route. I will optimize road order only after the office list is finalized.`;
 
       return empty({
         performed: false,
