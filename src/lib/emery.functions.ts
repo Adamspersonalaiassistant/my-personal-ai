@@ -190,6 +190,10 @@ async function loadHpoPlanningSessionContext(
   userId: string,
   source: SourceMetadata,
 ) {
+  const clip = (value: unknown, max = 320) => {
+    const text = String(value ?? "").replace(/\s+/g, " ").trim();
+    return text.length > max ? `${text.slice(0, max - 1).trim()}…` : text || null;
+  };
   const accountIds = [...new Set(source.hpoPlanningAccountIds ?? [])].filter(Boolean);
   const prospectIds = [...new Set(source.hpoPlanningProspectIds ?? [])].filter(Boolean);
   if (!accountIds.length && !prospectIds.length) return null;
@@ -260,10 +264,22 @@ async function loadHpoPlanningSessionContext(
       last_touch_at: row.last_touch_at,
       next_action: row.next_action,
       next_action_due_at: row.next_action_due_at,
-      opportunity: row.opportunity,
-      blockers: row.blockers,
-      notes: row.notes,
-      latest_interaction: interactionByAccount.get(String(row.id)) ?? null,
+      opportunity: clip(row.opportunity, 220),
+      blockers: clip(row.blockers, 220),
+      notes: clip(row.notes, 360),
+      latest_interaction: (() => {
+        const latest = interactionByAccount.get(String(row.id));
+        return latest
+          ? {
+              occurred_at: latest.occurred_at,
+              summary: clip(latest.summary, 360),
+              outcome: clip(latest.outcome, 180),
+              relationship_signal: latest.relationship_signal,
+              next_action: clip(latest.next_action, 220),
+              next_action_due_at: latest.next_action_due_at,
+            }
+          : null;
+      })(),
     })),
     prospects: prospects.map((row: any) => ({
       id: row.id,
@@ -274,8 +290,15 @@ async function loadHpoPlanningSessionContext(
       city: row.city,
       fit_status: row.fit_status,
       verification_status: row.verification_status,
-      notes: row.notes,
-      metadata: row.metadata,
+      notes: clip(row.notes, 360),
+      metadata:
+        row.metadata && typeof row.metadata === "object"
+          ? {
+              internal_priority: row.metadata.internal_priority ?? null,
+              prospect_score: row.metadata.prospect_score ?? null,
+              firm_size: row.metadata.firm_size ?? null,
+            }
+          : null,
     })),
   };
 }
@@ -1493,7 +1516,7 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
                   role: "system",
                   content: `CURRENT HPO ROUTE GAME-PLAN CONTEXT (server-verified, non-PHI):\n${JSON.stringify(
                     hpoPlanningContext,
-                  ).slice(0, 18000)}\nWork directly with these offices when Adam asks route-planning questions. Explain recommendations from the recorded relationship facts; distinguish saved facts from your judgment.`,
+                  ).slice(0, 30000)}\nWork directly with these offices when Adam asks route-planning questions. Explain recommendations from the recorded relationship facts; distinguish saved facts from your judgment.`,
                 },
               ]
             : []),
