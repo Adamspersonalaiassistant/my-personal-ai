@@ -9,6 +9,8 @@ export type HpoMapOffice = {
   longitude?: number | null | undefined;
   detail: string;
   kind: "account" | "prospect";
+  accountType?: string | null;
+  prospectType?: string | null;
   specialty?: string | null;
   priority?: number | null;
   relationshipStage?: string | null;
