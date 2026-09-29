@@ -129,6 +129,7 @@ type SourceMetadata = {
   hpoEphemeral?: boolean;
   hpoEphemeralSession?: string | null;
   hpoPlanningArea?: string | null;
+  hpoPlanningActiveTag?: string | null;
   hpoPlanningAccountIds?: string[];
   hpoPlanningProspectIds?: string[];
   hpoPlanningSelectedAccountIds?: string[];
@@ -194,6 +195,46 @@ async function loadHpoPlanningSessionContext(
     const text = String(value ?? "").replace(/\s+/g, " ").trim();
     return text.length > max ? `${text.slice(0, max - 1).trim()}…` : text || null;
   };
+  const canonicalRouteTags = (row: any) => {
+    const tags = new Set<string>(
+      (Array.isArray(row?.tags) ? row.tags : [])
+        .map((tag: unknown) => String(tag ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_"))
+        .filter(Boolean),
+    );
+    const metadata =
+      row?.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+        ? row.metadata
+        : {};
+    const noteText = `${row?.notes ?? ""} ${row?.next_action ?? ""}`.toLowerCase();
+    const trackerSource = String(metadata.source_workbook ?? "").toLowerCase().includes("vein");
+    const explicitlyNotVein =
+      noteText.includes("not a vein target") || noteText.includes("rather than vein target");
+    if (
+      !explicitlyNotVein &&
+      (metadata.vein_tracker_active === true ||
+        tags.has("vein_target") ||
+        tags.has("vein_prospect") ||
+        (trackerSource && metadata.vein_fit))
+    ) {
+      tags.add("vein_prospect");
+      if (metadata.vein_lunch_target === true || tags.has("lunch_target")) {
+        tags.add("lunch_target");
+      }
+    }
+    if (String(metadata.visit_status ?? "").toLowerCase() === "need to visit") {
+      tags.add("need_to_visit");
+    }
+    if (String(row?.relationship_stage ?? "").toLowerCase() === "warm") {
+      tags.add("warm_relationship");
+    }
+    if (metadata.lunch_date || tags.has("lunch_set")) tags.add("lunch_set");
+    tags.delete("exclude_from_adam_route");
+    tags.delete("vein_tracker");
+    tags.delete("vein_target");
+    tags.delete("vein_lunch_target");
+    return [...tags];
+  };
+
   const accountIds = [...new Set(source.hpoPlanningAccountIds ?? [])].filter(Boolean);
   const prospectIds = [...new Set(source.hpoPlanningProspectIds ?? [])].filter(Boolean);
   if (!accountIds.length && !prospectIds.length) return null;
@@ -249,8 +290,9 @@ async function loadHpoPlanningSessionContext(
 
   return {
     area: source.hpoPlanningArea ?? null,
+    active_tag: source.hpoPlanningActiveTag ?? null,
     instruction:
-      "This is the exact live office pool currently shown in the HPO route game-plan UI. Use it to discuss, compare, prioritize, remove, or swap offices. Never say the territory has no accounts when rows are present here. Keep office lists in bullets grouped as Doctors / Medical, Attorneys, PT / Chiro, then Other. Do not claim a route was built unless a deterministic route receipt confirms it.",
+      "This is the exact live office pool currently shown in the HPO route game-plan UI. Use it to discuss, compare, prioritize, remove, swap, and filter offices. Treat tags as durable account labels and use them literally when Adam asks for tagged groups. Canonical labels include vein_prospect, lunch_target, need_to_visit, warm_relationship, and lunch_set. If active_tag is set, Adam is currently viewing that tag. Never say the territory has no accounts when rows are present here. Keep office lists in bullets grouped as Doctors / Medical, Attorneys, PT / Chiro, then Other. Do not claim a route was built unless a deterministic route receipt confirms it.",
     accounts: accounts.map((row: any) => ({
       id: row.id,
       selected: selectedAccountIds.has(String(row.id)),
@@ -267,7 +309,7 @@ async function loadHpoPlanningSessionContext(
       opportunity: clip(row.opportunity, 220),
       blockers: clip(row.blockers, 220),
       notes: clip(row.notes, 360),
-      tags: Array.isArray(row.tags) ? row.tags : [],
+      tags: canonicalRouteTags(row),
       vein_tracker:
         row.metadata && typeof row.metadata === "object"
           ? {
@@ -308,12 +350,17 @@ async function loadHpoPlanningSessionContext(
       fit_status: row.fit_status,
       verification_status: row.verification_status,
       notes: clip(row.notes, 360),
+      tags: canonicalRouteTags(row),
       metadata:
         row.metadata && typeof row.metadata === "object"
           ? {
               internal_priority: row.metadata.internal_priority ?? null,
               prospect_score: row.metadata.prospect_score ?? null,
               firm_size: row.metadata.firm_size ?? null,
+              vein_fit: row.metadata.vein_fit ?? null,
+              visit_status: row.metadata.visit_status ?? null,
+              vein_lunch_target: row.metadata.vein_lunch_target ?? null,
+              source_workbook: row.metadata.source_workbook ?? null,
             }
           : null,
     })),
@@ -488,6 +535,9 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
         ? String(raw.hpoEphemeralSession).slice(0, 120)
         : null,
       hpoPlanningArea: raw.hpoPlanningArea ? String(raw.hpoPlanningArea).slice(0, 180) : null,
+      hpoPlanningActiveTag: raw.hpoPlanningActiveTag
+        ? String(raw.hpoPlanningActiveTag).slice(0, 80)
+        : null,
       hpoPlanningAccountIds: Array.isArray(raw.hpoPlanningAccountIds)
         ? raw.hpoPlanningAccountIds.slice(0, 120).map((id) => String(id).slice(0, 80))
         : [],
