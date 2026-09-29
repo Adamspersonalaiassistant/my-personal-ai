@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 /* eslint-disable @typescript-eslint/no-explicit-any -- Existing field-context payloads include dynamic account metadata. */
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -31,6 +31,7 @@ function dateLabel(value: string | null | undefined) {
 export function HpoAccountFieldDetail({
   accountId,
   revision,
+  revealHistory,
   onClose,
   onChanged,
   onNote,
@@ -39,6 +40,7 @@ export function HpoAccountFieldDetail({
 }: {
   accountId: string;
   revision?: number;
+  revealHistory?: boolean;
   onClose: () => void;
   onChanged?: () => void;
   onNote?: () => void;
@@ -55,6 +57,11 @@ export function HpoAccountFieldDetail({
   const [editError, setEditError] = useState("");
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const historyRef = useRef<HTMLDetailsElement>(null);
+
+  useEffect(() => {
+    if (revealHistory && data?.account) historyRef.current?.setAttribute("open", "");
+  }, [revealHistory, data]);
 
   useEffect(() => {
     let cancelled = false;
@@ -595,7 +602,10 @@ export function HpoAccountFieldDetail({
               </div>
             </section>
 
-            <section className="rounded-md border border-border bg-card p-3">
+            <details ref={historyRef} className="rounded-md border border-border bg-card p-3">
+              <summary className="flex min-h-11 cursor-pointer items-center text-sm font-semibold">
+                Relationship history <span className="ml-auto text-xs font-normal text-muted-foreground">{interactions.length} recent</span>
+              </summary>
               <div className="flex items-center gap-2">
                 <History className="size-4 text-primary" />
                 <p className="text-sm font-semibold">Relationship history</p>
@@ -639,9 +649,12 @@ export function HpoAccountFieldDetail({
               ) : (
                 <p className="mt-3 text-xs text-muted-foreground">No interactions recorded yet.</p>
               )}
-            </section>
+            </details>
 
-            <section className="rounded-md border border-border bg-card p-3">
+            <details className="rounded-md border border-border bg-card p-3">
+              <summary className="flex min-h-11 cursor-pointer items-center text-sm font-semibold">
+                Route visit history <span className="ml-auto text-xs font-normal text-muted-foreground">{routeStops.length} recent</span>
+              </summary>
               <div className="flex items-center gap-2">
                 <CalendarClock className="size-4 text-primary" />
                 <p className="text-sm font-semibold">Route visit history</p>
@@ -669,7 +682,7 @@ export function HpoAccountFieldDetail({
                   No prior route visits recorded.
                 </p>
               )}
-            </section>
+            </details>
 
             {routeAddress ? (
               <a
