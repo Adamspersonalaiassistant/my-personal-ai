@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowUp, X } from "lucide-react";
+import { ArrowUp, Building2, Check, MapPin, X } from "lucide-react";
 import brainImage from "@/assets/neural-brain.png";
 import { EmeryVoiceControl } from "@/components/EmeryVoiceControl";
 import { sendEmeryMessage } from "@/lib/emery.functions";
@@ -14,10 +14,32 @@ type HpoEmeryDetail = {
   autoSend?: boolean;
 };
 
+type RouteRecommendationCandidate = {
+  officeName: string;
+  city?: string | null;
+  priorityLabel?: string | null;
+  kind?: "account" | "prospect";
+  accountType?: string | null;
+  specialty?: string | null;
+  relationshipStage?: string | null;
+  nextAction?: string | null;
+  latestNote?: string | null;
+  reasons?: string[];
+};
+
+type RouteRecommendation = {
+  area?: string | null;
+  routeDate?: string | null;
+  requestedCount?: number | null;
+  eligibleCount?: number | null;
+  candidates: RouteRecommendationCandidate[];
+};
+
 type MiniMessage = {
   id?: string;
   role: "user" | "assistant";
   text: string;
+  recommendation?: RouteRecommendation | null;
 };
 
 export function openHpoEmery(
@@ -134,18 +156,23 @@ export function HpoEmerySheet({
       if (!("reply" in result) || !result.reply) {
         throw new Error(("error" in result && result.error) || "Emery couldn't complete that.");
       }
+      const routeCommand =
+        "hpoRouteCommand" in result ? (result as any).hpoRouteCommand : null;
+      const recommendation =
+        routeCommand?.action === "hpo.route.recommend" &&
+        routeCommand?.receiptData?.recommendation
+          ? (routeCommand.receiptData.recommendation as RouteRecommendation)
+          : null;
       setMessages((current) => [
         ...current,
         {
           id: "assistantMessage" in result ? result.assistantMessage?.id : undefined,
           role: "assistant",
           text: result.reply,
+          recommendation,
         },
       ]);
       onChanged?.();
-
-      const routeCommand =
-        "hpoRouteCommand" in result ? (result as any).hpoRouteCommand : null;
       if (
         routeCommand?.performed &&
         routeCommand?.action === "hpo.route.create" &&
@@ -207,7 +234,7 @@ export function HpoEmerySheet({
           </button>
         </div>
 
-        <div className="max-h-[42dvh] min-h-24 space-y-3 overflow-y-auto px-4 py-3">
+        <div className="max-h-[58dvh] min-h-24 space-y-3 overflow-y-auto px-4 py-3">
           {!messages.length ? (
             <p className="text-sm leading-6 text-muted-foreground">
               This is a focused HPO work session. Tell Emery what you want to plan or change; she still uses your HPO history, notes, memory and route tools underneath.
@@ -218,15 +245,153 @@ export function HpoEmerySheet({
               key={`${message.role}-${index}`}
               className={message.role === "user" ? "flex justify-end" : "flex justify-start"}
             >
-              <div
-                className={
-                  message.role === "user"
-                    ? "max-w-[88%] rounded-2xl rounded-br-md bg-primary px-3.5 py-2.5 text-sm leading-6 text-primary-foreground"
-                    : "max-w-[92%] rounded-2xl rounded-bl-md bg-card px-3.5 py-2.5 text-sm leading-6 text-foreground"
-                }
-              >
-                {message.text}
-              </div>
+              {message.role === "assistant" && message.recommendation ? (
+                <div className="w-full space-y-2.5">
+                  <div className="rounded-2xl rounded-bl-md bg-card px-3.5 py-3 text-sm leading-6 text-foreground">
+                    <p className="font-semibold">
+                      Best offices to prioritize
+                      {message.recommendation.area ? ` · ${message.recommendation.area}` : ""}
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      I reviewed {message.recommendation.eligibleCount ?? "your"} eligible HPO targets
+                      {message.recommendation.routeDate
+                        ? ` for ${new Date(
+                            `${message.recommendation.routeDate}T12:00:00`,
+                          ).toLocaleDateString([], {
+                            weekday: "short",
+                            month: "short",
+                            day: "numeric",
+                          })}`
+                        : ""}. Ranked for sales value first; driving order comes after you approve.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    {message.recommendation.candidates.map((candidate, candidateIndex) => (
+                      <article
+                        key={`${candidate.officeName}-${candidateIndex}`}
+                        className="rounded-2xl border border-border/60 bg-card/80 p-3 shadow-sm"
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                            {candidateIndex + 1}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold leading-5 text-foreground">
+                                  {candidate.officeName}
+                                </p>
+                                <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
+                                  {candidate.city ? (
+                                    <span className="inline-flex items-center gap-1">
+                                      <MapPin className="size-3" />
+                                      {candidate.city}
+                                    </span>
+                                  ) : null}
+                                  <span className="inline-flex items-center gap-1">
+                                    <Building2 className="size-3" />
+                                    {candidate.kind === "prospect"
+                                      ? "Prospect"
+                                      : candidate.accountType || candidate.relationshipStage || "Account"}
+                                  </span>
+                                </p>
+                              </div>
+                              <span
+                                className={
+                                  candidate.priorityLabel === "GO NOW"
+                                    ? "shrink-0 rounded-full border border-primary/35 bg-primary/15 px-2 py-1 text-[9px] font-bold text-primary"
+                                    : candidate.priorityLabel === "HIGH"
+                                      ? "shrink-0 rounded-full border border-border bg-background/60 px-2 py-1 text-[9px] font-bold text-foreground"
+                                      : "shrink-0 rounded-full border border-border bg-background/40 px-2 py-1 text-[9px] font-semibold text-muted-foreground"
+                                }
+                              >
+                                {candidate.priorityLabel || "PRIORITY"}
+                              </span>
+                            </div>
+
+                            {candidate.reasons?.length ? (
+                              <div className="mt-2">
+                                <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-primary">
+                                  Why now
+                                </p>
+                                <ul className="mt-1 space-y-1">
+                                  {candidate.reasons.slice(0, 3).map((reason) => (
+                                    <li
+                                      key={reason}
+                                      className="flex items-start gap-1.5 text-[11px] leading-4 text-foreground/90"
+                                    >
+                                      <Check className="mt-0.5 size-3 shrink-0 text-primary" />
+                                      <span>{reason}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ) : null}
+
+                            <div className="mt-2 rounded-xl bg-background/45 px-2.5 py-2">
+                              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                                Visit objective
+                              </p>
+                              <p className="mt-1 text-[11px] leading-4 text-foreground/90">
+                                {candidate.nextAction ||
+                                  (candidate.kind === "prospect"
+                                    ? "Qualify the relationship and identify the right decision-maker."
+                                    : "Advance the relationship and leave with a clear next step.")}
+                              </p>
+                            </div>
+
+                            {candidate.latestNote ? (
+                              <details className="mt-2">
+                                <summary className="cursor-pointer text-[10px] font-semibold text-primary">
+                                  View recent note
+                                </summary>
+                                <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                                  {candidate.latestNote}
+                                </p>
+                              </details>
+                            ) : null}
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+
+                  <div className="rounded-2xl border border-primary/20 bg-primary/[0.05] p-3">
+                    <p className="text-[11px] font-semibold text-foreground">
+                      Ready to build?
+                    </p>
+                    <p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">
+                      Approve the shortlist or choose how many of the top offices to use.
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {[5, 8, 10]
+                        .filter((count) => count <= message.recommendation!.candidates.length)
+                        .map((count) => (
+                          <button
+                            key={count}
+                            type="button"
+                            disabled={pending}
+                            onClick={() => void sendText(`Use the top ${count} and build the route.`, true)}
+                            className="min-h-9 rounded-xl border border-primary/30 bg-primary/10 px-3 text-[11px] font-semibold text-primary disabled:opacity-40"
+                          >
+                            Use top {count}
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  className={
+                    message.role === "user"
+                      ? "max-w-[88%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-primary px-3.5 py-2.5 text-sm leading-6 text-primary-foreground"
+                      : "max-w-[92%] whitespace-pre-wrap rounded-2xl rounded-bl-md bg-card px-3.5 py-2.5 text-sm leading-6 text-foreground"
+                  }
+                >
+                  {message.text}
+                </div>
+              )}
             </div>
           ))}
           {pending ? <p className="text-xs text-muted-foreground">Emery is working…</p> : null}
