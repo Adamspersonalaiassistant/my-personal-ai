@@ -514,6 +514,7 @@ export function HpoEmerySheet({
             hpoEphemeral: true,
             hpoEphemeralSession: sessionRef.current || null,
             hpoPlanningArea: recommendation?.area ?? null,
+            hpoPlanningActiveTag: activeTag,
             hpoPlanningAccountIds: allCandidates
               .map((candidate) => candidate.accountId)
               .filter((id): id is string => Boolean(id)),
