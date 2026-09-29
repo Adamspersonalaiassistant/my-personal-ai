@@ -37,7 +37,3 @@
   order: 4;
 }
 
-/* Persistent area navigation replaces the redundant map-tray Today shortcut. */
-.hpo-crm #hpo-route-planner > section > div:last-child > div:last-child:has(> button) {
-  display: none;
-}
