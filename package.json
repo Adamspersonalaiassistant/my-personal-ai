@@ -14,7 +14,8 @@
     "validate:behavior": "node scripts/validate-emery-behavior.mjs",
     "validate:hpo-field-os": "node scripts/validate-hpo-field-os.mjs",
     "validate:hpo-crm-write": "node --experimental-strip-types scripts/validate-hpo-crm-write-layer.mjs",
-    "validate:orchestration": "node --experimental-strip-types scripts/validate-emery-orchestration.mjs"
+    "validate:orchestration": "node --experimental-strip-types scripts/validate-emery-orchestration.mjs",
+    "validate:hpo-account": "node scripts/validate-hpo-account-experience.mjs"
   },
   "overrides": {
     "rolldown": "1.2.1"
