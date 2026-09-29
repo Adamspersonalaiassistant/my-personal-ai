@@ -467,7 +467,7 @@ Return strict JSON only.`,
     if (rawUpdates.priority !== null && rawUpdates.priority !== undefined) {
       const priority = Math.round(Number(rawUpdates.priority));
       if (Number.isFinite(priority) && priority >= 1 && priority <= 5) {
-        updatePayload.priority = priority;
+        updatePayload["priority"] = priority;
         changedFields.push("priority");
       }
     }
@@ -499,25 +499,25 @@ Return strict JSON only.`,
       const addressWasExplicit = Object.prototype.hasOwnProperty.call(updatePayload, "address");
       const cityWasExplicit = Object.prototype.hasOwnProperty.call(updatePayload, "city");
       const nextAddress = addressWasExplicit
-        ? String(updatePayload.address ?? "").trim()
+        ? String(updatePayload["address"] ?? "").trim()
         : String(target.address ?? "").trim();
       const nextCity = cityWasExplicit
-        ? String(updatePayload.city ?? "").trim()
+        ? String(updatePayload["city"] ?? "").trim()
         : String(target.city ?? "").trim();
 
       if (!nextAddress) {
-        updatePayload.latitude = null;
-        updatePayload.longitude = null;
-        updatePayload.geocoded_at = null;
+        updatePayload["latitude"] = null;
+        updatePayload["longitude"] = null;
+        updatePayload["geocoded_at"] = null;
       } else {
         const point = await geocodeHpoOfficeAddress(nextAddress, nextCity || null).catch(() => null);
-        updatePayload.latitude = point?.lat ?? null;
-        updatePayload.longitude = point?.lon ?? null;
-        updatePayload.geocoded_at = point ? new Date().toISOString() : null;
+        updatePayload["latitude"] = point?.lat ?? null;
+        updatePayload["longitude"] = point?.lon ?? null;
+        updatePayload["geocoded_at"] = point ? new Date().toISOString() : null;
       }
     }
 
-    updatePayload.updated_at = new Date().toISOString();
+    updatePayload["updated_at"] = new Date().toISOString();
 
     const updated = await db
       .from("hpo_accounts")
