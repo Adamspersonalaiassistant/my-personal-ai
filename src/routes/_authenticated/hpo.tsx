@@ -16,6 +16,7 @@ import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { HpoRoutePlanner } from "@/components/HpoRoutePlanner";
 import { HpoFieldToday } from "@/components/HpoFieldToday";
+import { HpoWeeklyPlanner } from "@/components/HpoWeeklyPlanner";
 import { HpoFieldNav, type HpoFieldView } from "@/components/HpoFieldNav";
 import { HpoAccountFieldDetail } from "@/components/HpoAccountFieldDetail";
 import { HpoEmerySheet, openHpoEmery } from "@/components/HpoEmerySheet";
@@ -112,6 +113,11 @@ function HpoWorkspace() {
   const [revision, setRevision] = useState(0);
   const [initialResolved, setInitialResolved] = useState(false);
   const [todayContext, setTodayContext] = useState<{ routeId: string | null; stopId: string | null }>({ routeId: null, stopId: null });
+  const [plannerContext, setPlannerContext] = useState<{ routeId: string | null; stopId: string | null }>({ routeId: null, stopId: null });
+  const [mapRouteId, setMapRouteId] = useState<string | null>(null);
+  const [mapRouteDate, setMapRouteDate] = useState<string | null>(null);
+  const [mapOpenBuilder, setMapOpenBuilder] = useState(false);
+  const [mapReturnView, setMapReturnView] = useState<"today" | "planner">("today");
 
   const refresh = useCallback(async () => {
     try {
@@ -172,13 +178,15 @@ function HpoWorkspace() {
   const account = data?.accounts.find((item) => item.id === selected) ?? null;
   const emeryContextPrompt = account
     ? `I'm looking at ${account.name} in HPO. Help me with this account and use the live HPO record.`
-    : view === "map"
-      ? "I'm on the HPO map. Help me add offices, build or change my route, or work with the accounts on this map."
-      : view === "today"
-        ? "I'm in HPO Today. Help me run today's route, log visits, change stops, or handle the next action."
-        : view === "accounts"
-          ? "I'm in HPO Accounts. Help me add, update, research, or plan follow-up for an account."
-          : "I'm in HPO Activity. Help me log a visit or touch, update follow-ups, or review recent account activity.";
+    : view === "planner"
+      ? "I'm in HPO Planner. Help me plan this week, review saved routes, and build or adjust the route for the day I'm viewing."
+      : view === "map"
+        ? "I'm on the HPO map. Help me add offices, build or change my route, or work with the accounts on this map."
+        : view === "today"
+          ? "I'm in HPO Today. Help me run today's route, log visits, change stops, or handle the next action."
+          : view === "accounts"
+            ? "I'm in HPO Accounts. Help me add, update, research, or plan follow-up for an account."
+            : "I'm in HPO Activity. Help me log a visit or touch, update follow-ups, or review recent account activity.";
   return (
     <AppShell
       title="HPO"
@@ -189,7 +197,18 @@ function HpoWorkspace() {
         className="hpo-crm flex h-full min-h-0 min-w-0 flex-col bg-background text-foreground"
         data-controlled-prospect-writes={CONTROLLED_PROSPECT_WRITE_FUNCTIONS.length}
       >
-        <HpoFieldNav view={view} onChange={setView} />
+        <HpoFieldNav
+          view={view}
+          onChange={(next) => {
+            if (next === "map") {
+              setMapRouteId(null);
+              setMapRouteDate(null);
+              setMapOpenBuilder(false);
+              setMapReturnView("today");
+            }
+            setView(next);
+          }}
+        />
         <div
           className={
             view === "map"
@@ -216,10 +235,44 @@ function HpoWorkspace() {
               </div>
             )}
             {view === "today" && initialResolved ? (
-              <HpoFieldToday key={`today-${revision}`} onOpenMap={() => setView("map")} />
+              <HpoFieldToday
+                key={`today-${revision}`}
+                onOpenMap={() => {
+                  setMapRouteId(null);
+                  setMapRouteDate(null);
+                  setMapOpenBuilder(false);
+                  setMapReturnView("today");
+                  setView("map");
+                }}
+              />
+            ) : null}
+            {view === "planner" ? (
+              <HpoWeeklyPlanner
+                key={`planner-${revision}`}
+                onRouteContextChange={(routeId, stopId) =>
+                  setPlannerContext({ routeId, stopId })
+                }
+                onOpenMap={({ routeDate, routeId, build }) => {
+                  setMapRouteId(routeId ?? null);
+                  setMapRouteDate(routeDate);
+                  setMapOpenBuilder(Boolean(build));
+                  setMapReturnView("planner");
+                  setView("map");
+                }}
+              />
             ) : null}
             {view === "map" && initialResolved ? (
-              <HpoRoutePlanner key={`map-${revision}`} onNavigateHpo={(next) => setView(next)} />
+              <HpoRoutePlanner
+                key={`map-${revision}-${mapRouteId ?? "none"}-${mapRouteDate ?? "none"}-${mapOpenBuilder ? "build" : "browse"}`}
+                initialRouteId={mapRouteId}
+                initialRouteDate={mapRouteDate}
+                openBuilderOnMount={mapOpenBuilder}
+                returnViewAfterCreate={mapReturnView}
+                onNavigateHpo={(next) => {
+                  setMapOpenBuilder(false);
+                  setView(next);
+                }}
+              />
             ) : null}
             {((view === "accounts" || view === "activity") && loading) ||
             ((view === "today" || view === "map") && !initialResolved) ? (
@@ -361,8 +414,8 @@ function HpoWorkspace() {
               </Button>
             ) : null}
             <HpoEmerySheet
-              routeId={todayContext.routeId}
-              stopId={todayContext.stopId}
+              routeId={view === "planner" ? plannerContext.routeId : todayContext.routeId}
+              stopId={view === "planner" ? plannerContext.stopId : todayContext.stopId}
               selectedAccountId={selected}
               surface={`hpo.${view}`}
               onChanged={() => {
