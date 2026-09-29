@@ -33,10 +33,16 @@ begin
     raise exception 'route_not_found_or_not_owned';
   end if;
 
-  select count(*) into v_count
+  -- Lock the route's stops first, then count them. PostgreSQL does not allow
+  -- FOR UPDATE directly on an aggregate query such as count(*).
+  perform 1
   from public.hpo_route_stops
   where route_id = p_route_id and user_id = v_user_id
   for update;
+
+  select count(*) into v_count
+  from public.hpo_route_stops
+  where route_id = p_route_id and user_id = v_user_id;
 
   if coalesce(array_length(p_stop_ids, 1), 0) <> v_count then
     raise exception 'route_order_must_include_every_stop';
