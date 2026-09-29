@@ -1,0 +1,18 @@
+name: Export Emery Accounts CSV
+on:
+  push:
+    branches:
+      - exports/emery-accounts-20260929
+    paths:
+      - exports/emery_hpo_accounts_editable.csv
+jobs:
+  artifact:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: emery-hpo-accounts-csv
+          path: exports/emery_hpo_accounts_editable.csv
+          if-no-files-found: error
+          retention-days: 7
