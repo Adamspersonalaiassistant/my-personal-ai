@@ -34,7 +34,7 @@ import {
   updateHpoRouteStop,
 } from "@/lib/hpo-route.functions";
 import { HpoMapV2MapLibre } from "@/components/hpo-map/HpoMapV2MapLibre";
-import { HpoAccountFieldDetail } from "@/components/HpoAccountFieldDetail";
+import { HpoAccountFieldDetail } from "@/components/HpoAccountFieldDetail";\nimport { openHpoEmery } from "@/components/HpoEmerySheet";
 import { loadHpoOfficeSnapshots, saveHpoOfficeSnapshots } from "@/lib/hpo-field-offline";
 import {
   addHpoRouteStops,
@@ -1135,7 +1135,7 @@ function OfficePlanningMap({
           ) : null}
 
           <div
-            className={`mt-3 grid gap-2 ${selectedOffice.accountId ? "grid-cols-3" : "grid-cols-2"}`}
+            className="mt-3 grid grid-cols-2 gap-2"
           >
             <a
               href={`https://maps.apple.com/?q=${encodeURIComponent([selectedOffice.officeName, selectedOffice.address, selectedOffice.city].filter(Boolean).join(", "))}`}
@@ -1165,6 +1165,20 @@ function OfficePlanningMap({
             >
               {selectedKeys.includes(selectedOffice.key) ? "Remove from route" : "Add to route"}
             </button>
+            <button
+              type="button"
+              onClick={() =>
+                openHpoEmery(
+                  `Use HPO context for ${selectedOffice.officeName} at ${[selectedOffice.address, selectedOffice.city]
+                    .filter(Boolean)
+                    .join(", ")}. Help me with this relationship, route, visit history, or follow-up.`,
+                  selectedOffice.officeName,
+                )
+              }
+              className="emery-press min-h-11 rounded-xl border border-primary/20 bg-primary/[0.05] px-3 text-xs font-semibold text-primary"
+            >
+              Emery
+            </button>
           </div>
         </div>
       ) : null}
@@ -1175,7 +1189,9 @@ function OfficePlanningMap({
             {selectedCount ? `${selectedCount} offices selected` : "Tap pins to build a route"}
           </p>
           <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
-            Your selections become the stop list in the route builder.
+            {hasActiveRoute
+              ? "Selected offices add directly to today’s route."
+              : "Review selected offices, then optimize and start today’s route."}
           </p>
         </div>
         <button
