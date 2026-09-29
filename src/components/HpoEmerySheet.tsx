@@ -753,6 +753,9 @@ export function HpoEmerySheet({
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-foreground">Office game plan</p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                      Groups start collapsed. Tap a group to review and select its offices.
+                    </p>
                     <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
                       {recommendation.area || "Selected territory"}
                       {recommendation.routeDate || sessionRouteDate
