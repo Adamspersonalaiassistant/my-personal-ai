@@ -43,6 +43,11 @@ as $$
 declare
   v_field jsonb := coalesce(new.metadata->'field_session', '{}'::jsonb);
 begin
+  -- Ignore unrelated route metadata updates. Without this guard, any metadata
+  -- write lacking field_session would incorrectly complete an active session.
+  if new.metadata->'field_session' is null then
+    return new;
+  end if;
   if jsonb_typeof(v_field) <> 'object' then
     return new;
   end if;
@@ -130,19 +135,19 @@ begin
   insert into public.hpo_route_stops (
     id,user_id,route_id,account_id,prospect_id,stop_order,visit_priority,status,
     planned_at,visited_at,notes,metadata,office_name,address,city,latitude,longitude,
-    distance_from_previous_meters,drive_seconds_from_previous,created_at,updated_at
+    distance_meters_from_previous,drive_seconds_from_previous,created_at,updated_at
   )
   select
     x.id,v_user_id,p_route_id,x.account_id,x.prospect_id,x.stop_order,x.visit_priority,
     coalesce(x.status,'planned'),x.planned_at,x.visited_at,x.notes,coalesce(x.metadata,'{}'::jsonb),
     x.office_name,x.address,x.city,x.latitude,x.longitude,
-    x.distance_from_previous_meters,x.drive_seconds_from_previous,
+    x.distance_meters_from_previous,x.drive_seconds_from_previous,
     coalesce(x.created_at,now()),now()
   from jsonb_to_recordset(coalesce(p_previous_open_stops,'[]'::jsonb)) as x(
     id uuid, account_id uuid, prospect_id uuid, stop_order integer, visit_priority text,
     status text, planned_at timestamptz, visited_at timestamptz, notes text, metadata jsonb,
     office_name text, address text, city text, latitude double precision, longitude double precision,
-    distance_from_previous_meters integer, drive_seconds_from_previous integer,
+    distance_meters_from_previous integer, drive_seconds_from_previous integer,
     created_at timestamptz
   );
 
