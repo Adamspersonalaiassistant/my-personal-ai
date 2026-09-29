@@ -124,6 +124,22 @@ function secondsToMinutes(seconds: number | null | undefined) {
   return seconds == null ? null : Math.round(seconds / 60);
 }
 
+async function stageRouteStopOrders(db: any, userId: string, routeId: string, stops: any[]) {
+  const offset = stops.length + 1000;
+  for (const stop of stops) {
+    const { error } = await db
+      .from("hpo_route_stops")
+      .update({
+        stop_order: Number(stop.stop_order) + offset,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", stop.id)
+      .eq("route_id", routeId)
+      .eq("user_id", userId);
+    if (error) throw error;
+  }
+}
+
 function extractNextAction(note: string) {
   const sentences = note
     .split(/(?<=[.!?])\s+|\n+/)
@@ -1232,6 +1248,8 @@ export async function executeHpoRouteOptimizeCore(input: {
     const stopByNode = new Map<number, any>();
     stops.forEach((stop: any, index: number) => stopByNode.set(stopOffset + index, stop));
 
+    await stageRouteStopOrders(db, userId, route.id, stops);
+
     let previousNode = startIndex;
     let totalDistance = 0;
     let totalDuration = 0;
@@ -1374,6 +1392,14 @@ export const reorderHpoRouteStops = createServerFn({ method: "POST" })
   }))
   .handler(async ({ data, context }) => {
     const db = context.supabase as any;
+    const { data: currentStops, error: currentStopsError } = await db
+      .from("hpo_route_stops")
+      .select("id,stop_order")
+      .eq("route_id", data.routeId)
+      .eq("user_id", context.userId)
+      .order("stop_order", { ascending: true });
+    if (currentStopsError) throw currentStopsError;
+    await stageRouteStopOrders(db, context.userId, data.routeId, currentStops ?? []);
     for (let index = 0; index < data.stopIds.length; index += 1) {
       const { error } = await db
         .from("hpo_route_stops")
