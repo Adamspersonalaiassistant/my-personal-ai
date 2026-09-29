@@ -22,6 +22,12 @@ import { HpoEmerySheet, openHpoEmery } from "@/components/HpoEmerySheet";
 import { createHpoAccount, logHpoInteraction } from "@/lib/hpo.functions";
 import { getHpoWorkspace, setHpoFieldAccountFollowup } from "@/lib/hpo-workspace.functions";
 import { getHpoFieldToday } from "@/lib/hpo-field.functions";
+import {
+  updateVerifiedHpoAccountFacts,
+  correctHpoAccountRelationship,
+  upsertVerifiedHpoContact,
+  importVerifiedHpoInteractionHistory,
+} from "@/lib/hpo-crm-write.functions";
 import type { HpoAttentionState } from "@/lib/hpo-account-intelligence";
 import {
   createVerifiedHpoProspect,
@@ -40,6 +46,10 @@ type Workspace = Awaited<ReturnType<typeof getHpoWorkspace>>;
 type Account = Workspace["accounts"][number];
 type Touch = Workspace["interactions"][number];
 const CONTROLLED_PROSPECT_WRITE_FUNCTIONS = [
+  updateVerifiedHpoAccountFacts,
+  correctHpoAccountRelationship,
+  upsertVerifiedHpoContact,
+  importVerifiedHpoInteractionHistory,
   findHpoProspectDuplicates,
   createVerifiedHpoProspect,
   updateHpoProspectVerification,
