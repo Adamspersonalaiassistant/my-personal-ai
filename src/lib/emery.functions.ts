@@ -203,7 +203,7 @@ async function loadHpoPlanningSessionContext(
     const { data, error } = await db
       .from("hpo_accounts")
       .select(
-        "id,name,account_type,specialty,address,city,priority,relationship_stage,relationship_health,last_touch_at,next_action,next_action_due_at,opportunity,blockers,notes,status,owner_name",
+        "id,name,account_type,specialty,address,city,priority,relationship_stage,relationship_health,last_touch_at,next_action,next_action_due_at,opportunity,blockers,notes,status,owner_name,tags,metadata",
       )
       .eq("user_id", userId)
       .eq("status", "active")
@@ -267,6 +267,23 @@ async function loadHpoPlanningSessionContext(
       opportunity: clip(row.opportunity, 220),
       blockers: clip(row.blockers, 220),
       notes: clip(row.notes, 360),
+      tags: Array.isArray(row.tags) ? row.tags : [],
+      vein_tracker:
+        row.metadata && typeof row.metadata === "object"
+          ? {
+              active: row.metadata.vein_tracker_active === true,
+              lunch_target: row.metadata.vein_lunch_target === true,
+              fit: row.metadata.vein_fit ?? null,
+              priority: row.metadata.priority ?? null,
+              priority_score: row.metadata.priority_score ?? null,
+              visit_status: row.metadata.visit_status ?? null,
+              next_step: clip(row.metadata.next_step, 220),
+              route_cluster: row.metadata.route_cluster ?? null,
+              closest_hpo_office: row.metadata.closest_hpo_office ?? null,
+              service_status: row.metadata.vein_service_status ?? null,
+              outreach_goal: row.metadata.vein_outreach_goal ?? null,
+            }
+          : null,
       latest_interaction: (() => {
         const latest = interactionByAccount.get(String(row.id));
         return latest
