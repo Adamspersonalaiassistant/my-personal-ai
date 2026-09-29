@@ -117,7 +117,6 @@ function HpoWorkspace() {
   const [mapRouteId, setMapRouteId] = useState<string | null>(null);
   const [mapRouteDate, setMapRouteDate] = useState<string | null>(null);
   const [mapOpenBuilder, setMapOpenBuilder] = useState(false);
-  const [mapReturnView, setMapReturnView] = useState<"today" | "planner">("today");
 
   const refresh = useCallback(async () => {
     try {
@@ -204,7 +203,6 @@ function HpoWorkspace() {
               setMapRouteId(null);
               setMapRouteDate(null);
               setMapOpenBuilder(false);
-              setMapReturnView("today");
             }
             setView(next);
           }}
@@ -241,8 +239,7 @@ function HpoWorkspace() {
                   setMapRouteId(null);
                   setMapRouteDate(null);
                   setMapOpenBuilder(false);
-                  setMapReturnView("today");
-                  setView("map");
+                      setView("map");
                 }}
               />
             ) : null}
@@ -256,7 +253,6 @@ function HpoWorkspace() {
                   setMapRouteId(routeId ?? null);
                   setMapRouteDate(routeDate);
                   setMapOpenBuilder(Boolean(build));
-                  setMapReturnView("planner");
                   setView("map");
                 }}
               />
@@ -267,7 +263,6 @@ function HpoWorkspace() {
                 initialRouteId={mapRouteId}
                 initialRouteDate={mapRouteDate}
                 openBuilderOnMount={mapOpenBuilder}
-                returnViewAfterCreate={mapReturnView}
                 onNavigateHpo={(next) => {
                   setMapOpenBuilder(false);
                   setView(next);
