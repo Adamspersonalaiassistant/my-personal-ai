@@ -801,6 +801,7 @@ function requestedAction(message: string): HpoRouteCommandAction {
   if (
     /\b(?:build|plan|make|create)\b.*\broute\b/.test(text) ||
     /\broute\b.*\b(?:hoboken|jersey city|town|city|territory|offices?|accounts?|prospects?)\b/.test(text) ||
+    /\b(?:list|show|review)\b.*\b(?:offices?|accounts?|prospects?)\b.*\b(?:in|around|for)\b/.test(text) ||
     /\b(?:which|what|top|best)\b.*\b(?:offices?|accounts?|prospects?)\b.*\b(?:visit|see|route)\b/.test(text) ||
     /\b(?:top|best|good)\b.*\b(?:prospects?|accounts?|offices?)\b.*\b(?:in|around)\b/.test(text) ||
     /\bwhere should i (?:go|visit) in\b/.test(text)
@@ -970,6 +971,13 @@ export async function processHpoRouteCommand(input: {
     recommendationApproval(commandMessage)
   ) {
     action = "hpo.route.create";
+  }
+  if (
+    pendingRecommendation &&
+    !input.routeId &&
+    ["hpo.route.add_stops", "hpo.route.remove_stop", "hpo.route.reorder"].includes(action)
+  ) {
+    action = "none";
   }
   const requestPrefix = input.sourceMessageId
     ? `message:${input.sourceMessageId}`
