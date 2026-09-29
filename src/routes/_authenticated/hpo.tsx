@@ -6,10 +6,13 @@ import {
   CalendarDays,
   ChevronRight,
   Clock3,
+  FileText,
   MapPinned,
   MessageCircle,
+  Navigation,
   Plus,
   Search,
+  SlidersHorizontal,
   UsersRound,
   X,
 } from "lucide-react";
@@ -22,6 +25,7 @@ import { HpoEmerySheet, openHpoEmery } from "@/components/HpoEmerySheet";
 import { createHpoAccount, logHpoInteraction } from "@/lib/hpo.functions";
 import { getHpoWorkspace, setHpoFieldAccountFollowup } from "@/lib/hpo-workspace.functions";
 import { getHpoFieldToday } from "@/lib/hpo-field.functions";
+import "@/components/hpo-accounts.css";
 
 type View = "today" | "map" | "accounts" | "activity";
 type Workspace = Awaited<ReturnType<typeof getHpoWorkspace>>;
@@ -69,7 +73,7 @@ function HpoWorkspace() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
-  const [sheet, setSheet] = useState<"add" | "log" | "followup" | null>(null);
+  const [sheet, setSheet] = useState<"add" | "log" | "followup" | "note" | null>(null);
   const [logAccount, setLogAccount] = useState("");
   const [logKind, setLogKind] = useState("visit");
   const [page, setPage] = useState(0);
@@ -200,6 +204,8 @@ function HpoWorkspace() {
           <Accounts
             accounts={data.accounts}
             limited={data.accountLimitReached}
+            onNote={(id) => { setLogAccount(id); setSheet("note"); }}
+            onEmery={(a) => openHpoEmery(`I'm working with HPO account ${a.name} (account ID ${a.id}). Use its live relationship history, contacts, visits, and follow-ups to advise me on this account.`, a.name)}
             onAdd={() =>
               openHpoEmery(
                 "Add a new HPO account. Ask me only for the office name and physical street address if I haven't given them yet, then save it to HPO and plot it on the map.",
@@ -238,6 +244,7 @@ function HpoWorkspace() {
             accountId={selected}
             onClose={() => setSelected(null)}
             onChanged={() => void refresh()}
+            onNote={() => { setLogAccount(selected); setSheet("note"); }}
             onLog={() =>
               openHpoEmery(
                 `Log a visit for ${account?.name || "this HPO account"}. Ask me what happened and who I spoke with, then save it.`,
@@ -275,6 +282,17 @@ function HpoWorkspace() {
             }}
           />
         )}
+        {sheet === "note" && (
+          <QuickNoteSheet
+            account={data?.accounts.find((item) => item.id === logAccount)}
+            onClose={() => setSheet(null)}
+            onSave={async (summary) => {
+              await logTouch({ data: { accountId: logAccount, interactionType: "note", summary } });
+              setSheet(null);
+              await refresh();
+            }}
+          />
+        )}
         {sheet === "followup" && (
           <FollowupSheet
             account={data?.accounts.find((item) => item.id === logAccount)}
@@ -287,8 +305,8 @@ function HpoWorkspace() {
           />
         )}
 
-        {view !== "map" ? (
-          <button
+        {view !== "map" && view !== "accounts" ? (
+          <Button
             type="button"
             onClick={() => openHpoEmery(emeryContextPrompt, `HPO · ${view}`)}
             className="fixed bottom-[calc(5.15rem+env(safe-area-inset-bottom))] right-3 z-[55] flex size-11 items-center justify-center rounded-full border border-primary/20 bg-primary text-xs font-semibold text-primary-foreground shadow-[0_10px_24px_rgba(0,0,0,0.3)] sm:h-12 sm:w-auto sm:gap-2 sm:px-4 md:bottom-6 md:right-6"
@@ -296,7 +314,7 @@ function HpoWorkspace() {
           >
             <MessageCircle className="size-4" />
             <span className="hidden sm:inline">Emery</span>
-          </button>
+          </Button>
         ) : null}
         <HpoEmerySheet onChanged={() => void refresh()} />
 
