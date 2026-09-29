@@ -49,6 +49,11 @@ type RouteRecommendationCandidate = {
   latestSignal?: string | null;
   latestNote?: string | null;
   reasons?: string[];
+  veinTarget?: boolean;
+  veinFit?: string | null;
+  veinPriorityScore?: number | null;
+  veinVisitStatus?: string | null;
+  lunchTarget?: boolean;
 };
 
 type RouteRecommendation = {
@@ -171,6 +176,21 @@ function applySelectionInstruction(
   );
   categoryInstruction("PT / Chiro", /\b(?:pt|physical therapy|chiro|chiropractors?)\b/);
 
+  if (/\b(?:vein|veins|vascular|venous)\b/.test(text)) {
+    const keys = candidates.filter((candidate) => candidate.veinTarget).map(candidateKey);
+    if (/\b(?:remove|clear|drop|exclude)\b/.test(text)) {
+      for (const key of keys) set.delete(key);
+      changed = true;
+    } else if (/\b(?:only|use|select|include|keep)\b/.test(text)) {
+      if (/\bonly\b/.test(text)) set.clear();
+      for (const key of keys) {
+        if (set.size >= MAX_ROUTE_STOPS) break;
+        set.add(key);
+      }
+      changed = true;
+    }
+  }
+
   const removeMode = /\b(?:remove|drop|exclude|take out)\b/.test(text);
   const addMode = /\b(?:add|include|select|put back|keep)\b/.test(text);
   if (removeMode || addMode) {
@@ -239,6 +259,7 @@ export function HpoEmerySheet({
   const [recommendation, setRecommendation] = useState<RouteRecommendation | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [showAll, setShowAll] = useState(true);
+  const [veinOnly, setVeinOnly] = useState(false);
   const [officeQuery, setOfficeQuery] = useState("");
   const [openGroups, setOpenGroups] = useState<Record<RecommendationGroup, boolean>>({
     "Doctors / Medical": true,
@@ -262,6 +283,7 @@ export function HpoEmerySheet({
       setRecommendation(null);
       setSelectedKeys([]);
       setShowAll(true);
+      setVeinOnly(false);
       setOfficeQuery("");
       setError("");
       setPending(false);
@@ -324,7 +346,9 @@ export function HpoEmerySheet({
   const visibleCandidates = (showAll
     ? allCandidates
     : allCandidates.filter((candidate) => recommendedKeys.has(candidateKey(candidate)))
-  ).filter((candidate) => {
+  )
+    .filter((candidate) => (veinOnly ? candidate.veinTarget === true : true))
+    .filter((candidate) => {
     const needle = officeQuery.trim().toLowerCase();
     if (!needle) return true;
     return [
@@ -488,6 +512,16 @@ export function HpoEmerySheet({
 
   function selectTop(count: number) {
     setSelectedKeys(allCandidates.slice(0, count).map(candidateKey));
+  }
+
+  function selectVeinTargets() {
+    const keys = allCandidates
+      .filter((candidate) => candidate.veinTarget)
+      .slice(0, MAX_ROUTE_STOPS)
+      .map(candidateKey);
+    setSelectedKeys(keys);
+    setVeinOnly(true);
+    setError("");
   }
 
   function selectGroup(group: RecommendationGroup) {
@@ -672,6 +706,26 @@ export function HpoEmerySheet({
                   >
                     All offices {allCandidates.length}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setVeinOnly((current) => !current)}
+                    className={
+                      veinOnly
+                        ? "min-h-9 rounded-xl bg-primary px-3 text-[11px] font-semibold text-primary-foreground"
+                        : "min-h-9 rounded-xl border border-primary/25 bg-background/40 px-3 text-[11px] font-semibold text-primary"
+                    }
+                  >
+                    Vein targets {allCandidates.filter((candidate) => candidate.veinTarget).length}
+                  </button>
+                  {allCandidates.some((candidate) => candidate.veinTarget) ? (
+                    <button
+                      type="button"
+                      onClick={selectVeinTargets}
+                      className="min-h-9 rounded-xl border border-primary/25 bg-background/40 px-3 text-[11px] font-semibold text-primary"
+                    >
+                      Select vein targets
+                    </button>
+                  ) : null}
                   {[5, 8, 10, 15]
                     .filter((count) => count <= allCandidates.length)
                     .map((count) => (
@@ -707,6 +761,7 @@ export function HpoEmerySheet({
 
                 <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
                   {[
+                    "Which vein tracker doctors in this territory should I prioritize for lunches, especially offices I have not visited?",
                     "Compare my selected offices and tell me which ones matter most.",
                     "Which of these offices have I visited before and what happened?",
                     "Which attorneys in this territory should I prioritize and why?",
@@ -719,7 +774,7 @@ export function HpoEmerySheet({
                       onClick={() => void sendText(prompt, true)}
                       className="min-h-9 shrink-0 rounded-xl border border-border bg-background/40 px-3 text-[10px] font-semibold text-foreground disabled:opacity-40"
                     >
-                      {["Compare selected", "Prior visits", "Best attorneys", "Follow-ups"][index]}
+                      {["Vein lunches", "Compare selected", "Prior visits", "Best attorneys", "Follow-ups"][index]}
                     </button>
                   ))}
                 </div>
@@ -829,6 +884,16 @@ export function HpoEmerySheet({
                                         </span>
                                         {recommended ? (
                                           <span className="text-[9px] font-semibold text-primary">Recommended</span>
+                                        ) : null}
+                                        {candidate.veinTarget ? (
+                                          <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[9px] font-bold text-primary">
+                                            VEIN / LUNCH
+                                          </span>
+                                        ) : null}
+                                        {candidate.veinVisitStatus ? (
+                                          <span className="text-[9px] font-medium text-muted-foreground">
+                                            {candidate.veinVisitStatus}
+                                          </span>
                                         ) : null}
                                       </div>
                                     </div>
