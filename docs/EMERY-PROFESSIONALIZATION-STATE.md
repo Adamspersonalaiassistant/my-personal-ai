@@ -4,9 +4,9 @@ Last updated: 2026-09-29
 
 ## Run identity
 
-- Starting production/main commit: `5f7af39e677e225cf4b56d87cc2ff164de61db14`
-- Working branch: `codex/emery-professionalization`
-- Draft PR: #7
+- Current production/main checkpoint: `bf9d9035176b4fa2f6ba3415e36e6defcb4dd6b3`
+- Working branch: `codex/emery-professionalization-continue`
+- Previous published checkpoint PR: #7 (merged)
 - Production branch: `main` — keep protected from partial work
 - Persistent objective: one typed, receipt-driven Emery orchestration system shared by Chat and Voice, with professional field continuity, trustworthy data, native-feeling mobile behavior, proactive health reporting, and executable QA.
 - Lovable AI generation credits used by this professionalization branch so far: 0
@@ -121,7 +121,7 @@ Final completion cannot rely on static validators alone. Add executable:
 
 ## Deployment rule
 
-Do not deploy partial professionalization to production.
+A verified checkpoint through IDs 1–30 and 204–223 has now been published so Adam can test real route workflows. Continue remaining audit work on this continuation branch. Publish later checkpoints only when their scoped tests and CI are green.
 
 Only after the 270 ledger contains no OPEN rows and the final gate is green:
 1. inspect full diff against main;
@@ -134,6 +134,14 @@ Only after the 270 ledger contains no OPEN rows and the final gate is green:
 8. run non-destructive production smoke checks;
 9. report exact merge/deployment and only the real-iPhone checks that automation cannot truthfully perform.
 
+## Published checkpoint
+
+- Production merge commit: `bf9d9035176b4fa2f6ba3415e36e6defcb4dd6b3`
+- Lovable production: published and ready
+- Supabase migrations applied: set-stops/field-session RPC, atomic route order RPC, persistent Field Session + bounded undo
+- IDs formally closed before publish: 1–30 and 204–223
+- Both GitHub validation workflows were green before merge.
+
 ## Next exact action
 
-Continue with coverage rows 31–71 only: finish the remaining Voice/hands-free items and route-reliability items, beginning from the shared planner/Field Session foundation recorded here. Do not reopen rows 1–30 or 204–223 unless a regression test proves they failed.
+Continue with coverage rows 31–71 only: finish Voice/hands-free and route-reliability items from this new continuation branch. Do not reopen rows 1–30 or 204–223 unless a regression proves they failed.
