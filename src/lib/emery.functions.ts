@@ -125,6 +125,8 @@ type SourceMetadata = {
   hpoStopId?: string | null;
   selectedAccountId?: string | null;
   selectedProspectId?: string | null;
+  hpoEphemeral?: boolean;
+  hpoEphemeralSession?: string | null;
 };
 type ChatInput = { message?: string; attachments?: AttachmentInput[]; source?: SourceMetadata };
 type ChatAttachment = {
@@ -335,6 +337,10 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
       selectedAccountId: raw.selectedAccountId ? String(raw.selectedAccountId).slice(0, 80) : null,
       selectedProspectId: raw.selectedProspectId
         ? String(raw.selectedProspectId).slice(0, 80)
+        : null,
+      hpoEphemeral: raw.hpoEphemeral === true,
+      hpoEphemeralSession: raw.hpoEphemeralSession
+        ? String(raw.hpoEphemeralSession).slice(0, 120)
         : null,
     };
     if (!message && !attachments.length) throw new Error("Message or attachment is required");
@@ -991,6 +997,8 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
             replyTo: data.source.entryPoint,
             domain: "hpo",
             emery_identity: "central-v1",
+            hpoEphemeral: data.source.hpoEphemeral === true,
+            hpoEphemeralSession: data.source.hpoEphemeralSession ?? null,
             hpo_field_read: hpoFieldRead,
           },
         })
@@ -1058,6 +1066,8 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
             replyTo: data.source.entryPoint,
             domain: "hpo",
             emery_identity: "central-v1",
+            hpoEphemeral: data.source.hpoEphemeral === true,
+            hpoEphemeralSession: data.source.hpoEphemeralSession ?? null,
             hpo_route_command: hpoRouteCommand,
           },
         })
@@ -1127,6 +1137,8 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
             replyTo: data.source.entryPoint,
             domain: route.domain,
             emery_identity: "central-v1",
+            hpoEphemeral: data.source.hpoEphemeral === true,
+            hpoEphemeralSession: data.source.hpoEphemeralSession ?? null,
             hpo_route_stop_action: routeStopAction,
           },
         })
@@ -1202,6 +1214,8 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
             replyTo: data.source.entryPoint,
             domain: route.domain,
             emery_identity: "central-v1",
+            hpoEphemeral: data.source.hpoEphemeral === true,
+            hpoEphemeralSession: data.source.hpoEphemeralSession ?? null,
             hpo_action: hpoAction,
           },
         })
@@ -1421,9 +1435,10 @@ export const getMainConversation = createServerFn({ method: "GET" })
       c = await mainConversation(db, context.userId);
     const { data } = await db
       .from("conversation_messages")
-      .select("id,role,content,created_at")
+      .select("id,role,content,created_at,source_metadata")
       .eq("user_id", context.userId)
       .eq("conversation_id", c.id)
+      .not("source_metadata->>hpoEphemeral", "eq", "true")
       .order("created_at", { ascending: true })
       .limit(500);
     return {
@@ -1450,9 +1465,10 @@ export const getMainConversationPage = createServerFn({ method: "GET" })
       c = await mainConversation(db, context.userId);
     let q = db
       .from("conversation_messages")
-      .select("id,role,content,created_at")
+      .select("id,role,content,created_at,source_metadata")
       .eq("user_id", context.userId)
       .eq("conversation_id", c.id)
+      .not("source_metadata->>hpoEphemeral", "eq", "true")
       .order("created_at", { ascending: false })
       .limit(data.limit + 1);
     if (data.before) q = q.lt("created_at", data.before);
