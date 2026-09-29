@@ -5,6 +5,7 @@ import {
   ArrowUpRight,
   CalendarClock,
   History,
+  FileText,
   MapPin,
   MapPinned,
   MessageCircle,
@@ -29,14 +30,18 @@ function dateLabel(value: string | null | undefined) {
 
 export function HpoAccountFieldDetail({
   accountId,
+  revision,
   onClose,
   onChanged,
+  onNote,
   onLog,
   onFollowup,
 }: {
   accountId: string;
+  revision?: number;
   onClose: () => void;
   onChanged?: () => void;
+  onNote?: () => void;
   onLog?: () => void;
   onFollowup?: () => void;
 }) {
@@ -64,7 +69,7 @@ export function HpoAccountFieldDetail({
     return () => {
       cancelled = true;
     };
-  }, [accountId, load]);
+  }, [accountId, load, revision]);
 
   const account = data?.account;
   const contacts = data?.contacts ?? [];
@@ -82,38 +87,38 @@ export function HpoAccountFieldDetail({
       ) === index,
   );
   const singleLinkedLocation = officeLocations.length === 1 ? officeLocations[0] : null;
-  const routeAddress = account?.address || singleLinkedLocation?.address || "";
+  const routeAddress = [account?.address, singleLinkedLocation?.address].find((address) => typeof address === "string" && /\d/.test(address)) || "";
   const routeCity = account?.city || singleLinkedLocation?.city || "";
 
   return (
     <div
-      className="fixed inset-0 z-[82] flex items-end bg-background/68 backdrop-blur-[4px] sm:items-center sm:justify-center sm:p-4"
+      className="hpo-crm fixed inset-0 z-[82] flex items-end bg-background/70 sm:items-center sm:justify-center sm:p-4"
       onClick={onClose}
       role="presentation"
     >
       <section
-        className="emery-sheet-in max-h-[92dvh] w-full overflow-y-auto rounded-t-lg border-t border-border/55 bg-background px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-24px_70px_rgba(0,0,0,0.42)] sm:max-w-xl sm:rounded-lg sm:border"
+        className="emery-sheet-in h-[min(95dvh,100dvh)] w-full min-w-0 overflow-y-auto overscroll-contain rounded-t-lg border-t border-border bg-card px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 text-foreground shadow-xl [-webkit-overflow-scrolling:touch] sm:h-auto sm:max-h-[90dvh] sm:max-w-xl sm:rounded-lg sm:border"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="HPO account field record"
       >
         <div className="mx-auto h-1 w-10 rounded-full bg-border/80 sm:hidden" />
-        <div className="sticky top-0 z-10 -mx-1 flex items-center justify-between gap-3 bg-background/95 px-1 pb-3 pt-3 backdrop-blur">
+        <div className="sticky top-0 z-10 -mx-4 flex items-center justify-between gap-3 border-b border-border bg-card/95 px-4 pb-3 pt-3 backdrop-blur">
           <div className="min-w-0">
-            <p className="emery-kicker">Field Account</p>
+            <p className="text-[11px] font-semibold uppercase text-primary">Field account</p>
             <h2 className="mt-1 break-words text-lg font-semibold">
               {account?.name ?? "Loading account…"}
             </h2>
           </div>
-          <button
+          <Button variant="ghost"
             type="button"
             onClick={onClose}
-            className="emery-press flex size-11 shrink-0 items-center justify-center rounded-xl text-muted-foreground"
+            className="size-11 shrink-0"
             aria-label="Close account"
           >
             <X className="size-4" />
-          </button>
+          </Button>
         </div>
 
         {error ? (
@@ -126,6 +131,11 @@ export function HpoAccountFieldDetail({
           </div>
         ) : (
           <div className="space-y-3 pb-2">
+            <div className="min-w-0 border-b border-border py-2">
+              <p className="break-words text-xs text-muted-foreground">{[account.city, account.account_type, account.specialty].filter(Boolean).join(" · ") || "Account"}</p>
+              <p className="mt-1 text-xs font-semibold capitalize text-primary">{account.relationship_stage || account.status || "Active"} · Priority {account.priority}</p>
+              <p className="mt-2 break-words text-sm font-medium">{account.next_action || "No follow-up set"}{account.next_action_due_at ? ` · Due ${dateLabel(account.next_action_due_at)}` : ""}</p>
+            </div>
             <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {routeAddress ? (
                 <a
@@ -140,11 +150,9 @@ export function HpoAccountFieldDetail({
                   Navigate
                 </a>
               ) : null}
-              <button
+              {(routeAddress || officeLocations.length > 0) && <Button
                 type="button"
-                disabled={!routeAddress && !officeLocations.length}
                 onClick={() => {
-                  if (!routeAddress && !officeLocations.length) return;
                   openHpoEmery(
                     routeAddress
                       ? `Add ${account.name} at ${[routeAddress, routeCity]
@@ -158,12 +166,13 @@ export function HpoAccountFieldDetail({
                     account.name,
                   );
                 }}
-                className="flex min-h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-xl border border-primary/20 bg-primary/[0.055] px-2 text-[10px] font-semibold text-primary disabled:cursor-not-allowed disabled:opacity-35"
+                variant="outline" className="flex h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-md px-2 text-xs"
               >
                 <MapPinned className="size-4" />
-                {routeAddress || officeLocations.length ? "Route" : "No Address"}
-              </button>
-              <button
+                Route
+              </Button>}
+              <Button type="button" variant="outline" onClick={onNote} className="flex h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-md px-2 text-xs"><FileText className="size-4" />Note</Button>
+              <Button variant="outline"
                 type="button"
                 onClick={() =>
                   onLog
@@ -173,12 +182,12 @@ export function HpoAccountFieldDetail({
                         account.name,
                       )
                 }
-                className="flex min-h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-xl border border-border/50 bg-card/45 px-2 text-[10px] font-semibold text-foreground"
+                className="flex h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-md px-2 text-xs"
               >
                 <History className="size-4 text-primary" />
                 Log Visit
-              </button>
-              <button
+              </Button>
+              <Button variant="outline"
                 type="button"
                 onClick={() =>
                   onFollowup
@@ -188,24 +197,24 @@ export function HpoAccountFieldDetail({
                         account.name,
                       )
                 }
-                className="flex min-h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-xl border border-border/50 bg-card/45 px-2 text-[10px] font-semibold text-foreground"
+                className="flex h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-md px-2 text-xs"
               >
                 <CalendarClock className="size-4 text-primary" />
                 Follow-Up
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 onClick={() =>
                   openHpoEmery(
-                    `I'm working with ${account.name} in HPO. Use this account's live relationship history, route context, contacts, visits and follow-ups to help me with the next action.`,
+                    `I'm working with ${account.name} (HPO account ID ${accountId}). Use this account's live relationship history, route context, contacts, visits and follow-ups to help me with the next action.`,
                     account.name,
                   )
                 }
-                className="flex min-h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-xl bg-primary px-2 text-[10px] font-semibold text-primary-foreground"
+                className="flex h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-md px-2 text-xs"
               >
                 <MessageCircle className="size-4" />
                 Emery
-              </button>
+              </Button>
             </div>
             <Button
               variant="ghost"
