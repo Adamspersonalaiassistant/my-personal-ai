@@ -1181,7 +1181,7 @@ export async function executeHpoRouteOptimizeCore(input: {
 
     for (let index = 0; index < unresolved.length; index += 1) {
       const stop = unresolved[index]!;
-      const point = await geocode([stop.address, stop.city, "NJ"].filter(Boolean).join(", "));
+      const point = await geocode([stop.address, stop.city].filter(Boolean).join(", "));
       stop.latitude = point.lat;
       stop.longitude = point.lon;
       const { error } = await db
