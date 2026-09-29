@@ -151,3 +151,75 @@ revoke all on function public.emery_hpo_set_remaining_route_stops(
 grant execute on function public.emery_hpo_set_remaining_route_stops(
   uuid,uuid,uuid,text,text,text,double precision,double precision,text,boolean
 ) to authenticated;
+
+
+-- Consume an armed note target only after the matching stop has been saved.
+-- This keeps the session durable across reloads while preventing a later note
+-- from silently attaching to an already-completed visit.
+create or replace function public.emery_hpo_consume_field_note_target(
+  p_route_id uuid,
+  p_stop_id uuid
+)
+returns jsonb
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_metadata jsonb;
+  v_field jsonb;
+  v_expected text;
+  v_now timestamptz := now();
+begin
+  if v_user_id is null then
+    raise exception 'authentication_required';
+  end if;
+
+  select metadata
+    into v_metadata
+  from public.hpo_route_plans
+  where id = p_route_id and user_id = v_user_id
+  for update;
+
+  if not found then
+    raise exception 'route_not_found_or_not_owned';
+  end if;
+
+  v_field := coalesce(v_metadata->'field_session', '{}'::jsonb);
+  v_expected := nullif(v_field->>'expected_note_target_stop_id', '');
+
+  if v_expected is null or v_expected <> p_stop_id::text then
+    return jsonb_build_object(
+      'consumed', false,
+      'reason', 'target_not_armed',
+      'expected_stop_id', v_expected
+    );
+  end if;
+
+  v_field := v_field ||
+    jsonb_build_object(
+      'active', false,
+      'consumed_at', v_now,
+      'last_consumed_stop_id', p_stop_id
+    )
+    - 'expected_note_target_stop_id'
+    - 'expected_note_target_account_id'
+    - 'expected_note_target_prospect_id';
+
+  update public.hpo_route_plans
+  set
+    metadata = jsonb_set(coalesce(v_metadata, '{}'::jsonb), '{field_session}', v_field, true),
+    updated_at = v_now
+  where id = p_route_id and user_id = v_user_id;
+
+  return jsonb_build_object(
+    'consumed', true,
+    'stop_id', p_stop_id,
+    'consumed_at', v_now
+  );
+end;
+$$;
+
+revoke all on function public.emery_hpo_consume_field_note_target(uuid,uuid) from public;
+grant execute on function public.emery_hpo_consume_field_note_target(uuid,uuid) to authenticated;
