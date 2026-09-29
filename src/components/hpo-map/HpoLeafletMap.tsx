@@ -64,7 +64,7 @@ type Props = {
   onBuildRoute: () => void;
   preparing: boolean;
   onRefreshPins: () => void;
-  onNavigateHpo?: ((view: "today" | "map" | "accounts" | "activity") => void) | undefined;
+  onNavigateHpo?: ((view: "today" | "planner" | "map" | "accounts" | "activity") => void) | undefined;
 };
 
 function validOffice(office: HpoMapOffice) {
