@@ -1042,7 +1042,7 @@ export const executeVoiceHpoRouteNote = createServerFn({ method: "POST" })
         .select("id,route_date,status")
         .eq("user_id", context.userId)
         .gte("route_date", today)
-        .in("status", ["draft", "planned", "in_progress"])
+        .in("status", ["draft", "planned", "active", "in_progress"])
         .order("route_date", { ascending: true })
         .limit(3);
       if (error) throw error;
