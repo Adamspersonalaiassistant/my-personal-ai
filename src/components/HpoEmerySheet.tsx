@@ -19,6 +19,7 @@ import { sendEmeryMessage } from "@/lib/emery.functions";
 import { buildHpoRouteFromSelection } from "@/lib/hpo-route-session.functions";
 
 const EVENT_NAME = "emery:hpo-chat";
+const MAX_ROUTE_STOPS = 30;
 
 type HpoEmeryDetail = {
   prompt?: string;
@@ -367,9 +368,15 @@ export function HpoEmerySheet({
 
   function toggleCandidate(candidate: RouteRecommendationCandidate) {
     const key = candidateKey(candidate);
-    setSelectedKeys((current) =>
-      current.includes(key) ? current.filter((item) => item !== key) : [...current, key],
-    );
+    setSelectedKeys((current) => {
+      if (current.includes(key)) return current.filter((item) => item !== key);
+      if (current.length >= MAX_ROUTE_STOPS) {
+        setError(`Keep a single optimized route to ${MAX_ROUTE_STOPS} stops or fewer.`);
+        return current;
+      }
+      setError("");
+      return [...current, key];
+    });
   }
 
   function selectTop(count: number) {
@@ -381,9 +388,19 @@ export function HpoEmerySheet({
     const allSelected = keys.length > 0 && keys.every((key) => selectedKeys.includes(key));
     setSelectedKeys((current) => {
       const set = new Set(current);
+      if (allSelected) {
+        for (const key of keys) set.delete(key);
+        setError("");
+        return [...set];
+      }
       for (const key of keys) {
-        if (allSelected) set.delete(key);
-        else set.add(key);
+        if (set.size >= MAX_ROUTE_STOPS) break;
+        set.add(key);
+      }
+      if (keys.some((key) => !set.has(key))) {
+        setError(`I selected the first ${MAX_ROUTE_STOPS} offices only. Keep one optimized route to ${MAX_ROUTE_STOPS} stops or fewer.`);
+      } else {
+        setError("");
       }
       return [...set];
     });
@@ -521,7 +538,7 @@ export function HpoEmerySheet({
                     </p>
                   </div>
                   <span className="shrink-0 rounded-full bg-primary px-2.5 py-1 text-[10px] font-bold text-primary-foreground">
-                    {selectedKeys.length} selected
+                    {selectedKeys.length} selected · max {MAX_ROUTE_STOPS}
                   </span>
                 </div>
 
