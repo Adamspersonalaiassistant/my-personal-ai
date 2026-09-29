@@ -26,6 +26,7 @@ const routeActions = read("src/lib/hpo-route-action-controller.ts");
 const emery = read("src/lib/emery.functions.ts");
 const voice = read("src/lib/voice.functions.ts");
 const hpoRoute = read("src/routes/_authenticated/hpo.tsx");
+const hpoNav = read("src/components/HpoFieldNav.tsx");
 const hpoFns = read("src/lib/hpo.functions.ts");
 const fieldToday = read("src/components/HpoFieldToday.tsx");
 const fieldFns = read("src/lib/hpo-field.functions.ts");
@@ -227,9 +228,10 @@ check(
 );
 check(
   "HPO has exactly four field-first areas",
-  /type View = "today" \| "map" \| "accounts" \| "activity"/.test(hpoRoute) &&
-    ["today", "map", "accounts", "activity"].every((key) => hpoRoute.includes(`key: "${key}"`)) &&
-    (hpoRoute.match(/key: "(today|map|accounts|activity)"/g) ?? []).length === 4,
+  /type HpoFieldView = "today" \| "map" \| "accounts" \| "activity"/.test(hpoNav) &&
+    ["today", "map", "accounts", "activity"].every((key) => hpoNav.includes(`key: "${key}"`)) &&
+    (hpoNav.match(/key: "(today|map|accounts|activity)"/g) ?? []).length === 4 &&
+    hpoRoute.includes('<HpoFieldNav view={view} onChange={setView} />'),
 );
 check(
   "legacy HPO dashboard and secondary tools are removed",

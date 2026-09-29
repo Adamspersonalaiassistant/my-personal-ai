@@ -303,6 +303,7 @@ function HpoWorkspace() {
         ) : null}
         <HpoEmerySheet onChanged={() => void refresh()} />
           </div>
+        </div>
       </div>
     </AppShell>
   );
