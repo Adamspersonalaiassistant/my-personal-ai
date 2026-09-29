@@ -38,15 +38,16 @@ export const buildHpoRouteFromSelection = createServerFn({ method: "POST" })
   .inputValidator((input: BuildSelectionInput) => {
     const routeDate = validDate(input?.routeDate);
     if (!routeDate) throw new Error("Choose a valid Planner date before building the route.");
-    const selected = Array.isArray(input?.selected)
-      ? input.selected
-          .slice(0, 30)
-          .map((item) => ({
-            accountId: clean(item?.accountId) || null,
-            prospectId: clean(item?.prospectId) || null,
-          }))
-          .filter((item) => item.accountId || item.prospectId)
-      : [];
+    const rawSelected = Array.isArray(input?.selected) ? input.selected : [];
+    if (rawSelected.length > 30) {
+      throw new Error("Keep a single optimized HPO route to 30 office stops or fewer.");
+    }
+    const selected = rawSelected
+      .map((item) => ({
+        accountId: clean(item?.accountId) || null,
+        prospectId: clean(item?.prospectId) || null,
+      }))
+      .filter((item) => item.accountId || item.prospectId);
     if (!selected.length) throw new Error("Select at least one office before building the route.");
     return {
       routeDate,
