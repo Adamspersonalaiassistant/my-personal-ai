@@ -154,7 +154,7 @@ export function HpoAccountFieldDetail({
                   : ""}
               </p>
             </div>
-            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
               {routeAddress ? (
                 <a
                   href={`https://maps.apple.com/?daddr=${encodeURIComponent(
@@ -162,7 +162,7 @@ export function HpoAccountFieldDetail({
                   )}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex min-h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-xl border border-border/50 bg-card/45 px-2 text-[10px] font-semibold text-foreground"
+                  className="flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-md border border-border bg-card px-1 text-xs font-semibold text-foreground"
                 >
                   <Navigation className="size-4 text-primary" />
                   Navigate
@@ -186,7 +186,7 @@ export function HpoAccountFieldDetail({
                     );
                   }}
                   variant="outline"
-                  className="flex h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-md px-2 text-xs"
+                  className="flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-md px-1 text-xs"
                 >
                   <MapPinned className="size-4" />
                   Route
@@ -196,7 +196,7 @@ export function HpoAccountFieldDetail({
                 type="button"
                 variant="outline"
                 onClick={onNote}
-                className="flex h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-md px-2 text-xs"
+                className="flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-md px-1 text-xs"
               >
                 <FileText className="size-4" />
                 Note
@@ -212,7 +212,7 @@ export function HpoAccountFieldDetail({
                         account.name,
                       )
                 }
-                className="flex h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-md px-2 text-xs"
+                className="flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-md px-1 text-xs"
               >
                 <History className="size-4 text-primary" />
                 Log Visit
@@ -228,7 +228,7 @@ export function HpoAccountFieldDetail({
                         account.name,
                       )
                 }
-                className="flex h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-md px-2 text-xs"
+                className="flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-md px-1 text-xs"
               >
                 <CalendarClock className="size-4 text-primary" />
                 Follow-Up
@@ -241,7 +241,7 @@ export function HpoAccountFieldDetail({
                     account.name,
                   )
                 }
-                className="flex h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-md px-2 text-xs"
+                className="flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-md px-1 text-xs"
               >
                 <MessageCircle className="size-4" />
                 Emery
