@@ -622,6 +622,7 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
             timezone: profile?.timezone ?? "America/New_York",
             sourceMessageId: userMessage.id,
             sourceChannel: String(data.source.entryPoint ?? "text"),
+            routeId: data.source.hpoRouteId ?? null,
           }).catch((error: any) => {
             console.error("HPO route command controller failed", error);
             return {
