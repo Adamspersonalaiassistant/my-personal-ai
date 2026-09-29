@@ -457,6 +457,25 @@ function Filter({
     </label>
   );
 }
+function QuickNoteSheet({ account, onClose, onSave }: {
+  account: Account | undefined;
+  onClose: () => void;
+  onSave: (summary: string) => Promise<void>;
+}) {
+  const [summary, setSummary] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  return <div className="hpo-crm fixed inset-0 z-[90] flex items-end justify-center bg-background/70 sm:items-center sm:p-4" role="presentation" onClick={onClose}>
+    <section role="dialog" aria-modal="true" aria-label={`Quick note for ${account?.name || "account"}`} onClick={(event) => event.stopPropagation()} className="w-full max-w-lg rounded-t-lg border border-border bg-card px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 shadow-xl sm:rounded-lg">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2"><div className="min-w-0"><h2 className="text-base font-semibold">Quick note</h2><p className="truncate text-xs text-muted-foreground">{account?.name}</p></div><Button type="button" size="icon" variant="ghost" className="size-11" aria-label="Close note" onClick={onClose}><X className="size-5" /></Button></div>
+      <form className="mt-3 space-y-3" onSubmit={async (event) => { event.preventDefault(); setSaving(true); setError(""); try { await onSave(summary.trim()); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save note."); } finally { setSaving(false); } }}>
+        <label className="block text-xs font-medium">Note<textarea autoFocus required value={summary} onChange={(event) => setSummary(event.target.value)} placeholder="What should you remember about this office?" className="mt-1 min-h-32 w-full rounded-md border border-border bg-card p-3 text-base text-foreground outline-none focus:border-primary" /></label>
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        <Button type="submit" disabled={saving || !summary.trim()} className="min-h-12 w-full">{saving ? "Saving…" : "Save note"}</Button>
+      </form>
+    </section>
+  </div>;
+}
 function ActivityView({
   data,
   onOpen,
