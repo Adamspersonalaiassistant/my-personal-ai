@@ -423,7 +423,13 @@ function HpoWorkspace() {
                     ? mapContextRouteId
                     : todayContext.routeId
               }
-              stopId={view === "planner" ? plannerContext.stopId : todayContext.stopId}
+              stopId={
+                view === "planner"
+                  ? plannerContext.stopId
+                  : view === "map"
+                    ? null
+                    : todayContext.stopId
+              }
               selectedAccountId={selected}
               surface={`hpo.${view}`}
               onChanged={() => {
