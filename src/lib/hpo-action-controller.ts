@@ -496,15 +496,20 @@ Return strict JSON only.`,
     }
 
     if (changedFields.includes("address") || changedFields.includes("city")) {
-      const nextAddress =
-        typeof updatePayload.address === "string"
-          ? updatePayload.address
-          : String(target.address ?? "").trim();
-      const nextCity =
-        typeof updatePayload.city === "string"
-          ? updatePayload.city
-          : String(target.city ?? "").trim();
-      if (nextAddress) {
+      const addressWasExplicit = Object.prototype.hasOwnProperty.call(updatePayload, "address");
+      const cityWasExplicit = Object.prototype.hasOwnProperty.call(updatePayload, "city");
+      const nextAddress = addressWasExplicit
+        ? String(updatePayload.address ?? "").trim()
+        : String(target.address ?? "").trim();
+      const nextCity = cityWasExplicit
+        ? String(updatePayload.city ?? "").trim()
+        : String(target.city ?? "").trim();
+
+      if (!nextAddress) {
+        updatePayload.latitude = null;
+        updatePayload.longitude = null;
+        updatePayload.geocoded_at = null;
+      } else {
         const point = await geocodeHpoOfficeAddress(nextAddress, nextCity || null).catch(() => null);
         updatePayload.latitude = point?.lat ?? null;
         updatePayload.longitude = point?.lon ?? null;
