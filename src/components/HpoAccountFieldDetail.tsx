@@ -133,8 +133,9 @@ export function HpoAccountFieldDetail({
         ),
       ).filter((element) => element.offsetParent !== null);
       if (!focusable.length) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
+      const first = focusable.at(0);
+      const last = focusable.at(-1);
+      if (!first || !last) return;
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last.focus();
@@ -469,7 +470,10 @@ export function HpoAccountFieldDetail({
                   </Button>
                   <div className="flex min-h-12 items-center gap-2 rounded-xl border border-primary/25 bg-background/55 pl-3 pr-1">
                     <span className="text-xs font-semibold text-foreground">Voice</span>
-                    <EmeryVoiceControl hpoAccountId={accountId} onConversationChanged={onChanged} />
+                    <EmeryVoiceControl
+                      hpoAccountId={accountId}
+                      {...(onChanged ? { onConversationChanged: onChanged } : {})}
+                    />
                   </div>
                 </div>
               </section>
