@@ -432,6 +432,14 @@ function HpoWorkspace() {
               }
               selectedAccountId={selected}
               surface={`hpo.${view}`}
+              onRouteBuilt={(builtRouteId) => {
+                setMapRouteId(builtRouteId);
+                setMapContextRouteId(builtRouteId);
+                setMapRouteDate(null);
+                setMapOpenBuilder(false);
+                setView("map");
+                setRevision((current) => current + 1);
+              }}
               onChanged={() => {
                 void refresh();
                 void readToday({})
