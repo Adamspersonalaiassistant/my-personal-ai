@@ -927,9 +927,16 @@ export const executeVoiceHpoRouteCommand = createServerFn({ method: "POST" })
 
 export const executeVoiceHpoRouteStopAction = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { request: string; requestId?: string | null }) => ({
+  .inputValidator((input: {
+    request: string;
+    requestId?: string | null;
+    routeId?: string | null;
+    stopId?: string | null;
+  }) => ({
     request: String(input?.request ?? "").trim().slice(0, 5000),
     requestId: input?.requestId ? String(input.requestId).trim().slice(0, 240) : null,
+    routeId: input?.routeId ? String(input.routeId).trim() : null,
+    stopId: input?.stopId ? String(input.stopId).trim() : null,
   }))
   .handler(async ({ data, context }) => {
     if (!data.request) {
@@ -955,6 +962,8 @@ export const executeVoiceHpoRouteStopAction = createServerFn({ method: "POST" })
       timezone: profile?.timezone ?? "America/New_York",
       requestId: data.requestId,
       sourceChannel: "voice",
+      routeId: data.routeId,
+      stopId: data.stopId,
     });
     await recordRuntimeEvent(db, context.userId, {
       channel: "voice",
@@ -980,10 +989,12 @@ export const executeVoiceHpoRouteNote = createServerFn({ method: "POST" })
   .inputValidator((input: {
     request: string;
     routeId?: string | null;
+    stopId?: string | null;
     requestId?: string | null;
   }) => ({
     request: String(input?.request ?? "").trim().slice(0, 5000),
     routeId: input?.routeId ? String(input.routeId).trim() : null,
+    stopId: input?.stopId ? String(input.stopId).trim() : null,
     requestId: input?.requestId ? String(input.requestId).trim().slice(0, 240) : null,
   }))
   .handler(async ({ data, context }) => {
@@ -1060,6 +1071,7 @@ export const executeVoiceHpoRouteNote = createServerFn({ method: "POST" })
         ? `request:${data.requestId}:hpo.route_stop.log_visit`
         : `voice:${routeId}:route-note:${Date.now()}`,
       sourceChannel: "voice",
+      preferredStopId: data.stopId,
     });
 
     await recordRuntimeEvent(db, context.userId, {
