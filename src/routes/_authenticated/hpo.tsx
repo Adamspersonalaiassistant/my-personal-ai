@@ -364,7 +364,6 @@ function Accounts({
           <Button onClick={onAdd} className="min-h-11 shrink-0 px-3">
             <Plus className="size-4" /> Add
           </Button>
-          </div>
         </div>
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
           <label className="relative min-w-0">
