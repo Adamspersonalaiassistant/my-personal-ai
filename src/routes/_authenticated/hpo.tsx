@@ -122,6 +122,8 @@ function HpoWorkspace() {
   const [mapContextRouteId, setMapContextRouteId] = useState<string | null>(requestedRouteId);
   const [mapRouteDate, setMapRouteDate] = useState<string | null>(null);
   const [mapOpenBuilder, setMapOpenBuilder] = useState(false);
+  const [plannerFocusDate, setPlannerFocusDate] = useState<string | null>(null);
+  const [plannerFocusRouteId, setPlannerFocusRouteId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -210,6 +212,10 @@ function HpoWorkspace() {
               setMapRouteDate(null);
               setMapOpenBuilder(false);
             }
+            if (next !== "planner") {
+              setPlannerFocusDate(null);
+              setPlannerFocusRouteId(null);
+            }
             setView(next);
           }}
         />
@@ -251,7 +257,9 @@ function HpoWorkspace() {
             ) : null}
             {view === "planner" ? (
               <HpoWeeklyPlanner
-                key={`planner-${revision}`}
+                key={`planner-${revision}-${plannerFocusDate ?? "none"}-${plannerFocusRouteId ?? "none"}`}
+                focusDate={plannerFocusDate}
+                focusRouteId={plannerFocusRouteId}
                 onRouteContextChange={(routeId, stopId) =>
                   setPlannerContext({ routeId, stopId })
                 }
@@ -432,12 +440,15 @@ function HpoWorkspace() {
               }
               selectedAccountId={selected}
               surface={`hpo.${view}`}
-              onRouteBuilt={(builtRouteId) => {
+              onRouteBuilt={(builtRouteId, builtRouteDate) => {
+                setPlannerFocusDate(builtRouteDate);
+                setPlannerFocusRouteId(builtRouteId);
+                setPlannerContext({ routeId: builtRouteId, stopId: null });
                 setMapRouteId(builtRouteId);
                 setMapContextRouteId(builtRouteId);
-                setMapRouteDate(null);
+                setMapRouteDate(builtRouteDate);
                 setMapOpenBuilder(false);
-                setView("map");
+                setView("planner");
                 setRevision((current) => current + 1);
               }}
               onChanged={() => {
