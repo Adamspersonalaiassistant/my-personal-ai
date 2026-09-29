@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowUp, X } from "lucide-react";
 import brainImage from "@/assets/neural-brain.png";
@@ -103,11 +104,11 @@ export function HpoEmerySheet({
     }
   }
 
-  if (!open) return null;
+  if (!open || typeof document === "undefined") return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-[180] flex items-end bg-black/55 backdrop-blur-[2px] sm:items-center sm:justify-center sm:p-4"
+      className="fixed inset-0 z-[300] flex items-end bg-black/55 backdrop-blur-[2px] sm:items-center sm:justify-center sm:p-4"
       onClick={() => setOpen(false)}
       role="presentation"
     >
@@ -193,6 +194,7 @@ export function HpoEmerySheet({
           </div>
         </div>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }
