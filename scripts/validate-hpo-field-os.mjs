@@ -231,7 +231,7 @@ check(
   /type HpoFieldView = "today" \| "map" \| "accounts" \| "activity"/.test(hpoNav) &&
     ["today", "map", "accounts", "activity"].every((key) => hpoNav.includes(`key: "${key}"`)) &&
     (hpoNav.match(/key: "(today|map|accounts|activity)"/g) ?? []).length === 4 &&
-    hpoRoute.includes('<HpoFieldNav view={view} onChange={setView} />'),
+    hpoRoute.includes("<HpoFieldNav view={view} onChange={setView} />"),
 );
 check(
   "legacy HPO dashboard and secondary tools are removed",
