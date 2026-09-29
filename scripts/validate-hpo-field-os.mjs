@@ -13,6 +13,7 @@ function check(name, ok) {
 }
 
 const planner = read("src/components/HpoRoutePlanner.tsx");
+const leaflet = read("src/components/hpo-map/HpoLeafletMap.tsx");
 const adapter = read("src/components/hpo-map/HpoMapAdapter.tsx");
 const v2 = read("src/components/hpo-map/HpoMapV2MapLibre.tsx");
 const routeFns = read("src/lib/hpo-route.functions.ts");
@@ -35,14 +36,14 @@ const voiceControl = read("src/components/EmeryVoiceControl.tsx");
 const routeCommands = read("src/lib/hpo-route-command-controller.ts");
 const capabilities = read("src/lib/execution-capabilities.ts");
 
-check("Map V1 remains in Route Planner", planner.includes("function OfficePlanningMap("));
+check("Historical V1 map remains available", planner.includes("function OfficePlanningMap("));
 check(
-  "Route Planner uses direct RepMove-style Map V2 renderer",
-  planner.includes("<HpoMapV2MapLibre"),
+  "Route Planner uses Leaflet as the primary field map",
+  planner.includes("<HpoLeafletMap") && !planner.includes("<HpoMapV2MapLibre"),
 );
 check(
   "Legacy map is not rendered in the active HPO route planner",
-  !planner.includes("<HpoMapAdapter") && planner.includes("<HpoMapV2MapLibre"),
+  !planner.includes("<HpoMapAdapter") && planner.includes("<HpoLeafletMap"),
 );
 check("MapLibre dependency is declared", Boolean(packageJson.dependencies?.["maplibre-gl"]));
 check(
@@ -51,9 +52,9 @@ check(
 );
 check("Route Planner loads Map V2 feature flag", routeFns.includes('select("hpo_map_v2")'));
 check(
-  "RepMove-style Map V2 is the direct HPO field renderer",
-  planner.includes("<HpoMapV2MapLibre") &&
-    planner.includes("onFatalError") &&
+  "Leaflet is the direct HPO field renderer",
+  planner.includes("<HpoLeafletMap") &&
+    leaflet.includes("L.map(") &&
     !planner.includes("<HpoMapAdapter"),
 );
 check(
@@ -73,11 +74,10 @@ check(
   v2.includes("selectedOfficeKey") && v2.includes("onSelectOffice"),
 );
 check(
-  "Map V2 supports deterministic polygon area selection",
-  v2.includes("pointInPolygon") &&
-    v2.includes("hpo-selection-area") &&
-    v2.includes("Select Area") &&
-    planner.includes("onSelectMany={selectManyMapOffices}"),
+  "Leaflet keeps map search, clustered pins and route selection",
+  leaflet.includes("searchResults") &&
+    leaflet.includes("clusterIcon(") &&
+    leaflet.includes("onToggleRouteStop(selectedOffice)"),
 );
 check(
   "Map V2 supports relationship-signal filters",
@@ -506,4 +506,4 @@ check(
 );
 
 if (process.exitCode) process.exit(process.exitCode);
-console.log("HPO Field OS Map V2 foundation certification passed.");
+console.log("HPO Field OS Leaflet foundation certification passed.");
