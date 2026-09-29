@@ -604,7 +604,10 @@ export function HpoAccountFieldDetail({
 
             <details ref={historyRef} className="rounded-md border border-border bg-card p-3">
               <summary className="flex min-h-11 cursor-pointer items-center text-sm font-semibold">
-                Relationship history <span className="ml-auto text-xs font-normal text-muted-foreground">{interactions.length} recent</span>
+                Relationship history{" "}
+                <span className="ml-auto text-xs font-normal text-muted-foreground">
+                  {interactions.length} recent
+                </span>
               </summary>
               <div className="flex items-center gap-2">
                 <History className="size-4 text-primary" />
@@ -653,7 +656,10 @@ export function HpoAccountFieldDetail({
 
             <details className="rounded-md border border-border bg-card p-3">
               <summary className="flex min-h-11 cursor-pointer items-center text-sm font-semibold">
-                Route visit history <span className="ml-auto text-xs font-normal text-muted-foreground">{routeStops.length} recent</span>
+                Route visit history{" "}
+                <span className="ml-auto text-xs font-normal text-muted-foreground">
+                  {routeStops.length} recent
+                </span>
               </summary>
               <div className="flex items-center gap-2">
                 <CalendarClock className="size-4 text-primary" />
