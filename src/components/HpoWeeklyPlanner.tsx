@@ -230,6 +230,7 @@ export function HpoWeeklyPlanner({
     openHpoEmery(
       `I want to build an HPO marketing route for ${date}. Ask me which towns or territory if I have not given them yet. Before creating anything, review my active HPO targets, prior visit notes, relationship history, follow-ups and prospect quality. Rank the best offices to visit with a short why-now reason and visit objective. Let me approve or adjust the shortlist, then build and optimize the route. Do not invent offices.`,
       `Build Route · ${prettyDate(date)}`,
+      { autoSend: true },
     );
   }
 
