@@ -2139,13 +2139,16 @@ export const updateHpoRouteStop = createServerFn({ method: "POST" })
       .single();
     if (error) throw error;
 
-    await upsertInteractionForStop(db, context.userId, updated, {
-      notes: data.notes ?? updated.notes,
-      visitOutcome: data.visitOutcome ?? updated.visit_outcome,
-      nextAction: data.nextAction ?? updated.next_action,
-      nextActionDueAt: data.nextActionDueAt ?? updated.next_action_due_at,
-      status: data.status ?? updated.status,
-    });
+    const interactionStatus = String(data.status ?? stop.status ?? updated.status);
+    if (TERMINAL.has(interactionStatus)) {
+      await upsertInteractionForStop(db, context.userId, updated, {
+        notes: data.notes ?? updated.notes,
+        visitOutcome: data.visitOutcome ?? updated.visit_outcome,
+        nextAction: data.nextAction ?? updated.next_action,
+        nextActionDueAt: data.nextActionDueAt ?? updated.next_action_due_at,
+        status: data.status ?? updated.status,
+      });
+    }
 
     const routeStatus = await syncRouteStatus(db, context.userId, stop.route_id);
     return { stop: updated, routeStatus };
