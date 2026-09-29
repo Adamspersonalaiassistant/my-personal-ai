@@ -402,13 +402,17 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
       message: data.message,
     });
     const recent = await history(db, userId, conversation.id);
+    const nonEphemeralRecent = recent.filter(
+      (turn: any) => turn.sourceMetadata?.hpoEphemeral !== true,
+    );
     const hpoSessionHistory =
       data.source.hpoEphemeral && data.source.hpoEphemeralSession
         ? recent.filter(
             (turn: any) =>
               turn.sourceMetadata?.hpoEphemeralSession === data.source.hpoEphemeralSession,
           )
-        : recent;
+        : nonEphemeralRecent;
+    const turnRecent = data.source.hpoEphemeral ? hpoSessionHistory : nonEphemeralRecent;
     if (!hpoEligible && hasPendingHpoRouteClarification(hpoSessionHistory)) {
       hpoEligible = true;
     }
@@ -418,7 +422,7 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
       userId,
       conversation,
       newestMessage: data.message,
-      recentHistory: recent,
+      recentHistory: turnRecent,
     }).catch((error: any) => {
       console.error("Rolling conversation state refresh failed", error);
       return { summary: "", updatedAt: null, summarizedMessageId: null, summarizedMessageCount: 0 };
@@ -428,7 +432,7 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
       userId,
       apiKey,
       text: data.message,
-      recent,
+      recent: turnRecent,
     }).catch((error: any) => {
       console.error("Voice Studio operation failed", error);
       return {
@@ -589,7 +593,7 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
       userId,
       apiKey,
       message: data.message,
-      recent: recent.filter((x: any) => x.id !== userMessage.id),
+      recent: turnRecent.filter((x: any) => x.id !== userMessage.id),
       timezone: profile?.timezone ?? "America/New_York",
       openTasks: actions.tasks ?? [],
       upcomingMeetings: actions.meetings ?? [],
@@ -741,7 +745,7 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
             userId,
             apiKey,
             message: data.message,
-            recent: recent.filter((x: any) => x.id !== userMessage.id),
+            recent: turnRecent.filter((x: any) => x.id !== userMessage.id),
             timezone: profile?.timezone ?? "America/New_York",
             sourceMessageId: userMessage.id,
             selectedAccountId: data.source.selectedAccountId ?? null,
@@ -778,7 +782,7 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
       12000,
       Math.max(2000, Number(config?.memory_max_characters ?? 6500)),
     );
-    const selected = selectRelevantMemories(memories ?? [], data.message, recent, {
+    const selected = selectRelevantMemories(memories ?? [], data.message, turnRecent, {
       maxItems: memoryMaxItems,
       maxCharacters: memoryMaxCharacters,
     });
@@ -812,7 +816,7 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
           : { type: "input_file", file_url: a.url },
       );
     }
-    const previous = recent.filter((x: any) => x.id !== userMessage.id).slice(-18);
+    const previous = turnRecent.filter((x: any) => x.id !== userMessage.id).slice(-18);
     const hpoFieldReadReply = hpoFieldReadConfirmation(hpoFieldRead);
     const hpoRouteCommandReply = hpoRouteCommandConfirmation(hpoRouteCommand);
     const routeStopReply = hpoRouteStopConfirmation(routeStopAction);
