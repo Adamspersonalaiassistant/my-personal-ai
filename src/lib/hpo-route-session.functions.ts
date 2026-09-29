@@ -76,6 +76,12 @@ export const buildHpoRouteFromSelection = createServerFn({ method: "POST" })
     if (existingError) throw existingError;
 
     if (existing) {
+      if (String(existing.status) !== "planned") {
+        throw new Error(
+          "This day already has an active HPO route. Open it in Planner and edit or re-optimize the existing route instead of replacing it.",
+        );
+      }
+
       const existingSource =
         existing.metadata && typeof existing.metadata === "object"
           ? clean(existing.metadata.source_channel)
