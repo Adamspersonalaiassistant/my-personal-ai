@@ -18,3 +18,21 @@
   --ring: oklch(0.59 0.15 250);
   color-scheme: light;
 }
+
+.hpo-crm .hpo-today > header {
+  order: 0;
+}
+.hpo-crm .hpo-today-overview {
+  order: 1;
+}
+.hpo-crm .hpo-today-next {
+  order: 2;
+}
+.hpo-crm .hpo-today-queue {
+  order: 3;
+}
+.hpo-crm
+  .hpo-today
+  > :not(header):not(.hpo-today-overview):not(.hpo-today-next):not(.hpo-today-queue) {
+  order: 4;
+}

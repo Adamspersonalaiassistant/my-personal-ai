@@ -2,24 +2,21 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
-  Activity,
   CalendarDays,
   ChevronRight,
-  Clock3,
   FileText,
-  MapPinned,
   MessageCircle,
   Navigation,
   Plus,
   Search,
   SlidersHorizontal,
-  UsersRound,
   X,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { HpoRoutePlanner } from "@/components/HpoRoutePlanner";
 import { HpoFieldToday } from "@/components/HpoFieldToday";
+import { HpoFieldNav, type HpoFieldView } from "@/components/HpoFieldNav";
 import { HpoAccountFieldDetail } from "@/components/HpoAccountFieldDetail";
 import { HpoEmerySheet, openHpoEmery } from "@/components/HpoEmerySheet";
 import { createHpoAccount, logHpoInteraction } from "@/lib/hpo.functions";
@@ -27,16 +24,10 @@ import { getHpoWorkspace, setHpoFieldAccountFollowup } from "@/lib/hpo-workspace
 import { getHpoFieldToday } from "@/lib/hpo-field.functions";
 import "@/components/hpo-accounts.css";
 
-type View = "today" | "map" | "accounts" | "activity";
+type View = HpoFieldView;
 type Workspace = Awaited<ReturnType<typeof getHpoWorkspace>>;
 type Account = Workspace["accounts"][number];
 type Touch = Workspace["interactions"][number];
-const tabs = [
-  { key: "today", label: "Today", icon: Clock3 },
-  { key: "map", label: "Map", icon: MapPinned },
-  { key: "accounts", label: "Accounts", icon: UsersRound },
-  { key: "activity", label: "Activity", icon: Activity },
-] as const;
 const field =
   "min-h-12 w-full rounded-md border border-border/70 bg-card/60 px-3 text-base text-foreground outline-none focus:border-primary";
 const date = (value: string | null | undefined) =>
@@ -147,189 +138,184 @@ function HpoWorkspace() {
   return (
     <AppShell
       title="HPO"
-      padded={view !== "map"}
+      padded={false}
       askEmery={`I'm working in HPO ${view}. Help me with my field accounts and route.`}
     >
-      <div
-        className={
-          view === "map"
-            ? "relative h-full min-h-0 min-w-0 overflow-hidden"
-            : "mx-auto max-w-5xl min-w-0 space-y-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
-        }
-      >
-        {view !== "map" ? (
-          <nav
-            aria-label="HPO field areas"
-            className="sticky top-0 z-20 grid grid-cols-4 gap-1 rounded-xl border border-slate-200 bg-white/96 p-1 shadow-sm backdrop-blur-md"
-          >
-            {tabs.map(({ key, label, icon: Icon }) => (
-              <Button
-                key={key}
-                type="button"
-                variant="ghost"
-                onClick={() => setView(key)}
-                aria-current={view === key ? "page" : undefined}
-                className={`h-11 min-w-0 flex-row gap-1 rounded-lg px-1 text-[10px] font-semibold ${view === key ? "bg-[#31486f] text-white hover:bg-[#31486f] hover:text-white" : "text-slate-500 hover:bg-[#d9f4e9] hover:text-[#31486f]"}`}
-              >
-                <Icon className="size-3.5" />
-                <span className="truncate">{label}</span>
-              </Button>
-            ))}
-          </nav>
-        ) : null}
-        {error && (
+      <div className="hpo-crm flex h-full min-h-0 min-w-0 flex-col bg-background text-foreground">
+        <HpoFieldNav view={view} onChange={setView} />
+        <div
+          className={
+            view === "map"
+              ? "relative min-h-0 min-w-0 flex-1 overflow-hidden"
+              : "min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]"
+          }
+        >
           <div
-            role="alert"
-            className="rounded-md border border-destructive/40 p-3 text-sm text-destructive"
+            className={
+              view === "map"
+                ? "h-full min-h-0"
+                : "mx-auto max-w-5xl space-y-4 px-3 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-4"
+            }
           >
-            {error}{" "}
-            <Button variant="ghost" className="ml-2 min-h-11" onClick={() => void refresh()}>
-              Retry
-            </Button>
-          </div>
-        )}
-        {view === "today" && initialResolved ? (
-          <HpoFieldToday key={`today-${revision}`} onOpenMap={() => setView("map")} />
-        ) : null}
-        {view === "map" && initialResolved ? (
-          <HpoRoutePlanner key={`map-${revision}`} onNavigateHpo={(next) => setView(next)} />
-        ) : null}
-        {((view === "accounts" || view === "activity") && loading) ||
-        ((view === "today" || view === "map") && !initialResolved) ? (
-          <p className="py-12 text-center text-sm text-muted-foreground">Opening HPO records…</p>
-        ) : null}
-        {view === "accounts" && data ? (
-          <Accounts
-            accounts={data.accounts}
-            limited={data.accountLimitReached}
-            onNote={(id) => {
-              setLogAccount(id);
-              setSheet("note");
-            }}
-            onEmery={(a) =>
-              openHpoEmery(
-                `I'm working with HPO account ${a.name} (account ID ${a.id}). Use its live relationship history, contacts, visits, and follow-ups to advise me on this account.`,
-                a.name,
-              )
-            }
-            onAdd={() =>
-              openHpoEmery(
-                "Add a new HPO account. Ask me only for the office name and physical street address if I haven't given them yet, then save it to HPO and plot it on the map.",
-                "Accounts",
-              )
-            }
-            onOpen={(id) => {
-              setNoteSavedAccount(null);
-              setSelected(id);
-            }}
-          />
-        ) : null}
-        {view === "activity" && data ? (
-          <ActivityView
-            data={data}
-            onOpen={setSelected}
-            onLog={(accountId, kind) => {
-              const target = data.accounts.find((item) => item.id === accountId);
-              openHpoEmery(
-                kind === "visit"
-                  ? `Log an HPO office visit${target ? ` for ${target.name}` : ""}. Ask me what happened and who I spoke with, then save it.`
-                  : `Log an HPO relationship touch${target ? ` for ${target.name}` : ""}. Ask me for the missing details and save it.`,
-                "Activity",
-              );
-            }}
-            onFollowup={(accountId) => {
-              const target = data.accounts.find((item) => item.id === accountId);
-              openHpoEmery(
-                `Update the next HPO follow-up${target ? ` for ${target.name}` : ""}. Ask me only for the missing action or date, then save it.`,
-                "Follow-up",
-              );
-            }}
-            onMore={() => void loadMore()}
-            loading={moreLoading}
-          />
-        ) : null}
-        {selected && (
-          <HpoAccountFieldDetail
-            accountId={selected}
-            revision={revision}
-            revealHistory={noteSavedAccount === selected}
-            onClose={() => setSelected(null)}
-            onChanged={() => void refresh()}
-            onNote={() => {
-              setLogAccount(selected);
-              setSheet("note");
-            }}
-            onLog={() =>
-              openHpoEmery(
-                `Log a visit for ${account?.name || "this HPO account"}. Ask me what happened and who I spoke with, then save it.`,
-                account?.name || "Account",
-              )
-            }
-            onFollowup={() => {
-              setLogAccount(selected);
-              setSheet("followup");
-            }}
-          />
-        )}
-        {sheet === "add" && (
-          <AccountSheet
-            onClose={() => setSheet(null)}
-            onSave={async (values) => {
-              await createAccount({ data: values });
-              setSheet(null);
-              await refresh();
-            }}
-          />
-        )}
-        {sheet === "log" && (
-          <TouchSheet
-            accounts={data?.accounts ?? []}
-            initialAccount={logAccount}
-            initialKind={logKind}
-            onClose={() => setSheet(null)}
-            onSave={async (values) => {
-              await logTouch({ data: values });
-              setSheet(null);
-              await refresh();
-            }}
-          />
-        )}
-        {sheet === "note" && (
-          <QuickNoteSheet
-            account={data?.accounts.find((item) => item.id === logAccount)}
-            onClose={() => setSheet(null)}
-            onSave={async (summary) => {
-              await logTouch({ data: { accountId: logAccount, interactionType: "note", summary } });
-              setNoteSavedAccount(logAccount);
-              setSheet(null);
-              await refresh();
-            }}
-          />
-        )}
-        {sheet === "followup" && (
-          <FollowupSheet
-            account={data?.accounts.find((item) => item.id === logAccount)}
-            onClose={() => setSheet(null)}
-            onSave={async (values) => {
-              await setFollowup({ data: values });
-              setSheet(null);
-              await refresh();
-            }}
-          />
-        )}
+            {error && (
+              <div
+                role="alert"
+                className="rounded-md border border-destructive/40 p-3 text-sm text-destructive"
+              >
+                {error}{" "}
+                <Button variant="ghost" className="ml-2 min-h-11" onClick={() => void refresh()}>
+                  Retry
+                </Button>
+              </div>
+            )}
+            {view === "today" && initialResolved ? (
+              <HpoFieldToday key={`today-${revision}`} onOpenMap={() => setView("map")} />
+            ) : null}
+            {view === "map" && initialResolved ? (
+              <HpoRoutePlanner key={`map-${revision}`} onNavigateHpo={(next) => setView(next)} />
+            ) : null}
+            {((view === "accounts" || view === "activity") && loading) ||
+            ((view === "today" || view === "map") && !initialResolved) ? (
+              <p className="py-12 text-center text-sm text-muted-foreground">
+                Opening HPO records…
+              </p>
+            ) : null}
+            {view === "accounts" && data ? (
+              <Accounts
+                accounts={data.accounts}
+                limited={data.accountLimitReached}
+                onNote={(id) => {
+                  setLogAccount(id);
+                  setSheet("note");
+                }}
+                onEmery={(a) =>
+                  openHpoEmery(
+                    `I'm working with HPO account ${a.name} (account ID ${a.id}). Use its live relationship history, contacts, visits, and follow-ups to advise me on this account.`,
+                    a.name,
+                  )
+                }
+                onAdd={() =>
+                  openHpoEmery(
+                    "Add a new HPO account. Ask me only for the office name and physical street address if I haven't given them yet, then save it to HPO and plot it on the map.",
+                    "Accounts",
+                  )
+                }
+                onOpen={(id) => {
+                  setNoteSavedAccount(null);
+                  setSelected(id);
+                }}
+              />
+            ) : null}
+            {view === "activity" && data ? (
+              <ActivityView
+                data={data}
+                onOpen={setSelected}
+                onLog={(accountId, kind) => {
+                  const target = data.accounts.find((item) => item.id === accountId);
+                  openHpoEmery(
+                    kind === "visit"
+                      ? `Log an HPO office visit${target ? ` for ${target.name}` : ""}. Ask me what happened and who I spoke with, then save it.`
+                      : `Log an HPO relationship touch${target ? ` for ${target.name}` : ""}. Ask me for the missing details and save it.`,
+                    "Activity",
+                  );
+                }}
+                onFollowup={(accountId) => {
+                  const target = data.accounts.find((item) => item.id === accountId);
+                  openHpoEmery(
+                    `Update the next HPO follow-up${target ? ` for ${target.name}` : ""}. Ask me only for the missing action or date, then save it.`,
+                    "Follow-up",
+                  );
+                }}
+                onMore={() => void loadMore()}
+                loading={moreLoading}
+              />
+            ) : null}
+            {selected && (
+              <HpoAccountFieldDetail
+                accountId={selected}
+                revision={revision}
+                revealHistory={noteSavedAccount === selected}
+                onClose={() => setSelected(null)}
+                onChanged={() => void refresh()}
+                onNote={() => {
+                  setLogAccount(selected);
+                  setSheet("note");
+                }}
+                onLog={() =>
+                  openHpoEmery(
+                    `Log a visit for ${account?.name || "this HPO account"}. Ask me what happened and who I spoke with, then save it.`,
+                    account?.name || "Account",
+                  )
+                }
+                onFollowup={() => {
+                  setLogAccount(selected);
+                  setSheet("followup");
+                }}
+              />
+            )}
+            {sheet === "add" && (
+              <AccountSheet
+                onClose={() => setSheet(null)}
+                onSave={async (values) => {
+                  await createAccount({ data: values });
+                  setSheet(null);
+                  await refresh();
+                }}
+              />
+            )}
+            {sheet === "log" && (
+              <TouchSheet
+                accounts={data?.accounts ?? []}
+                initialAccount={logAccount}
+                initialKind={logKind}
+                onClose={() => setSheet(null)}
+                onSave={async (values) => {
+                  await logTouch({ data: values });
+                  setSheet(null);
+                  await refresh();
+                }}
+              />
+            )}
+            {sheet === "note" && (
+              <QuickNoteSheet
+                account={data?.accounts.find((item) => item.id === logAccount)}
+                onClose={() => setSheet(null)}
+                onSave={async (summary) => {
+                  await logTouch({
+                    data: { accountId: logAccount, interactionType: "note", summary },
+                  });
+                  setNoteSavedAccount(logAccount);
+                  setSheet(null);
+                  await refresh();
+                }}
+              />
+            )}
+            {sheet === "followup" && (
+              <FollowupSheet
+                account={data?.accounts.find((item) => item.id === logAccount)}
+                onClose={() => setSheet(null)}
+                onSave={async (values) => {
+                  await setFollowup({ data: values });
+                  setSheet(null);
+                  await refresh();
+                }}
+              />
+            )}
 
-        {view !== "map" && view !== "accounts" ? (
-          <Button
-            type="button"
-            onClick={() => openHpoEmery(emeryContextPrompt, `HPO · ${view}`)}
-            className="fixed bottom-[calc(5.15rem+env(safe-area-inset-bottom))] right-3 z-[55] flex size-11 items-center justify-center rounded-full border border-primary/20 bg-primary text-xs font-semibold text-primary-foreground shadow-[0_10px_24px_rgba(0,0,0,0.3)] sm:h-12 sm:w-auto sm:gap-2 sm:px-4 md:bottom-6 md:right-6"
-            aria-label="Ask Emery about HPO"
-          >
-            <MessageCircle className="size-4" />
-            <span className="hidden sm:inline">Emery</span>
-          </Button>
-        ) : null}
-        <HpoEmerySheet onChanged={() => void refresh()} />
+            {view !== "map" && view !== "accounts" ? (
+              <Button
+                type="button"
+                onClick={() => openHpoEmery(emeryContextPrompt, `HPO · ${view}`)}
+                className="fixed bottom-[calc(5.15rem+env(safe-area-inset-bottom))] right-3 z-[55] flex size-11 items-center justify-center rounded-full border border-primary/20 bg-primary text-xs font-semibold text-primary-foreground shadow-[0_10px_24px_rgba(0,0,0,0.3)] sm:h-12 sm:w-auto sm:gap-2 sm:px-4 md:bottom-6 md:right-6"
+                aria-label="Ask Emery about HPO"
+              >
+                <MessageCircle className="size-4" />
+                <span className="hidden sm:inline">Emery</span>
+              </Button>
+            ) : null}
+            <HpoEmerySheet onChanged={() => void refresh()} />
+          </div>
+        </div>
       </div>
     </AppShell>
   );
@@ -380,8 +366,8 @@ function Accounts({
   });
   const activeFilters = [type, stage, city].filter((value) => value !== "all").length;
   return (
-    <section className="hpo-crm min-w-0 space-y-3 rounded-lg bg-background p-2 text-foreground sm:p-4">
-      <div className="sticky top-[4.75rem] z-10 -mx-2 space-y-2 border-b border-border bg-background/95 px-2 pb-2 pt-1 shadow-sm backdrop-blur-md sm:-mx-4 sm:px-4">
+    <section className="min-w-0 space-y-3">
+      <div className="sticky top-0 z-10 -mx-3 space-y-2 border-b border-border bg-background/95 px-3 pb-3 pt-1 backdrop-blur-md sm:-mx-4 sm:px-4">
         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
           <div className="min-w-0">
             <h1 className="text-lg font-semibold">Accounts</h1>
@@ -450,7 +436,7 @@ function Accounts({
           return (
             <article
               key={a.id}
-              className="min-w-0 overflow-hidden rounded-md border border-border bg-card shadow-sm"
+              className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
             >
               <Button
                 type="button"
@@ -665,9 +651,12 @@ function ActivityView({
       (filter === "visit" ? i.interaction_type === "visit" : i.interaction_type !== "visit"),
   );
   return (
-    <section className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="text-lg font-semibold">Activity</h1>
+    <section className="space-y-3">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold">Activity</h1>
+          <p className="text-xs text-muted-foreground">{data.interactions.length} recent touches</p>
+        </div>
         <div className="grid grid-cols-2 gap-1.5">
           <Button className="h-11 px-2.5 text-xs" onClick={() => onLog("", "visit")}>
             <Plus /> Log Visit
@@ -682,7 +671,7 @@ function ActivityView({
         </div>
       </div>
       {due.length > 0 && (
-        <div className="border-y border-border/60 py-2">
+        <div className="rounded-2xl border border-border bg-card px-3 py-3 shadow-sm">
           <h2 className="mb-1 text-xs font-semibold uppercase text-primary">
             Follow-ups due · {due.length}
           </h2>
@@ -713,7 +702,7 @@ function ActivityView({
         </div>
       )}
       {data.meetings.length > 0 && (
-        <div className="border-b border-border/60 pb-3">
+        <div className="rounded-2xl border border-border bg-card p-3 shadow-sm">
           <h2 className="mb-2 text-xs font-semibold uppercase text-primary">Upcoming</h2>
           {data.meetings.slice(0, 5).map((meeting) => (
             <div key={meeting.id} className="flex gap-2 py-1.5 text-xs">
@@ -726,7 +715,7 @@ function ActivityView({
           ))}
         </div>
       )}
-      <div className="flex gap-1 border-b border-border/60 pb-2">
+      <div className="flex gap-1.5 overflow-x-auto pb-1">
         {(
           [
             ["all", "All"],
@@ -737,20 +726,20 @@ function ActivityView({
           <Button
             key={key}
             variant="ghost"
-            className={`h-11 px-3 text-xs ${filter === key ? "bg-primary/12 text-primary" : "text-muted-foreground"}`}
+            className={`h-11 shrink-0 rounded-xl border border-border px-3 text-xs ${filter === key ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground"}`}
             onClick={() => setFilter(key)}
           >
             {label}
           </Button>
         ))}
       </div>
-      <div className="divide-y divide-border/50">
+      <div className="space-y-2">
         {items.map((i: Touch) => (
           <Button
             key={i.id}
             variant="ghost"
             onClick={() => onOpen(i.account_id)}
-            className="h-auto min-h-[76px] w-full justify-start rounded-none px-1 py-2.5 text-left hover:bg-card/50"
+            className="h-auto min-h-[76px] w-full justify-start rounded-2xl border border-border bg-card px-3 py-3 text-left shadow-sm hover:bg-muted/40"
           >
             <span className="min-w-0 whitespace-normal">
               <span className="block text-sm font-semibold">

@@ -891,7 +891,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
 
   if (loading) {
     return (
-      <section className="emery-glass flex min-h-64 items-center justify-center rounded-[1.6rem] text-sm text-muted-foreground">
+      <section className="flex min-h-64 items-center justify-center rounded-2xl border border-border bg-card text-sm text-muted-foreground">
         Opening today's field route…
       </section>
     );
@@ -899,33 +899,49 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
 
   if (!route) {
     return (
-      <section className="emery-glass rounded-[1.6rem] p-6 text-center">
-        <RouteIcon className="mx-auto size-7 text-primary" />
-        <h2 className="mt-3 text-base font-semibold">No route yet today</h2>
-        <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-muted-foreground">
-          Build a route from the Map. Today will automatically become your field execution screen.
-        </p>
-        <button
-          type="button"
-          onClick={onOpenMap}
-          className="emery-press mt-4 min-h-11 rounded-xl bg-primary px-4 text-xs font-semibold text-primary-foreground"
-        >
-          Build Today's Route
-        </button>
-      </section>
+      <div className="space-y-3">
+        <header>
+          <h1 className="text-lg font-semibold">Today</h1>
+          <p className="text-xs text-muted-foreground">
+            {new Date().toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" })}{" "}
+            · No route planned
+          </p>
+        </header>
+        <section className="rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
+          <RouteIcon className="mx-auto size-7 text-primary" />
+          <h2 className="mt-3 text-base font-semibold">No route yet today</h2>
+          <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-muted-foreground">
+            Build a route from the Map. Today will automatically become your field execution screen.
+          </p>
+          <Button
+            type="button"
+            onClick={onOpenMap}
+            className="mt-4 min-h-11 rounded-xl px-4 text-sm font-semibold"
+          >
+            Build Route
+          </Button>
+        </section>
+      </div>
     );
   }
 
   return (
-    <div className="space-y-3">
-      <section className="overflow-hidden rounded-2xl border border-emerald-200/80 bg-white text-slate-900 shadow-[0_12px_32px_rgba(15,23,42,0.12)]">
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 bg-[#c8f2e2] px-3 py-3">
+    <div className="hpo-today flex flex-col gap-3">
+      <header>
+        <h1 className="text-lg font-semibold">Today</h1>
+        <p className="text-xs text-muted-foreground">
+          {dateOnly(route.route_date)} · {data.remaining} remaining ·{" "}
+          {String(route.status).replaceAll("_", " ")}
+        </p>
+      </header>
+      <section className="hpo-today-overview overflow-hidden rounded-2xl border border-border bg-card text-foreground shadow-sm">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-border bg-muted px-3 py-3">
           <div className="min-w-0">
             <span
               className={`inline-flex min-h-8 items-center gap-1.5 rounded-full border px-2.5 text-[9px] font-semibold ${
                 offline
                   ? "border-amber-500/25 bg-amber-50 text-amber-700"
-                  : "border-emerald-500/20 bg-white/65 text-emerald-700"
+                  : "border-primary/20 bg-card text-primary"
               }`}
             >
               {offline ? <WifiOff className="size-3" /> : <Wifi className="size-3" />}
@@ -933,15 +949,13 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
             </span>
           </div>
           <div className="text-center">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#31486f]">
-              HPO Field
-            </p>
-            <h2 className="mt-0.5 text-lg font-bold tracking-tight text-[#1f3354]">Daily Route</h2>
+            <p className="text-[10px] font-semibold uppercase text-primary">HPO Field</p>
+            <h2 className="mt-0.5 text-lg font-bold text-foreground">Daily Route</h2>
           </div>
           <button
             type="button"
             onClick={() => void load()}
-            className="ml-auto flex size-11 items-center justify-center rounded-xl border border-white/70 bg-white/70 text-[#31486f] shadow-sm"
+            className="ml-auto flex size-11 items-center justify-center rounded-xl border border-border bg-card text-primary shadow-sm"
             aria-label="Refresh today's route"
           >
             <RefreshCw className="size-3.5" />
@@ -962,7 +976,9 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                   </p>
                   <span
                     className={`mx-auto mt-1 flex size-9 items-center justify-center rounded-full text-xs font-semibold ${
-                      active ? "bg-[#10b981] text-white shadow-sm" : "text-slate-700"
+                      active
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground"
                     }`}
                   >
                     {day.getDate()}
@@ -983,23 +999,21 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                 {data.completed}/{data.total} stops complete · {data.remaining} remaining
               </p>
             </div>
-            <span className="shrink-0 rounded-full bg-[#d9f4e9] px-2.5 py-1 text-[10px] font-semibold text-[#047857]">
+            <span className="shrink-0 rounded-full bg-accent px-2.5 py-1 text-[10px] font-semibold text-primary">
               {progressPercent}%
             </span>
           </div>
 
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
             <div
-              className="h-full rounded-full bg-[#10b981] transition-[width]"
+              className="h-full rounded-full bg-primary transition-[width]"
               style={{ width: `${progressPercent}%` }}
             />
           </div>
 
           {data.lastCompletedStop || nextStop ? (
             <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-[#31486f]">
-                Route context
-              </p>
+              <p className="text-[9px] font-semibold uppercase text-primary">Route context</p>
               <p className="mt-1 text-[11px] leading-5 text-slate-600">
                 {data.lastCompletedStop
                   ? `Last: Stop ${data.lastCompletedStop.stop_order} · ${data.lastCompletedStop.office_name || "completed"}.`
@@ -1034,16 +1048,14 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
 
       <section
         aria-label="Ordered route stops"
-        className="overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-[0_10px_28px_rgba(15,23,42,0.1)]"
+        className="hpo-today-queue overflow-hidden rounded-2xl border border-border bg-card text-foreground shadow-sm"
       >
         <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2.5">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#31486f]">
-              Daily Route
-            </p>
+            <p className="text-[10px] font-semibold uppercase text-primary">Daily Route</p>
             <h3 className="text-sm font-semibold">{data.total} scheduled stops</h3>
           </div>
-          <span className="rounded-full bg-[#d9f4e9] px-2.5 py-1 text-[10px] font-semibold text-[#047857]">
+          <span className="rounded-full bg-accent px-2.5 py-1 text-[10px] font-semibold text-primary">
             {data.remaining} remaining
           </span>
         </div>
@@ -1055,10 +1067,10 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
               return (
                 <div
                   key={stop.id}
-                  className={`flex min-h-[72px] items-center gap-2 px-2 py-2 ${done ? "bg-slate-50/80" : "bg-white"}`}
+                  className={`flex min-h-[72px] items-center gap-2 px-2 py-2 ${done ? "bg-muted/50" : "bg-card"}`}
                 >
                   <GripVertical className="size-5 shrink-0 text-slate-300" />
-                  <span className="w-7 shrink-0 text-right text-sm font-bold text-[#31486f]">
+                  <span className="w-7 shrink-0 text-right text-sm font-bold text-primary">
                     {stop.stop_order}.
                   </span>
                   <div className="min-w-0 flex-1">
@@ -1079,7 +1091,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                   <div className="flex shrink-0 items-center">
                     {done ? (
                       <SquareCheckBig
-                        className="mr-1 size-5 text-[#10b981]"
+                        className="mr-1 size-5 text-primary"
                         aria-label="Completed stop"
                       />
                     ) : null}
@@ -1136,7 +1148,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
 
       {nextStop ? (
         <>
-          <section className="border-b border-border/60 pb-3">
+          <section className="hpo-today-next rounded-2xl border border-border bg-card p-3 shadow-sm">
             <div className="flex items-start gap-3">
               <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-sm font-bold text-primary-foreground">
                 {nextStop.stop_order}
@@ -1259,11 +1271,11 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
               <p className="emery-kicker">Account Brief</p>
               <h3 className="mt-1.5 text-sm font-semibold">{accountContext.account?.name}</h3>
               <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-muted-foreground">
-                <div className="emery-surface rounded-xl p-2.5">
+                <div className="rounded-xl border border-border bg-muted/50 p-2.5">
                   <p className="font-semibold text-foreground">Last touch</p>
                   <p className="mt-1">{dateOnly(accountContext.account?.last_touch_at)}</p>
                 </div>
-                <div className="emery-surface rounded-xl p-2.5">
+                <div className="rounded-xl border border-border bg-muted/50 p-2.5">
                   <p className="font-semibold text-foreground">Follow-up</p>
                   <p className="mt-1">{accountContext.account?.next_action || "None saved"}</p>
                 </div>
@@ -1408,7 +1420,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
           ) : null}
         </>
       ) : (
-        <section className="emery-glass rounded-[1.6rem] p-5 text-center">
+        <section className="rounded-2xl border border-border bg-card p-5 text-center shadow-sm">
           <CheckCircle2 className="mx-auto size-7 text-primary" />
           <h3 className="mt-3 text-base font-semibold">Every stop has an outcome</h3>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
@@ -1422,7 +1434,10 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
           <p className="emery-kicker">Nearby Backup</p>
           <div className="mt-2 space-y-2">
             {nearbyOptions.slice(0, 3).map((option, index) => (
-              <div key={option.key} className="emery-surface rounded-xl p-3">
+              <div
+                key={option.key}
+                className="rounded-2xl border border-border bg-card p-3 shadow-sm"
+              >
                 <div className="flex items-start gap-3">
                   <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-primary/[0.08] text-xs font-semibold text-primary">
                     {index + 1}
@@ -1473,13 +1488,6 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
           className="emery-press flex min-h-12 items-center justify-center gap-2 rounded-xl border border-border/45 px-3 text-xs font-semibold text-muted-foreground"
         >
           <CheckCircle2 className="size-4" /> Copy Visits
-        </button>
-        <button
-          type="button"
-          onClick={onOpenMap}
-          className="emery-press flex min-h-12 items-center justify-center gap-2 rounded-xl border border-border/45 px-3 text-xs font-semibold text-muted-foreground"
-        >
-          <RouteIcon className="size-4" /> Open Map
         </button>
         <button
           type="button"
