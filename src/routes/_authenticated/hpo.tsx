@@ -101,6 +101,7 @@ function HpoWorkspace() {
   const [moreLoading, setMoreLoading] = useState(false);
   const [revision, setRevision] = useState(0);
   const [initialResolved, setInitialResolved] = useState(false);
+  const [todayContext, setTodayContext] = useState<{ routeId: string | null; stopId: string | null }>({ routeId: null, stopId: null });
 
   const refresh = useCallback(async () => {
     try {
@@ -123,6 +124,10 @@ function HpoWorkspace() {
     void readToday({})
       .then((result) => {
         if (cancelled) return;
+        setTodayContext({
+          routeId: result.route?.id ?? null,
+          stopId: result.nextStop?.id ?? null,
+        });
         if (
           result.route &&
           (result.route.route_date === result.today ||
@@ -345,7 +350,23 @@ function HpoWorkspace() {
                 <span className="hidden sm:inline">Emery</span>
               </Button>
             ) : null}
-            <HpoEmerySheet onChanged={() => void refresh()} />
+            <HpoEmerySheet
+              routeId={todayContext.routeId}
+              stopId={todayContext.stopId}
+              selectedAccountId={selected}
+              surface={`hpo.${view}`}
+              onChanged={() => {
+                void refresh();
+                void readToday({})
+                  .then((result) =>
+                    setTodayContext({
+                      routeId: result.route?.id ?? null,
+                      stopId: result.nextStop?.id ?? null,
+                    }),
+                  )
+                  .catch(() => undefined);
+              }}
+            />
           </div>
         </div>
       </div>
