@@ -778,7 +778,8 @@ function requestedAction(message: string): HpoRouteCommandAction {
   if (
     /\b(i want to|help me|lets|let us|plan)\b.*\b(build|plan|make)\b.*\broute\b/.test(text) ||
     /\b(?:which|what|top|best)\b.*\b(?:offices?|accounts?|prospects?)\b.*\b(?:visit|see|route)\b/.test(text) ||
-    /\bwhere should i (?:go|visit)\b/.test(text)
+    /\b(?:top|best|good)\b.*\b(?:prospects?|accounts?|offices?)\b.*\b(?:in|around)\b/.test(text) ||
+    /\bwhere should i (?:go|visit) in\b/.test(text)
   )
     return "hpo.route.recommend";
   if (/\b(build me|create|make)\b.*\broute\b/.test(text)) return "hpo.route.create";
