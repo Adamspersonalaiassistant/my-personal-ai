@@ -114,11 +114,12 @@ export const buildHpoRouteFromSelection = createServerFn({ method: "POST" })
         );
       }
 
-      await db
+      const { error: meetingCleanupError } = await db
         .from("meetings")
         .delete()
         .eq("user_id", userId)
-        .eq("metadata->>hpo_route_id", existing.id);
+        .contains("metadata", { hpo_route_id: existing.id });
+      if (meetingCleanupError) throw meetingCleanupError;
       const { error: deleteError } = await db
         .from("hpo_route_plans")
         .delete()
