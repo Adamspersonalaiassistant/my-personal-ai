@@ -8,6 +8,7 @@ import { processHpoRouteCommand } from "@/lib/hpo-route-command-controller";
 import { getHpoFieldTodayCore } from "@/lib/hpo-field.functions";
 import { undoLatestEligibleExecutionCore } from "./undo.ts";
 import { getTodaysPlanCore } from "./today-plan.ts";
+import { armExpectedFieldNoteTargetCore } from "@/lib/emery-field-session.functions";
 
 function localDate(timeZone: string) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -80,6 +81,12 @@ export async function processEmeryMultiIntentDayPlan(input: {
     null;
   let fieldState: any = null;
   let meetingRows: any[] = [];
+  let resolvedTarget: {
+    accountId: string | null;
+    prospectId: string | null;
+    meetingId: string | null;
+    label: string;
+  } | null = null;
 
   const execution = await executeActionPlan({
     plan,
@@ -161,18 +168,33 @@ export async function processEmeryMultiIntentDayPlan(input: {
           name: row.name,
           email: row.email,
           phone: row.phone,
+          accountId: row.account_id,
+          prospectId: null,
+          meetingId: null,
         }));
         const accountCandidates = (accounts.data ?? []).map((row: any) => ({
           id: `account:${row.id}`,
           name: row.name,
           address: row.address,
+          accountId: row.id,
+          prospectId: null,
+          meetingId: null,
         }));
         const meetingCandidates = meetingRows.flatMap((row: any) => [
-          { id: `meeting:${row.id}`, name: row.title },
+          {
+            id: `meeting:${row.id}`,
+            name: row.title,
+            accountId: null,
+            prospectId: null,
+            meetingId: row.id,
+          },
           ...(Array.isArray(row.participants)
             ? row.participants.map((name: unknown, index: number) => ({
                 id: `meeting:${row.id}:participant:${index}`,
                 name: String(name),
+                accountId: null,
+                prospectId: null,
+                meetingId: row.id,
               }))
             : []),
         ]);
@@ -203,6 +225,12 @@ export async function processEmeryMultiIntentDayPlan(input: {
             undoData: null,
             sourceMessageId: input.sourceMessageId,
           });
+        resolvedTarget = {
+          accountId: resolution.value.accountId ?? null,
+          prospectId: resolution.value.prospectId ?? null,
+          meetingId: resolution.value.meetingId ?? null,
+          label: resolution.value.name,
+        };
         return receipt({
           id: `resolve:${intent.id}:${input.sourceMessageId}`,
           capability: intent.capability,
@@ -302,8 +330,34 @@ export async function processEmeryMultiIntentDayPlan(input: {
       },
       "hpo.field_session.arm_note_target": async (intent, state) => {
         const routeReceipt = state.receipts.get("hpo.route:hpo.route.set_stops");
+        let executionRunId = `session:${input.sourceMessageId}`;
+        if (!routeReceipt) {
+          if (!resolvedTarget) throw new Error("The expected note target was not resolved.");
+          const armed: any = await armExpectedFieldNoteTargetCore({
+            db: input.db,
+            userId: input.userId,
+            sessionDate: targetDate,
+            routeId: context.currentRouteId,
+            stopId: context.currentStopId,
+            accountId: resolvedTarget.accountId,
+            prospectId: resolvedTarget.prospectId,
+            meetingId: resolvedTarget.meetingId,
+            label: resolvedTarget.label,
+            idempotencyKey: `message:${input.sourceMessageId}:hpo.field_session.arm_note_target`,
+            sourceMessageId: input.sourceMessageId,
+            sourceChannel: input.sourceChannel,
+          });
+          executionRunId = armed.executionRunId;
+          context.fieldSessionId = armed.session?.id ?? context.fieldSessionId;
+          context.expectedNoteTargetId =
+            armed.session?.expected_note_stop_id ??
+            armed.session?.expected_note_account_id ??
+            armed.session?.expected_note_prospect_id ??
+            armed.session?.expected_note_meeting_id ??
+            null;
+        }
         return receipt({
-          id: `session:${input.sourceMessageId}`,
+          id: executionRunId,
           capability: intent.capability,
           action: intent.action,
           target: { type: "hpo_route_stop", id: context.currentStopId },
