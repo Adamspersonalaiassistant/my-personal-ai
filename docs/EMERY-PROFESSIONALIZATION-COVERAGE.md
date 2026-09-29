@@ -212,11 +212,11 @@ OPEN is a working status only and must be eliminated before Milestone O complete
 | 201 | OPEN | Calendar / integrations / performance / Chat latency audit pending | Pending assigned milestone | Pending | — |
 | 202 | OPEN | Calendar / integrations / performance / Chat latency audit pending | Pending assigned milestone | Pending | — |
 | 203 | OPEN | Calendar / integrations / performance / Chat latency audit pending | Pending assigned milestone | Pending | — |
-| 204 | OPEN | memory / types / orchestration architecture / undo audit pending | Pending assigned milestone | Pending | — |
-| 205 | OPEN | memory / types / orchestration architecture / undo audit pending | Pending assigned milestone | Pending | — |
-| 206 | OPEN | memory / types / orchestration architecture / undo audit pending | Pending assigned milestone | Pending | — |
-| 207 | OPEN | memory / types / orchestration architecture / undo audit pending | Pending assigned milestone | Pending | — |
-| 208 | OPEN | memory / types / orchestration architecture / undo audit pending | Pending assigned milestone | Pending | — |
+| 204 | FIXED + VERIFIED | Chat and Voice lacked one typed deterministic request context contract | Added `RequestContext` with entry, surface, HPO selection, session, location, receipts and health | TypeScript passes | `orchestration.types.ts` |
+| 205 | FIXED + VERIFIED | A recognized domain was used as an execution gate instead of a multi-intent plan | Added typed `ActionPlan` / `PlannedIntent` with reads, writes, dependencies, risk and expected receipts | Exact multi-intent fixture passes | `planner.ts`; `validate:orchestration` |
+| 206 | FIXED + VERIFIED | Capability descriptions were prompt text rather than typed operational definitions | Added typed registry with mode, risk, idempotency, confirmation and health keys | TypeScript + focused ESLint pass | `capability-registry.ts` |
+| 207 | FIXED + VERIFIED | Confirmation decisions were scattered and not risk-based | Added centralized low/medium/high risk policy and confirmation rules | Unit assertions and TypeScript pass | `risk-policy.ts` |
+| 208 | FIXED + VERIFIED | Multi-operation results had no shared partial-success aggregation | Added structured receipts and deterministic aggregate outcome | Partial-success regression passes | `receipt-aggregator.ts`; `validate:orchestration` |
 | 209 | OPEN | memory / types / orchestration architecture / undo audit pending | Pending assigned milestone | Pending | — |
 | 210 | OPEN | memory / types / orchestration architecture / undo audit pending | Pending assigned milestone | Pending | — |
 | 211 | OPEN | memory / types / orchestration architecture / undo audit pending | Pending assigned milestone | Pending | — |
@@ -238,7 +238,7 @@ OPEN is a working status only and must be eliminated before Milestone O complete
 | 227 | OPEN | telemetry / self-awareness / system health audit pending | Pending assigned milestone | Pending | — |
 | 228 | OPEN | telemetry / self-awareness / system health audit pending | Pending assigned milestone | Pending | — |
 | 229 | OPEN | telemetry / self-awareness / system health audit pending | Pending assigned milestone | Pending | — |
-| 230 | OPEN | executable QA audit pending | Pending assigned milestone | Pending | — |
+| 230 | FIXED + VERIFIED | The binding Jason regression existed only in prose | Added executable exact sentence plus three realistic phrasing variants | `npm run validate:orchestration` passes | `scripts/validate-emery-orchestration.mjs` |
 | 231 | OPEN | executable QA audit pending | Pending assigned milestone | Pending | — |
 | 232 | OPEN | executable QA audit pending | Pending assigned milestone | Pending | — |
 | 233 | OPEN | executable QA audit pending | Pending assigned milestone | Pending | — |
@@ -279,4 +279,3 @@ OPEN is a working status only and must be eliminated before Milestone O complete
 | 268 | OPEN | professional-product acceptance standard audit pending | Pending assigned milestone | Pending | — |
 | 269 | OPEN | professional-product acceptance standard audit pending | Pending assigned milestone | Pending | — |
 | 270 | OPEN | professional-product acceptance standard audit pending | Pending assigned milestone | Pending | — |
-

@@ -14,9 +14,9 @@ Last updated: 2026-09-29
 
 | Milestone | Status | Evidence |
 | --- | --- | --- |
-| A — baseline, ledgers, regression reproduction | IN PROGRESS | Calendar recognition currently gates every HPO controller in emery.functions.ts. |
-| B — typed context/plan/capabilities/risk/receipts | PENDING | — |
-| C — multi-intent planner/entity resolver/Jason regression | PENDING | — |
+| A — baseline, ledgers, regression reproduction | COMPLETE | Baseline checkpoint f4559700; 270 rows present; Calendar-recognition gate reproduced. |
+| B — typed context/plan/capabilities/risk/receipts | COMPLETE | Typed RequestContext, ActionPlan, entity result, risk policy, registry, safe errors and receipt aggregation pass TypeScript/lint. |
+| C — multi-intent planner/entity resolver/Jason regression | IN PROGRESS | Exact Jason sentence plus three variants generate Calendar + entity + HPO route operations; runtime composition remains. |
 | D — Today's Plan/Field Session/safe set-stops | PENDING | — |
 | E — shared Voice context/Talk to Emery/audition | PENDING | — |
 | F — route reliability/errors/scoring | PENDING | — |
@@ -35,7 +35,7 @@ Last updated: 2026-09-29
 - sendEmeryMessage is a monolithic composition root.
 - Calendar executes first and calendarAction.recognized suppresses HPO read, route, stop, and relationship controllers—even when Calendar recognized but did not perform.
 - Execution ledger already provides begin/complete/clarify/fail/recent receipt primitives and should be extended rather than replaced.
-- Existing capability registry is descriptive but not yet a typed executable registry.
+- A typed capability registry now supplements the existing descriptive capability prompt; runtime handlers remain to be wired through the central executor.
 - Improvement backlog, self-evaluations, metrics, rollback, and runtime events already exist and should be connected into capability health rather than duplicated.
 - HPO production UI is dark and Leaflet is the protected map engine.
 - Controlled prospect-write functions exist and must be extended, never replaced by unrestricted SQL.
@@ -49,11 +49,12 @@ Last updated: 2026-09-29
 ## Tests
 
 - Existing gates discovered: build, TypeScript, phase0, behavior, HPO Field OS, CRM-write validator, ESLint.
-- Critical Jason multi-intent fixture does not yet exist and is the first executable regression target.
+- `validate:orchestration` covers the exact Jason sentence, three natural variants, recognition-vs-completion, partial success, deterministic entity resolution, and safe error serialization.
+- TypeScript and focused ESLint pass for the new orchestration modules.
 
 ## Blockers
 
-- None for Milestone A.
+- None for Milestones A–C.
 - External OAuth/native platform limitations must not block unrelated milestones.
 
 ## Deployment
@@ -63,9 +64,8 @@ Last updated: 2026-09-29
 
 ## Latest safe commit
 
-- Baseline: 5f7af39e677e225cf4b56d87cc2ff164de61db14
+- Baseline checkpoint: f4559700b7bc966d739a8574430efb9cc7d493eb
 
 ## Next exact action
 
-Create typed orchestration contracts and an executable natural-language regression fixture proving that Calendar recognition cannot suppress HPO route planning.
-
+Wire the planner into `sendEmeryMessage`, replace recognition-based suppression with dependency-aware execution, and aggregate all performed outcomes into one response.
