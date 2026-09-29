@@ -1260,7 +1260,7 @@ export async function getHpoNearbyBackupsCore(input: {
     db
       .from("hpo_accounts")
       .select(
-        "id,name,account_type,specialty,address,city,latitude,longitude,priority,owner_name,last_touch_at,next_action,next_action_due_at,tags,status",
+        "id,name,account_type,specialty,address,city,latitude,longitude,priority,owner_name,last_touch_at,next_action,next_action_due_at,tags,status,relationship_stage,relationship_health,source_origin",
       )
       .eq("user_id", input.userId)
       .eq("status", "active")
@@ -1304,7 +1304,11 @@ export async function getHpoNearbyBackupsCore(input: {
         lastTouchAt: row.last_touch_at,
         nextAction: row.next_action,
         nextActionDueAt: row.next_action_due_at,
-        detail: [row.account_type, row.specialty].filter(Boolean).join(" · "),
+        relationshipStage: row.relationship_stage,
+        relationshipHealth: row.relationship_health,
+        sourceOrigin: row.source_origin,
+        historyKnown: Boolean(row.last_touch_at) || !["prospect", "prospecting"].includes(String(row.relationship_stage ?? "").toLowerCase()),
+        detail: [row.account_type, row.specialty, row.relationship_stage].filter(Boolean).join(" · "),
         directMiles: haversineMiles(
           origin.lat,
           origin.lon,
@@ -1368,16 +1372,31 @@ export async function getHpoNearbyBackupsCore(input: {
       const overdue = row.nextActionDueAt && Date.parse(row.nextActionDueAt) < now ? 1 : 0;
       const daysSinceTouch = row.lastTouchAt
         ? Math.max(0, Math.floor((now - Date.parse(row.lastTouchAt)) / 86400000))
-        : row.kind === "account"
-          ? 120
-          : 0;
+        : null;
+      const stage = String((row as any).relationshipStage ?? "").toLowerCase();
+      const health = String((row as any).relationshipHealth ?? "").toLowerCase();
+      const relationshipBoost =
+        stage === "key_account" || stage === "key account" ? 24 :
+        stage === "active" || stage === "established" ? 18 :
+        stage === "warm" || stage === "reactivation" ? 12 :
+        stage === "dormant" ? 8 : 0;
+      const healthBoost =
+        health === "at_risk" || health === "at risk" ? 12 :
+        health === "strong" ? 8 :
+        health === "healthy" ? 6 : 0;
+      const knownHistoryBoost =
+        row.kind === "account" && (row as any).historyKnown ? 6 : 0;
+      const recencyOpportunity =
+        daysSinceTouch == null ? 0 : Math.min(24, Math.floor(daysSinceTouch / 10) * 3);
       const score =
         row.priority * 12 +
         overdue * 35 +
-        (row.kind === "account" ? 14 : 0) +
-        Math.min(24, Math.floor(daysSinceTouch / 10) * 3) +
-        (row.kind === "prospect" && (row as any).verified ? 6 : 0) +
-        (row.kind === "prospect" && (row as any).prospectFit === "accepted" ? 8 : 0) -
+        relationshipBoost +
+        healthBoost +
+        knownHistoryBoost +
+        recencyOpportunity +
+        (row.kind === "prospect" && (row as any).verified ? 10 : 0) +
+        (row.kind === "prospect" && (row as any).prospectFit === "qualified" ? 12 : 0) -
         driveMinutes * 2;
       return {
         ...row,
@@ -1386,9 +1405,13 @@ export async function getHpoNearbyBackupsCore(input: {
         score,
         reasons: [
           overdue ? "follow-up overdue" : null,
-          row.kind === "account" && daysSinceTouch >= 30
+          row.kind === "account" && daysSinceTouch !== null && daysSinceTouch >= 30
             ? `${daysSinceTouch} days since touch`
             : null,
+          row.kind === "account" && daysSinceTouch === null ? "relationship recency unknown" : null,
+          stage && !["prospect", "prospecting"].includes(stage) ? `${stage.replaceAll("_", " ")} relationship` : null,
+          row.kind === "prospect" && (row as any).verified ? "verified prospect" : null,
+          row.kind === "prospect" && (row as any).prospectFit === "qualified" ? "qualified prospect" : null,
           row.priority >= 4 ? "high priority" : null,
           `${driveMinutes} min away`,
         ].filter(Boolean),
