@@ -590,7 +590,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
         },
       });
       await clearHpoDraftNote(nextStop.id).catch(() => undefined);
-      setMessage("Visit saved to route and account history.");
+      setMessage("Visit saved to the route and account history. Your next stop is ready.");
       setNote("");
       setFollowup("");
       setFollowupDue("");
@@ -917,7 +917,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
           <RouteIcon className="mx-auto size-7 text-primary" />
           <h2 className="mt-3 text-base font-semibold">No route yet today</h2>
           <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-muted-foreground">
-            Build a route from the Map. Today will automatically become your field execution screen.
+            Build your route from Planner or Map. On the route day, Today becomes your field execution and visit-notes screen.
           </p>
           <Button
             type="button"
@@ -1337,9 +1337,13 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                           : "Reschedule stop"}
                   </p>
                   <p className="mt-0.5 text-[10px] text-muted-foreground">
-                    {captureMode === "followup"
-                      ? "The stop stays open after this follow-up is saved."
-                      : "Your note is saved locally while you type."}
+                    {captureMode === "visit"
+                      ? "Save what happened, the outcome and any next action. Completing the visit advances the route."
+                      : captureMode === "note"
+                        ? "Add a route note without completing this stop. The stop stays open."
+                        : captureMode === "followup"
+                          ? "Save the next action and due date without completing this stop."
+                          : "Save the reschedule reason and next action. This stop will be closed as rescheduled."}
                   </p>
                 </div>
                 <EmeryVoiceControl
