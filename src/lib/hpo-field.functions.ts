@@ -9,6 +9,18 @@ function clean(value: unknown) {
   return String(value ?? "").trim();
 }
 
+function readableError(value: unknown) {
+  if (value instanceof Error) return value.message;
+  if (value && typeof value === "object" && "message" in value) {
+    return String((value as { message?: unknown }).message ?? "Unknown error");
+  }
+  try {
+    return typeof value === "string" ? value : JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
 async function timezoneFor(db: any, userId: string) {
   const { data } = await db.from("profiles").select("timezone").eq("user_id", userId).maybeSingle();
   return data?.timezone || "America/New_York";
@@ -912,7 +924,7 @@ export async function executeHpoRouteReorderCore(input: {
       userId: input.userId,
       runId: run.id,
       errorCode: "hpo_route_reorder_failed",
-      errorMessage: error instanceof Error ? error.message : String(error),
+      errorMessage: readableError(error),
       retryable: true,
     }).catch(() => undefined);
     throw error;
