@@ -291,11 +291,11 @@ function HpoWorkspace() {
           <button
             type="button"
             onClick={() => openHpoEmery(emeryContextPrompt, `HPO · ${view}`)}
-            className="fixed bottom-[calc(4.9rem+env(safe-area-inset-bottom))] right-4 z-[55] flex min-h-12 items-center gap-2 rounded-full border border-primary/20 bg-primary px-4 text-xs font-semibold text-primary-foreground shadow-[0_12px_32px_rgba(0,0,0,0.35)] md:bottom-6 md:right-6"
+            className="fixed bottom-[calc(5.15rem+env(safe-area-inset-bottom))] right-3 z-[55] flex size-11 items-center justify-center rounded-full border border-primary/20 bg-primary text-xs font-semibold text-primary-foreground shadow-[0_10px_24px_rgba(0,0,0,0.3)] sm:h-12 sm:w-auto sm:gap-2 sm:px-4 md:bottom-6 md:right-6"
             aria-label="Ask Emery about HPO"
           >
             <MessageCircle className="size-4" />
-            Emery
+            <span className="hidden sm:inline">Emery</span>
           </button>
         ) : null}
         <HpoEmerySheet onChanged={() => void refresh()} />
