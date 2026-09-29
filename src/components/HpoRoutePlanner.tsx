@@ -34,7 +34,8 @@ import {
   updateHpoRouteStop,
 } from "@/lib/hpo-route.functions";
 import { HpoLeafletMap } from "@/components/hpo-map/HpoLeafletMap";
-import { HpoAccountFieldDetail } from "@/components/HpoAccountFieldDetail";\nimport { openHpoEmery } from "@/components/HpoEmerySheet";
+import { HpoAccountFieldDetail } from "@/components/HpoAccountFieldDetail";
+import { openHpoEmery } from "@/components/HpoEmerySheet";
 import { loadHpoOfficeSnapshots, saveHpoOfficeSnapshots } from "@/lib/hpo-field-offline";
 import {
   addHpoRouteStops,
