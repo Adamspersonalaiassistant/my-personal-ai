@@ -17,6 +17,7 @@ import {
 
 export type HpoRouteCommandAction =
   | "none"
+  | "hpo.route.recommend"
   | "hpo.route.create"
   | "hpo.route.set_stops"
   | "hpo.route.add_stops"
@@ -322,12 +323,84 @@ async function findOffice(db: any, userId: string, phrase: string) {
   return { match: candidates[0]!, ambiguous: false };
 }
 
-async function chooseRouteCandidates(db: any, userId: string, message: string, count: number) {
+
+type RouteSalesCandidate = {
+  score: number;
+  accountId: string | null;
+  prospectId: string | null;
+  officeName: string;
+  address: string;
+  city: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  visitPriority: string | null;
+  kind: "account" | "prospect";
+  accountType: string | null;
+  specialty: string | null;
+  relationshipStage: string | null;
+  relationshipHealth: string | null;
+  nextAction: string | null;
+  nextActionDueAt: string | null;
+  lastTouchAt: string | null;
+  latestOutcome: string | null;
+  latestSignal: string | null;
+  latestNote: string | null;
+  reasons: string[];
+  priorityLabel: string;
+};
+
+function boundedText(value: unknown, max = 180) {
+  const cleanValue = clean(value).replace(/\s+/g, " ");
+  if (cleanValue.length <= max) return cleanValue;
+  return `${cleanValue.slice(0, Math.max(0, max - 1)).trim()}…`;
+}
+
+function dateDistanceDays(value: unknown, nowMs: number) {
+  const parsed = Date.parse(clean(value));
+  if (!Number.isFinite(parsed)) return null;
+  return Math.floor((nowMs - parsed) / 86400000);
+}
+
+function candidatePriorityLabel(score: number, candidate: Partial<RouteSalesCandidate>) {
+  const signal = normalize(clean(candidate.latestSignal));
+  const stage = normalize(clean(candidate.relationshipStage));
+  if (signal === "low fit" || score < 35) return "LOW";
+  if (score >= 105 || stage === "warm" || signal === "positive") return "GO NOW";
+  if (score >= 80) return "HIGH";
+  if (score >= 60) return "MEDIUM";
+  return "WATCH";
+}
+
+function addReason(reasons: Array<{ weight: number; text: string }>, weight: number, text: string) {
+  if (!text || reasons.some((reason) => reason.text === text)) return;
+  reasons.push({ weight, text });
+}
+
+function scoreRelationshipText(textValue: string, reasons: Array<{ weight: number; text: string }>) {
+  const text = normalize(textValue);
+  let score = 0;
+  if (/\b(receptive|interested|positive|meeting|lunch|schedule|relationship opportunity|prior lunch|warm)\b/.test(text)) {
+    score += 10;
+    addReason(reasons, 10, "prior notes show relationship momentum");
+  }
+  if (/\b(not pi|not a fit|low fit|no interest|do not visit|bad address)\b/.test(text)) {
+    score -= 35;
+    addReason(reasons, -35, "prior notes indicate low fit or a visit blocker");
+  }
+  return score;
+}
+
+async function recommendRouteCandidates(
+  db: any,
+  userId: string,
+  message: string,
+  count: number,
+) {
   const [accounts, prospects] = await Promise.all([
     db
       .from("hpo_accounts")
       .select(
-        "id,name,address,city,latitude,longitude,priority,last_touch_at,next_action,next_action_due_at,tags,status,owner_name",
+        "id,name,account_type,specialty,territory,address,city,latitude,longitude,priority,last_touch_at,next_action,next_action_due_at,tags,status,owner_name,relationship_stage,relationship_health,opportunity,blockers,notes,metadata",
       )
       .eq("user_id", userId)
       .eq("status", "active")
@@ -336,7 +409,7 @@ async function chooseRouteCandidates(db: any, userId: string, message: string, c
     db
       .from("hpo_prospects")
       .select(
-        "id,name,address,city,latitude,longitude,fit_status,verification_status,promoted_account_id,metadata",
+        "id,name,prospect_type,specialty,territory,address,city,latitude,longitude,fit_status,verification_status,promoted_account_id,notes,metadata,created_at",
       )
       .eq("user_id", userId)
       .not("fit_status", "in", "(not_fit,closed,duplicate)")
@@ -346,86 +419,319 @@ async function chooseRouteCandidates(db: any, userId: string, message: string, c
   if (accounts.error) throw accounts.error;
   if (prospects.error) throw prospects.error;
 
+  const rows = [...(accounts.data ?? []), ...(prospects.data ?? [])];
   const normalizedMessage = normalize(message);
   const cities = [
-    ...new Set(
-      [...(accounts.data ?? []), ...(prospects.data ?? [])]
-        .map((row: any) => clean(row.city))
-        .filter(Boolean),
-    ),
+    ...new Set(rows.map((row: any) => clean(row.city)).filter(Boolean)),
+  ];
+  const territories = [
+    ...new Set(rows.map((row: any) => clean(row.territory)).filter(Boolean)),
   ];
   const matchedCities = cities.filter((city) => normalizedMessage.includes(normalize(city)));
-  if (!matchedCities.length) return { candidates: [], area: null };
+  const matchedTerritories = territories.filter((territory) =>
+    normalizedMessage.includes(normalize(territory)),
+  );
+  if (!matchedCities.length && !matchedTerritories.length) {
+    return {
+      candidates: [] as RouteSalesCandidate[],
+      area: null as string | null,
+      eligibleCount: 0,
+      matchedCities: [] as string[],
+      matchedTerritories: [] as string[],
+    };
+  }
 
   const citySet = new Set(matchedCities.map((city) => normalize(city)));
-  const now = Date.now();
-  const candidates = [
-    ...(accounts.data ?? [])
-      .filter((row: any) => citySet.has(normalize(row.city ?? "")))
-      .filter(
-        (row: any) => !(Array.isArray(row.tags) && row.tags.includes("exclude_from_adam_route")),
-      )
-      .filter((row: any) => !clean(row.owner_name) || normalize(row.owner_name) === "adam")
-      .map((row: any) => {
-        const overdue =
-          row.next_action_due_at && !Number.isNaN(Date.parse(row.next_action_due_at))
-            ? Date.parse(row.next_action_due_at) <= now
-            : false;
-        const daysSinceTouch = row.last_touch_at
-          ? Math.max(0, Math.floor((now - Date.parse(row.last_touch_at)) / 86400000))
-          : null;
-        const score =
-          Number(row.priority ?? 3) * 12 +
-          (overdue ? 35 : 0) +
-          (daysSinceTouch == null ? 0 : Math.min(30, Math.floor(daysSinceTouch / 10) * 3)) +
-          18;
-        return {
-          score,
-          accountId: row.id,
-          prospectId: null,
-          officeName: row.name,
-          address: row.address,
-          city: row.city,
-          latitude: row.latitude,
-          longitude: row.longitude,
-          visitPriority: Number(row.priority ?? 0) >= 4 ? "high" : null,
-        };
-      }),
-    ...(prospects.data ?? [])
-      .filter((row: any) => citySet.has(normalize(row.city ?? "")))
-      .filter((row: any) => {
-        const metadata =
-          row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
-            ? row.metadata
-            : {};
-        if (metadata.exclude_from_adam_route === true) return false;
-        if (!row.promoted_account_id) return true;
-        return metadata.map_as_location === true;
-      })
-      .map((row: any) => {
-        const priority = Number(row.metadata?.internal_priority ?? 2);
-        const score =
-          priority * 10 +
-          (row.verification_status === "verified" ? 10 : 0) +
-          (row.fit_status === "qualified" ? 14 : 0);
-        return {
-          score,
-          accountId: row.promoted_account_id ?? null,
-          prospectId: row.id,
-          officeName: row.name,
-          address: row.address,
-          city: row.city,
-          latitude: row.latitude,
-          longitude: row.longitude,
-          visitPriority: priority >= 4 ? "high" : null,
-        };
-      }),
-  ]
-    .filter((row) => row.address)
-    .sort((left, right) => right.score - left.score)
-    .slice(0, Math.max(1, Math.min(30, count)));
+  const territorySet = new Set(matchedTerritories.map((territory) => normalize(territory)));
+  const inRequestedArea = (row: any) =>
+    citySet.has(normalize(clean(row.city))) ||
+    territorySet.has(normalize(clean(row.territory)));
 
-  return { candidates, area: matchedCities.join("/") };
+  const areaAccounts = (accounts.data ?? [])
+    .filter(inRequestedArea)
+    .filter(
+      (row: any) => !(Array.isArray(row.tags) && row.tags.includes("exclude_from_adam_route")),
+    )
+    .filter((row: any) => !clean(row.owner_name) || normalize(row.owner_name) === "adam");
+  const accountIds = areaAccounts.map((row: any) => row.id);
+
+  let interactions: any[] = [];
+  if (accountIds.length) {
+    const { data, error } = await db
+      .from("hpo_interactions")
+      .select(
+        "id,account_id,occurred_at,summary,outcome,relationship_signal,next_action,next_action_due_at",
+      )
+      .eq("user_id", userId)
+      .in("account_id", accountIds)
+      .order("occurred_at", { ascending: false })
+      .limit(1000);
+    if (error) throw error;
+    interactions = data ?? [];
+  }
+
+  const latestByAccount = new Map<string, any>();
+  for (const interaction of interactions) {
+    if (!latestByAccount.has(interaction.account_id)) {
+      latestByAccount.set(interaction.account_id, interaction);
+    }
+  }
+
+  const now = Date.now();
+  const scored: RouteSalesCandidate[] = [];
+
+  for (const row of areaAccounts) {
+    const latest = latestByAccount.get(row.id) ?? null;
+    const reasons: Array<{ weight: number; text: string }> = [];
+    let score = Number(row.priority ?? 3) * 14;
+
+    if (Number(row.priority ?? 0) >= 5) addReason(reasons, 16, "high-priority target account");
+    else if (Number(row.priority ?? 0) >= 4) addReason(reasons, 10, "above-average account priority");
+
+    const stage = normalize(clean(row.relationship_stage));
+    if (stage === "warm") {
+      score += 25;
+      addReason(reasons, 25, "warm relationship with room to advance");
+    } else if (stage === "active") {
+      score += 20;
+      addReason(reasons, 20, "active relationship worth protecting or growing");
+    } else if (stage === "prospecting") {
+      score += 12;
+      addReason(reasons, 12, "prospecting relationship already in motion");
+    } else if (stage === "prospect") {
+      score += 5;
+    }
+
+    const dueAt = Date.parse(clean(row.next_action_due_at));
+    if (Number.isFinite(dueAt)) {
+      const daysUntilDue = Math.ceil((dueAt - now) / 86400000);
+      if (daysUntilDue < 0) {
+        score += 32;
+        addReason(reasons, 32, "relationship follow-up is overdue");
+      } else if (daysUntilDue <= 7) {
+        score += 20;
+        addReason(reasons, 20, "follow-up is due within a week");
+      }
+    }
+    if (clean(row.next_action)) {
+      score += 8;
+      addReason(reasons, 8, `clear next step: ${boundedText(row.next_action, 80)}`);
+    }
+    if (clean(row.opportunity)) {
+      score += 16;
+      addReason(reasons, 16, `documented opportunity: ${boundedText(row.opportunity, 80)}`);
+    }
+
+    const daysSinceTouch = dateDistanceDays(row.last_touch_at, now);
+    if (daysSinceTouch == null) {
+      score += 12;
+      addReason(reasons, 12, "no completed visit history yet");
+    } else if (daysSinceTouch >= 45) {
+      score += 16;
+      addReason(reasons, 16, `relationship has gone ${daysSinceTouch} days without a touch`);
+    } else if (daysSinceTouch >= 21) {
+      score += 10;
+      addReason(reasons, 10, `last touch was ${daysSinceTouch} days ago`);
+    } else if (daysSinceTouch <= 5 && !(Number.isFinite(dueAt) && dueAt <= now)) {
+      score -= 8;
+      addReason(reasons, -8, "recently visited, so another stop may be premature");
+    }
+
+    const historicalReferrals = Number(row.metadata?.historical_referral_count ?? 0);
+    if (historicalReferrals > 0) {
+      const referralBoost = Math.min(24, 6 + Math.round(Math.log2(historicalReferrals + 1) * 4));
+      score += referralBoost;
+      addReason(reasons, referralBoost, "historical referral relationship");
+    }
+
+    const signal = normalize(clean(latest?.relationship_signal));
+    if (signal === "positive") {
+      score += 22;
+      addReason(reasons, 22, "latest relationship signal was positive");
+    } else if (signal === "neutral positive") {
+      score += 14;
+      addReason(reasons, 14, "latest interaction showed positive momentum");
+    } else if (signal === "active") {
+      score += 8;
+      addReason(reasons, 8, "recent relationship activity is on record");
+    } else if (signal === "qualified general") {
+      score += 5;
+      addReason(reasons, 5, "relationship was qualified for general follow-up");
+    } else if (signal === "low fit") {
+      score -= 45;
+      addReason(reasons, -45, "latest interaction was marked low-fit");
+    }
+
+    const outcome = normalize(clean(latest?.outcome));
+    if (outcome.includes("lunch scheduled")) {
+      score += 28;
+      addReason(reasons, 28, "lunch/meeting momentum is already established");
+    } else if (outcome.includes("positive front desk")) {
+      score += 20;
+      addReason(reasons, 20, "positive front-desk conversation to build on");
+    } else if (outcome.includes("contact not present")) {
+      score += 12;
+      addReason(reasons, 12, "key contact was missed on the prior visit");
+    } else if (outcome.includes("information delivered") || outcome.includes("materials delivered")) {
+      score += 9;
+      addReason(reasons, 9, "materials were delivered and now need relationship follow-through");
+    } else if (outcome.includes("relationship qualified")) {
+      score += 10;
+      addReason(reasons, 10, "relationship was previously qualified");
+    }
+
+    score += scoreRelationshipText(
+      [row.notes, row.blockers, latest?.summary, latest?.next_action].filter(Boolean).join(" "),
+      reasons,
+    );
+
+    const candidate: RouteSalesCandidate = {
+      score,
+      accountId: row.id,
+      prospectId: null,
+      officeName: row.name,
+      address: row.address,
+      city: row.city ?? null,
+      latitude: Number.isFinite(row.latitude) ? Number(row.latitude) : null,
+      longitude: Number.isFinite(row.longitude) ? Number(row.longitude) : null,
+      visitPriority: score >= 90 || Number(row.priority ?? 0) >= 5 ? "high" : null,
+      kind: "account",
+      accountType: row.account_type ?? null,
+      specialty: row.specialty ?? null,
+      relationshipStage: row.relationship_stage ?? null,
+      relationshipHealth: row.relationship_health ?? null,
+      nextAction: row.next_action ?? latest?.next_action ?? null,
+      nextActionDueAt: row.next_action_due_at ?? latest?.next_action_due_at ?? null,
+      lastTouchAt: row.last_touch_at ?? null,
+      latestOutcome: latest?.outcome ?? null,
+      latestSignal: latest?.relationship_signal ?? null,
+      latestNote: latest?.summary ?? row.notes ?? null,
+      reasons: [],
+      priorityLabel: "MEDIUM",
+    };
+    candidate.reasons = reasons
+      .sort((left, right) => Math.abs(right.weight) - Math.abs(left.weight))
+      .slice(0, 3)
+      .map((reason) => reason.text);
+    candidate.priorityLabel = candidatePriorityLabel(score, candidate);
+    scored.push(candidate);
+  }
+
+  for (const row of (prospects.data ?? []).filter(inRequestedArea)) {
+    const metadata =
+      row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+        ? row.metadata
+        : {};
+    if (metadata.exclude_from_adam_route === true) continue;
+    if (row.promoted_account_id && metadata.map_as_location !== true) continue;
+
+    const reasons: Array<{ weight: number; text: string }> = [];
+    const internalPriority = Number(metadata.internal_priority ?? 2);
+    let score = internalPriority * 13;
+    if (row.fit_status === "qualified") {
+      score += 24;
+      addReason(reasons, 24, "qualified prospect");
+    } else {
+      score += 8;
+      addReason(reasons, 8, "new prospect available for qualification");
+    }
+    if (row.verification_status === "verified") {
+      score += 14;
+      addReason(reasons, 14, "office details are verified");
+    } else if (row.verification_status === "partial") {
+      score += 6;
+    }
+    const prospectScore = Number(metadata.prospect_score ?? 0);
+    if (prospectScore > 0) {
+      const boost = Math.min(24, Math.round(prospectScore / 5));
+      score += boost;
+      addReason(reasons, boost, "prospect research score is strong");
+    }
+    score += scoreRelationshipText(clean(row.notes), reasons);
+
+    const candidate: RouteSalesCandidate = {
+      score,
+      accountId: row.promoted_account_id ?? null,
+      prospectId: row.id,
+      officeName: row.name,
+      address: row.address,
+      city: row.city ?? null,
+      latitude: Number.isFinite(row.latitude) ? Number(row.latitude) : null,
+      longitude: Number.isFinite(row.longitude) ? Number(row.longitude) : null,
+      visitPriority: score >= 85 || internalPriority >= 4 ? "high" : null,
+      kind: "prospect",
+      accountType: row.prospect_type ?? null,
+      specialty: row.specialty ?? null,
+      relationshipStage: "Prospect",
+      relationshipHealth: null,
+      nextAction: null,
+      nextActionDueAt: null,
+      lastTouchAt: null,
+      latestOutcome: null,
+      latestSignal: null,
+      latestNote: row.notes ?? null,
+      reasons: reasons
+        .sort((left, right) => Math.abs(right.weight) - Math.abs(left.weight))
+        .slice(0, 3)
+        .map((reason) => reason.text),
+      priorityLabel: "MEDIUM",
+    };
+    candidate.priorityLabel = candidatePriorityLabel(score, candidate);
+    scored.push(candidate);
+  }
+
+  scored.sort((left, right) => right.score - left.score || left.officeName.localeCompare(right.officeName));
+
+  const targetCount = Math.max(1, Math.min(30, count));
+  const selected: RouteSalesCandidate[] = [];
+  const selectedKeys = new Set<string>();
+  if (matchedCities.length > 1) {
+    for (const city of matchedCities) {
+      if (selected.length >= targetCount) break;
+      const match = scored.find(
+        (candidate) =>
+          normalize(clean(candidate.city)) === normalize(city) &&
+          !selectedKeys.has(candidate.accountId ?? candidate.prospectId ?? candidate.officeName),
+      );
+      if (!match) continue;
+      selected.push(match);
+      selectedKeys.add(match.accountId ?? match.prospectId ?? match.officeName);
+    }
+  }
+  for (const candidate of scored) {
+    if (selected.length >= targetCount) break;
+    const key = candidate.accountId ?? candidate.prospectId ?? candidate.officeName;
+    if (selectedKeys.has(key)) continue;
+    selected.push(candidate);
+    selectedKeys.add(key);
+  }
+
+  const areaParts = [...matchedCities, ...matchedTerritories.filter((territory) => !matchedCities.includes(territory))];
+  return {
+    candidates: selected,
+    area: areaParts.join(" / "),
+    eligibleCount: scored.length,
+    matchedCities,
+    matchedTerritories,
+  };
+}
+
+async function chooseRouteCandidates(db: any, userId: string, message: string, count: number) {
+  const recommendation = await recommendRouteCandidates(db, userId, message, count);
+  return {
+    candidates: recommendation.candidates.map((candidate) => ({
+      score: candidate.score,
+      accountId: candidate.accountId,
+      prospectId: candidate.prospectId,
+      officeName: candidate.officeName,
+      address: candidate.address,
+      city: candidate.city,
+      latitude: candidate.latitude,
+      longitude: candidate.longitude,
+      visitPriority: candidate.visitPriority,
+    })),
+    area: recommendation.area,
+  };
 }
 
 function bestOpenStop(stops: any[], phrase: string) {
@@ -469,7 +775,14 @@ function requestedAction(message: string): HpoRouteCommandAction {
     /\b(sync route to calendar|put route on calendar)\b/.test(text)
   )
     return "hpo.route.sync_calendar";
-  if (/\b(build|create|make)\b.*\broute\b/.test(text)) return "hpo.route.create";
+  if (
+    /\b(i want to|help me|lets|let us|plan)\b.*\b(build|plan|make)\b.*\broute\b/.test(text) ||
+    /\b(?:which|what|top|best)\b.*\b(?:offices?|accounts?|prospects?)\b.*\b(?:visit|see|route)\b/.test(text) ||
+    /\bwhere should i (?:go|visit)\b/.test(text)
+  )
+    return "hpo.route.recommend";
+  if (/\b(build me|create|make)\b.*\broute\b/.test(text)) return "hpo.route.create";
+  if (/^build\b.*\broute\b/.test(text)) return "hpo.route.create";
   if (
     /\b(wrap up|wrap today|finish (?:the )?(?:route|day)|complete (?:the )?route|end (?:the )?route)\b/.test(
       text,
