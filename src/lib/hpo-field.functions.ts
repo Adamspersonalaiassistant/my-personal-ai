@@ -177,6 +177,28 @@ async function loadStops(db: any, userId: string, routeId: string) {
   return data ?? [];
 }
 
+async function stageOpenStopOrders(
+  db: any,
+  userId: string,
+  routeId: string,
+  stops: any[],
+) {
+  const offset = stops.length + 1000;
+  for (const stop of stops) {
+    if (TERMINAL.has(String(stop.status))) continue;
+    const { error } = await db
+      .from("hpo_route_stops")
+      .update({
+        stop_order: Number(stop.stop_order) + offset,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", stop.id)
+      .eq("route_id", routeId)
+      .eq("user_id", userId);
+    if (error) throw error;
+  }
+}
+
 async function clearRouteOptimization(db: any, userId: string, routeId: string) {
   const { data: route } = await db
     .from("hpo_route_plans")
@@ -835,6 +857,11 @@ export async function executeHpoRouteReorderCore(input: {
       }
     }
 
+    // The route has a unique (route_id, stop_order) constraint. Move open
+    // stops out of the final range before assigning their new positions so a
+    // swap cannot collide with the row that still owns the destination slot.
+    await stageOpenStopOrders(db, input.userId, input.routeId, currentOrdered);
+
     for (let index = 0; index < input.stopIds.length; index += 1) {
       const stopId = input.stopIds[index]!;
       if (terminalById.get(stopId)) continue;
@@ -1032,6 +1059,8 @@ export async function executeHpoRouteReoptimizeCore(input: {
     const openSlots = open
       .map((stop: any) => Number(stop.stop_order))
       .sort((left: number, right: number) => left - right);
+
+    await stageOpenStopOrders(db, input.userId, route.id, open);
 
     let previousNode = startIndex;
     let totalDistance = 0;
