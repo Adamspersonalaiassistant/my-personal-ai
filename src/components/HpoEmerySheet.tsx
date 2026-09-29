@@ -26,7 +26,19 @@ export function openHpoEmery(prompt = "", title = "HPO") {
   );
 }
 
-export function HpoEmerySheet({ onChanged }: { onChanged?: () => void }) {
+export function HpoEmerySheet({
+  onChanged,
+  routeId,
+  stopId,
+  selectedAccountId,
+  surface = "hpo",
+}: {
+  onChanged?: () => void;
+  routeId?: string | null;
+  stopId?: string | null;
+  selectedAccountId?: string | null;
+  surface?: string;
+}) {
   const askEmery = useServerFn(sendEmeryMessage);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -41,7 +53,6 @@ export function HpoEmerySheet({ onChanged }: { onChanged?: () => void }) {
       const detail = (event as CustomEvent<HpoEmeryDetail>).detail ?? {};
       setTitle(detail.title || "HPO");
       setDraft(detail.prompt || "");
-      setMessages([]);
       setError("");
       setOpen(true);
       window.setTimeout(() => inputRef.current?.focus(), 80);
@@ -65,7 +76,20 @@ export function HpoEmerySheet({ onChanged }: { onChanged?: () => void }) {
     setPending(true);
     setError("");
     try {
-      const result = await askEmery({ data: { message: clean, attachments: [] } });
+      const result = await askEmery({
+        data: {
+          message: clean,
+          attachments: [],
+          source: {
+            entryPoint: "chat",
+            inputMode: "typed",
+            surface,
+            hpoRouteId: routeId ?? null,
+            hpoStopId: stopId ?? null,
+            selectedAccountId: selectedAccountId ?? null,
+          },
+        },
+      });
       if (!("reply" in result) || !result.reply) {
         throw new Error(("error" in result && result.error) || "Emery couldn't complete that.");
       }
@@ -118,7 +142,7 @@ export function HpoEmerySheet({ onChanged }: { onChanged?: () => void }) {
         <div className="max-h-[42dvh] min-h-24 space-y-3 overflow-y-auto px-4 py-3">
           {!messages.length ? (
             <p className="text-sm leading-6 text-muted-foreground">
-              Tell Emery what you want done. She will use the same HPO records shown in this tab.
+              Tell Emery what you want done. This is the same Emery conversation, with the current HPO route and account context attached.
             </p>
           ) : null}
           {messages.map((message, index) => (
@@ -151,7 +175,12 @@ export function HpoEmerySheet({ onChanged }: { onChanged?: () => void }) {
               placeholder="Tell Emery what to do…"
               className="max-h-28 min-h-11 min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-base leading-6 outline-none placeholder:text-muted-foreground/60"
             />
-            <EmeryVoiceControl onConversationChanged={() => onChanged?.()} />
+            <EmeryVoiceControl
+              hpoRouteId={routeId ?? null}
+              hpoStopId={stopId ?? null}
+              hpoAccountId={selectedAccountId ?? null}
+              onConversationChanged={() => onChanged?.()}
+            />
             <button
               type="button"
               onClick={() => void send()}
