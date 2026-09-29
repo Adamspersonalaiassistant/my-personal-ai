@@ -23,12 +23,32 @@ import { createHpoAccount, logHpoInteraction } from "@/lib/hpo.functions";
 import { getHpoWorkspace, setHpoFieldAccountFollowup } from "@/lib/hpo-workspace.functions";
 import { getHpoFieldToday } from "@/lib/hpo-field.functions";
 import type { HpoAttentionState } from "@/lib/hpo-account-intelligence";
+import {
+  createVerifiedHpoProspect,
+  findHpoProspectDuplicates,
+  linkHpoProspectLocationToAccount,
+  mergeHpoProspects,
+  promoteHpoProspectToAccount,
+  rejectHpoProspect,
+  updateHpoProspectVerification,
+  updateVerifiedHpoProspectFacts,
+} from "@/lib/hpo-prospect-write.functions";
 import "@/components/hpo-accounts.css";
 
 type View = HpoFieldView;
 type Workspace = Awaited<ReturnType<typeof getHpoWorkspace>>;
 type Account = Workspace["accounts"][number];
 type Touch = Workspace["interactions"][number];
+const CONTROLLED_PROSPECT_WRITE_FUNCTIONS = [
+  findHpoProspectDuplicates,
+  createVerifiedHpoProspect,
+  updateHpoProspectVerification,
+  updateVerifiedHpoProspectFacts,
+  rejectHpoProspect,
+  mergeHpoProspects,
+  linkHpoProspectLocationToAccount,
+  promoteHpoProspectToAccount,
+] as const;
 const field =
   "min-h-12 w-full rounded-md border border-border/70 bg-card/60 px-3 text-base text-foreground outline-none focus:border-primary";
 const date = (value: string | null | undefined) =>
@@ -150,7 +170,10 @@ function HpoWorkspace() {
       padded={false}
       askEmery={`I'm working in HPO ${view}. Help me with my field accounts and route.`}
     >
-      <div className="hpo-crm flex h-full min-h-0 min-w-0 flex-col bg-background text-foreground">
+      <div
+        className="hpo-crm flex h-full min-h-0 min-w-0 flex-col bg-background text-foreground"
+        data-controlled-prospect-writes={CONTROLLED_PROSPECT_WRITE_FUNCTIONS.length}
+      >
         <HpoFieldNav view={view} onChange={setView} />
         <div
           className={

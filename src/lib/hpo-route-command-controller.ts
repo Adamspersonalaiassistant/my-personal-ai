@@ -213,7 +213,7 @@ async function findOffice(db: any, userId: string, phrase: string) {
       .from("hpo_prospects")
       .select("id,name,address,city,latitude,longitude,fit_status,verification_status,promoted_account_id,metadata")
       .eq("user_id", userId)
-      .neq("fit_status", "rejected")
+      .not("fit_status", "in", "(not_fit,closed,duplicate)")
       .not("address", "is", null)
       .limit(1000),
   ]);
@@ -287,7 +287,7 @@ async function chooseRouteCandidates(db: any, userId: string, message: string, c
       .from("hpo_prospects")
       .select("id,name,address,city,latitude,longitude,fit_status,verification_status,promoted_account_id,metadata")
       .eq("user_id", userId)
-      .neq("fit_status", "rejected")
+      .not("fit_status", "in", "(not_fit,closed,duplicate)")
       .not("address", "is", null)
       .limit(1000),
   ]);

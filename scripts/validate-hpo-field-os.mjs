@@ -14,14 +14,10 @@ function check(name, ok) {
 
 const planner = read("src/components/HpoRoutePlanner.tsx");
 const leaflet = read("src/components/hpo-map/HpoLeafletMap.tsx");
-const adapter = read("src/components/hpo-map/HpoMapAdapter.tsx");
-const v2 = read("src/components/hpo-map/HpoMapV2MapLibre.tsx");
 const routeFns = read("src/lib/hpo-route.functions.ts");
 const geocode = read("src/lib/hpo-geocode.ts");
 const hpoChatRouter = read("src/lib/hpo-chat-router.ts");
 const hpoEmerySheet = read("src/components/HpoEmerySheet.tsx");
-const packageJson = JSON.parse(read("package.json"));
-const migration = read("supabase/migrations/20260927234500_hpo_map_v2_feature_flag.sql");
 const routeActions = read("src/lib/hpo-route-action-controller.ts");
 const emery = read("src/lib/emery.functions.ts");
 const voice = read("src/lib/voice.functions.ts");
@@ -37,70 +33,52 @@ const voiceControl = read("src/components/EmeryVoiceControl.tsx");
 const routeCommands = read("src/lib/hpo-route-command-controller.ts");
 const capabilities = read("src/lib/execution-capabilities.ts");
 
-check("Historical V1 map remains available", planner.includes("function OfficePlanningMap("));
+check("Leaflet is the active HPO route map", planner.includes("<HpoLeafletMap"));
 check(
-  "Route Planner uses Leaflet as the primary field map",
-  planner.includes("<HpoLeafletMap") && !planner.includes("<HpoMapV2MapLibre"),
+  "Route Planner does not render the retired WebGL map",
+  !planner.includes("<HpoMapV2MapLibre"),
 );
 check(
-  "Legacy map is not rendered in the active HPO route planner",
-  !planner.includes("<HpoMapAdapter") && planner.includes("<HpoLeafletMap"),
-);
-check("MapLibre dependency is declared", Boolean(packageJson.dependencies?.["maplibre-gl"]));
-check(
-  "Map V2 feature flag defaults off",
-  /hpo_map_v2 boolean not null default false/i.test(migration),
-);
-check("Route Planner loads Map V2 feature flag", routeFns.includes('select("hpo_map_v2")'));
-check(
-  "Leaflet is the direct HPO field renderer",
-  planner.includes("<HpoLeafletMap") &&
-    leaflet.includes("L.map(") &&
-    !planner.includes("<HpoMapAdapter"),
+  "Leaflet renderer remains independent of WebGL",
+  leaflet.includes('import * as L from "leaflet"') && !leaflet.includes("maplibregl"),
 );
 check(
-  "Map V2 renders every mapped office directly instead of hiding them in clusters",
-  v2.includes('id: "hpo-office-points"') && !v2.includes("cluster: true"),
+  "Leaflet clusters dense office markers",
+  leaflet.includes("clusterIcon") &&
+    leaflet.includes("shouldCluster") &&
+    leaflet.includes("latLngToContainerPoint"),
 );
 check(
-  "Map V2 preserves account/prospect filters",
-  v2.includes('"account"') && v2.includes('"prospect"'),
+  "Leaflet preserves account and prospect filters",
+  leaflet.includes('type Filter = "all" | "account" | "prospect"'),
 );
 check(
-  "Map V2 renders canonical accounts and prospects through one reliable blue point layer",
-  v2.includes('id: "hpo-office-points"') && v2.includes("officeCollection"),
+  "Leaflet preserves categorized field pins",
+  leaflet.includes("officePinCategory") && leaflet.includes("PIN_CATEGORY_ORDER"),
 );
 check(
-  "Map V2 supports synchronized office focus",
-  v2.includes("selectedOfficeKey") && v2.includes("onSelectOffice"),
+  "Leaflet supports synchronized office focus",
+  leaflet.includes("selectedOfficeKey") && leaflet.includes("onSelectOffice"),
 );
 check(
-  "Leaflet keeps map search, clustered pins and route selection",
-  leaflet.includes("searchResults") &&
-    leaflet.includes("clusterIcon(") &&
-    leaflet.includes("onToggleRouteStop(selectedOffice)"),
+  "Leaflet supports multi-office route selection",
+  leaflet.includes("selectedKeys") && leaflet.includes("onToggleRouteStop"),
 );
 check(
-  "Map V2 supports relationship-signal filters",
-  v2.includes('"followup"') &&
-    v2.includes('"stale"') &&
-    v2.includes('"priority"') &&
-    v2.includes("Stale 60d+"),
+  "Leaflet opens field account context",
+  leaflet.includes("onOpenAccount") && planner.includes("HpoAccountFieldDetail"),
 );
 check(
-  "Map V2 opens field account context from the territory map",
-  v2.includes("onOpenAccount") && planner.includes("HpoAccountFieldDetail"),
+  "Leaflet preserves route geometry and stop markers",
+  leaflet.includes("route_geometry_remaining") &&
+    leaflet.includes("route_geometry") &&
+    leaflet.includes("L.circleMarker"),
 );
 check(
-  "Map V2 preserves route line",
-  v2.includes("hpo-route-line") && v2.includes("route_geometry"),
-);
-check("Map V2 preserves route-stop markers", v2.includes("hpo-route-stop-points"));
-check(
-  "Map V2 exposes a custom current-location control without developer-demo map chrome",
-  v2.includes("function locateMe()") &&
-    v2.includes('aria-label="Center on my location"') &&
-    !v2.includes("NavigationControl"),
+  "Leaflet exposes current-location control and touch navigation",
+  leaflet.includes("function locateMe()") &&
+    leaflet.includes('aria-label="Use my location"') &&
+    leaflet.includes("touchZoom: true"),
 );
 check(
   "OSRM routing remains unchanged",
@@ -132,10 +110,10 @@ check(
 );
 check(
   "Map route and relationship actions open Emery inside the map experience",
-  v2.includes("openHpoEmery") &&
-    v2.includes("Help me with the HPO map") &&
-    v2.includes("to today's HPO route") &&
-    v2.includes("onToggleRouteStop(selectedOffice)"),
+  leaflet.includes("openHpoEmery") &&
+    leaflet.includes("Help me with this HPO account/office") &&
+    leaflet.includes("Help me build today's HPO field route") &&
+    leaflet.includes("onToggleRouteStop(selectedOffice)"),
 );
 check(
   "Completed historical routes never masquerade as today's active route",
@@ -151,25 +129,18 @@ check(
     planner.includes('onNavigateHpo?.("today")'),
 );
 check(
-  "Map V2 uses a reliable no-key full-detail street basemap and blue teardrop pins",
-  v2.includes("https://tile.openstreetmap.org/{z}/{x}/{y}.png") &&
-    v2.includes("const PROFESSIONAL_MAP_STYLE: StyleSpecification") &&
-    v2.includes("maplibregl.setWorkerUrl") &&
-    v2.includes("maplibre-gl-worker.mjs?worker&url") &&
-    v2.includes("officeMarkersRef") &&
-    v2.includes("new maplibregl.Marker") &&
-    v2.includes("createOfficePinElement") &&
-    v2.includes('viewBox="0 0 32 42"') &&
-    v2.includes('anchor: "bottom"'),
+  "Leaflet uses a reliable no-key street basemap and teardrop office pins",
+  leaflet.includes("https://tile.openstreetmap.org/{z}/{x}/{y}.png") &&
+    leaflet.includes("function pinIcon") &&
+    leaflet.includes('viewBox="0 0 32 40"') &&
+    leaflet.includes("iconAnchor: [size / 2, Math.round(size * 1.25)]"),
 );
 check(
-  "Map V2 is map-first with floating search, quick chips, compact controls, and a bottom sheet",
-  v2.includes("Search HPO accounts, offices or towns") &&
-    v2.includes('onNavigateHpo?.("today")') &&
-    v2.includes("Follow-up Due") &&
-    v2.includes("Center on my location") &&
-    v2.includes("rounded-t-[1.7rem]") &&
-    v2.includes("Tap a blue pin"),
+  "Leaflet is map-first with search, filters, compact controls, and an account tray",
+  leaflet.includes("Search HPO accounts, offices or towns") &&
+    leaflet.includes('onNavigateHpo?.("today")') &&
+    leaflet.includes("Fit offices") &&
+    leaflet.includes("Build today's route"),
 );
 check(
   "Today uses a RepMove-style Daily Route date strip and ordered route list",
@@ -353,9 +324,9 @@ check(
 );
 check(
   "Map is the territory command surface without a duplicate route map",
-  v2.includes("Search HPO accounts, offices or towns") &&
-    v2.includes("New Route") &&
-    v2.includes("rounded-t-[1.7rem]") &&
+  leaflet.includes("Search HPO accounts, offices or towns") &&
+    leaflet.includes("Build Route") &&
+    leaflet.includes("selectedOffice") &&
     !planner.includes("<RouteMap route="),
 );
 check(
@@ -367,7 +338,7 @@ check(
 );
 check(
   "reoptimized route geometry is rendered when available",
-  v2.includes("route_geometry_remaining") && v2.includes("route_geometry"),
+  leaflet.includes("route_geometry_remaining") && leaflet.includes("route_geometry"),
 );
 check(
   "HPO Today state has a reusable deterministic core",

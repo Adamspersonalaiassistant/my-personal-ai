@@ -12,7 +12,8 @@
     "format": "prettier --write .",
     "validate:phase0": "node scripts/validate-phase0.mjs",
     "validate:behavior": "node scripts/validate-emery-behavior.mjs",
-    "validate:hpo-field-os": "node scripts/validate-hpo-field-os.mjs"
+    "validate:hpo-field-os": "node scripts/validate-hpo-field-os.mjs",
+    "validate:hpo-crm-write": "node --experimental-strip-types scripts/validate-hpo-crm-write-layer.mjs"
   },
   "overrides": {
     "rolldown": "1.2.1"
@@ -80,6 +81,7 @@
     "@types/node": "^22.16.5",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
+    "@types/leaflet": "^1.9.16",
     "@vitejs/plugin-react": "^5.2.0",
     "eslint": "^9.32.0",
     "eslint-config-prettier": "^10.1.1",
@@ -91,7 +93,6 @@
     "prettier": "^3.7.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
-    "vite": "8.1.5",
-    "@types/leaflet": "^1.9.16"
+    "vite": "8.1.5"
   }
 }
