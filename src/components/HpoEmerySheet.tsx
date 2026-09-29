@@ -121,6 +121,71 @@ function categoryIcon(group: RecommendationGroup) {
   return Building2;
 }
 
+function normalizeSelectionText(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function applySelectionInstruction(
+  message: string,
+  candidates: RouteRecommendationCandidate[],
+  currentKeys: string[],
+) {
+  if (!candidates.length) return { keys: currentKeys, changed: false };
+  const text = normalizeSelectionText(message);
+  const set = new Set(currentKeys);
+  let changed = false;
+
+  const categoryInstruction = (
+    group: RecommendationGroup,
+    aliases: RegExp,
+  ) => {
+    if (!aliases.test(text)) return false;
+    const keys = candidates.filter((candidate) => categoryFor(candidate) === group).map(candidateKey);
+    if (!keys.length) return false;
+
+    if (/\b(?:remove|clear|drop|exclude)\b/.test(text)) {
+      for (const key of keys) set.delete(key);
+      changed = true;
+      return true;
+    }
+    if (/\b(?:only|use|select|include|keep)\b/.test(text)) {
+      if (/\bonly\b/.test(text)) set.clear();
+      for (const key of keys) {
+        if (set.size >= MAX_ROUTE_STOPS) break;
+        set.add(key);
+      }
+      changed = true;
+      return true;
+    }
+    return false;
+  };
+
+  categoryInstruction("Attorneys", /\b(?:attorneys?|law firms?|lawyers?)\b/);
+  categoryInstruction(
+    "Doctors / Medical",
+    /\b(?:doctors?|medical|pcps?|primary care|providers?|physicians?)\b/,
+  );
+  categoryInstruction("PT / Chiro", /\b(?:pt|physical therapy|chiro|chiropractors?)\b/);
+
+  const removeMode = /\b(?:remove|drop|exclude|take out)\b/.test(text);
+  const addMode = /\b(?:add|include|select|put back|keep)\b/.test(text);
+  if (removeMode || addMode) {
+    for (const candidate of candidates) {
+      const name = normalizeSelectionText(candidate.officeName);
+      if (!name || !text.includes(name)) continue;
+      const key = candidateKey(candidate);
+      if (removeMode) set.delete(key);
+      else if (set.size < MAX_ROUTE_STOPS) set.add(key);
+      changed = true;
+    }
+  }
+
+  return { keys: [...set], changed };
+}
+
 function cleanMarkdown(text: string) {
   return text.replace(/\*\*/g, "").replace(/^[-•]\s*/gm, "• ");
 }
@@ -285,6 +350,15 @@ export function HpoEmerySheet({
   async function sendText(text: string, showUser: boolean) {
     const clean = text.trim();
     if (!clean || pending || building) return;
+    const selectionInstruction = applySelectionInstruction(clean, allCandidates, selectedKeys);
+    const selectionKeysForTurn = selectionInstruction.changed
+      ? selectionInstruction.keys
+      : selectedKeys;
+    const selectionSetForTurn = new Set(selectionKeysForTurn);
+    const selectedForTurn = allCandidates.filter((candidate) =>
+      selectionSetForTurn.has(candidateKey(candidate)),
+    );
+    if (selectionInstruction.changed) setSelectedKeys(selectionKeysForTurn);
     if (showUser) {
       setMessages((current) => [...current, { role: "user", text: clean }]);
       setDraft("");
@@ -313,10 +387,10 @@ export function HpoEmerySheet({
             hpoPlanningProspectIds: allCandidates
               .map((candidate) => candidate.prospectId)
               .filter((id): id is string => Boolean(id)),
-            hpoPlanningSelectedAccountIds: selectedCandidates
+            hpoPlanningSelectedAccountIds: selectedForTurn
               .map((candidate) => candidate.accountId)
               .filter((id): id is string => Boolean(id)),
-            hpoPlanningSelectedProspectIds: selectedCandidates
+            hpoPlanningSelectedProspectIds: selectedForTurn
               .map((candidate) => candidate.prospectId)
               .filter((id): id is string => Boolean(id)),
           },
