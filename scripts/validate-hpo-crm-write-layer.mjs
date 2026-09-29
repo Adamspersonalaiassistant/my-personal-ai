@@ -71,3 +71,28 @@ assert.doesNotMatch(serverSource, /userId:\s*z\./, "Client-controlled userId inp
 assert.doesNotMatch(serverSource, /service_role|serviceRole/, "Service-role access is forbidden");
 
 console.log("HPO controlled CRM write validation passed.");
+
+
+const crmSource = await readFile(
+  new URL("../src/lib/hpo-crm-write.functions.ts", import.meta.url),
+  "utf8",
+);
+for (const operation of [
+  "updateVerifiedHpoAccountFacts",
+  "correctHpoAccountRelationship",
+  "upsertVerifiedHpoContact",
+  "importVerifiedHpoInteractionHistory",
+]) {
+  const start = crmSource.indexOf(`export const ${operation}`);
+  assert.ok(start >= 0, `${operation} must be exported`);
+  const boundary = crmSource.indexOf("export const ", start + 20);
+  const block = crmSource.slice(start, boundary < 0 ? undefined : boundary);
+  assert.match(block, /\.middleware\(\[requireSupabaseAuth\]\)/, `${operation} must enforce auth`);
+  assert.match(block, /context\.userId/, `${operation} must derive ownership from auth context`);
+}
+assert.match(
+  crmSource,
+  /containsPhi:\s*z\.literal\(false\)/,
+  "Historical interaction imports must require an explicit non-PHI assertion",
+);
+assert.doesNotMatch(crmSource, /service_role|serviceRole/, "CRM bridge may not use service-role access");
