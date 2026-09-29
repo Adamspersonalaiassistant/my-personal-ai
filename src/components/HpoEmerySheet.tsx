@@ -306,6 +306,19 @@ export function HpoEmerySheet({
             selectedAccountId: selectedAccountId ?? null,
             hpoEphemeral: true,
             hpoEphemeralSession: sessionRef.current || null,
+            hpoPlanningArea: recommendation?.area ?? null,
+            hpoPlanningAccountIds: allCandidates
+              .map((candidate) => candidate.accountId)
+              .filter((id): id is string => Boolean(id)),
+            hpoPlanningProspectIds: allCandidates
+              .map((candidate) => candidate.prospectId)
+              .filter((id): id is string => Boolean(id)),
+            hpoPlanningSelectedAccountIds: selectedCandidates
+              .map((candidate) => candidate.accountId)
+              .filter((id): id is string => Boolean(id)),
+            hpoPlanningSelectedProspectIds: selectedCandidates
+              .map((candidate) => candidate.prospectId)
+              .filter((id): id is string => Boolean(id)),
           },
         },
       });
