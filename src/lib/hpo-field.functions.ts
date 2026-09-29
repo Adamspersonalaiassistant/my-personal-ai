@@ -1356,18 +1356,32 @@ export async function getHpoNearbyBackupsCore(input: {
       })),
   ]
     .sort((a, b) => a.directMiles - b.directMiles)
-    .slice(0, 18);
+    // Road time, not straight-line distance, decides the recommendation. Keep a
+    // broad geographic safety pool and evaluate it in bounded matrix batches.
+    .slice(0, 72);
 
   if (!rough.length) return { origin, options: [], recommended: null };
-  const { durations, distances } = await roadMatrix([
-    origin,
-    ...rough.map((row) => ({ lat: row.latitude, lon: row.longitude })),
-  ]);
+
+  const roadMetrics = new Map<string, { seconds: number; meters: number }>();
+  for (let offset = 0; offset < rough.length; offset += 18) {
+    const batch = rough.slice(offset, offset + 18);
+    const { durations, distances } = await roadMatrix([
+      origin,
+      ...batch.map((row) => ({ lat: row.latitude, lon: row.longitude })),
+    ]);
+    batch.forEach((row, index) => {
+      roadMetrics.set(row.key, {
+        seconds: Number(durations[0]?.[index + 1] ?? Number.POSITIVE_INFINITY),
+        meters: Number(distances[0]?.[index + 1] ?? Number.POSITIVE_INFINITY),
+      });
+    });
+  }
 
   const options = rough
-    .map((row, index) => {
-      const seconds = Number(durations[0]?.[index + 1] ?? Number.POSITIVE_INFINITY);
-      const meters = Number(distances[0]?.[index + 1] ?? Number.POSITIVE_INFINITY);
+    .map((row) => {
+      const metric = roadMetrics.get(row.key);
+      const seconds = Number(metric?.seconds ?? Number.POSITIVE_INFINITY);
+      const meters = Number(metric?.meters ?? Number.POSITIVE_INFINITY);
       const driveMinutes = Math.round(seconds / 60);
       const overdue = row.nextActionDueAt && Date.parse(row.nextActionDueAt) < now ? 1 : 0;
       const daysSinceTouch = row.lastTouchAt
