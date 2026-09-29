@@ -223,6 +223,14 @@ export function HpoLeafletMap({
   }, []);
 
   useEffect(() => {
+    if (listMode) return;
+    const frame = requestAnimationFrame(() =>
+      mapRef.current?.invalidateSize({ pan: false, animate: false }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [listMode]);
+
+  useEffect(() => {
     const map = mapRef.current;
     const layer = officeLayerRef.current;
     if (!map || !layer || !ready) return;
@@ -392,7 +400,7 @@ export function HpoLeafletMap({
 
   return (
     <section className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#eef2f7]">
-      <div className="shrink-0 border-b border-slate-200/90 bg-white/96 px-3 pb-2 pt-3 shadow-sm">
+      <div className="relative z-[1000] shrink-0 border-b border-slate-200/90 bg-white/96 px-3 pb-2 pt-3 shadow-sm">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
           <input
@@ -457,7 +465,7 @@ export function HpoLeafletMap({
         </div>
 
         {searchResults.length ? (
-          <div className="mt-2 max-h-56 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-lg">
+          <div className="absolute left-3 right-3 top-full max-h-[min(14rem,40dvh)] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-lg">
             {searchResults.map((office) => (
               <button
                 key={office.key}
@@ -485,7 +493,7 @@ export function HpoLeafletMap({
             ))}
           </div>
         ) : query.trim() ? (
-          <div className="mt-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
+          <div className="absolute left-3 right-3 top-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500 shadow-lg">
             No matching offices.
           </div>
         ) : null}
@@ -570,7 +578,7 @@ export function HpoLeafletMap({
         ) : null}
       </div>
 
-      <div className="shrink-0 border-t border-slate-200 bg-white px-3 pb-[max(0.7rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-10px_30px_rgba(15,23,42,.08)]">
+      <div className="shrink-0 border-t border-slate-200 bg-white px-3 pb-2 pt-2 shadow-[0_-10px_30px_rgba(15,23,42,.08)]">
         {selectedOffice ? (
           <>
             <div className="flex items-start gap-3">
