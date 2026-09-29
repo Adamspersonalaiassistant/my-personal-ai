@@ -36,4 +36,3 @@
   > :not(header):not(.hpo-today-overview):not(.hpo-today-next):not(.hpo-today-queue) {
   order: 4;
 }
-

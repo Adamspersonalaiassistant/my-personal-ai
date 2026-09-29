@@ -1013,9 +1013,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
 
           {data.lastCompletedStop || nextStop ? (
             <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-              <p className="text-[9px] font-semibold uppercase text-primary">
-                Route context
-              </p>
+              <p className="text-[9px] font-semibold uppercase text-primary">Route context</p>
               <p className="mt-1 text-[11px] leading-5 text-slate-600">
                 {data.lastCompletedStop
                   ? `Last: Stop ${data.lastCompletedStop.stop_order} · ${data.lastCompletedStop.office_name || "completed"}.`
@@ -1054,9 +1052,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
       >
         <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2.5">
           <div>
-            <p className="text-[10px] font-semibold uppercase text-primary">
-              Daily Route
-            </p>
+            <p className="text-[10px] font-semibold uppercase text-primary">Daily Route</p>
             <h3 className="text-sm font-semibold">{data.total} scheduled stops</h3>
           </div>
           <span className="rounded-full bg-accent px-2.5 py-1 text-[10px] font-semibold text-primary">
@@ -1438,7 +1434,10 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
           <p className="emery-kicker">Nearby Backup</p>
           <div className="mt-2 space-y-2">
             {nearbyOptions.slice(0, 3).map((option, index) => (
-              <div key={option.key} className="rounded-2xl border border-border bg-card p-3 shadow-sm">
+              <div
+                key={option.key}
+                className="rounded-2xl border border-border bg-card p-3 shadow-sm"
+              >
                 <div className="flex items-start gap-3">
                   <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-primary/[0.08] text-xs font-semibold text-primary">
                     {index + 1}
