@@ -1281,11 +1281,13 @@ export function HpoRoutePlannerCompact({ onOpen }: { onOpen: () => void }) {
 
 export function HpoRoutePlanner({
   onNavigateHpo,
+  onRouteContextChange,
   initialRouteId = null,
   initialRouteDate = null,
   openBuilderOnMount = false,
 }: {
   onNavigateHpo?: ((view: "today" | "planner" | "map" | "accounts" | "activity") => void) | undefined;
+  onRouteContextChange?: ((routeId: string | null) => void) | undefined;
   initialRouteId?: string | null;
   initialRouteDate?: string | null;
   openBuilderOnMount?: boolean;
@@ -1382,6 +1384,12 @@ export function HpoRoutePlanner({
   }, [activeRouteId, data, mapPreparedOnce, mapPreparing, prepareOfficeMap]);
 
   const activeRoute = data?.routes.find((route) => route.id === activeRouteId) ?? null;
+
+  useEffect(() => {
+    onRouteContextChange?.(activeRouteId);
+    return () => onRouteContextChange?.(null);
+  }, [activeRouteId, onRouteContextChange]);
+
   const activeCalendar = activeRoute
     ? (data?.calendar ?? []).filter((item) => item.local_date === activeRoute.route_date)
     : [];
