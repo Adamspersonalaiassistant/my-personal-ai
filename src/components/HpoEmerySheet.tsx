@@ -54,6 +54,7 @@ type RouteRecommendationCandidate = {
   veinPriorityScore?: number | null;
   veinVisitStatus?: string | null;
   lunchTarget?: boolean;
+  tags?: string[];
 };
 
 type RouteRecommendation = {
@@ -127,6 +128,31 @@ function categoryIcon(group: RecommendationGroup) {
   return Building2;
 }
 
+function tagLabel(tag: string) {
+  const labels: Record<string, string> = {
+    vein_prospect: "VEIN PROSPECT",
+    lunch_target: "LUNCH TARGET",
+    need_to_visit: "NEED TO VISIT",
+    warm_relationship: "WARM RELATIONSHIP",
+    lunch_set: "LUNCH SET",
+  };
+  return labels[tag] ?? tag.replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function tagClasses(tag: string) {
+  if (tag === "vein_prospect")
+    return "border-cyan-400/35 bg-cyan-400/10 text-cyan-300";
+  if (tag === "lunch_target")
+    return "border-amber-400/35 bg-amber-400/10 text-amber-300";
+  if (tag === "need_to_visit")
+    return "border-violet-400/35 bg-violet-400/10 text-violet-300";
+  if (tag === "warm_relationship")
+    return "border-emerald-400/35 bg-emerald-400/10 text-emerald-300";
+  if (tag === "lunch_set")
+    return "border-green-400/35 bg-green-400/10 text-green-300";
+  return "border-border bg-accent/35 text-foreground/80";
+}
+
 function normalizeSelectionText(value: string) {
   return value
     .toLowerCase()
@@ -178,6 +204,24 @@ function applySelectionInstruction(
 
   if (/\b(?:vein|veins|vascular|venous)\b/.test(text)) {
     const keys = candidates.filter((candidate) => candidate.veinTarget).map(candidateKey);
+    if (/\b(?:remove|clear|drop|exclude)\b/.test(text)) {
+      for (const key of keys) set.delete(key);
+      changed = true;
+    } else if (/\b(?:only|use|select|include|keep)\b/.test(text)) {
+      if (/\bonly\b/.test(text)) set.clear();
+      for (const key of keys) {
+        if (set.size >= MAX_ROUTE_STOPS) break;
+        set.add(key);
+      }
+      changed = true;
+    }
+  }
+
+  const availableTags = [...new Set(candidates.flatMap((candidate) => candidate.tags ?? []))];
+  for (const tag of availableTags) {
+    const phrase = normalizeSelectionText(tag.replace(/[_-]+/g, " "));
+    if (!phrase || !text.includes(phrase)) continue;
+    const keys = candidates.filter((candidate) => candidate.tags?.includes(tag)).map(candidateKey);
     if (/\b(?:remove|clear|drop|exclude)\b/.test(text)) {
       for (const key of keys) set.delete(key);
       changed = true;
@@ -245,6 +289,8 @@ export function HpoEmerySheet({
   const buildSelection = useServerFn(buildHpoRouteFromSelection);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const jumpToTopRef = useRef(false);
   const sessionRef = useRef<string>("");
 
   const [open, setOpen] = useState(false);
@@ -259,13 +305,13 @@ export function HpoEmerySheet({
   const [recommendation, setRecommendation] = useState<RouteRecommendation | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [showAll, setShowAll] = useState(true);
-  const [veinOnly, setVeinOnly] = useState(false);
+  const [activeTag, setActiveTag] = useState<string | null>(null);
   const [officeQuery, setOfficeQuery] = useState("");
   const [openGroups, setOpenGroups] = useState<Record<RecommendationGroup, boolean>>({
-    "Doctors / Medical": true,
-    Attorneys: true,
-    "PT / Chiro": true,
-    Other: true,
+    "Doctors / Medical": false,
+    Attorneys: false,
+    "PT / Chiro": false,
+    Other: false,
   });
 
   useEffect(() => {
@@ -283,8 +329,14 @@ export function HpoEmerySheet({
       setRecommendation(null);
       setSelectedKeys([]);
       setShowAll(true);
-      setVeinOnly(false);
+      setActiveTag(null);
       setOfficeQuery("");
+      setOpenGroups({
+        "Doctors / Medical": false,
+        Attorneys: false,
+        "PT / Chiro": false,
+        Other: false,
+      });
       setError("");
       setPending(false);
       setBuilding(false);
@@ -305,6 +357,11 @@ export function HpoEmerySheet({
   useEffect(() => {
     if (!open) return;
     const frame = requestAnimationFrame(() => {
+      if (jumpToTopRef.current && recommendation) {
+        jumpToTopRef.current = false;
+        scrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+        return;
+      }
       endRef.current?.scrollIntoView({
         block: "end",
         behavior: pending || building ? "smooth" : "auto",
@@ -343,11 +400,33 @@ export function HpoEmerySheet({
     [recommendation],
   );
 
+  const availableTags = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const candidate of allCandidates) {
+      for (const tag of candidate.tags ?? []) {
+        counts.set(tag, (counts.get(tag) ?? 0) + 1);
+      }
+    }
+    const order = ["vein_prospect", "lunch_target", "need_to_visit", "warm_relationship", "lunch_set"];
+    return [...counts.entries()]
+      .sort(([left], [right]) => {
+        const leftIndex = order.indexOf(left);
+        const rightIndex = order.indexOf(right);
+        if (leftIndex !== -1 || rightIndex !== -1) {
+          if (leftIndex === -1) return 1;
+          if (rightIndex === -1) return -1;
+          return leftIndex - rightIndex;
+        }
+        return tagLabel(left).localeCompare(tagLabel(right));
+      })
+      .map(([tag, count]) => ({ tag, count }));
+  }, [allCandidates]);
+
   const visibleCandidates = (showAll
     ? allCandidates
     : allCandidates.filter((candidate) => recommendedKeys.has(candidateKey(candidate)))
   )
-    .filter((candidate) => (veinOnly ? candidate.veinTarget === true : true))
+    .filter((candidate) => (activeTag ? candidate.tags?.includes(activeTag) : true))
     .filter((candidate) => {
     const needle = officeQuery.trim().toLowerCase();
     if (!needle) return true;
@@ -358,6 +437,7 @@ export function HpoEmerySheet({
       candidate.specialty,
       candidate.relationshipStage,
       candidate.latestNote,
+      ...(candidate.tags ?? []).map(tagLabel),
       ...(candidate.reasons ?? []),
     ]
       .filter(Boolean)
@@ -384,11 +464,20 @@ export function HpoEmerySheet({
 
   function installRecommendation(next: RouteRecommendation) {
     const pool = next.allCandidates?.length ? next.allCandidates : next.candidates;
+    jumpToTopRef.current = true;
     setRecommendation({ ...next, allCandidates: pool });
     const initial = (next.candidates ?? []).map(candidateKey);
     setSelectedKeys(initial);
     if (next.routeDate) setSessionRouteDate(next.routeDate);
     setShowAll(true);
+    setActiveTag(null);
+    setOfficeQuery("");
+    setOpenGroups({
+      "Doctors / Medical": false,
+      Attorneys: false,
+      "PT / Chiro": false,
+      Other: false,
+    });
   }
 
   async function sendText(text: string, showUser: boolean) {
@@ -516,11 +605,11 @@ export function HpoEmerySheet({
 
   function selectVeinTargets() {
     const keys = allCandidates
-      .filter((candidate) => candidate.veinTarget)
+      .filter((candidate) => candidate.tags?.includes("vein_prospect"))
       .slice(0, MAX_ROUTE_STOPS)
       .map(candidateKey);
     setSelectedKeys(keys);
-    setVeinOnly(true);
+    setActiveTag("vein_prospect");
     setError("");
   }
 
@@ -624,7 +713,7 @@ export function HpoEmerySheet({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
+        <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
           {!messages.length && !pending ? (
             <p className="px-1 text-sm leading-6 text-muted-foreground">
               Emery is reviewing your HPO relationship history and target offices for this route.
@@ -708,14 +797,16 @@ export function HpoEmerySheet({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setVeinOnly((current) => !current)}
+                    onClick={() =>
+                      setActiveTag((current) => (current === "vein_prospect" ? null : "vein_prospect"))
+                    }
                     className={
-                      veinOnly
+                      activeTag === "vein_prospect"
                         ? "min-h-9 rounded-xl bg-primary px-3 text-[11px] font-semibold text-primary-foreground"
                         : "min-h-9 rounded-xl border border-primary/25 bg-background/40 px-3 text-[11px] font-semibold text-primary"
                     }
                   >
-                    Vein targets {allCandidates.filter((candidate) => candidate.veinTarget).length}
+                    Vein prospects {allCandidates.filter((candidate) => candidate.tags?.includes("vein_prospect")).length}
                   </button>
                   {allCandidates.some((candidate) => candidate.veinTarget) ? (
                     <button
@@ -739,6 +830,41 @@ export function HpoEmerySheet({
                       </button>
                     ))}
                 </div>
+
+                {availableTags.length ? (
+                  <div className="mt-3">
+                    <div className="mb-1.5 flex items-center justify-between gap-2">
+                      <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        Filter by tag
+                      </p>
+                      {activeTag ? (
+                        <button
+                          type="button"
+                          onClick={() => setActiveTag(null)}
+                          className="text-[9px] font-semibold text-primary"
+                        >
+                          Show all
+                        </button>
+                      ) : null}
+                    </div>
+                    <div className="flex gap-1.5 overflow-x-auto pb-1">
+                      {availableTags.map(({ tag, count }) => (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => setActiveTag((current) => (current === tag ? null : tag))}
+                          className={`shrink-0 rounded-full border px-2.5 py-1.5 text-[9px] font-bold tracking-[0.04em] ${
+                            activeTag === tag
+                              ? `${tagClasses(tag)} ring-1 ring-current/30`
+                              : tagClasses(tag)
+                          }`}
+                        >
+                          {tagLabel(tag)} · {count}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="mt-3 flex min-h-11 items-center gap-2 rounded-xl border border-border bg-background/45 px-3">
                   <Search className="size-4 shrink-0 text-muted-foreground" />
@@ -803,7 +929,12 @@ export function HpoEmerySheet({
                         >
                           <Icon className="size-4 shrink-0 text-primary" />
                           <span className="min-w-0 flex-1 text-sm font-semibold">{group}</span>
-                          <span className="text-[10px] text-muted-foreground">{candidates.length}</span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {candidates.length}
+                            {candidates.some((candidate) => selectedKeys.includes(candidateKey(candidate)))
+                              ? ` · ${candidates.filter((candidate) => selectedKeys.includes(candidateKey(candidate))).length} selected`
+                              : ""}
+                          </span>
                           <ChevronDown
                             className={`size-4 text-muted-foreground transition-transform ${
                               openGroups[group] ? "rotate-180" : ""
@@ -885,18 +1016,21 @@ export function HpoEmerySheet({
                                         {recommended ? (
                                           <span className="text-[9px] font-semibold text-primary">Recommended</span>
                                         ) : null}
-                                        {candidate.veinTarget ? (
-                                          <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[9px] font-bold text-primary">
-                                            VEIN / LUNCH
-                                          </span>
-                                        ) : null}
-                                        {candidate.veinVisitStatus ? (
-                                          <span className="text-[9px] font-medium text-muted-foreground">
-                                            {candidate.veinVisitStatus}
-                                          </span>
-                                        ) : null}
                                       </div>
                                     </div>
+
+                                    {candidate.tags?.length ? (
+                                      <div className="mt-2 flex flex-wrap gap-1.5">
+                                        {candidate.tags.map((tag) => (
+                                          <span
+                                            key={tag}
+                                            className={`rounded-full border px-2 py-1 text-[8px] font-bold tracking-[0.05em] ${tagClasses(tag)}`}
+                                          >
+                                            {tagLabel(tag)}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    ) : null}
 
                                     {candidate.reasons?.length ? (
                                       <ul className="mt-2 space-y-1">
