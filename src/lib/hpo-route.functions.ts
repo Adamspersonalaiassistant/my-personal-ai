@@ -2203,6 +2203,7 @@ export async function captureHpoRouteNoteCore(input: {
   idempotencyKey?: string | null;
   sourceChannel?: string | null;
   sourceMessageId?: string | null;
+  preferredStopId?: string | null;
 }) {
   const message = clean(input.message);
   if (!message) throw new Error("Tell Emery what happened at the stop");
@@ -2219,6 +2220,7 @@ export async function captureHpoRouteNoteCore(input: {
       routeId: input.routeId,
       message,
       sourceChannel: input.sourceChannel ?? "route_note",
+      preferredStopId: input.preferredStopId ?? null,
     },
   });
   if (
@@ -2296,6 +2298,14 @@ export async function captureHpoRouteNoteCore(input: {
       if (!best || score > best.score) best = { row, score };
     }
     if (!target && best && best.score >= 0.5) target = best.row;
+  }
+
+  if (!target && input.preferredStopId) {
+    target =
+      rows.find(
+        (row: any) =>
+          row.id === input.preferredStopId && !TERMINAL.has(String(row.status)),
+      ) ?? null;
   }
 
   if (!target) {
