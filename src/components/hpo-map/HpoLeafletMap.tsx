@@ -10,6 +10,7 @@ import {
   MessageCircle,
   Navigation,
   RefreshCw,
+  Route as RouteIcon,
   Search,
   X,
 } from "lucide-react";
@@ -214,6 +215,7 @@ export function HpoLeafletMap({
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [listMode, setListMode] = useState(false);
+  const [routeListMode, setRouteListMode] = useState(false);
   const selectedSet = useMemo(() => new Set(selectedKeys), [selectedKeys]);
 
   const filtered = useMemo(() => {
@@ -285,12 +287,12 @@ export function HpoLeafletMap({
   }, []);
 
   useEffect(() => {
-    if (listMode) return;
+    if (listMode || routeListMode) return;
     const frame = requestAnimationFrame(() =>
       mapRef.current?.invalidateSize({ pan: false, animate: false }),
     );
     return () => cancelAnimationFrame(frame);
-  }, [listMode]);
+  }, [listMode, routeListMode]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -386,17 +388,25 @@ export function HpoLeafletMap({
 
   useEffect(() => {
     const layer = routeLayerRef.current;
-    if (!layer || !ready) return;
+    const map = mapRef.current;
+    if (!layer || !map || !ready) return;
     layer.clearLayers();
     const coords = routeCoordinates(route);
     if (coords.length >= 2) {
       L.polyline(coords, {
         color: "#1769e8",
         weight: 5,
-        opacity: 0.82,
+        opacity: 0.86,
         lineCap: "round",
         lineJoin: "round",
       }).addTo(layer);
+      const bounds = L.latLngBounds(coords as L.LatLngExpression[]);
+      map.fitBounds(bounds.pad(0.12), {
+        maxZoom: 13,
+        animate: false,
+        paddingTopLeft: [18, 18],
+        paddingBottomRight: [18, 190],
+      });
     }
     const ordered = [...(route?.stops ?? [])].sort((a, b) => a.stop_order - b.stop_order);
     const currentId = ordered.find((stop) => !TERMINAL.has(stop.status))?.id ?? null;
@@ -405,7 +415,7 @@ export function HpoLeafletMap({
       const completed = TERMINAL.has(stop.status);
       const current = stop.id === currentId;
       const marker = L.circleMarker([Number(stop.latitude), Number(stop.longitude)], {
-        radius: current ? 10 : 8,
+        radius: current ? 11 : 9,
         color: "#ffffff",
         weight: 2.5,
         fillColor: current ? "#0f4fb9" : completed ? "#8ab8f5" : "#1769e8",
@@ -416,6 +426,11 @@ export function HpoLeafletMap({
         direction: "center",
         className: "hpo-route-number-tooltip",
       });
+      marker.bindPopup(
+        `<strong>${stop.stop_order}. ${stop.office_name || "Route stop"}</strong>${
+          stop.address ? `<br/>${stop.address}${stop.city ? `, ${stop.city}` : ""}` : ""
+        }`,
+      );
       marker.addTo(layer);
     }
   }, [ready, route]);
@@ -511,12 +526,32 @@ export function HpoLeafletMap({
           ))}
           <button
             type="button"
-            onClick={() => setListMode((value) => !value)}
+            onClick={() => {
+              setRouteListMode(false);
+              setListMode((value) => !value);
+            }}
             className="flex min-h-10 shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-4 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <List className="size-3.5" />
-            {listMode ? "Map" : "List"}
+            {listMode ? "Map" : "Offices"}
           </button>
+          {route ? (
+            <button
+              type="button"
+              onClick={() => {
+                setListMode(false);
+                setRouteListMode((value) => !value);
+              }}
+              className={`flex min-h-10 shrink-0 items-center gap-1.5 rounded-full border px-4 text-xs font-semibold ${
+                routeListMode
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-primary/35 bg-primary/10 text-primary"
+              }`}
+            >
+              <RouteIcon className="size-3.5" />
+              {routeListMode ? "Map" : "Route"}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onRefreshPins}
@@ -586,9 +621,62 @@ export function HpoLeafletMap({
       <div className="relative min-h-0 flex-1">
         <div
           ref={containerRef}
-          className={`absolute inset-0 z-0 bg-[#dbe5ee] ${listMode ? "invisible" : ""}`}
+          className={`absolute inset-0 z-0 bg-[#dbe5ee] ${listMode || routeListMode ? "invisible" : ""}`}
           aria-label="Interactive HPO office map"
         />
+
+        {routeListMode && route ? (
+          <div className="absolute inset-0 z-10 overflow-y-auto bg-background px-3 py-3 pb-44">
+            <div className="mb-3 rounded-2xl border border-primary/20 bg-primary/[0.05] p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-primary">
+                Optimized route
+              </p>
+              <p className="mt-1 text-sm font-semibold text-foreground">
+                {route.area || "HPO Marketing Route"}
+              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {route.route_date ? new Date(`${route.route_date}T12:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" }) : "Route"} · {route.stops.length} stops
+                {route.optimized_duration_seconds ? ` · ${Math.round(route.optimized_duration_seconds / 60)} min drive` : ""}
+                {route.optimized_distance_meters ? ` · ${(route.optimized_distance_meters / 1609.344).toFixed(1)} mi` : ""}
+              </p>
+            </div>
+            <div className="space-y-2">
+              {[...route.stops]
+                .sort((a, b) => a.stop_order - b.stop_order)
+                .map((stop) => (
+                  <div
+                    key={stop.id}
+                    className="flex items-start gap-3 rounded-2xl border border-border bg-card p-3 shadow-sm"
+                  >
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                      {stop.stop_order}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-foreground">
+                        {stop.office_name || "Route stop"}
+                      </p>
+                      <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
+                        {[stop.address, stop.city].filter(Boolean).join(", ") || "Address saved on route"}
+                      </p>
+                      <p className="mt-1 text-[10px] text-primary">
+                        {stop.drive_seconds_from_previous
+                          ? `${Math.max(1, Math.round(stop.drive_seconds_from_previous / 60))} min from previous`
+                          : stop.stop_order === 1
+                            ? "First stop"
+                            : ""}
+                        {stop.distance_meters_from_previous
+                          ? ` · ${(stop.distance_meters_from_previous / 1609.344).toFixed(1)} mi`
+                          : ""}
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-full border border-border px-2 py-1 text-[9px] font-semibold capitalize text-muted-foreground">
+                      {String(stop.status).replaceAll("_", " ")}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          </div>
+        ) : null}
 
         {listMode ? (
           <div className="absolute inset-0 z-10 overflow-y-auto bg-background px-3 py-3 pb-40">
@@ -634,7 +722,7 @@ export function HpoLeafletMap({
           </div>
         ) : null}
 
-        {!listMode ? (
+        {!listMode && !routeListMode ? (
           <div className="pointer-events-none absolute right-3 top-3 z-[500] flex flex-col gap-2">
             <button
               type="button"
@@ -749,10 +837,27 @@ export function HpoLeafletMap({
           <div className="flex items-center gap-3">
             <div className="min-w-0 flex-1">
               <p className="text-xs font-semibold text-foreground">
-                {route ? `${route.stops.length} stops on today's route` : "Build today's route"}
+                {route
+                  ? `${route.optimized_at ? "Optimized" : "Saved"} route · ${route.stops.length} stops`
+                  : "Build an HPO route"}
               </p>
               <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
-                Search or tap offices, then add them to your route.
+                {route
+                  ? [
+                      route.area || "HPO",
+                      route.route_date
+                        ? new Date(`${route.route_date}T12:00:00`).toLocaleDateString([], { month: "short", day: "numeric" })
+                        : null,
+                      route.optimized_duration_seconds
+                        ? `${Math.round(route.optimized_duration_seconds / 60)} min drive`
+                        : null,
+                      route.optimized_distance_meters
+                        ? `${(route.optimized_distance_meters / 1609.344).toFixed(1)} mi`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
+                  : "Search or tap offices, choose your stops, then optimize the route."}
               </p>
             </div>
             <button
@@ -760,8 +865,8 @@ export function HpoLeafletMap({
               onClick={() =>
                 openHpoEmery(
                   route
-                    ? "Help me with today's HPO route."
-                    : "Help me build today's HPO field route.",
+                    ? `Help me with the HPO route for ${route.route_date || "this route"}. Review the optimized stop order and help me change it if needed.`
+                    : "Help me build an HPO field route. Ask me for the date and territory if I haven't given them.",
                   "HPO Route",
                 )
               }
@@ -778,7 +883,7 @@ export function HpoLeafletMap({
             onClick={onBuildRoute}
             className="mt-2 min-h-12 w-full rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm"
           >
-            {route ? `Add ${selectedKeys.length} to Today` : `Build Route · ${selectedKeys.length}`}
+            {route ? `Add ${selectedKeys.length} to Route` : `Build Route · ${selectedKeys.length}`}
           </button>
         ) : null}
 
