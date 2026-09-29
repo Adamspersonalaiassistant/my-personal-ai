@@ -242,6 +242,7 @@ function HpoWorkspace() {
         {selected && (
           <HpoAccountFieldDetail
             accountId={selected}
+            revision={revision}
             onClose={() => setSelected(null)}
             onChanged={() => void refresh()}
             onNote={() => { setLogAccount(selected); setSheet("note"); }}
@@ -328,16 +329,21 @@ function Accounts({
   limited,
   onAdd,
   onOpen,
+  onNote,
+  onEmery,
 }: {
   accounts: Account[];
   limited: boolean;
   onAdd: () => void;
   onOpen: (id: string) => void;
+  onNote: (id: string) => void;
+  onEmery: (account: Account) => void;
 }) {
   const [query, setQuery] = useState("");
   const [type, setType] = useState("all");
   const [stage, setStage] = useState("all");
   const [city, setCity] = useState("all");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const types = useMemo(
     () => [...new Set(accounts.map((a) => a.account_type).filter(Boolean))].sort() as string[],
     [accounts],
@@ -361,68 +367,63 @@ function Accounts({
       (city === "all" || a.city === city)
     );
   });
+  const activeFilters = [type, stage, city].filter((value) => value !== "all").length;
   return (
-    <section className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <h1 className="text-lg font-semibold">Accounts</h1>
-          <p className="text-xs text-muted-foreground">{shown.length} offices</p>
+    <section className="hpo-crm min-w-0 space-y-3 rounded-lg bg-background p-2 text-foreground sm:p-4">
+      <div className="sticky top-[4.75rem] z-10 -mx-2 space-y-2 border-b border-border bg-background/95 px-2 pb-2 pt-1 shadow-sm backdrop-blur-md sm:-mx-4 sm:px-4">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+          <div className="min-w-0">
+            <h1 className="text-lg font-semibold">Accounts</h1>
+            <p className="text-xs text-muted-foreground">{shown.length} offices</p>
+          </div>
+          <Button onClick={onAdd} className="min-h-11 shrink-0 px-3"><Plus className="size-4" /> Add</Button>
         </div>
-        <Button onClick={onAdd} className="h-11 px-3">
-          <Plus /> Add
-        </Button>
-      </div>
-      <label className="relative block">
-        <Search className="pointer-events-none absolute left-3 top-3.5 size-4 text-muted-foreground" />
-        <span className="sr-only">Search accounts</span>
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search office, city or address"
-          className={`${field} pl-10`}
-        />
-      </label>
-      <div className="grid grid-cols-3 gap-1.5">
-        <Filter value={type} onChange={setType} label="Type" options={types} />
-        <Filter value={stage} onChange={setStage} label="Stage" options={stages} />
-        <Filter value={city} onChange={setCity} label="City" options={cities} />
-      </div>
-      {limited && (
-        <p className="text-xs text-muted-foreground">Showing the first 1,000 accounts.</p>
-      )}
-      <div className="divide-y divide-border/55 border-y border-border/55">
-        {shown.map((a) => (
-          <Button
-            key={a.id}
-            variant="ghost"
-            onClick={() => onOpen(a.id)}
-            className="h-auto min-h-[76px] w-full justify-between gap-2 rounded-none px-1.5 py-2 text-left hover:bg-card/60"
-          >
-            <span className="min-w-0 flex-1 whitespace-normal">
-              <span className="block break-words text-sm font-semibold">{a.name}</span>
-              <span className="mt-1 block break-words text-xs font-normal text-muted-foreground">
-                {[a.account_type, a.city, a.relationship_stage].filter(Boolean).join(" · ") ||
-                  "Account"}
-              </span>
-              <span className="mt-1 block break-words text-[11px] font-normal text-muted-foreground">
-                {a.next_action
-                  ? `Next: ${a.next_action}${a.next_action_due_at ? ` · ${date(a.next_action_due_at)}` : ""}`
-                  : `Last touch: ${date(a.last_touch_at)}`}
-              </span>
-            </span>
-            <span className="flex shrink-0 items-center gap-1 text-xs text-primary">
-              P{a.priority}
-              <ChevronRight className="size-4" />
-            </span>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+          <label className="relative min-w-0">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <span className="sr-only">Search accounts</span>
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Office, specialty, city…" className="min-h-11 w-full rounded-md border border-border bg-card pl-10 pr-2 text-base text-foreground outline-none focus:border-primary" />
+          </label>
+          <Button type="button" variant="outline" onClick={() => setFiltersOpen((open) => !open)} aria-expanded={filtersOpen} className="min-h-11 shrink-0 gap-1 px-2 text-xs">
+            <SlidersHorizontal className="size-4" /> Filters{activeFilters ? ` · ${activeFilters}` : ""}
           </Button>
-        ))}
-        {!shown.length && (
-          <p className="py-12 text-center text-sm text-muted-foreground">
-            {accounts.length
-              ? "No accounts match these filters."
-              : "No accounts yet. Add your first office."}
-          </p>
-        )}
+        </div>
+        {activeFilters > 0 && <div className="flex items-center gap-2 overflow-x-auto text-xs text-primary">
+          <span className="truncate">{[type, stage, city].filter((v) => v !== "all").join(" · ")}</span>
+          <Button type="button" variant="ghost" className="min-h-11 shrink-0 px-2 text-xs" onClick={() => { setType("all"); setStage("all"); setCity("all"); }}>Clear</Button>
+        </div>}
+        {filtersOpen && <div className="grid gap-2 rounded-md border border-border bg-card p-2 sm:grid-cols-3">
+          <Filter value={type} onChange={setType} label="Type" options={types} />
+          <Filter value={stage} onChange={setStage} label="Stage" options={stages} />
+          <Filter value={city} onChange={setCity} label="City" options={cities} />
+        </div>}
+      </div>
+      {limited && <p className="text-xs text-muted-foreground">Showing the first 1,000 accounts.</p>}
+      <div className="space-y-2">
+        {shown.map((a) => {
+          const due = a.next_action_due_at && Date.parse(a.next_action_due_at) <= Date.now();
+          const navigable = Boolean(a.address?.trim() && /\d/.test(a.address));
+          return <article key={a.id} className="min-w-0 overflow-hidden rounded-md border border-border bg-card shadow-sm">
+            <Button type="button" variant="ghost" onClick={() => onOpen(a.id)} className="h-auto min-h-24 w-full justify-between gap-2 rounded-none px-3 py-3 text-left text-foreground hover:bg-muted/40">
+              <span className="min-w-0 flex-1 whitespace-normal">
+                <span className="block break-words text-sm font-semibold leading-5">{a.name}</span>
+                <span className="mt-1 block break-words text-xs font-normal text-muted-foreground">{[a.city, a.account_type, a.specialty].filter(Boolean).join(" · ") || "Account"}</span>
+                <span className="mt-2 block break-words text-[11px] font-medium capitalize text-primary">{a.relationship_stage || a.status || "Account"} · Priority {a.priority}</span>
+                <span className="mt-1 block text-[11px] font-normal text-muted-foreground">Last touch: {date(a.last_touch_at)}</span>
+                {a.next_action && <span className={`mt-1 block break-words text-xs font-medium ${due ? "text-destructive" : "text-foreground"}`}>
+                  {due ? "Due · " : "Next · "}{a.next_action}{a.next_action_due_at ? ` · ${date(a.next_action_due_at)}` : ""}
+                </span>}
+              </span>
+              <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+            </Button>
+            <div className="flex min-w-0 items-center gap-1 border-t border-border px-1.5 py-1">
+              <Button type="button" variant="ghost" className="min-h-11 flex-1 gap-1 px-1 text-xs" onClick={() => onNote(a.id)}><FileText className="size-4" /> Note</Button>
+              <Button type="button" variant="ghost" className="min-h-11 flex-1 gap-1 px-1 text-xs" onClick={() => onEmery(a)}><MessageCircle className="size-4" /> Emery</Button>
+              {navigable && <a href={`https://maps.apple.com/?daddr=${encodeURIComponent([a.address, a.city].filter(Boolean).join(", "))}`} target="_blank" rel="noreferrer" className="flex min-h-11 flex-1 items-center justify-center gap-1 rounded-md text-xs font-medium text-primary hover:bg-muted"><Navigation className="size-4" /> Go</a>}
+            </div>
+          </article>;
+        })}
+        {!shown.length && <p className="py-12 text-center text-sm text-muted-foreground">{accounts.length ? "No accounts match these filters." : "No accounts yet. Add your first office."}</p>}
       </div>
     </section>
   );
@@ -444,7 +445,7 @@ function Filter({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-11 w-full min-w-0 rounded-md border border-border/70 bg-card/60 px-1.5 text-xs text-foreground"
+        className="h-11 w-full min-w-0 rounded-md border border-border bg-card px-3 text-base text-foreground"
       >
         <option value="all">{label}: All</option>
         {options.map((o) => (
