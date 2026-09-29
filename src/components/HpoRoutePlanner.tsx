@@ -209,7 +209,11 @@ function projectToWorld(lat: number, lon: number, zoom: number) {
   };
 }
 
-function routeMapBaseZoom(points: Array<{ lat: number; lon: number }>) {
+function routeMapBaseZoom(
+  points: Array<{ lat: number; lon: number }>,
+  maxWidth = 620,
+  maxHeight = 245,
+) {
   if (points.length <= 1) return 14;
   for (let zoom = 16; zoom >= 6; zoom -= 1) {
     const projected = points.map((point) => projectToWorld(point.lat, point.lon, zoom));
@@ -219,7 +223,7 @@ function routeMapBaseZoom(points: Array<{ lat: number; lon: number }>) {
     const height =
       Math.max(...projected.map((point) => point.y)) -
       Math.min(...projected.map((point) => point.y));
-    if (width <= 620 && height <= 245) return zoom;
+    if (width <= maxWidth && height <= maxHeight) return zoom;
   }
   return 6;
 }
@@ -250,19 +254,16 @@ function centerForPoints(
 function useInteractiveMap({
   baseCenter,
   fitZoom,
-  width,
-  height,
   resetKey,
 }: {
   baseCenter: { lat: number; lon: number };
   fitZoom: number;
-  width: number;
-  height: number;
   resetKey: string;
 }) {
   const [zoomOffset, setZoomOffset] = useState(0);
   const [center, setCenter] = useState(baseCenter);
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const [viewportSize, setViewportSize] = useState({ width: 390, height: 340 });
   const pointersRef = useRef(new Map<number, { x: number; y: number }>());
   const panStartRef = useRef<{
     pointerId: number;
@@ -275,6 +276,30 @@ function useInteractiveMap({
   const pinchRef = useRef<{ distance: number } | null>(null);
 
   const zoom = Math.max(5, Math.min(18, fitZoom + zoomOffset));
+
+  useEffect(() => {
+    const element = viewportRef.current;
+    if (!element) return;
+    const updateSize = () => {
+      const rect = element.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      setViewportSize((current) => {
+        const next = { width: rect.width, height: rect.height };
+        return Math.abs(current.width - next.width) < 1 && Math.abs(current.height - next.height) < 1
+          ? current
+          : next;
+      });
+    };
+    updateSize();
+    const observer =
+      typeof ResizeObserver !== "undefined" ? new ResizeObserver(updateSize) : null;
+    observer?.observe(element);
+    window.addEventListener("resize", updateSize);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", updateSize);
+    };
+  }, []);
 
   useEffect(() => {
     setZoomOffset(0);
@@ -342,8 +367,8 @@ function useInteractiveMap({
     if (!start || start.pointerId !== event.pointerId || start.zoom !== zoom) return;
     const rect = viewportRef.current?.getBoundingClientRect();
     if (!rect?.width || !rect.height) return;
-    const dx = (event.clientX - start.x) * (width / rect.width);
-    const dy = (event.clientY - start.y) * (height / rect.height);
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
     setCenter(worldToLatLon(start.worldX - dx, start.worldY - dy, zoom));
   }
 
@@ -372,6 +397,7 @@ function useInteractiveMap({
     center,
     zoom,
     viewportRef,
+    viewportSize,
     zoomIn: () => zoomBy(1),
     zoomOut: () => zoomBy(-1),
     focus: (lat: number, lon: number, targetZoom: number) => {
@@ -433,17 +459,20 @@ function RouteMap({ route }: { route: RoutePlan }) {
     return result;
   }, [route]);
 
-  const fitZoom = useMemo(() => routeMapBaseZoom(points), [points]);
-  const width = 760;
-  const height = 340;
+  const routeViewportWidth =
+    typeof window !== "undefined" ? Math.max(300, Math.min(620, window.innerWidth - 24)) : 366;
+  const fitZoom = useMemo(
+    () => routeMapBaseZoom(points, routeViewportWidth, 245),
+    [points, routeViewportWidth],
+  );
   const baseCenter = useMemo(() => centerForPoints(points, { lat: 40.25, lon: -74.65 }), [points]);
   const map = useInteractiveMap({
     baseCenter,
     fitZoom,
-    width,
-    height,
     resetKey: `${route.id}:${route.optimized_at ?? ""}`,
   });
+  const width = Math.max(1, map.viewportSize.width);
+  const height = Math.max(1, map.viewportSize.height);
 
   if (!points.length) {
     return (
@@ -725,17 +754,21 @@ function OfficePlanningMap({
     lon: Number(office.longitude),
   }));
 
-  const fitZoom = points.length ? routeMapBaseZoom(points) : 8;
-  const width = 760;
-  const height = 390;
+  const officeViewportWidth =
+    typeof window !== "undefined" ? Math.max(300, Math.min(620, window.innerWidth - 16)) : 374;
+  const officeViewportHeight =
+    typeof window !== "undefined" ? Math.max(260, Math.min(390, window.innerHeight * 0.52)) : 360;
+  const fitZoom = points.length
+    ? routeMapBaseZoom(points, officeViewportWidth, Math.max(210, officeViewportHeight - 80))
+    : 8;
   const baseCenter = useMemo(() => centerForPoints(points, { lat: 40.25, lon: -74.65 }), [points]);
   const officeMap = useInteractiveMap({
     baseCenter,
     fitZoom,
-    width,
-    height,
     resetKey: `${filter}:${query.trim().toLowerCase()}:${points.map((point) => point.key).join("|")}`,
   });
+  const width = Math.max(1, officeMap.viewportSize.width);
+  const height = Math.max(1, officeMap.viewportSize.height);
   const zoom = officeMap.zoom;
   const projected = points.map((point) => ({
     ...point,
