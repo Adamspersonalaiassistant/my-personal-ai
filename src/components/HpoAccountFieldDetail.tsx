@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 /* eslint-disable @typescript-eslint/no-explicit-any -- Existing field-context payloads include dynamic account metadata. */
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -31,6 +31,7 @@ function dateLabel(value: string | null | undefined) {
 export function HpoAccountFieldDetail({
   accountId,
   revision,
+  revealHistory,
   onClose,
   onChanged,
   onNote,
@@ -39,6 +40,7 @@ export function HpoAccountFieldDetail({
 }: {
   accountId: string;
   revision?: number;
+  revealHistory?: boolean;
   onClose: () => void;
   onChanged?: () => void;
   onNote?: () => void;
@@ -55,6 +57,11 @@ export function HpoAccountFieldDetail({
   const [editError, setEditError] = useState("");
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const historyRef = useRef<HTMLDetailsElement>(null);
+
+  useEffect(() => {
+    if (revealHistory && data?.account) historyRef.current?.setAttribute("open", "");
+  }, [revealHistory, data]);
 
   useEffect(() => {
     let cancelled = false;
@@ -154,7 +161,7 @@ export function HpoAccountFieldDetail({
                   : ""}
               </p>
             </div>
-            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
               {routeAddress ? (
                 <a
                   href={`https://maps.apple.com/?daddr=${encodeURIComponent(
@@ -162,7 +169,7 @@ export function HpoAccountFieldDetail({
                   )}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex min-h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-xl border border-border/50 bg-card/45 px-2 text-[10px] font-semibold text-foreground"
+                  className="flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-md border border-border bg-card px-1 text-xs font-semibold text-foreground"
                 >
                   <Navigation className="size-4 text-primary" />
                   Navigate
@@ -186,7 +193,7 @@ export function HpoAccountFieldDetail({
                     );
                   }}
                   variant="outline"
-                  className="flex h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-md px-2 text-xs"
+                  className="flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-md px-1 text-xs"
                 >
                   <MapPinned className="size-4" />
                   Route
@@ -196,7 +203,7 @@ export function HpoAccountFieldDetail({
                 type="button"
                 variant="outline"
                 onClick={onNote}
-                className="flex h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-md px-2 text-xs"
+                className="flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-md px-1 text-xs"
               >
                 <FileText className="size-4" />
                 Note
@@ -212,7 +219,7 @@ export function HpoAccountFieldDetail({
                         account.name,
                       )
                 }
-                className="flex h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-md px-2 text-xs"
+                className="flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-md px-1 text-xs"
               >
                 <History className="size-4 text-primary" />
                 Log Visit
@@ -228,7 +235,7 @@ export function HpoAccountFieldDetail({
                         account.name,
                       )
                 }
-                className="flex h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-md px-2 text-xs"
+                className="flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-md px-1 text-xs"
               >
                 <CalendarClock className="size-4 text-primary" />
                 Follow-Up
@@ -241,7 +248,7 @@ export function HpoAccountFieldDetail({
                     account.name,
                   )
                 }
-                className="flex h-14 min-w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-md px-2 text-xs"
+                className="flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-md px-1 text-xs"
               >
                 <MessageCircle className="size-4" />
                 Emery
@@ -595,7 +602,13 @@ export function HpoAccountFieldDetail({
               </div>
             </section>
 
-            <section className="rounded-md border border-border bg-card p-3">
+            <details ref={historyRef} className="rounded-md border border-border bg-card p-3">
+              <summary className="flex min-h-11 cursor-pointer items-center text-sm font-semibold">
+                Relationship history{" "}
+                <span className="ml-auto text-xs font-normal text-muted-foreground">
+                  {interactions.length} recent
+                </span>
+              </summary>
               <div className="flex items-center gap-2">
                 <History className="size-4 text-primary" />
                 <p className="text-sm font-semibold">Relationship history</p>
@@ -639,9 +652,15 @@ export function HpoAccountFieldDetail({
               ) : (
                 <p className="mt-3 text-xs text-muted-foreground">No interactions recorded yet.</p>
               )}
-            </section>
+            </details>
 
-            <section className="rounded-md border border-border bg-card p-3">
+            <details className="rounded-md border border-border bg-card p-3">
+              <summary className="flex min-h-11 cursor-pointer items-center text-sm font-semibold">
+                Route visit history{" "}
+                <span className="ml-auto text-xs font-normal text-muted-foreground">
+                  {routeStops.length} recent
+                </span>
+              </summary>
               <div className="flex items-center gap-2">
                 <CalendarClock className="size-4 text-primary" />
                 <p className="text-sm font-semibold">Route visit history</p>
@@ -669,7 +688,7 @@ export function HpoAccountFieldDetail({
                   No prior route visits recorded.
                 </p>
               )}
-            </section>
+            </details>
 
             {routeAddress ? (
               <a

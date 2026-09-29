@@ -75,6 +75,7 @@ function HpoWorkspace() {
   const [selected, setSelected] = useState<string | null>(null);
   const [sheet, setSheet] = useState<"add" | "log" | "followup" | "note" | null>(null);
   const [logAccount, setLogAccount] = useState("");
+  const [noteSavedAccount, setNoteSavedAccount] = useState<string | null>(null);
   const [logKind, setLogKind] = useState("visit");
   const [page, setPage] = useState(0);
   const [moreLoading, setMoreLoading] = useState(false);
@@ -217,7 +218,10 @@ function HpoWorkspace() {
                 "Accounts",
               )
             }
-            onOpen={setSelected}
+            onOpen={(id) => {
+              setNoteSavedAccount(null);
+              setSelected(id);
+            }}
           />
         ) : null}
         {view === "activity" && data ? (
@@ -248,6 +252,7 @@ function HpoWorkspace() {
           <HpoAccountFieldDetail
             accountId={selected}
             revision={revision}
+            revealHistory={noteSavedAccount === selected}
             onClose={() => setSelected(null)}
             onChanged={() => void refresh()}
             onNote={() => {
@@ -295,6 +300,7 @@ function HpoWorkspace() {
             onClose={() => setSheet(null)}
             onSave={async (summary) => {
               await logTouch({ data: { accountId: logAccount, interactionType: "note", summary } });
+              setNoteSavedAccount(logAccount);
               setSheet(null);
               await refresh();
             }}
