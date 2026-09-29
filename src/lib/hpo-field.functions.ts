@@ -858,9 +858,6 @@ export async function executeHpoRouteReorderCore(input: {
       throw new Error("Manual reorder must include every current route stop exactly once");
     }
 
-    const terminalById = new Map(
-      current.map((row: any) => [row.id, TERMINAL.has(String(row.status))]),
-    );
     const currentOrdered = [...current].sort(
       (left: any, right: any) => left.stop_order - right.stop_order,
     );
@@ -873,27 +870,13 @@ export async function executeHpoRouteReorderCore(input: {
       }
     }
 
-    // The route has a unique (route_id, stop_order) constraint. Move open
-    // stops out of the final range before assigning their new positions so a
-    // swap cannot collide with the row that still owns the destination slot.
-    await stageOpenStopOrders(db, input.userId, input.routeId, currentOrdered);
-
-    for (let index = 0; index < input.stopIds.length; index += 1) {
-      const stopId = input.stopIds[index]!;
-      if (terminalById.get(stopId)) continue;
-      const { error } = await db
-        .from("hpo_route_stops")
-        .update({
-          stop_order: index + 1,
-          distance_meters_from_previous: null,
-          drive_seconds_from_previous: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", stopId)
-        .eq("route_id", input.routeId)
-        .eq("user_id", input.userId);
-      if (error) throw error;
-    }
+    const { error: reorderError } = await db.rpc("emery_hpo_apply_route_order", {
+      p_route_id: input.routeId,
+      p_stop_ids: input.stopIds,
+      p_distance_meters: input.stopIds.map(() => null),
+      p_drive_seconds: input.stopIds.map(() => null),
+    });
+    if (reorderError) throw reorderError;
     await clearRouteOptimization(db, input.userId, input.routeId);
     const verified = await loadStops(db, input.userId, input.routeId);
     const verifiedIds = verified
@@ -1072,15 +1055,10 @@ export async function executeHpoRouteReoptimizeCore(input: {
     const stopByNode = new Map<number, any>();
     open.forEach((stop: any, index: number) => stopByNode.set(stopOffset + index, stop));
     const orderedOpen = optimizedIndexes.map((index) => stopByNode.get(index)).filter(Boolean);
-    const openSlots = open
-      .map((stop: any) => Number(stop.stop_order))
-      .sort((left: number, right: number) => left - right);
-
-    await stageOpenStopOrders(db, input.userId, route.id, open);
-
     let previousNode = startIndex;
     let totalDistance = 0;
     let totalDuration = 0;
+    const metricsByStop = new Map<string, { distance: number; duration: number }>();
     for (let index = 0; index < orderedOpen.length; index += 1) {
       const stop = orderedOpen[index]!;
       const node = optimizedIndexes[index]!;
@@ -1088,19 +1066,36 @@ export async function executeHpoRouteReoptimizeCore(input: {
       const duration = previousNode == null ? 0 : Number(durations[previousNode]?.[node] ?? 0);
       totalDistance += distance;
       totalDuration += duration;
-      const { error } = await db
-        .from("hpo_route_stops")
-        .update({
-          stop_order: openSlots[index],
-          distance_meters_from_previous: Math.round(distance),
-          drive_seconds_from_previous: Math.round(duration),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", stop.id)
-        .eq("user_id", input.userId);
-      if (error) throw error;
+      metricsByStop.set(stop.id, {
+        distance: Math.round(distance),
+        duration: Math.round(duration),
+      });
       previousNode = node;
     }
+
+    const currentOrdered = [...stops].sort(
+      (left: any, right: any) => Number(left.stop_order) - Number(right.stop_order),
+    );
+    let openCursor = 0;
+    const finalOrder = currentOrdered.map((stop: any) => {
+      if (TERMINAL.has(String(stop.status))) return stop.id as string;
+      const replacement = orderedOpen[openCursor]?.id as string | undefined;
+      openCursor += 1;
+      return replacement ?? stop.id;
+    });
+    const distancePayload = finalOrder.map((stopId: string) =>
+      metricsByStop.has(stopId) ? metricsByStop.get(stopId)!.distance : null,
+    );
+    const drivePayload = finalOrder.map((stopId: string) =>
+      metricsByStop.has(stopId) ? metricsByStop.get(stopId)!.duration : null,
+    );
+    const { error: orderError } = await db.rpc("emery_hpo_apply_route_order", {
+      p_route_id: route.id,
+      p_stop_ids: finalOrder,
+      p_distance_meters: distancePayload,
+      p_drive_seconds: drivePayload,
+    });
+    if (orderError) throw orderError;
     if (previousNode != null && endIndex != null) {
       totalDistance += Number(distances[previousNode]?.[endIndex] ?? 0);
       totalDuration += Number(durations[previousNode]?.[endIndex] ?? 0);
