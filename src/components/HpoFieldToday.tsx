@@ -32,6 +32,7 @@ import {
   reorderHpoRouteStopsCanonical,
 } from "@/lib/hpo-field.functions";
 import {
+  addHpoRouteStopNote,
   setHpoRouteStopFollowup,
   setHpoRouteStopOutcome,
   updateHpoRouteStop,
@@ -134,6 +135,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
   const arrive = useServerFn(arriveHpoRouteStop);
   const outcome = useServerFn(setHpoRouteStopOutcome);
   const saveVisit = useServerFn(updateHpoRouteStop);
+  const saveNote = useServerFn(addHpoRouteStopNote);
   const saveFollowup = useServerFn(setHpoRouteStopFollowup);
   const nearby = useServerFn(getHpoNearbyBackups);
   const addStops = useServerFn(addHpoRouteStops);
@@ -245,13 +247,12 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
         },
       });
     } else if (mutation.action === "hpo.route_stop.add_note") {
-      await saveVisit({
+      await saveNote({
         data: {
           stopId: mutation.targetId,
-          notes: payload.notes ?? "",
+          note: payload.notes ?? "",
           idempotencyKey: mutation.idempotencyKey,
           sourceChannel: "offline_sync",
-          baseUpdatedAt: mutation.baseUpdatedAt ?? null,
         },
       });
     } else if (mutation.action === "hpo.route_stop.set_followup") {
@@ -620,15 +621,15 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
       if (typeof navigator !== "undefined" && !navigator.onLine) {
         await queueMutation("hpo.route_stop.add_note", nextStop.id, payload, key);
       } else {
-        await saveVisit({
+        await saveNote({
           data: {
             stopId: nextStop.id,
-            notes: payload.notes,
+            note: payload.notes,
             idempotencyKey: key,
             sourceChannel: "field_ui",
           },
         });
-        setMessage("Note added without completing the stop.");
+        setMessage("Note saved to the route and account history without completing the stop.");
         await load();
       }
       await clearHpoDraftNote(nextStop.id).catch(() => undefined);
@@ -1194,14 +1195,14 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
             <div className="mt-3 grid grid-cols-2 gap-2">
               {nextStop.address ? (
                 <a
-                  href={`https://maps.apple.com/?daddr=${encodeURIComponent(
+                  href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
                     [nextStop.address, nextStop.city].filter(Boolean).join(", "),
-                  )}`}
+                  )}&travelmode=driving`}
                   target="_blank"
                   rel="noreferrer"
-                  className="emery-press flex min-h-12 items-center justify-center gap-2 rounded-xl border border-primary/20 bg-primary/[0.055] text-xs font-semibold text-primary"
+                  className="emery-press flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary px-3 text-xs font-semibold text-primary-foreground"
                 >
-                  <Navigation className="size-4" /> Navigate
+                  <Navigation className="size-4" /> Go
                 </a>
               ) : (
                 <button
