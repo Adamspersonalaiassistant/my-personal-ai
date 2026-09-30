@@ -2378,9 +2378,23 @@ export async function addHpoRouteStopNoteCore(input: {
       if (interactionError) throw interactionError;
       interactionId = interaction?.id ?? null;
 
+      const { data: accountRow, error: accountLoadError } = await input.db
+        .from("hpo_accounts")
+        .select("notes")
+        .eq("id", stop.account_id)
+        .eq("user_id", input.userId)
+        .maybeSingle();
+      if (accountLoadError) throw accountLoadError;
+      const previousAccountNotes = clean(accountRow?.notes);
+      const combinedAccountNotes = previousAccountNotes
+        ? `${previousAccountNotes}\n\n${note}`
+        : note;
       const { error: accountError } = await input.db
         .from("hpo_accounts")
-        .update({ updated_at: new Date().toISOString() })
+        .update({
+          notes: combinedAccountNotes,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", stop.account_id)
         .eq("user_id", input.userId);
       if (accountError) throw accountError;
