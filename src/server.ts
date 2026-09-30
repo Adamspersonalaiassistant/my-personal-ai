@@ -54,7 +54,9 @@ export default {
       const pathname = new URL(request.url).pathname;
       const shouldNoCache =
         contentType.includes("text/html") ||
-        pathname === "/manifest.webmanifest";
+        pathname === "/manifest.webmanifest" ||
+        pathname === "/emery-build.json" ||
+        pathname.startsWith("/assets/");
       if (!shouldNoCache) return normalized;
 
       const headers = new Headers(normalized.headers);
