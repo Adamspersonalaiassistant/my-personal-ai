@@ -152,7 +152,7 @@ Deno.serve(async (req: Request) => {
         .eq("user_id", USER_ID).eq("status", "active").order("priority", { ascending: false }).limit(15),
       db.from("meetings").select("id, title, meeting_at, end_at, participants, metadata")
         .eq("user_id", USER_ID).gte("meeting_at", nowIso).order("meeting_at", { ascending: true }).limit(20),
-      db.from("hpo_accounts").select("id,name,account_type,city,address,priority,owner_name,relationship_stage,relationship_health,next_action,next_action_due_at,tags,metadata")
+      db.from("hpo_accounts").select("id,name,account_type,city,address,priority,owner_name,relationship_stage,relationship_health,next_action,next_action_due_at,notes,tags,metadata")
         .eq("user_id", USER_ID).eq("status", "active").order("priority", { ascending: false }).limit(40),
       db.from("hpo_contacts").select("id,account_id,name,role_title,relationship_notes")
         .eq("user_id", USER_ID).limit(80),
@@ -525,9 +525,16 @@ Deno.serve(async (req: Request) => {
               if (stopUpdate.error) throw stopUpdate.error;
             }
 
+            const previousAccountNotes = String(target.notes ?? "").trim();
+            const combinedAccountNotes = previousAccountNotes
+              ? `${previousAccountNotes}\n\n${summary}`
+              : summary;
             const accountUpdate = await db
               .from("hpo_accounts")
-              .update({ updated_at: new Date().toISOString() })
+              .update({
+                notes: combinedAccountNotes,
+                updated_at: new Date().toISOString(),
+              })
               .eq("user_id", USER_ID)
               .eq("id", target.id);
             if (accountUpdate.error) throw accountUpdate.error;
