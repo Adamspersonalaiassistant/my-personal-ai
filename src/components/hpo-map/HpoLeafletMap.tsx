@@ -15,7 +15,7 @@ import {
   X,
 } from "lucide-react";
 import type { HpoMapOffice, HpoMapRoute } from "@/components/hpo-map/types";
-import { openHpoEmery } from "@/components/HpoEmerySheet";
+import { openHpoEmery } from "@/lib/hpo-emery-event";
 
 const TERMINAL = new Set([
   "completed",
@@ -74,6 +74,7 @@ function officePinCategory(office: HpoMapOffice): PinCategory {
 
 type Props = {
   routeOnly?: boolean;
+  embeddedSelection?: boolean;
   offices: HpoMapOffice[];
   selectedKeys: string[];
   selectedOfficeKey: string | null;
@@ -276,6 +277,7 @@ function numberedStopIcon(
 
 export function HpoLeafletMap({
   routeOnly = false,
+  embeddedSelection = false,
   offices,
   selectedKeys,
   selectedOfficeKey,
@@ -325,7 +327,9 @@ export function HpoLeafletMap({
 
   const selectedOffice =
     offices.find((office) => office.key === selectedOfficeKey) ??
-    offices.find((office) => selectedSet.has(office.key)) ??
+    (!embeddedSelection
+      ? offices.find((office) => selectedSet.has(office.key))
+      : null) ??
     null;
 
   useEffect(() => {
@@ -650,7 +654,11 @@ export function HpoLeafletMap({
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search HPO accounts, offices or towns"
+              placeholder={
+                embeddedSelection
+                  ? "Search offices or towns"
+                  : "Search HPO accounts, offices or towns"
+              }
               className="h-12 w-full rounded-2xl border border-border bg-card pl-10 pr-10 text-base text-foreground shadow-sm outline-none placeholder:text-muted-foreground focus:border-primary"
             />
             {query ? (
@@ -714,17 +722,19 @@ export function HpoLeafletMap({
                 {routeListMode ? "Map" : "Route"}
               </button>
             ) : null}
-            <button
-              type="button"
-              onClick={onRefreshPins}
-              disabled={preparing}
-              className="flex size-10 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
-              aria-label="Refresh HPO offices"
-            >
-              <RefreshCw
-                className={`size-3.5 ${preparing ? "animate-spin" : ""}`}
-              />
-            </button>
+            {!embeddedSelection ? (
+              <button
+                type="button"
+                onClick={onRefreshPins}
+                disabled={preparing}
+                className="flex size-10 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
+                aria-label="Refresh HPO offices"
+              >
+                <RefreshCw
+                  className={`size-3.5 ${preparing ? "animate-spin" : ""}`}
+                />
+              </button>
+            ) : null}
           </div>
 
           <div className="mt-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
@@ -1017,9 +1027,24 @@ export function HpoLeafletMap({
                 </div>
               </div>
 
+              {embeddedSelection && selectedOffice.detail ? (
+                <div className="mt-2 rounded-xl border border-border/60 bg-card/70 px-3 py-2">
+                  <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-primary">
+                    Latest note
+                  </p>
+                  <p className="mt-1 line-clamp-3 text-[11px] leading-4 text-muted-foreground">
+                    {selectedOffice.detail}
+                  </p>
+                </div>
+              ) : null}
+
               <div
                 className={`mt-2 grid gap-2 ${
-                  selectedOffice.accountId ? "grid-cols-4" : "grid-cols-3"
+                  embeddedSelection
+                    ? "grid-cols-2"
+                    : selectedOffice.accountId
+                      ? "grid-cols-4"
+                      : "grid-cols-3"
                 }`}
               >
                 <a
@@ -1035,7 +1060,7 @@ export function HpoLeafletMap({
                   <Navigation className="size-3.5" />
                   Go
                 </a>
-                {selectedOffice.accountId ? (
+                {!embeddedSelection && selectedOffice.accountId ? (
                   <button
                     type="button"
                     onClick={() => onOpenAccount?.(selectedOffice.accountId!)}
@@ -1053,12 +1078,17 @@ export function HpoLeafletMap({
                       : "bg-primary text-primary-foreground"
                   }`}
                 >
-                  {selectedSet.has(selectedOffice.key) ? "Remove" : "Route"}
+                  {selectedSet.has(selectedOffice.key)
+                    ? "Remove"
+                    : embeddedSelection
+                      ? "Select Office"
+                      : "Route"}
                 </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    openHpoEmery(
+                {!embeddedSelection ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openHpoEmery(
                       `I'm looking at ${selectedOffice.officeName} at ${[
                         selectedOffice.address,
                         selectedOffice.city,
@@ -1068,24 +1098,29 @@ export function HpoLeafletMap({
                       selectedOffice.officeName,
                     )
                   }
-                  className="flex min-h-11 items-center justify-center gap-1 rounded-xl border border-border text-[10px] font-semibold text-foreground hover:bg-muted"
-                >
-                  <MessageCircle className="size-3.5" />
-                  Emery
-                </button>
+                    className="flex min-h-11 items-center justify-center gap-1 rounded-xl border border-border text-[10px] font-semibold text-foreground hover:bg-muted"
+                  >
+                    <MessageCircle className="size-3.5" />
+                    Emery
+                  </button>
+                ) : null}
               </div>
             </>
           ) : (
             <div className="flex items-center gap-3">
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold text-foreground">
-                  {route
-                    ? `${route.optimized_at ? "Optimized" : "Saved"} route · ${route.stops.length} stops`
-                    : "Build an HPO route"}
+                  {embeddedSelection
+                    ? "Select offices from the map"
+                    : route
+                      ? `${route.optimized_at ? "Optimized" : "Saved"} route · ${route.stops.length} stops`
+                      : "Build an HPO route"}
                 </p>
                 <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
-                  {route
-                    ? [
+                  {embeddedSelection
+                    ? `Search or tap a pin, then choose Select Office. ${selectedKeys.length} selected.`
+                    : route
+                      ? [
                         route.area || "HPO",
                         route.route_date
                           ? new Date(
@@ -1104,10 +1139,11 @@ export function HpoLeafletMap({
                       ]
                         .filter(Boolean)
                         .join(" · ")
-                    : "Search or tap offices, choose your stops, then optimize the route."}
+                      : "Search or tap offices, choose your stops, then optimize the route."}
                 </p>
               </div>
-              <div className="flex shrink-0 items-center gap-1.5">
+              {!embeddedSelection ? (
+                <div className="flex shrink-0 items-center gap-1.5">
                 {route && onOptimizeRoute ? (
                   <button
                     type="button"
@@ -1132,11 +1168,12 @@ export function HpoLeafletMap({
                 >
                   Emery
                 </button>
-              </div>
+                </div>
+              ) : null}
             </div>
           )}
 
-          {selectedKeys.length ? (
+          {!embeddedSelection && selectedKeys.length ? (
             <button
               type="button"
               onClick={onBuildRoute}
@@ -1148,7 +1185,8 @@ export function HpoLeafletMap({
             </button>
           ) : null}
 
-          <div className="mt-1.5 flex justify-center">
+          {!embeddedSelection ? (
+            <div className="mt-1.5 flex justify-center">
             <button
               type="button"
               onClick={() =>
@@ -1164,7 +1202,8 @@ export function HpoLeafletMap({
                 ? "Open Planner"
                 : "Open Today"}
             </button>
-          </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </section>
