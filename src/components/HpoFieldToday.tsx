@@ -1107,6 +1107,20 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                     ) : null}
                   </div>
                   <div className="flex shrink-0 items-center">
+                    {stop.address ? (
+                      <a
+                        href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+                          [stop.address, stop.city].filter(Boolean).join(", "),
+                        )}&travelmode=driving`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mr-1 flex min-h-10 items-center justify-center gap-1 rounded-xl bg-primary px-2.5 text-[10px] font-semibold text-primary-foreground"
+                        aria-label={`Open Google Maps directions to ${stop.office_name || "route stop"}`}
+                      >
+                        <Navigation className="size-3.5" />
+                        Go
+                      </a>
+                    ) : null}
                     {done ? (
                       <SquareCheckBig
                         className="mr-1 size-5 text-primary"
@@ -1341,7 +1355,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                     {captureMode === "visit"
                       ? "Save what happened, the outcome and any next action. Completing the visit advances the route."
                       : captureMode === "note"
-                        ? "Add a route note without completing this stop. The stop stays open."
+                        ? "Add a note without completing this stop. It is saved to the route and account history."
                         : captureMode === "followup"
                           ? "Save the next action and due date without completing this stop."
                           : "Save the reschedule reason and next action. This stop will be closed as rescheduled."}
