@@ -782,9 +782,16 @@ export function HpoLeafletMap({
                       {[office.address, office.city].filter(Boolean).join(", ")}
                     </span>
                   </span>
-                  <span className="text-[9px] font-semibold uppercase text-muted-foreground">
-                    {office.kind}
-                  </span>
+                  {embeddedSelection && selectedSet.has(office.key) ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-[9px] font-semibold text-primary">
+                      <Check className="size-3" />
+                      Selected
+                    </span>
+                  ) : (
+                    <span className="text-[9px] font-semibold uppercase text-muted-foreground">
+                      {office.kind}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
@@ -926,10 +933,15 @@ export function HpoLeafletMap({
             <button
               type="button"
               onClick={locateMe}
-              className="pointer-events-auto flex size-11 items-center justify-center rounded-2xl border border-border bg-card text-primary shadow-lg"
+              className={
+                embeddedSelection
+                  ? "pointer-events-auto flex min-h-11 items-center justify-center gap-1.5 rounded-2xl border border-border bg-card px-3 text-[10px] font-semibold text-primary shadow-lg"
+                  : "pointer-events-auto flex size-11 items-center justify-center rounded-2xl border border-border bg-card text-primary shadow-lg"
+              }
               aria-label="Use my location"
             >
               <LocateFixed className="size-4" />
+              {embeddedSelection ? <span>Nearby</span> : null}
             </button>
           </div>
         ) : null}
