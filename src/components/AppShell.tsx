@@ -86,7 +86,7 @@ const moreItems = [
 
 const RETURN_KEY = "emery:return";
 const PREFILL_KEY = "emery:prefill";
-const EMERY_BUILD_ID = "2026-09-30-hpo-map-routeonly-v4";
+const EMERY_BUILD_ID = "2026-09-30-hpo-route-builder-map-v1";
 
 export function AppShell({
   title,
