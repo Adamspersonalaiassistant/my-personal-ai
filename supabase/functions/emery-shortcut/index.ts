@@ -211,13 +211,14 @@ Deno.serve(async (req: Request) => {
       ? conversation.metadata.rolling_state.summary.slice(0, 5000)
       : "";
     const context = JSON.stringify({
+      hpo_route: currentRoute ?? null,
+      hpo_route_stops: currentRouteStops,
+      hpo_route_accounts: currentRouteAccounts,
+      hpo_accounts: currentHpoAccounts,
+      hpo_contacts: hpoContactsR.data ?? [],
       open_tasks: tasks,
       active_projects: projectsR.data ?? [],
       upcoming_calendar_events: meetingsR.data ?? [],
-      hpo_accounts: currentHpoAccounts,
-      hpo_route: currentRoute ?? null,
-      hpo_route_stops: currentRouteStops,
-      hpo_contacts: hpoContactsR.data ?? [],
       learned_config: configR.data ?? {},
     }).slice(0, 22000);
 
