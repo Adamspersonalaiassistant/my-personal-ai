@@ -17,6 +17,10 @@ import {
 } from "lucide-react";
 import brainImage from "@/assets/neural-brain.png";
 import { EmeryVoiceControl } from "@/components/EmeryVoiceControl";
+import { HpoLeafletMap } from "@/components/hpo-map/HpoLeafletMap";
+import type { HpoMapOffice } from "@/components/hpo-map/types";
+import { HPO_EMERY_EVENT_NAME } from "@/lib/hpo-emery-event";
+export { openHpoEmery } from "@/lib/hpo-emery-event";
 import { sendEmeryMessage } from "@/lib/emery.functions";
 import {
   buildHpoRouteFromSelection,
@@ -31,7 +35,7 @@ import {
   type PlannerStartingPoint,
 } from "@/lib/hpo-planner-selection";
 
-const EVENT_NAME = "emery:hpo-chat";
+const EVENT_NAME = HPO_EMERY_EVENT_NAME;
 const MAX_ROUTE_STOPS = 30;
 
 type HpoEmeryDetail = {
@@ -61,6 +65,8 @@ type RouteRecommendationCandidate = {
   latestOutcome?: string | null;
   latestSignal?: string | null;
   latestNote?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   reasons?: string[];
   veinTarget?: boolean;
   veinFit?: string | null;
@@ -89,29 +95,6 @@ type MiniMessage = {
 
 type RecommendationGroup =
   "Doctors / Medical" | "Attorneys" | "PT / Chiro" | "Other";
-
-export function openHpoEmery(
-  prompt = "",
-  title = "HPO",
-  options: {
-    autoSend?: boolean;
-    routeDate?: string | null;
-    plannerBuild?: boolean;
-  } = {},
-) {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(
-    new CustomEvent<HpoEmeryDetail>(EVENT_NAME, {
-      detail: {
-        prompt,
-        title,
-        autoSend: options.autoSend === true,
-        routeDate: options.routeDate ?? null,
-        plannerBuild: options.plannerBuild === true,
-      },
-    }),
-  );
-}
 
 function candidateKey(candidate: RouteRecommendationCandidate) {
   if (candidate.accountId) return `account:${candidate.accountId}`;
@@ -366,6 +349,8 @@ export function HpoEmerySheet({
   const [showAll, setShowAll] = useState(true);
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [officeQuery, setOfficeQuery] = useState("");
+  const [selectionView, setSelectionView] = useState<"list" | "map">("list");
+  const [selectedMapOfficeKey, setSelectedMapOfficeKey] = useState<string | null>(null);
   const [openGroups, setOpenGroups] = useState<
     Record<RecommendationGroup, boolean>
   >({
@@ -405,6 +390,8 @@ export function HpoEmerySheet({
       setShowAll(true);
       setActiveTag(null);
       setOfficeQuery("");
+      setSelectionView("list");
+      setSelectedMapOfficeKey(null);
       setOpenGroups({
         "Doctors / Medical": false,
         Attorneys: false,
@@ -571,6 +558,43 @@ export function HpoEmerySheet({
       selectedSet.has(candidateKey(candidate)),
     );
   }, [allCandidates, selectedKeys]);
+
+  const mapOffices = useMemo<HpoMapOffice[]>(
+    () =>
+      allCandidates
+        .filter(
+          (candidate) =>
+            Boolean(candidate.address?.trim()) &&
+            Number.isFinite(Number(candidate.latitude)) &&
+            Number.isFinite(Number(candidate.longitude)),
+        )
+        .map((candidate) => ({
+          key: candidateKey(candidate),
+          accountId: candidate.accountId ?? undefined,
+          prospectId: candidate.prospectId ?? undefined,
+          officeName: candidate.officeName,
+          address: candidate.address ?? "",
+          city: candidate.city ?? null,
+          latitude: candidate.latitude ?? null,
+          longitude: candidate.longitude ?? null,
+          detail:
+            candidate.latestNote ||
+            candidate.nextAction ||
+            "No recent note saved for this office.",
+          kind:
+            candidate.kind ??
+            (candidate.accountId ? ("account" as const) : ("prospect" as const)),
+          accountType: candidate.accountType ?? null,
+          specialty: candidate.specialty ?? null,
+          relationshipStage: candidate.relationshipStage ?? null,
+          relationshipHealth: candidate.relationshipHealth ?? null,
+          lastTouchAt: candidate.lastTouchAt ?? null,
+          nextAction: candidate.nextAction ?? null,
+          nextActionDueAt: candidate.nextActionDueAt ?? null,
+          mapped: true,
+        })),
+    [allCandidates],
+  );
 
   function installRecommendation(next: RouteRecommendation) {
     const pool = next.allCandidates?.length
@@ -1102,6 +1126,49 @@ export function HpoEmerySheet({
                   </span>
                 </div>
 
+                {plannerBuild ? (
+                  <div className="mt-3 grid grid-cols-2 gap-1 rounded-xl border border-border/60 bg-background/45 p-1">
+                    <button
+                      type="button"
+                      aria-pressed={selectionView === "list"}
+                      onClick={() => setSelectionView("list")}
+                      className={
+                        selectionView === "list"
+                          ? "min-h-10 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground"
+                          : "min-h-10 rounded-lg px-3 text-xs font-semibold text-muted-foreground"
+                      }
+                    >
+                      Search & List
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={selectionView === "map"}
+                      onClick={() => {
+                        setSelectionView("map");
+                        setOfficeQuery("");
+                      }}
+                      className={
+                        selectionView === "map"
+                          ? "min-h-10 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground"
+                          : "min-h-10 rounded-lg px-3 text-xs font-semibold text-muted-foreground"
+                      }
+                    >
+                      <span className="inline-flex items-center gap-1.5">
+                        <MapPin className="size-3.5" />
+                        Map
+                      </span>
+                    </button>
+                  </div>
+                ) : null}
+
+                {plannerBuild && selectionView === "map" ? (
+                  <p className="mt-2 text-[11px] leading-4 text-muted-foreground">
+                    Find nearby offices visually. Tap a pin, review the latest note, then choose Select Office. Your selections stay synced with Search & List.
+                  </p>
+                ) : null}
+
+                {!plannerBuild || selectionView === "list" ? (
+                  <>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -1256,8 +1323,41 @@ export function HpoEmerySheet({
                     ))}
                   </div>
                 ) : null}
+                  </>
+                ) : null}
               </div>
 
+              {plannerBuild && selectionView === "map" ? (
+                mapOffices.length ? (
+                  <div className="h-[58dvh] min-h-[440px] max-h-[640px] overflow-hidden rounded-2xl border border-border/60 bg-card/40 shadow-sm">
+                    <HpoLeafletMap
+                      embeddedSelection
+                      offices={mapOffices}
+                      selectedKeys={selectedKeys}
+                      selectedOfficeKey={selectedMapOfficeKey}
+                      onSelectOffice={setSelectedMapOfficeKey}
+                      onToggleRouteStop={(office) => {
+                        const candidate = allCandidates.find(
+                          (item) => candidateKey(item) === office.key,
+                        );
+                        if (candidate) toggleCandidate(candidate);
+                      }}
+                      onBuildRoute={() => {}}
+                      preparing={false}
+                      onRefreshPins={() => {}}
+                    />
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-border/60 bg-card/50 p-5 text-center">
+                    <MapPin className="mx-auto size-6 text-primary" />
+                    <p className="mt-2 text-sm font-semibold">No mapped offices available</p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      Switch to Search & List to review saved offices.
+                    </p>
+                  </div>
+                )
+              ) : (
+                <>
               {(
                 [
                   "Doctors / Medical",
@@ -1460,6 +1560,8 @@ export function HpoEmerySheet({
                   </div>
                 );
               })}
+                </>
+              )}
             </section>
           ) : null}
 
