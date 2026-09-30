@@ -125,6 +125,17 @@ function HpoWorkspace() {
   const [plannerFocusDate, setPlannerFocusDate] = useState<string | null>(null);
   const [plannerFocusRouteId, setPlannerFocusRouteId] = useState<string | null>(null);
 
+  const handlePlannerRouteContextChange = useCallback(
+    (routeId: string | null, stopId: string | null) => {
+      setPlannerContext((current) =>
+        current.routeId === routeId && current.stopId === stopId
+          ? current
+          : { routeId, stopId },
+      );
+    },
+    [],
+  );
+
   const refresh = useCallback(async () => {
     try {
       setData(await read({ data: { page: 0 } }));
@@ -260,9 +271,7 @@ function HpoWorkspace() {
                 key={`planner-${revision}-${plannerFocusDate ?? "none"}-${plannerFocusRouteId ?? "none"}`}
                 focusDate={plannerFocusDate}
                 focusRouteId={plannerFocusRouteId}
-                onRouteContextChange={(routeId, stopId) =>
-                  setPlannerContext({ routeId, stopId })
-                }
+                onRouteContextChange={handlePlannerRouteContextChange}
                 onOpenMap={({ routeDate, routeId, build }) => {
                   setMapRouteId(routeId ?? null);
                   setMapRouteDate(routeDate);
