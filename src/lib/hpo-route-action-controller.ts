@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {
+  addHpoRouteStopNoteCore,
   captureHpoRouteNoteCore,
   executeHpoRouteStopOutcomeCore,
 } from "@/lib/hpo-route.functions";
@@ -16,7 +17,8 @@ export type HpoRouteStopActionResult = {
     | "none"
     | "hpo.route_stop.arrive"
     | "hpo.route_stop.set_outcome"
-    | "hpo.route_stop.log_visit";
+    | "hpo.route_stop.log_visit"
+    | "hpo.route_stop.add_note";
   routeId: string | null;
   stopId: string | null;
   officeName: string | null;
@@ -45,6 +47,16 @@ function localDate(timezone: string) {
   }).formatToParts(new Date());
   const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${map["year"]}-${map["month"]}-${map["day"]}`;
+}
+
+function extractExplicitNote(message: string) {
+  const colon = message.match(/\b(?:note|notes?)\b[^:]{0,120}:\s*(.+)$/i);
+  if (colon?.[1]?.trim()) return colon[1].trim();
+  const that = message.match(
+    /\b(?:add|save|log|record|leave)\s+(?:a\s+)?note\b[\s\S]*?\b(?:that|saying|says)\b\s*(.+)$/i,
+  );
+  if (that?.[1]?.trim()) return that[1].trim();
+  return message.trim();
 }
 
 function requestedOutcome(message: string) {
@@ -117,13 +129,20 @@ export async function processHpoRouteStopAction(input: {
     /\b(i(?:'|’)??m here|im here|i am here|arrived|i arrived|at the office|i(?:'|’)??m at the office|im at the office)\b/i.test(
       input.message,
     );
+  const explicitNoteSignal =
+    !outcome &&
+    !arrivalSignal &&
+    /\b(?:add|save|log|record|leave)\s+(?:a\s+)?note\b|\bnote\s+(?:for|on|to)\b/i.test(
+      input.message,
+    );
   const visitSignal =
     !outcome &&
     !arrivalSignal &&
+    !explicitNoteSignal &&
     /\b(just left|spoke with|talked to|met with|left (?:the )?(?:cards|materials|information|info)|dropped off|attorney (?:was|is)|front desk|receptionist|follow\s*up|will pass|took the (?:cards|materials|info|information))\b/i.test(
       input.message,
     );
-  if (!outcome && !arrivalSignal && !visitSignal) {
+  if (!outcome && !arrivalSignal && !visitSignal && !explicitNoteSignal) {
     return {
       recognized: false,
       performed: false,
@@ -182,7 +201,9 @@ export async function processHpoRouteStopAction(input: {
         ? "hpo.route_stop.set_outcome"
         : arrivalSignal
           ? "hpo.route_stop.arrive"
-          : "hpo.route_stop.log_visit",
+          : explicitNoteSignal
+            ? "hpo.route_stop.add_note"
+            : "hpo.route_stop.log_visit",
       routeId: null,
       stopId: null,
       officeName: null,
@@ -255,6 +276,82 @@ export async function processHpoRouteStopAction(input: {
         stopId: target.id,
         officeName: target.office_name ?? null,
         status: "arrived",
+        executionRunId: null,
+        nextStopId: null,
+        nextStopName: null,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  if (explicitNoteSignal) {
+    const { data: stops, error: stopError } = await db
+      .from("hpo_route_stops")
+      .select("*")
+      .eq("user_id", input.userId)
+      .eq("route_id", route.id)
+      .order("stop_order", { ascending: true });
+    if (stopError) throw stopError;
+
+    const target = resolveStopFromMessage(
+      stops ?? [],
+      input.message,
+      input.stopId,
+    );
+    if (!target) {
+      return {
+        recognized: true,
+        performed: false,
+        needsClarification: true,
+        question: "Which stop should I add that note to? Say the stop number or office name.",
+        action: "hpo.route_stop.add_note",
+        routeId: route.id,
+        stopId: null,
+        officeName: null,
+        status: null,
+        executionRunId: null,
+        nextStopId: null,
+        nextStopName: null,
+      };
+    }
+
+    try {
+      const saved = await addHpoRouteStopNoteCore({
+        db,
+        userId: input.userId,
+        stopId: target.id,
+        note: extractExplicitNote(input.message),
+        idempotencyKey: requestPrefix
+          ? `${requestPrefix}:hpo.route_stop.add_note`
+          : `${input.sourceChannel ?? "text"}:${route.id}:${target.id}:note:${Date.now()}`,
+        sourceChannel: input.sourceChannel ?? "text",
+        sourceMessageId: input.sourceMessageId ?? null,
+      });
+      return {
+        recognized: true,
+        performed: true,
+        needsClarification: false,
+        question: null,
+        action: "hpo.route_stop.add_note",
+        routeId: route.id,
+        stopId: target.id,
+        officeName: saved.officeName ?? target.office_name ?? null,
+        status: target.status ?? null,
+        executionRunId: null,
+        nextStopId: null,
+        nextStopName: null,
+      };
+    } catch (error) {
+      return {
+        recognized: true,
+        performed: false,
+        needsClarification: false,
+        question: null,
+        action: "hpo.route_stop.add_note",
+        routeId: route.id,
+        stopId: target.id,
+        officeName: target.office_name ?? null,
+        status: target.status ?? null,
         executionRunId: null,
         nextStopId: null,
         nextStopName: null,
