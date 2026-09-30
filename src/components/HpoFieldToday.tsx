@@ -1109,9 +1109,9 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                   <div className="flex shrink-0 items-center">
                     {stop.address ? (
                       <a
-                        href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+                        href={`https://maps.google.com/?saddr=Current+Location&daddr=${encodeURIComponent(
                           [stop.address, stop.city].filter(Boolean).join(", "),
-                        )}&travelmode=driving`}
+                        )}&dirflg=d`}
                         target="_blank"
                         rel="noreferrer"
                         className="mr-1 flex min-h-10 items-center justify-center gap-1 rounded-xl bg-primary px-2.5 text-[10px] font-semibold text-primary-foreground"
@@ -1209,9 +1209,9 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
             <div className="mt-3 grid grid-cols-2 gap-2">
               {nextStop.address ? (
                 <a
-                  href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+                  href={`https://maps.google.com/?saddr=Current+Location&daddr=${encodeURIComponent(
                     [nextStop.address, nextStop.city].filter(Boolean).join(", "),
-                  )}&travelmode=driving`}
+                  )}&dirflg=d`}
                   target="_blank"
                   rel="noreferrer"
                   className="emery-press flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary px-3 text-xs font-semibold text-primary-foreground"
