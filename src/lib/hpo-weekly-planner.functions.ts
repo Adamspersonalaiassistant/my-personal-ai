@@ -102,3 +102,75 @@ export const getHpoWeeklyPlanner = createServerFn({ method: "GET" })
       })),
     };
   });
+
+
+type DeletePlannedRouteInput = {
+  routeId: string;
+};
+
+export const deleteHpoPlannedRoute = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: DeletePlannedRouteInput) => {
+    const routeId = String(input?.routeId ?? "").trim();
+    if (!routeId) throw new Error("Missing route ID.");
+    return { routeId };
+  })
+  .handler(async ({ context, data }) => {
+    const db = context.supabase as any;
+    const userId = context.userId;
+
+    const { data: route, error: routeError } = await db
+      .from("hpo_route_plans")
+      .select("id,route_date,status")
+      .eq("user_id", userId)
+      .eq("id", data.routeId)
+      .maybeSingle();
+    if (routeError) throw routeError;
+    if (!route) throw new Error("That route no longer exists.");
+
+    if (!["planned", "draft"].includes(String(route.status))) {
+      throw new Error(
+        "Only an untouched planned route can be deleted from Planner. Active or completed routes are protected.",
+      );
+    }
+
+    const { data: stops, error: stopsError } = await db
+      .from("hpo_route_stops")
+      .select("id,status")
+      .eq("user_id", userId)
+      .eq("route_id", route.id);
+    if (stopsError) throw stopsError;
+
+    const terminal = new Set([
+      "completed",
+      "visited",
+      "closed",
+      "skipped",
+      "bad_address",
+    ]);
+    if ((stops ?? []).some((stop: any) => terminal.has(String(stop.status)))) {
+      throw new Error(
+        "This route already contains visit history and cannot be deleted from Planner.",
+      );
+    }
+
+    const { error: meetingError } = await db
+      .from("meetings")
+      .delete()
+      .eq("user_id", userId)
+      .contains("metadata", { hpo_route_id: route.id });
+    if (meetingError) throw meetingError;
+
+    const { error: deleteError } = await db
+      .from("hpo_route_plans")
+      .delete()
+      .eq("user_id", userId)
+      .eq("id", route.id);
+    if (deleteError) throw deleteError;
+
+    return {
+      deleted: true,
+      routeId: route.id,
+      routeDate: route.route_date,
+    };
+  });
