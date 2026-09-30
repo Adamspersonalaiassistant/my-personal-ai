@@ -1443,7 +1443,7 @@ export function HpoEmerySheet({
                                       onClick={(event) => event.stopPropagation()}
                                     >
                                       <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-primary">
-                                        Last note
+                                        Latest note
                                       </p>
                                       <p className="mt-1 whitespace-pre-wrap text-[11px] leading-4 text-muted-foreground">
                                         {candidate.latestNote}
