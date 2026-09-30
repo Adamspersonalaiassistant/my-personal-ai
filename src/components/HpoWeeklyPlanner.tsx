@@ -267,8 +267,14 @@ export function HpoWeeklyPlanner({
 
   useEffect(() => {
     onRouteContextChange?.(selectedRoute?.id ?? null, null);
-    return () => onRouteContextChange?.(null, null);
   }, [onRouteContextChange, selectedRoute?.id]);
+
+  useEffect(
+    () => () => {
+      onRouteContextChange?.(null, null);
+    },
+    [onRouteContextChange],
+  );
 
   if (loading) {
     return (
