@@ -1114,6 +1114,7 @@ export async function executeHpoRouteOptimizeCore(input: {
   idempotencyKey: string;
   sourceChannel: string;
   sourceMessageId?: string | null;
+  plannerSessionId?: string;
 }) {
   const action = "hpo.route.optimize";
   const execution = await beginExecution({
@@ -1171,6 +1172,8 @@ export async function executeHpoRouteOptimizeCore(input: {
     const stops: any[] = stopRows ?? [];
     if (!stops.length) throw new Error("This route has no stops");
 
+    if (input.plannerSessionId && (route.status !== "planned" || route.metadata?.source_channel !== `hpo_planner:${input.plannerSessionId}`))
+      throw new Error("This route is active or belongs to another session. Open it in Planner.");
     originalStopIds = stops.map((stop: any) => String(stop.id));
     if (stops.some((stop: any) => TERMINAL.has(String(stop.status)))) {
       throw new Error(
@@ -1245,7 +1248,9 @@ export async function executeHpoRouteOptimizeCore(input: {
     if (endPoint) points.push({ ...endPoint, kind: "end" });
     if (points.length > 32) throw new Error("Keep optimized routes to 30 office stops or fewer.");
 
-    const { durations, distances } = await roadMatrix(points);
+    const { durations, distances } = points.length === 1
+      ? { durations: [[0]], distances: [[0]] }
+      : await roadMatrix(points);
     const startIndex = startPoint ? 0 : null;
     const stopOffset = startPoint ? 1 : 0;
     const stopIndexes = stops.map((_stop: any, index: number) => stopOffset + index);
@@ -1268,6 +1273,10 @@ export async function executeHpoRouteOptimizeCore(input: {
         previousNode == null ? 0 : Number(distances[previousNode]?.[nodeIndex] ?? 0);
       const segmentDuration =
         previousNode == null ? 0 : Number(durations[previousNode]?.[nodeIndex] ?? 0);
+      if (input.plannerSessionId && previousNode != null &&
+        (distances[previousNode]?.[nodeIndex] == null || durations[previousNode]?.[nodeIndex] == null ||
+         !Number.isFinite(segmentDistance) || !Number.isFinite(segmentDuration)))
+        throw new Error("Road-time optimization could not connect every selected stop. Retry Finalize Route.");
       totalDistance += segmentDistance;
       totalDuration += segmentDuration;
       orderedStopIds.push(String(stop.id));
@@ -1276,7 +1285,7 @@ export async function executeHpoRouteOptimizeCore(input: {
       previousNode = nodeIndex;
     }
 
-    const { error: orderError } = await db.rpc("emery_hpo_apply_route_order", {
+    const { error: orderError } = input.plannerSessionId ? { error: null } : await db.rpc("emery_hpo_apply_route_order", {
       p_route_id: route.id,
       p_stop_ids: orderedStopIds,
       p_distance_meters: orderedDistances,
@@ -1300,10 +1309,10 @@ export async function executeHpoRouteOptimizeCore(input: {
     const routeGeometry =
       orderedRoadPoints.length >= 2 ? await roadRouteGeometry(orderedRoadPoints) : null;
 
+    if (input.plannerSessionId && orderedRoadPoints.length >= 2 && (!routeGeometry || routeGeometry.length < 2))
+      throw new Error("Road geometry is temporarily unavailable. Your offices are saved; retry Finalize Route.");
     const optimizedAt = new Date().toISOString();
-    const { data: verifiedRoute, error: updateError } = await db
-      .from("hpo_route_plans")
-      .update({
+    const routePatch = {
         status: route.status === "completed" ? "completed" : "planned",
         start_latitude: startPoint?.lat ?? null,
         start_longitude: startPoint?.lon ?? null,
@@ -1321,11 +1330,12 @@ export async function executeHpoRouteOptimizeCore(input: {
           optimization_execution_run_id: execution.id,
         },
         updated_at: optimizedAt,
-      })
-      .eq("id", route.id)
-      .eq("user_id", userId)
-      .select("id,optimized_at,optimized_distance_meters,optimized_duration_seconds")
-      .single();
+      };
+    const { data: verifiedRoute, error: updateError } = input.plannerSessionId
+      ? await db.rpc("emery_hpo_finalize_planner_order", { p_route_id: route.id, p_session_id: input.plannerSessionId,
+          p_stop_ids: orderedStopIds, p_distance_meters: orderedDistances, p_drive_seconds: orderedDrives, p_patch: routePatch })
+      : await db.from("hpo_route_plans").update(routePatch).eq("id", route.id).eq("user_id", userId)
+          .select("id,optimized_at,optimized_distance_meters,optimized_duration_seconds").single();
     const optimizedTimestampMatches =
       verifiedRoute?.optimized_at != null &&
       new Date(verifiedRoute.optimized_at).getTime() === new Date(optimizedAt).getTime();
@@ -1359,7 +1369,7 @@ export async function executeHpoRouteOptimizeCore(input: {
       operation: "optimize",
     });
     let restored = false;
-    if (originalStopIds.length) {
+    if (originalStopIds.length && !input.plannerSessionId) {
       const rollback = await input.db.rpc("emery_hpo_apply_route_order", {
         p_route_id: input.routeId,
         p_stop_ids: originalStopIds,
@@ -2724,3 +2734,4 @@ export const getHpoRouteScheduleAdvice = createServerFn({ method: "POST" })
     if (!response.ok) throw new Error("Emery could not review the route schedule right now.");
     return { advice: responseText(await response.json()) };
   });
+

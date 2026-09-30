@@ -17,7 +17,8 @@ import {
 import brainImage from "@/assets/neural-brain.png";
 import { EmeryVoiceControl } from "@/components/EmeryVoiceControl";
 import { sendEmeryMessage } from "@/lib/emery.functions";
-import { buildHpoRouteFromSelection } from "@/lib/hpo-route-session.functions";
+import { buildHpoRouteFromSelection, getHpoPlannerOffices, prepareHpoPlannerGamePlan, chatHpoPlannerGamePlan } from "@/lib/hpo-route-session.functions";
+import type { PlannerGamePlan } from "@/lib/hpo-planner-selection";
 
 const EVENT_NAME = "emery:hpo-chat";
 const MAX_ROUTE_STOPS = 30;
@@ -27,6 +28,7 @@ type HpoEmeryDetail = {
   title?: string;
   autoSend?: boolean;
   routeDate?: string | null;
+  plannerBuild?: boolean;
 };
 
 type RouteRecommendationCandidate = {
@@ -55,6 +57,7 @@ type RouteRecommendationCandidate = {
   veinVisitStatus?: string | null;
   lunchTarget?: boolean;
   tags?: string[];
+  gamePlan?: PlannerGamePlan;
 };
 
 type RouteRecommendation = {
@@ -78,7 +81,7 @@ type RecommendationGroup = "Doctors / Medical" | "Attorneys" | "PT / Chiro" | "O
 export function openHpoEmery(
   prompt = "",
   title = "HPO",
-  options: { autoSend?: boolean; routeDate?: string | null } = {},
+  options: { autoSend?: boolean; routeDate?: string | null; plannerBuild?: boolean } = {},
 ) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
@@ -88,6 +91,7 @@ export function openHpoEmery(
         title,
         autoSend: options.autoSend === true,
         routeDate: options.routeDate ?? null,
+        plannerBuild: options.plannerBuild === true,
       },
     }),
   );
@@ -287,6 +291,14 @@ export function HpoEmerySheet({
 }) {
   const askEmery = useServerFn(sendEmeryMessage);
   const buildSelection = useServerFn(buildHpoRouteFromSelection);
+  const loadPlannerOffices = useServerFn(getHpoPlannerOffices);
+  const preparePlanner = useServerFn(prepareHpoPlannerGamePlan);
+  const askPlanner = useServerFn(chatHpoPlannerGamePlan);
+  const busyRef = useRef(false);
+  const [plannerBuild, setPlannerBuild] = useState(false);
+  const [plannerPhase, setPlannerPhase] = useState<"select" | "plan">("select");
+  const [gamePlans, setGamePlans] = useState<RouteRecommendationCandidate[]>([]);
+  const [visitTypes, setVisitTypes] = useState<Record<string, "lunch" | "office_visit">>({});
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -314,17 +326,24 @@ export function HpoEmerySheet({
     Other: false,
   });
 
+  busyRef.current = building;
   useEffect(() => {
     const handler = (event: Event) => {
+      if (busyRef.current) return;
       const detail = (event as CustomEvent<HpoEmeryDetail>).detail ?? {};
       sessionRef.current =
         typeof crypto !== "undefined" && "randomUUID" in crypto
           ? crypto.randomUUID()
           : `hpo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const session = sessionRef.current;
+      setPlannerBuild(detail.plannerBuild === true);
+      setPlannerPhase("select");
+      setGamePlans([]);
+      setVisitTypes({});
       setTitle(detail.title || "HPO");
       setSessionRouteDate(detail.routeDate ?? null);
       setDraft(detail.autoSend ? "" : detail.prompt || "");
-      setAutoPrompt(detail.autoSend ? detail.prompt || "" : "");
+      setAutoPrompt(!detail.plannerBuild && detail.autoSend ? detail.prompt || "" : "");
       setMessages([]);
       setRecommendation(null);
       setSelectedKeys([]);
@@ -341,7 +360,15 @@ export function HpoEmerySheet({
       setPending(false);
       setBuilding(false);
       setOpen(true);
-      window.setTimeout(() => inputRef.current?.focus(), 80);
+      if (detail.plannerBuild) {
+        setPending(true);
+        void loadPlannerOffices({}).then((pool) => {
+          if (sessionRef.current !== session) return;
+          setRecommendation({ ...pool, routeDate: detail.routeDate ?? null });
+        }).catch((cause) => {
+          if (sessionRef.current === session) setError(cause instanceof Error ? cause.message : "Couldn't load saved offices.");
+        }).finally(() => { if (sessionRef.current === session) setPending(false); });
+      } else window.setTimeout(() => inputRef.current?.focus(), 80);
     };
     window.addEventListener(EVENT_NAME, handler);
     return () => window.removeEventListener(EVENT_NAME, handler);
@@ -487,6 +514,25 @@ export function HpoEmerySheet({
   async function sendText(text: string, showUser: boolean) {
     const clean = text.trim();
     if (!clean || pending || building) return;
+    if (plannerBuild) {
+      if (plannerPhase !== "plan") return;
+      const session = sessionRef.current;
+      const prior = messages;
+      setPending(true); setError("");
+      setMessages((current) => [...current, { role: "user", text: clean }]);
+      setDraft("");
+      try {
+        const result = await askPlanner({ data: {
+          routeDate: sessionRouteDate!,
+          selected: selectedCandidates.map((c) => ({ accountId: c.accountId ?? null, prospectId: c.prospectId ?? null, visitType: visitTypes[candidateKey(c)] ?? "office_visit" })),
+          message: clean, history: prior,
+        }});
+        if (sessionRef.current === session) setMessages((current) => [...current, { role: "assistant", text: result.reply }]);
+      } catch (cause) {
+        if (sessionRef.current === session) setError(cause instanceof Error ? cause.message : "Couldn't review that question.");
+      } finally { if (sessionRef.current === session) setPending(false); }
+      return;
+    }
     const selectionInstruction = applySelectionInstruction(clean, allCandidates, selectedKeys);
     const selectionKeysForTurn = selectionInstruction.changed
       ? selectionInstruction.keys
@@ -592,6 +638,7 @@ export function HpoEmerySheet({
   }
 
   function toggleCandidate(candidate: RouteRecommendationCandidate) {
+    if (pending || building) return;
     const key = candidateKey(candidate);
     setSelectedKeys((current) => {
       if (current.includes(key)) return current.filter((item) => item !== key);
@@ -619,6 +666,7 @@ export function HpoEmerySheet({
   }
 
   function selectGroup(group: RecommendationGroup) {
+    if (pending || building) return;
     const keys = grouped[group].map(candidateKey);
     const allSelected = keys.length > 0 && keys.every((key) => selectedKeys.includes(key));
     setSelectedKeys((current) => {
@@ -641,9 +689,26 @@ export function HpoEmerySheet({
     });
   }
 
+  async function finishSelection() {
+    if (!selectedCandidates.length || pending || building || !sessionRouteDate) return;
+    const session = sessionRef.current;
+    setPending(true); setError("");
+    try {
+      const plans = await preparePlanner({ data: { routeDate: sessionRouteDate, selected: selectedCandidates, sessionId: session } });
+      if (sessionRef.current !== session) return;
+      setGamePlans(plans);
+      setPlannerPhase("plan");
+      setMessages([{ role: "assistant", text: "Which stops are lunches? Every stop starts as Office Visit. Mark any lunches below, review your saved-history game plan, then tap Finalize Route." }]);
+      setOfficeQuery(""); setActiveTag(null);
+      scrollRef.current?.scrollTo({ top: 0 });
+    } catch (cause) {
+      if (sessionRef.current === session) setError(cause instanceof Error ? cause.message : "Couldn't prepare your selected offices.");
+    } finally { if (sessionRef.current === session) setPending(false); }
+  }
+
   async function buildRoute() {
     if (!recommendation || !selectedCandidates.length || building || pending) return;
-    const routeDate = recommendation.routeDate || sessionRouteDate;
+    const routeDate = plannerBuild ? sessionRouteDate : recommendation.routeDate || sessionRouteDate;
     if (!routeDate) {
       setError("Choose the route day from Planner first so I know where to save this route.");
       return;
@@ -660,21 +725,14 @@ export function HpoEmerySheet({
           selected: selectedCandidates.map((candidate) => ({
             accountId: candidate.accountId ?? null,
             prospectId: candidate.prospectId ?? null,
+            visitType: visitTypes[candidateKey(candidate)] ?? "office_visit",
           })),
+          planningMessages: plannerBuild ? messages : [],
         },
       });
-      setMessages((current) => [
-        ...current,
-        {
-          role: "assistant",
-          text: `Built and optimized ${result.stopCount} stops for ${routeDate}. Estimated driving: ${result.driveMinutes ?? "—"} minutes · ${result.distanceMiles != null ? Number(result.distanceMiles).toFixed(1) : "—"} miles. Opening it in Planner now.`,
-        },
-      ]);
       onChanged?.();
-      window.setTimeout(() => {
-        setOpen(false);
-        onRouteBuilt?.(String(result.routeId), String(result.routeDate));
-      }, 450);
+      setOpen(false);
+      onRouteBuilt?.(String(result.routeId), String(result.routeDate));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "I couldn't build that route safely.");
     } finally {
@@ -687,7 +745,7 @@ export function HpoEmerySheet({
   return createPortal(
     <div
       className="fixed inset-0 z-[300] flex items-end bg-black/55 backdrop-blur-[2px] sm:items-center sm:justify-center sm:p-4"
-      onClick={() => setOpen(false)}
+      onClick={() => !building && setOpen(false)}
       role="presentation"
     >
       <section
@@ -705,12 +763,12 @@ export function HpoEmerySheet({
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold">Emery</p>
             <p className="truncate text-[11px] text-muted-foreground">
-              {title} · route game plan
+              {title} · {plannerBuild && plannerPhase === "select" ? "Select offices" : "route game plan"}
             </p>
           </div>
           <button
             type="button"
-            onClick={() => setOpen(false)}
+            onClick={() => !building && setOpen(false)}
             className="flex size-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-accent/50 hover:text-foreground"
             aria-label="Close Emery"
           >
@@ -721,7 +779,7 @@ export function HpoEmerySheet({
         <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
           {!messages.length && !pending ? (
             <p className="px-1 text-sm leading-6 text-muted-foreground">
-              Emery is reviewing your HPO relationship history and target offices for this route.
+              {plannerBuild ? "Choose the saved offices you want to visit, then tap Done." : "Emery is reviewing your HPO relationship history and target offices for this route."}
             </p>
           ) : null}
 
@@ -751,12 +809,12 @@ export function HpoEmerySheet({
             );
           })}
 
-          {recommendation ? (
+          {recommendation && (!plannerBuild || plannerPhase === "select") ? (
             <section className="space-y-3">
               <div className="rounded-2xl border border-primary/20 bg-primary/[0.05] p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-foreground">Office game plan</p>
+                    <p className="text-sm font-semibold text-foreground">{plannerBuild ? "Select Offices" : "Office game plan"}</p>
                     <p className="mt-0.5 text-[10px] text-muted-foreground">
                       Groups start collapsed. Tap a group to review and select its offices.
                     </p>
@@ -816,7 +874,7 @@ export function HpoEmerySheet({
                   >
                     Vein prospects {allCandidates.filter((candidate) => candidate.tags?.includes("vein_prospect")).length}
                   </button>
-                  {allCandidates.some((candidate) => candidate.veinTarget) ? (
+                  {!plannerBuild && allCandidates.some((candidate) => candidate.veinTarget) ? (
                     <button
                       type="button"
                       onClick={selectVeinTargets}
@@ -825,7 +883,7 @@ export function HpoEmerySheet({
                       Select vein targets
                     </button>
                   ) : null}
-                  {[5, 8, 10, 15]
+                  {(!plannerBuild ? [5, 8, 10, 15] : [])
                     .filter((count) => count <= allCandidates.length)
                     .map((count) => (
                       <button
@@ -893,7 +951,7 @@ export function HpoEmerySheet({
                   ) : null}
                 </div>
 
-                <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                {!plannerBuild ? <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
                   {[
                     "Which vein tracker doctors in this territory should I prioritize for lunches, especially offices I have not visited?",
                     "Compare my selected offices and tell me which ones matter most.",
@@ -911,7 +969,7 @@ export function HpoEmerySheet({
                       {["Vein lunches", "Compare selected", "Prior visits", "Best attorneys", "Follow-ups"][index]}
                     </button>
                   ))}
-                </div>
+                </div> : null}
               </div>
 
               {(["Doctors / Medical", "Attorneys", "PT / Chiro", "Other"] as RecommendationGroup[]).map(
@@ -927,6 +985,7 @@ export function HpoEmerySheet({
                       <div className="flex items-center gap-2 border-b border-border/45 px-3 py-2.5">
                         <button
                           type="button"
+                          aria-expanded={openGroups[group]}
                           onClick={() =>
                             setOpenGroups((current) => ({
                               ...current,
@@ -1093,6 +1152,24 @@ export function HpoEmerySheet({
             </section>
           ) : null}
 
+          {plannerBuild && plannerPhase === "plan" ? (
+            <section className="space-y-3" aria-label="Emery Game Plan">
+              <button type="button" disabled={pending || building} onClick={() => { setPlannerPhase("select"); setGamePlans([]); setMessages([]); }} className="min-h-11 text-sm font-semibold text-primary disabled:opacity-40">Back to offices</button>
+              {gamePlans.map((office) => {
+                const key = candidateKey(office);
+                return <article key={key} className="rounded-2xl border border-border/55 bg-card/50 p-3.5">
+                  <h3 className="text-sm font-semibold">{office.officeName}</h3>
+                  <div className="mt-2 flex gap-2" role="group" aria-label={`Visit type for ${office.officeName}`}>
+                    {([ ["office_visit", "Office Visit"], ["lunch", "Lunch"] ] as const).map(([type, label]) =>
+                      <button key={type} type="button" disabled={building || pending} aria-pressed={(visitTypes[key] ?? "office_visit") === type} onClick={() => setVisitTypes((current) => ({ ...current, [key]: type }))} className={(visitTypes[key] ?? "office_visit") === type ? "min-h-11 rounded-xl bg-primary px-3 text-xs font-semibold text-primary-foreground" : "min-h-11 rounded-xl border border-border px-3 text-xs font-semibold"}>{label}</button>)}
+                  </div>
+                  <dl className="mt-3 space-y-2 text-xs leading-5">
+                    {([["Prior note", office.gamePlan?.priorNote], ["Relationship / follow-up", office.gamePlan?.relationshipContext], ["Visit purpose", office.gamePlan?.purpose], ["Recommended approach", office.gamePlan?.approach]]).map(([label, value]) => <div key={label}><dt className="font-semibold text-primary">{label}</dt><dd className="whitespace-pre-wrap text-foreground/90">{value}</dd></div>)}
+                  </dl>
+                </article>;
+              })}
+            </section>
+          ) : null}
           {pending ? <p className="px-1 text-xs text-muted-foreground">Emery is reviewing…</p> : null}
           {building ? (
             <p className="px-1 text-xs font-medium text-primary">
@@ -1111,12 +1188,14 @@ export function HpoEmerySheet({
           <div className="shrink-0 border-t border-border/45 bg-background/98 px-3 py-2">
             <button
               type="button"
-              onClick={() => void buildRoute()}
+              onClick={() => void (plannerBuild && plannerPhase === "select" ? finishSelection() : buildRoute())}
               disabled={!selectedCandidates.length || pending || building}
               className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm disabled:opacity-35"
             >
               <RouteIcon className="size-4" />
-              {building
+              {plannerBuild
+                ? building ? "Finalizing & optimizing…" : plannerPhase === "select" ? "Done" : "Finalize Route"
+                : building
                 ? "Building & optimizing…"
                 : `Build this route · ${selectedCandidates.length} stop${
                     selectedCandidates.length === 1 ? "" : "s"
@@ -1128,7 +1207,7 @@ export function HpoEmerySheet({
           </div>
         ) : null}
 
-        <div className="shrink-0 border-t border-border/45 bg-background/96 px-3 pb-[max(0.7rem,env(safe-area-inset-bottom))] pt-2">
+        {!plannerBuild || plannerPhase === "plan" ? <div className="shrink-0 border-t border-border/45 bg-background/96 px-3 pb-[max(0.7rem,env(safe-area-inset-bottom))] pt-2">
           <div className="flex items-end gap-1.5 rounded-xl border border-input bg-card p-1.5">
             <textarea
               ref={inputRef}
@@ -1142,7 +1221,7 @@ export function HpoEmerySheet({
               }
               className="max-h-28 min-h-11 min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-base leading-6 outline-none placeholder:text-muted-foreground/60"
             />
-            <EmeryVoiceControl
+            {!plannerBuild ? <EmeryVoiceControl
               hpoRouteId={routeId ?? null}
               hpoStopId={stopId ?? null}
               hpoAccountId={selectedAccountId ?? null}
@@ -1152,7 +1231,7 @@ export function HpoEmerySheet({
                   endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
                 }, 80);
               }}
-            />
+            /> : null}
             <button
               type="button"
               onClick={() => void send()}
@@ -1163,9 +1242,10 @@ export function HpoEmerySheet({
               <ArrowUp className="size-[18px]" />
             </button>
           </div>
-        </div>
+        </div> : null}
       </section>
     </div>,
     document.body,
   );
 }
+

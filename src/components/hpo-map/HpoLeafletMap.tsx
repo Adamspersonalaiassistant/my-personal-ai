@@ -55,6 +55,7 @@ function officePinCategory(office: HpoMapOffice): PinCategory {
 }
 
 type Props = {
+  routeOnly?: boolean;
   offices: HpoMapOffice[];
   selectedKeys: string[];
   selectedOfficeKey: string | null;
@@ -202,6 +203,7 @@ function routeCoordinates(route?: HpoMapRoute | null): L.LatLngExpression[] {
 }
 
 export function HpoLeafletMap({
+  routeOnly = false,
   offices,
   selectedKeys,
   selectedOfficeKey,
@@ -416,10 +418,11 @@ export function HpoLeafletMap({
         maxZoom: 13,
         animate: false,
         paddingTopLeft: [18, 18],
-        paddingBottomRight: [18, 190],
+        paddingBottomRight: [18, routeOnly ? 18 : 190],
       });
     }
     const ordered = [...(route?.stops ?? [])].sort((a, b) => a.stop_order - b.stop_order);
+    if (routeOnly && coords.length === 1) map.setView(coords[0] as L.LatLngTuple, 14, { animate: false });
     const currentId = ordered.find((stop) => !TERMINAL.has(stop.status))?.id ?? null;
     for (const stop of ordered) {
       if (!Number.isFinite(stop.latitude) || !Number.isFinite(stop.longitude)) continue;
@@ -444,7 +447,7 @@ export function HpoLeafletMap({
       );
       marker.addTo(layer);
     }
-  }, [ready, route]);
+  }, [ready, route, routeOnly]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -493,7 +496,7 @@ export function HpoLeafletMap({
 
   return (
     <section className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background text-foreground">
-      <div className="relative z-[1000] shrink-0 border-b border-border bg-background/95 px-3 pb-2 pt-3 shadow-[0_10px_28px_rgba(0,0,0,0.24)] backdrop-blur-xl">
+      {!routeOnly ? <div className="relative z-[1000] shrink-0 border-b border-border bg-background/95 px-3 pb-2 pt-3 shadow-[0_10px_28px_rgba(0,0,0,0.24)] backdrop-blur-xl">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -627,7 +630,7 @@ export function HpoLeafletMap({
             No matching offices.
           </div>
         ) : null}
-      </div>
+      </div> : null}
 
       <div className="relative min-h-0 flex-1">
         <div
@@ -762,7 +765,7 @@ export function HpoLeafletMap({
         ) : null}
       </div>
 
-      <div className="shrink-0 border-t border-border bg-background/95 px-3 pb-2 pt-2 shadow-[0_-14px_34px_rgba(0,0,0,.3)] backdrop-blur-xl">
+      {!routeOnly ? <div className="shrink-0 border-t border-border bg-background/95 px-3 pb-2 pt-2 shadow-[0_-14px_34px_rgba(0,0,0,.3)] backdrop-blur-xl">
         {selectedOffice ? (
           <>
             <div className="flex items-start gap-3">
@@ -925,7 +928,8 @@ export function HpoLeafletMap({
               : "Open Today"}
           </button>
         </div>
-      </div>
+      </div> : null}
     </section>
   );
 }
+

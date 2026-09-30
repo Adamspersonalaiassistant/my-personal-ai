@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { openHpoEmery } from "@/components/HpoEmerySheet";
+import { HpoLeafletMap } from "@/components/hpo-map/HpoLeafletMap";
+import type { PlannerGamePlan } from "@/lib/hpo-planner-selection";
 import { getHpoWeeklyPlanner } from "@/lib/hpo-weekly-planner.functions";
 
 type Stop = {
@@ -20,6 +22,9 @@ type Stop = {
   stop_order: number;
   status: string;
   visited_at: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  metadata: { visit_type?: string; game_plan?: PlannerGamePlan } | null;
   office_name: string | null;
   address: string | null;
   city: string | null;
@@ -41,6 +46,11 @@ type RoutePlan = {
   optimized_duration_seconds: number | null;
   optimized_at: string | null;
   notes: string | null;
+  metadata: (Record<string, unknown> & { game_plan?: { discussion?: Array<{ role: string; text: string }> } }) | null;
+  start_latitude: number | null;
+  start_longitude: number | null;
+  end_latitude: number | null;
+  end_longitude: number | null;
   stops: Stop[];
 };
 
@@ -97,12 +107,12 @@ function weekLabel(start: string, end: string) {
 }
 
 function miles(meters: number | null) {
-  if (!meters) return null;
+  if (meters == null) return null;
   return `${(meters / 1609.344).toFixed(meters > 16093 ? 0 : 1)} mi`;
 }
 
 function duration(seconds: number | null) {
-  if (!seconds) return null;
+  if (seconds == null) return null;
   const minutes = Math.round(seconds / 60);
   if (minutes < 60) return `${minutes} min`;
   const hours = Math.floor(minutes / 60);
@@ -230,7 +240,7 @@ export function HpoWeeklyPlanner({
   async function moveWeek(days: number) {
     setLoading(true);
     try {
-      await refresh(addDaysKey(data.weekStart, days));
+      await refresh(addDaysKey(data!.weekStart, days));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Couldn't load that week.");
     } finally {
@@ -240,17 +250,13 @@ export function HpoWeeklyPlanner({
 
   function planWeekWithEmery() {
     openHpoEmery(
-      `Help me plan my HPO field routes for the week of ${data.weekStart} through ${data.weekEnd}. Review the routes I already have saved for this week. Help me choose the best days and territories for the missing days, one decision at a time. Do not create a route until I tell you which day and area to use.`,
+      `Help me plan my HPO field routes for the week of ${data!.weekStart} through ${data!.weekEnd}. Review the routes I already have saved for this week. Help me choose the best days and territories for the missing days, one decision at a time. Do not create a route until I tell you which day and area to use.`,
       "Weekly Planner",
     );
   }
 
-  function buildWithEmery(date: string) {
-    openHpoEmery(
-      `I want to build an HPO marketing route for ${date}. Ask me which towns or territory if I have not given them yet. Before creating anything, review my active HPO targets, prior visit notes, relationship history, follow-ups and prospect quality. Rank the best offices to visit with a short why-now reason and visit objective. Let me approve or adjust the shortlist, then build and optimize the route. Do not invent offices.`,
-      `Build Route · ${prettyDate(date)}`,
-      { autoSend: true, routeDate: date },
-    );
+  function buildRoute(date: string) {
+    openHpoEmery("", `Build Route · ${prettyDate(date)}`, { routeDate: date, plannerBuild: true });
   }
 
   function workRouteWithEmery(route: RoutePlan) {
@@ -380,21 +386,7 @@ export function HpoWeeklyPlanner({
                 })}
               </h2>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-11 shrink-0 gap-1.5 px-3 text-xs"
-              onClick={() =>
-                onOpenMap({
-                  routeDate: selectedDate,
-                  routeId: selectedRoute?.id ?? null,
-                  build: !selectedRoute,
-                })
-              }
-            >
-              <MapPinned className="size-4" />
-              {selectedRoute ? "Map" : "Build"}
-            </Button>
+            {selectedRoute ? <Button type="button" variant="outline" className="min-h-11 shrink-0 gap-1.5 px-3 text-xs" onClick={() => onOpenMap({ routeDate: selectedDate, routeId: selectedRoute.id, build: false })}><MapPinned className="size-4" />Map</Button> : null}
           </div>
 
           {!selectedRoutes.length ? (
@@ -402,28 +394,10 @@ export function HpoWeeklyPlanner({
               <RouteIcon className="mx-auto size-7 text-primary" />
               <h3 className="mt-3 text-base font-semibold">No route planned</h3>
               <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-muted-foreground">
-                Start this day from your target accounts, or have Emery help choose the territory and build it.
+                Select the offices for this day, review your game plan with Emery, then finalize the driving route.
               </p>
-              <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                <Button
-                  type="button"
-                  className="min-h-12"
-                  onClick={() =>
-                    onOpenMap({ routeDate: selectedDate, routeId: null, build: true })
-                  }
-                >
-                  <RouteIcon className="size-4" />
-                  Build Route
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="min-h-12"
-                  onClick={() => buildWithEmery(selectedDate)}
-                >
-                  <MessageCircle className="size-4" />
-                  Build with Emery
-                </Button>
+              <div className="mt-4">
+                <Button type="button" className="min-h-12 w-full" onClick={() => buildRoute(selectedDate)}><RouteIcon className="size-4" />Build Route</Button>
               </div>
             </div>
           ) : (
@@ -505,6 +479,13 @@ export function HpoWeeklyPlanner({
                     </div>
                   </div>
 
+                  {route.metadata?.game_plan?.discussion?.length ? <details className="border-b border-border/45 px-4 py-3 text-xs leading-5">
+                    <summary className="cursor-pointer font-semibold text-primary">Emery planning discussion</summary>
+                    {route.metadata.game_plan.discussion.map((message, index) => <p key={index} className="mt-2 whitespace-pre-wrap"><strong>{message.role === "user" ? "Adam" : "Emery"}:</strong> {message.text}</p>)}
+                  </details> : null}
+                  {route.optimized_at ? <div className="relative h-[360px] overflow-hidden border-b border-border/45" aria-label="Optimized Planner route map">
+                    <HpoLeafletMap routeOnly offices={[]} selectedKeys={[]} selectedOfficeKey={null} route={route} onSelectOffice={() => undefined} onToggleRouteStop={() => undefined} onBuildRoute={() => undefined} preparing={false} onRefreshPins={() => undefined} />
+                  </div> : null}
                   <div className="divide-y divide-border/40">
                     {orderedStops.map((stop) => {
                       const note = stop.visit_summary || stop.notes || stop.visit_outcome;
@@ -524,6 +505,7 @@ export function HpoWeeklyPlanner({
                               <p className="min-w-0 truncate text-sm font-semibold">
                                 {stop.office_name || "Route stop"}
                               </p>
+                              {stop.metadata?.visit_type ? <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">{stop.metadata.visit_type === "lunch" ? "Lunch" : "Office Visit"}</span> : null}
                               <span className="shrink-0 rounded-full border border-border/45 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
                                 {statusLabel(stop.status)}
                               </span>
@@ -531,6 +513,13 @@ export function HpoWeeklyPlanner({
                             <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
                               {[stop.address, stop.city].filter(Boolean).join(", ") || "Address not saved"}
                             </p>
+                            {stop.metadata?.game_plan ? <div className="mt-2 rounded-lg border border-primary/15 bg-primary/[0.04] p-2.5 text-xs leading-5" aria-label={`Game plan for ${stop.office_name}`}>
+                              <p className="text-[10px] font-semibold uppercase text-primary">Emery Game Plan</p>
+                              <p className="mt-1 whitespace-pre-wrap"><strong>Prior note:</strong> {stop.metadata.game_plan.priorNote}</p>
+                              <p className="mt-1"><strong>Context:</strong> {stop.metadata.game_plan.relationshipContext}</p>
+                              <p className="mt-1"><strong>Purpose:</strong> {stop.metadata.game_plan.purpose}</p>
+                              <p className="mt-1"><strong>Approach:</strong> {stop.metadata.game_plan.approach}</p>
+                            </div> : null}
                             {note ? (
                               <div className="mt-2 rounded-lg bg-background/45 px-2.5 py-2">
                                 <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">
@@ -567,3 +556,4 @@ export function HpoWeeklyPlanner({
     </section>
   );
 }
+
