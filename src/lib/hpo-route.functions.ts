@@ -2289,6 +2289,186 @@ export async function executeHpoRouteStopVisitCore(input: {
   }
 }
 
+export async function addHpoRouteStopNoteCore(input: {
+  db: any;
+  userId: string;
+  stopId: string;
+  note: string;
+  idempotencyKey?: string | null;
+  sourceChannel?: string | null;
+  sourceMessageId?: string | null;
+}) {
+  const note = clean(input.note);
+  if (!note) throw new Error("Add a note before saving.");
+
+  const execution = await beginExecution({
+    db: input.db,
+    userId: input.userId,
+    domain: "hpo_route",
+    action: "hpo.route_stop.add_note",
+    sourceMessageId: input.sourceMessageId ?? null,
+    idempotencyKey: input.idempotencyKey ?? null,
+    targetType: "hpo_route_stop",
+    targetId: input.stopId,
+    requestPayload: {
+      stopId: input.stopId,
+      note,
+      sourceChannel: input.sourceChannel ?? "ui",
+    },
+  });
+
+  if (
+    execution.reused &&
+    execution.status === "completed" &&
+    execution.resultPayload["routeNote"]
+  ) {
+    return execution.resultPayload["routeNote"] as any;
+  }
+
+  try {
+    const { data: stop, error: stopError } = await input.db
+      .from("hpo_route_stops")
+      .select("*")
+      .eq("id", input.stopId)
+      .eq("user_id", input.userId)
+      .single();
+    if (stopError || !stop)
+      throw stopError ?? new Error("Route stop not found.");
+
+    const previousNotes = clean(stop.notes);
+    const combinedNotes = previousNotes
+      ? `${previousNotes}\n\n${note}`
+      : note;
+
+    const { data: updatedStop, error: updateError } = await input.db
+      .from("hpo_route_stops")
+      .update({
+        notes: combinedNotes,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", stop.id)
+      .eq("user_id", input.userId)
+      .select("*")
+      .single();
+    if (updateError) throw updateError;
+
+    let interactionId: string | null = null;
+    if (stop.account_id) {
+      const { data: interaction, error: interactionError } = await input.db
+        .from("hpo_interactions")
+        .insert({
+          user_id: input.userId,
+          account_id: stop.account_id,
+          interaction_type: "note",
+          occurred_at: new Date().toISOString(),
+          summary: note,
+          source_type: "route",
+          source_ref: stop.id,
+          metadata: {
+            route_id: stop.route_id,
+            route_stop_id: stop.id,
+            note_only: true,
+            source_channel: input.sourceChannel ?? "ui",
+            source_message_id: input.sourceMessageId ?? null,
+            non_phi: true,
+          },
+        })
+        .select("id")
+        .single();
+      if (interactionError) throw interactionError;
+      interactionId = interaction?.id ?? null;
+
+      const { error: accountError } = await input.db
+        .from("hpo_accounts")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", stop.account_id)
+        .eq("user_id", input.userId);
+      if (accountError) throw accountError;
+    } else if (stop.prospect_id) {
+      const { data: prospect, error: prospectError } = await input.db
+        .from("hpo_prospects")
+        .select("notes")
+        .eq("id", stop.prospect_id)
+        .eq("user_id", input.userId)
+        .maybeSingle();
+      if (prospectError) throw prospectError;
+      const previousProspectNotes = clean(prospect?.notes);
+      const combinedProspectNotes = previousProspectNotes
+        ? `${previousProspectNotes}\n\nRoute note: ${note}`
+        : `Route note: ${note}`;
+      const { error: updateProspectError } = await input.db
+        .from("hpo_prospects")
+        .update({
+          notes: combinedProspectNotes,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", stop.prospect_id)
+        .eq("user_id", input.userId);
+      if (updateProspectError) throw updateProspectError;
+    }
+
+    const result = {
+      ok: true,
+      routeId: stop.route_id,
+      stopId: stop.id,
+      accountId: stop.account_id ?? null,
+      prospectId: stop.prospect_id ?? null,
+      officeName: stop.office_name ?? null,
+      note,
+      interactionId,
+      stop: updatedStop,
+    };
+
+    await completeExecution({
+      db: input.db,
+      userId: input.userId,
+      runId: execution.id,
+      resultPayload: { routeNote: result },
+      targetType: "hpo_route_stop",
+      targetId: stop.id,
+    });
+
+    return result;
+  } catch (error) {
+    await failExecution({
+      db: input.db,
+      userId: input.userId,
+      runId: execution.id,
+      errorCode: "hpo_route_stop_note_failed",
+      errorMessage: error instanceof Error ? error.message : String(error),
+    }).catch(() => undefined);
+    throw error;
+  }
+}
+
+export const addHpoRouteStopNote = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (input: {
+      stopId: string;
+      note: string;
+      idempotencyKey?: string | null;
+      sourceChannel?: string | null;
+    }) => ({
+      stopId: clean(input.stopId),
+      note: clean(input.note),
+      idempotencyKey: clean(input.idempotencyKey) || null,
+      sourceChannel: clean(input.sourceChannel) || "ui",
+    }),
+  )
+  .handler(async ({ data, context }) =>
+    addHpoRouteStopNoteCore({
+      db: context.supabase as any,
+      userId: context.userId,
+      stopId: data.stopId,
+      note: data.note,
+      idempotencyKey:
+        data.idempotencyKey ??
+        `ui:${crypto.randomUUID()}:hpo.route_stop.add_note`,
+      sourceChannel: data.sourceChannel,
+    }),
+  );
+
 export const updateHpoRouteStop = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
