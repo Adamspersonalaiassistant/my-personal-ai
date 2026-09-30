@@ -104,14 +104,10 @@ export function validatePlannerSelection(input: {
   };
 }
 export function eligiblePlannerAccount(row: any) {
-  return (
-    row.status === "active" &&
-    Boolean(row.address?.trim()) &&
-    !row.tags?.includes("exclude_from_adam_route") &&
-    row.metadata?.exclude_from_adam_route !== true &&
-    (!row.owner_name?.trim() ||
-      ["adam", "adam ashraf"].includes(row.owner_name.trim().toLowerCase()))
-  );
+  // If an account is visible in the active HPO CRM and has a routable address,
+  // it belongs in Build Route. Ownership and legacy exclusion tags are context,
+  // not hidden eligibility rules.
+  return row.status === "active" && Boolean(row.address?.trim());
 }
 export function eligiblePlannerProspect(row: any) {
   return (
