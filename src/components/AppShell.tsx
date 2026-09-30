@@ -86,6 +86,7 @@ const moreItems = [
 
 const RETURN_KEY = "emery:return";
 const PREFILL_KEY = "emery:prefill";
+const EMERY_BUILD_ID = "2026-09-30-hpo-map-routeonly-v4";
 
 export function AppShell({
   title,
@@ -116,38 +117,38 @@ export function AppShell({
 
   useEffect(() => setMoreOpen(false), [pathname]);
 
-  // Check for a newer published bundle without interrupting active field work.
-  // A professional field app must never hard-refresh notes/routes underneath Adam.
+  // Detect a newer published bundle using an explicit build manifest and a
+  // cache-busted request. iOS Home Screen apps can otherwise keep an older
+  // bundle alive even after production has been redeployed.
   useEffect(() => {
     if (typeof window === "undefined" || typeof document === "undefined") return;
 
     let cancelled = false;
     let checking = false;
-    const currentScripts = () =>
-      [...document.querySelectorAll<HTMLScriptElement>('script[src]')]
-        .map((script) => new URL(script.src, window.location.href).pathname)
-        .filter((src) => src.includes("/assets/"))
-        .sort()
-        .join("|");
 
     async function checkForFreshBuild() {
       if (cancelled || checking || document.visibilityState !== "visible") return;
       checking = true;
       try {
-        const response = await fetch(window.location.href, {
-          cache: "no-store",
-          headers: { "x-emery-build-check": "1" },
-        });
+        const response = await fetch(
+          `/emery-build.json?check=${Date.now()}`,
+          {
+            cache: "no-store",
+            headers: {
+              "cache-control": "no-cache",
+              pragma: "no-cache",
+              "x-emery-build-check": EMERY_BUILD_ID,
+            },
+          },
+        );
         if (!response.ok) return;
-        const html = await response.text();
-        const parsed = new DOMParser().parseFromString(html, "text/html");
-        const freshScripts = [...parsed.querySelectorAll<HTMLScriptElement>('script[src]')]
-          .map((script) => new URL(script.src, window.location.href).pathname)
-          .filter((src) => src.includes("/assets/"))
-          .sort()
-          .join("|");
-        const running = currentScripts();
-        if (freshScripts && running && freshScripts !== running) setUpdateAvailable(true);
+        const payload = (await response.json()) as { buildId?: string };
+        if (
+          payload.buildId &&
+          payload.buildId !== EMERY_BUILD_ID
+        ) {
+          setUpdateAvailable(true);
+        }
       } catch {
         // Update discovery is advisory and must never interrupt field work.
       } finally {
@@ -158,9 +159,11 @@ export function AppShell({
     const onVisible = () => {
       if (document.visibilityState === "visible") void checkForFreshBuild();
     };
+
     void checkForFreshBuild();
     document.addEventListener("visibilitychange", onVisible);
-    const timer = window.setInterval(() => void checkForFreshBuild(), 15 * 60_000);
+    const timer = window.setInterval(() => void checkForFreshBuild(), 60_000);
+
     return () => {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisible);
@@ -285,10 +288,15 @@ export function AppShell({
             <span className="text-muted-foreground">A newer Emery build is ready.</span>
             <button
               type="button"
-              onClick={() => window.location.reload()}
+              onClick={() => {
+                const next = new URL(window.location.href);
+                next.searchParams.set("_emery_build", EMERY_BUILD_ID);
+                next.searchParams.set("_refresh", String(Date.now()));
+                window.location.replace(next.toString());
+              }}
               className="min-h-10 shrink-0 rounded-lg px-3 font-semibold text-primary hover:bg-primary/[0.08]"
             >
-              Update when ready
+              Reload latest
             </button>
           </div>
         ) : null}
