@@ -113,6 +113,7 @@ export async function processHpoAction(input: {
 
 Only recognize an HPO database write when Adam clearly authorizes it. Examples:
 - "I just visited Weiner Mazzei and spoke with Jenni. Log that..."
+- "Add a note to Weiner Mazzei that Jenni prefers email follow-up."
 - "Set my next follow-up with Lutz for Tuesday..."
 - "Remember my next action for Parra Klein is..."
 - "Change this account to priority 5."
@@ -139,6 +140,7 @@ TARGETING:
 - If no exact due time was provided, due_at may be null rather than inventing a clock time.
 
 For log_touch, summary must contain only the relationship-level facts Adam actually supplied. next_action may be captured if he supplied one.
+If Adam explicitly says add/save/log a note, use log_touch with interaction_type="note". A pure note is relationship intelligence, not proof that a visit occurred.
 For set_followup, next_action is required.
 For create_account, target_account_id must be null. Extract account_name, account_type, specialty, city, address, and priority only from Adam's request or recent conversation. If account_name or address is missing, set needs_clarification=true and ask only for the missing information.
 For update_account, populate ONLY fields Adam explicitly asked to change in updates. Every unrequested update field must be null. Never infer or "clean up" additional fields. Allowed update fields are name, account_type, specialty, territory, city, address, priority, relationship_stage, relationship_health, opportunity, blockers, and notes.
@@ -566,10 +568,71 @@ Return strict JSON only.`,
   if (action === "log_touch") {
     const summary = String(parsed.summary ?? "").trim();
     if (!summary) throw new Error("HPO interaction summary missing");
+    const interactionType = String(parsed.interaction_type || "visit").trim().toLowerCase();
+
+    if (interactionType === "note") {
+      const { data: row, error: noteError } = await db
+        .from("hpo_interactions")
+        .insert({
+          user_id: userId,
+          account_id: target.id,
+          interaction_type: "note",
+          occurred_at: new Date().toISOString(),
+          summary,
+          source_type: "emery",
+          metadata: {
+            non_phi: true,
+            note_only: true,
+            source_message_id: input.sourceMessageId ?? null,
+          },
+        })
+        .select("id")
+        .single();
+      if (noteError) {
+        await failExecution({
+          db,
+          userId,
+          runId: execution.id,
+          errorCode: "hpo_note_write_failed",
+          errorMessage: String(noteError.message ?? noteError),
+          retryable: true,
+        });
+        throw noteError;
+      }
+      const { error: accountError } = await db
+        .from("hpo_accounts")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("user_id", userId)
+        .eq("id", target.id);
+      if (accountError) throw accountError;
+
+      const hpoResult: HpoActionResult = {
+        recognized: true,
+        performed: true,
+        needsClarification: false,
+        question: null,
+        action,
+        accountId: target.id,
+        accountName: target.name,
+        recordId: row?.id ?? null,
+        nextAction: null,
+        dueAt: null,
+      };
+      await completeExecution({
+        db,
+        userId,
+        runId: execution.id,
+        resultPayload: { hpoResult: hpoResult as unknown as Record<string, unknown> },
+        targetType: "hpo_interaction",
+        targetId: hpoResult.recordId,
+      });
+      return hpoResult;
+    }
+
     const result = await db.rpc("emery_hpo_log_touch", {
       p_user_id: userId,
       p_account_id: target.id,
-      p_interaction_type: String(parsed.interaction_type || "visit"),
+      p_interaction_type: interactionType || "visit",
       p_summary: summary,
       p_outcome: String(parsed.outcome || "").trim() || null,
       p_relationship_signal: String(parsed.relationship_signal || "").trim() || null,
