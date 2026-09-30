@@ -1737,6 +1737,7 @@ export function HpoRoutePlanner({
     <div id="hpo-route-planner" className="relative h-full min-h-0 w-full overflow-hidden">
       {data || mapOffices.length ? (
         <HpoLeafletMap
+          routeOnly={Boolean(activeRoute)}
           offices={mapOffices}
           selectedKeys={mapSelectedKeys}
           selectedOfficeKey={selectedMapOfficeKey}
