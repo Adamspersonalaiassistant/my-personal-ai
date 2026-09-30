@@ -16,7 +16,10 @@ import { Button } from "@/components/ui/button";
 import { openHpoEmery } from "@/components/HpoEmerySheet";
 import { HpoLeafletMap } from "@/components/hpo-map/HpoLeafletMap";
 import type { PlannerGamePlan } from "@/lib/hpo-planner-selection";
-import { addHpoRouteStopNote } from "@/lib/hpo-route.functions";
+import {
+  addHpoRouteStopNote,
+  optimizeHpoRoute,
+} from "@/lib/hpo-route.functions";
 import {
   deleteHpoPlannedRoute,
   getHpoWeeklyPlanner,
@@ -173,6 +176,7 @@ export function HpoWeeklyPlanner({
   const load = useServerFn(getHpoWeeklyPlanner);
   const deleteRoute = useServerFn(deleteHpoPlannedRoute);
   const saveRouteNote = useServerFn(addHpoRouteStopNote);
+  const optimizeRoute = useServerFn(optimizeHpoRoute);
   const [data, setData] = useState<PlannerData | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -181,6 +185,7 @@ export function HpoWeeklyPlanner({
   const [deletingRouteId, setDeletingRouteId] = useState<string | null>(null);
   const [stopNotes, setStopNotes] = useState<Record<string, string>>({});
   const [savingNoteStopId, setSavingNoteStopId] = useState<string | null>(null);
+  const [optimizingRouteId, setOptimizingRouteId] = useState<string | null>(null);
 
   const refresh = useCallback(
     async (weekStart?: string | null) => {
@@ -335,6 +340,31 @@ export function HpoWeeklyPlanner({
       `I'm planning my saved HPO route for ${route.route_date}${route.area ? ` in ${route.area}` : ""}. Use route ID ${route.id} as the route I'm working on. Help me add, remove, reorder, optimize, or review stops and notes. Ask only for information you actually need before making a change.`,
       `Route · ${prettyDate(route.route_date)}`,
     );
+  }
+
+  async function reoptimizeRoute(route: RoutePlan) {
+    if (optimizingRouteId) return;
+    setOptimizingRouteId(route.id);
+    setError("");
+    try {
+      await optimizeRoute({
+        data: {
+          routeId: route.id,
+          idempotencyKey: `planner:${crypto.randomUUID()}:hpo.route.optimize`,
+          sourceChannel: "planner_ui",
+        },
+      });
+      await refresh(data!.weekStart);
+      setSelectedDate(route.route_date);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Couldn't re-optimize that route.",
+      );
+    } finally {
+      setOptimizingRouteId(null);
+    }
   }
 
   async function saveStopNote(stop: Stop) {
@@ -675,20 +705,39 @@ export function HpoWeeklyPlanner({
                           </p>
                         )}
                       </div>
-                      <Button
-                        type="button"
-                        className="min-h-12 gap-2"
-                        onClick={() =>
-                          onOpenMap({
-                            routeDate: route.route_date,
-                            routeId: route.id,
-                            build: false,
-                          })
-                        }
-                      >
-                        <MapPinned className="size-4" />
-                        View optimized map
-                      </Button>
+                      <div className="grid gap-2">
+                        <Button
+                          type="button"
+                          className="min-h-12 gap-2"
+                          onClick={() =>
+                            onOpenMap({
+                              routeDate: route.route_date,
+                              routeId: route.id,
+                              build: false,
+                            })
+                          }
+                        >
+                          <MapPinned className="size-4" />
+                          View optimized map
+                        </Button>
+                        {["planned", "draft"].includes(route.status) &&
+                        !orderedStops.some((stop) =>
+                          finishedStatuses.has(stop.status),
+                        ) ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="min-h-11 gap-2 text-xs"
+                            disabled={optimizingRouteId === route.id}
+                            onClick={() => void reoptimizeRoute(route)}
+                          >
+                            <RouteIcon className="size-4" />
+                            {optimizingRouteId === route.id
+                              ? "Re-optimizing…"
+                              : "Re-optimize route"}
+                          </Button>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
 
