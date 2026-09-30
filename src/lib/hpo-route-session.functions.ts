@@ -135,6 +135,7 @@ async function officePool(db: any, userId: string, selected?: PlannerTarget[]) {
       tags.add("need_to_visit");
     if (row.relationship_stage === "warm") tags.add("warm_relationship");
     if (row.metadata?.lunch_date) tags.add("lunch_set");
+    tags.delete("exclude_from_adam_route");
     return {
       ...target,
       officeName: row.name,
