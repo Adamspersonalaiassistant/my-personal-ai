@@ -109,7 +109,8 @@ export function eligiblePlannerAccount(row: any) {
     Boolean(row.address?.trim()) &&
     !row.tags?.includes("exclude_from_adam_route") &&
     row.metadata?.exclude_from_adam_route !== true &&
-    (!row.owner_name?.trim() || row.owner_name.trim().toLowerCase() === "adam")
+    (!row.owner_name?.trim() ||
+      ["adam", "adam ashraf"].includes(row.owner_name.trim().toLowerCase()))
   );
 }
 export function eligiblePlannerProspect(row: any) {
