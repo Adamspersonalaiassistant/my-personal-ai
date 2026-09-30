@@ -7,6 +7,7 @@ import {
   ChevronRight,
   MapPinned,
   MessageCircle,
+  Navigation,
   Route as RouteIcon,
   StickyNote,
   X,
@@ -170,12 +171,15 @@ export function HpoWeeklyPlanner({
 }) {
   const load = useServerFn(getHpoWeeklyPlanner);
   const deleteRoute = useServerFn(deleteHpoPlannedRoute);
+  const saveRouteNote = useServerFn(addHpoRouteStopNote);
   const [data, setData] = useState<PlannerData | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [routePendingDelete, setRoutePendingDelete] = useState<RoutePlan | null>(null);
   const [deletingRouteId, setDeletingRouteId] = useState<string | null>(null);
+  const [stopNotes, setStopNotes] = useState<Record<string, string>>({});
+  const [savingNoteStopId, setSavingNoteStopId] = useState<string | null>(null);
 
   const refresh = useCallback(
     async (weekStart?: string | null) => {
@@ -324,6 +328,32 @@ export function HpoWeeklyPlanner({
       `I'm planning my saved HPO route for ${route.route_date}${route.area ? ` in ${route.area}` : ""}. Use route ID ${route.id} as the route I'm working on. Help me add, remove, reorder, optimize, or review stops and notes. Ask only for information you actually need before making a change.`,
       `Route · ${prettyDate(route.route_date)}`,
     );
+  }
+
+  async function saveStopNote(stop: Stop) {
+    const note = (stopNotes[stop.id] ?? "").trim();
+    if (!note || savingNoteStopId) return;
+    setSavingNoteStopId(stop.id);
+    setError("");
+    try {
+      await saveRouteNote({
+        data: {
+          stopId: stop.id,
+          note,
+          idempotencyKey: `planner:${crypto.randomUUID()}:hpo.route_stop.add_note`,
+          sourceChannel: "planner_ui",
+        },
+      });
+      setStopNotes((current) => ({ ...current, [stop.id]: "" }));
+      await refresh(data!.weekStart);
+      if (selectedDate) setSelectedDate(selectedDate);
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Couldn't save that note.",
+      );
+    } finally {
+      setSavingNoteStopId(null);
+    }
   }
 
   async function confirmDeleteRoute() {
@@ -730,6 +760,58 @@ export function HpoWeeklyPlanner({
                                 .filter(Boolean)
                                 .join(", ") || "Address not saved"}
                             </p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {stop.address ? (
+                                <a
+                                  href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+                                    [stop.address, stop.city]
+                                      .filter(Boolean)
+                                      .join(", "),
+                                  )}&travelmode=driving`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-primary px-3 text-[11px] font-semibold text-primary-foreground"
+                                >
+                                  <Navigation className="size-3.5" />
+                                  Go
+                                </a>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled
+                                  className="min-h-10 rounded-xl border border-border/45 px-3 text-[11px] text-muted-foreground opacity-40"
+                                >
+                                  Address needed
+                                </button>
+                              )}
+                            </div>
+                            <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                              <input
+                                value={stopNotes[stop.id] ?? ""}
+                                onChange={(event) =>
+                                  setStopNotes((current) => ({
+                                    ...current,
+                                    [stop.id]: event.target.value,
+                                  }))
+                                }
+                                placeholder="Add account note…"
+                                className="h-11 min-w-0 rounded-xl border border-border/50 bg-background/45 px-3 text-[16px] outline-none focus:border-primary/35"
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="min-h-11 px-3 text-xs"
+                                disabled={
+                                  savingNoteStopId === stop.id ||
+                                  !(stopNotes[stop.id] ?? "").trim()
+                                }
+                                onClick={() => void saveStopNote(stop)}
+                              >
+                                {savingNoteStopId === stop.id
+                                  ? "Saving…"
+                                  : "Save Note"}
+                              </Button>
+                            </div>
                             {stop.drive_seconds_from_previous != null ? (
                               <p className="mt-1 text-[10px] font-medium text-primary">
                                 {Math.round(
