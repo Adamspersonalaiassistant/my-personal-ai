@@ -1438,19 +1438,17 @@ export function HpoEmerySheet({
                                   </div>
 
                                   {candidate.latestNote ? (
-                                    <details
-                                      className="mt-2"
-                                      onClick={(event) =>
-                                        event.stopPropagation()
-                                      }
+                                    <div
+                                      className="mt-2 rounded-lg border border-border/45 bg-background/45 px-2.5 py-2"
+                                      onClick={(event) => event.stopPropagation()}
                                     >
-                                      <summary className="cursor-pointer text-[10px] font-semibold text-primary">
-                                        Recent note
-                                      </summary>
-                                      <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                                      <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-primary">
+                                        Last note
+                                      </p>
+                                      <p className="mt-1 whitespace-pre-wrap text-[11px] leading-4 text-muted-foreground">
                                         {candidate.latestNote}
                                       </p>
-                                    </details>
+                                    </div>
                                   ) : null}
                                 </div>
                               </div>
