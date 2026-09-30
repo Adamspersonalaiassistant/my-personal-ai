@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { openHpoEmery } from "@/components/HpoEmerySheet";
 import { HpoLeafletMap } from "@/components/hpo-map/HpoLeafletMap";
 import type { PlannerGamePlan } from "@/lib/hpo-planner-selection";
+import { addHpoRouteStopNote } from "@/lib/hpo-route.functions";
 import {
   deleteHpoPlannedRoute,
   getHpoWeeklyPlanner,
