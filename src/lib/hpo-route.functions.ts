@@ -362,6 +362,96 @@ function routeCost(
   return total;
 }
 
+function optimizeSequenceExact(
+  stopIndexes: number[],
+  durations: Array<Array<number | null>>,
+  startIndex: number | null,
+  endIndex: number | null,
+) {
+  const count = stopIndexes.length;
+  if (count <= 1) return [...stopIndexes];
+  // Exact Held-Karp shortest Hamiltonian path for ordinary daily route sizes.
+  // 14 stops = 229,376 states, which is small enough server-side and avoids
+  // local-minimum route orders while still falling back to the heuristic for
+  // larger field days.
+  if (count > 14) return null;
+
+  const maskCount = 1 << count;
+  const stateCount = maskCount * count;
+  const dp = new Float64Array(stateCount);
+  dp.fill(Number.POSITIVE_INFINITY);
+  const parent = new Int16Array(stateCount);
+  parent.fill(-1);
+
+  for (let local = 0; local < count; local += 1) {
+    const node = stopIndexes[local]!;
+    const cost =
+      startIndex == null
+        ? 0
+        : Number(durations[startIndex]?.[node] ?? Number.POSITIVE_INFINITY);
+    if (Number.isFinite(cost)) {
+      dp[(1 << local) * count + local] = cost;
+    }
+  }
+
+  for (let mask = 1; mask < maskCount; mask += 1) {
+    for (let last = 0; last < count; last += 1) {
+      if ((mask & (1 << last)) === 0) continue;
+      const stateIndex = mask * count + last;
+      const base = dp[stateIndex]!;
+      if (!Number.isFinite(base)) continue;
+      const fromNode = stopIndexes[last]!;
+      for (let next = 0; next < count; next += 1) {
+        if (mask & (1 << next)) continue;
+        const toNode = stopIndexes[next]!;
+        const edge = Number(
+          durations[fromNode]?.[toNode] ?? Number.POSITIVE_INFINITY,
+        );
+        if (!Number.isFinite(edge)) continue;
+        const nextMask = mask | (1 << next);
+        const nextState = nextMask * count + next;
+        const candidate = base + edge;
+        if (candidate < dp[nextState]!) {
+          dp[nextState] = candidate;
+          parent[nextState] = last;
+        }
+      }
+    }
+  }
+
+  const fullMask = maskCount - 1;
+  let bestLast = -1;
+  let bestCost = Number.POSITIVE_INFINITY;
+  for (let last = 0; last < count; last += 1) {
+    const base = dp[fullMask * count + last]!;
+    if (!Number.isFinite(base)) continue;
+    const node = stopIndexes[last]!;
+    const finish =
+      endIndex == null
+        ? 0
+        : Number(durations[node]?.[endIndex] ?? Number.POSITIVE_INFINITY);
+    const total = base + finish;
+    if (Number.isFinite(total) && total < bestCost) {
+      bestCost = total;
+      bestLast = last;
+    }
+  }
+  if (bestLast < 0) return null;
+
+  const reversed: number[] = [];
+  let mask = fullMask;
+  let last = bestLast;
+  while (last >= 0) {
+    reversed.push(stopIndexes[last]!);
+    const stateIndex = mask * count + last;
+    const previous = parent[stateIndex]!;
+    mask ^= 1 << last;
+    last = previous;
+  }
+  reversed.reverse();
+  return reversed.length === count ? reversed : null;
+}
+
 function optimizeSequence(
   stopIndexes: number[],
   durations: Array<Array<number | null>>,
@@ -1412,12 +1502,9 @@ export async function executeHpoRouteOptimizeCore(input: {
       (_stop: any, index: number) => stopOffset + index,
     );
     const endIndex = endPoint ? points.length - 1 : null;
-    const optimized = optimizeSequence(
-      stopIndexes,
-      durations,
-      startIndex,
-      endIndex,
-    );
+    const optimized =
+      optimizeSequenceExact(stopIndexes, durations, startIndex, endIndex) ??
+      optimizeSequence(stopIndexes, durations, startIndex, endIndex);
     const stopByNode = new Map<number, any>();
     stops.forEach((stop: any, index: number) =>
       stopByNode.set(stopOffset + index, stop),
@@ -1516,7 +1603,10 @@ export async function executeHpoRouteOptimizeCore(input: {
       metadata: {
         ...(route.metadata ?? {}),
         planner: "emery_native_v2",
-        optimization_engine: "open_road_matrix",
+        optimization_engine:
+          stopIndexes.length <= 14
+            ? "open_road_matrix_exact_v2"
+            : "open_road_matrix_heuristic_v2",
         route_geometry: routeGeometry,
         mapquest_dependency: false,
         optimization_execution_run_id: execution.id,
