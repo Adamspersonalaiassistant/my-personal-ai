@@ -390,7 +390,7 @@ export function HpoAccountFieldDetail({
                 <div className="grid grid-cols-4 gap-2">
                   {routeAddress ? (
                     <a
-                      href={`https://maps.apple.com/?daddr=${encodeURIComponent(
+                      href={`https://maps.google.com/?saddr=Current+Location&daddr=${encodeURIComponent(
                         [routeAddress, routeCity].filter(Boolean).join(", "),
                       )}`}
                       target="_blank"
@@ -772,7 +772,7 @@ export function HpoAccountFieldDetail({
                           </div>
                           <div className="flex shrink-0 gap-1">
                             <a
-                              href={`https://maps.apple.com/?daddr=${encodeURIComponent(
+                              href={`https://maps.google.com/?saddr=Current+Location&daddr=${encodeURIComponent(
                                 [location.address, location.city].filter(Boolean).join(", "),
                               )}`}
                               target="_blank"
