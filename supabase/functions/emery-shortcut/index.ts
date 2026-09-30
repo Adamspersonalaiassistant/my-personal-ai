@@ -35,7 +35,9 @@ CALENDAR/TASK RULES:
 
 HPO RELATIONSHIP RULES:
 - HPO writes are referral-source/account/relationship intelligence only. Never store patient names, DOBs, diagnoses, claim/case identifiers, treatment details, records, or other PHI here.
-- Use log_hpo_touch only when Adam clearly asks to log/save a relationship interaction and target exactly one CURRENT HPO ACCOUNT id.
+- Use log_hpo_touch when Adam clearly asks to log/save a relationship interaction OR add/save/log a note for exactly one CURRENT HPO ACCOUNT id.
+- For a pure account note, set interaction_type="note", put the note itself in details, and do not invent an outcome or next action.
+- CURRENT HPO ROUTE STOPS are authoritative route context. If Adam names a current route office, use its exact account_id when available.
 - Use set_hpo_followup only when Adam clearly asks to save a next relationship action for one CURRENT HPO ACCOUNT id.
 - If a request includes PHI, do not write it. Ask Adam to restate only the non-PHI relationship update.
 - Respect owner/exclusion context in CURRENT HPO ACCOUNTS. If an account is marked for another owner/excluded from Adam's route, ask before changing it unless Adam explicitly overrides that context.
@@ -127,6 +129,16 @@ Deno.serve(async (req: Request) => {
       dateStyle: "full",
       timeStyle: "long",
     }).format(new Date());
+    const localDateParts = new Intl.DateTimeFormat("en-US", {
+      timeZone: TIMEZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date());
+    const localDateMap = Object.fromEntries(
+      localDateParts.map((part) => [part.type, part.value]),
+    );
+    const localDateKey = `${localDateMap.year}-${localDateMap.month}-${localDateMap.day}`;
 
     const [profileR, memoriesR, recentR, tasksR, projectsR, meetingsR, hpoR, hpoContactsR, configR] = await Promise.all([
       db.from("profiles").select("display_name, timezone, profile_summary").eq("user_id", USER_ID).maybeSingle(),
@@ -148,6 +160,48 @@ Deno.serve(async (req: Request) => {
         .eq("user_id", USER_ID).maybeSingle(),
     ]);
 
+    const { data: currentRoute } = await db
+      .from("hpo_route_plans")
+      .select("id,route_date,status,area")
+      .eq("user_id", USER_ID)
+      .eq("route_date", localDateKey)
+      .in("status", ["draft", "planned", "active", "in_progress"])
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    let currentRouteStops: any[] = [];
+    if (currentRoute?.id) {
+      const routeStopsResult = await db
+        .from("hpo_route_stops")
+        .select("id,route_id,account_id,prospect_id,stop_order,status,office_name,address,city,notes")
+        .eq("user_id", USER_ID)
+        .eq("route_id", currentRoute.id)
+        .order("stop_order", { ascending: true });
+      if (routeStopsResult.error) throw routeStopsResult.error;
+      currentRouteStops = routeStopsResult.data ?? [];
+    }
+
+    const routeAccountIds = [
+      ...new Set(currentRouteStops.map((stop: any) => stop.account_id).filter(Boolean)),
+    ];
+    let currentRouteAccounts: any[] = [];
+    if (routeAccountIds.length) {
+      const routeAccountsResult = await db
+        .from("hpo_accounts")
+        .select("id,name,account_type,city,address,priority,owner_name,relationship_stage,relationship_health,next_action,next_action_due_at,tags,metadata")
+        .eq("user_id", USER_ID)
+        .in("id", routeAccountIds);
+      if (routeAccountsResult.error) throw routeAccountsResult.error;
+      currentRouteAccounts = routeAccountsResult.data ?? [];
+    }
+
+    const hpoAccountMap = new Map<string, any>();
+    for (const account of [...(hpoR.data ?? []), ...currentRouteAccounts]) {
+      hpoAccountMap.set(String(account.id), account);
+    }
+    const currentHpoAccounts = [...hpoAccountMap.values()];
+
     const recent = (recentR.data ?? []).reverse().filter((turn: any) => turn.id !== userInsert.data?.id).slice(-18);
     const memoryMaxItems = Math.min(30, Math.max(6, Number(configR.data?.memory_max_items ?? 16)));
     const memoryMaxCharacters = Math.min(12000, Math.max(2000, Number(configR.data?.memory_max_characters ?? 6500)));
@@ -160,7 +214,9 @@ Deno.serve(async (req: Request) => {
       open_tasks: tasks,
       active_projects: projectsR.data ?? [],
       upcoming_calendar_events: meetingsR.data ?? [],
-      hpo_accounts: hpoR.data ?? [],
+      hpo_accounts: currentHpoAccounts,
+      hpo_route: currentRoute ?? null,
+      hpo_route_stops: currentRouteStops,
       hpo_contacts: hpoContactsR.data ?? [],
       learned_config: configR.data ?? {},
     }).slice(0, 22000);
@@ -414,7 +470,7 @@ Deno.serve(async (req: Request) => {
 
     if (action.type === "log_hpo_touch" || action.type === "set_hpo_followup") {
       const targetId = typeof action.target_hpo_account_id === "string" ? action.target_hpo_account_id : "";
-      const target = (hpoR.data ?? []).find((account: any) => account.id === targetId);
+      const target = currentHpoAccounts.find((account: any) => account.id === targetId);
       if (action.contains_phi === true) {
         reply = "I can save the HPO relationship update, but leave out patient-identifying or medical/case details. What non-PHI account update should I save?";
         continueConversation = true;
@@ -430,25 +486,84 @@ Deno.serve(async (req: Request) => {
           reply = `What relationship update should I log for ${target.name}?`;
           continueConversation = true;
         } else {
-          const dueAt = action.due_at && !Number.isNaN(Date.parse(action.due_at)) ? new Date(action.due_at).toISOString() : null;
-          const logged = await db.rpc("emery_hpo_log_touch", {
-            p_user_id: USER_ID,
-            p_account_id: target.id,
-            p_interaction_type: String(action.interaction_type || "visit"),
-            p_summary: summary,
-            p_outcome: String(action.outcome || "").trim() || null,
-            p_relationship_signal: String(action.relationship_signal || "").trim() || null,
-            p_next_action: String(action.next_action || "").trim() || null,
-            p_next_action_due_at: dueAt,
-            p_source: "emery-shortcut",
-          });
-          if (logged.error) throw logged.error;
-          const row = rpcRow(logged);
-          actionTaken = { type: "log_hpo_touch", id: row?.id, title: target.name };
-          reply = action.next_action
-            ? `Logged the ${target.name} relationship update. Next: ${String(action.next_action).trim()}.`
-            : `Logged the ${target.name} relationship update.`;
-          continueConversation = false;
+          const interactionType = String(action.interaction_type || "visit").trim().toLowerCase();
+          if (interactionType === "note") {
+            const noteInsert = await db
+              .from("hpo_interactions")
+              .insert({
+                user_id: USER_ID,
+                account_id: target.id,
+                interaction_type: "note",
+                occurred_at: new Date().toISOString(),
+                summary,
+                source_type: "shortcut",
+                metadata: {
+                  non_phi: true,
+                  source: "emery-shortcut",
+                  shortcut_request_id: shortcutRequestId || null,
+                },
+              })
+              .select("id")
+              .single();
+            if (noteInsert.error) throw noteInsert.error;
+
+            const matchingStop = currentRouteStops.find(
+              (stop: any) => String(stop.account_id ?? "") === String(target.id),
+            );
+            if (matchingStop) {
+              const previous = String(matchingStop.notes ?? "").trim();
+              const routeNotes = previous ? `${previous}\n\n${summary}` : summary;
+              const stopUpdate = await db
+                .from("hpo_route_stops")
+                .update({
+                  notes: routeNotes,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq("user_id", USER_ID)
+                .eq("id", matchingStop.id);
+              if (stopUpdate.error) throw stopUpdate.error;
+            }
+
+            const accountUpdate = await db
+              .from("hpo_accounts")
+              .update({ updated_at: new Date().toISOString() })
+              .eq("user_id", USER_ID)
+              .eq("id", target.id);
+            if (accountUpdate.error) throw accountUpdate.error;
+
+            actionTaken = {
+              type: "log_hpo_touch",
+              id: noteInsert.data?.id,
+              title: target.name,
+            };
+            reply = matchingStop
+              ? `Added the note to ${target.name} and today's route stop.`
+              : `Added the note to ${target.name}'s account history.`;
+            continueConversation = false;
+          } else {
+            const dueAt =
+              action.due_at && !Number.isNaN(Date.parse(action.due_at))
+                ? new Date(action.due_at).toISOString()
+                : null;
+            const logged = await db.rpc("emery_hpo_log_touch", {
+              p_user_id: USER_ID,
+              p_account_id: target.id,
+              p_interaction_type: String(action.interaction_type || "visit"),
+              p_summary: summary,
+              p_outcome: String(action.outcome || "").trim() || null,
+              p_relationship_signal: String(action.relationship_signal || "").trim() || null,
+              p_next_action: String(action.next_action || "").trim() || null,
+              p_next_action_due_at: dueAt,
+              p_source: "emery-shortcut",
+            });
+            if (logged.error) throw logged.error;
+            const row = rpcRow(logged);
+            actionTaken = { type: "log_hpo_touch", id: row?.id, title: target.name };
+            reply = action.next_action
+              ? `Logged the ${target.name} relationship update. Next: ${String(action.next_action).trim()}.`
+              : `Logged the ${target.name} relationship update.`;
+            continueConversation = false;
+          }
         }
       } else {
         const nextAction = String(action.next_action ?? "").trim();
@@ -507,7 +622,8 @@ Deno.serve(async (req: Request) => {
         action_taken: actionTaken,
         rolling_state_used: Boolean(rollingState),
         open_task_count: tasks.length,
-        hpo_account_count: (hpoR.data ?? []).length,
+        hpo_account_count: currentHpoAccounts.length,
+        hpo_route_stop_count: currentRouteStops.length,
         hpo_contact_count: (hpoContactsR.data ?? []).length,
         response_verbosity: configR.data?.response_verbosity ?? "concise",
         memory_max_items: memoryMaxItems,
