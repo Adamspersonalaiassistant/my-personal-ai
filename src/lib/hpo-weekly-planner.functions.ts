@@ -60,7 +60,7 @@ export const getHpoWeeklyPlanner = createServerFn({ method: "GET" })
     const { data: routes, error: routesError } = await db
       .from("hpo_route_plans")
       .select(
-        "id,route_date,area,status,start_window,end_window,optimized_distance_meters,optimized_duration_seconds,optimized_at,notes,metadata,start_latitude,start_longitude,end_latitude,end_longitude,updated_at",
+        "id,route_date,area,status,start_window,end_window,start_address,optimized_distance_meters,optimized_duration_seconds,optimized_at,notes,metadata,start_latitude,start_longitude,end_latitude,end_longitude,updated_at",
       )
       .eq("user_id", userId)
       .gte("route_date", weekStart)
@@ -75,7 +75,7 @@ export const getHpoWeeklyPlanner = createServerFn({ method: "GET" })
       const { data: stopRows, error: stopsError } = await db
         .from("hpo_route_stops")
         .select(
-          "id,route_id,account_id,prospect_id,stop_order,status,visited_at,office_name,address,city,notes,visit_summary,visit_outcome,next_action,next_action_due_at,latitude,longitude,metadata,updated_at",
+          "id,route_id,account_id,prospect_id,stop_order,status,visited_at,office_name,address,city,notes,visit_summary,visit_outcome,next_action,next_action_due_at,latitude,longitude,distance_meters_from_previous,drive_seconds_from_previous,metadata,updated_at",
         )
         .eq("user_id", userId)
         .in("route_id", routeIds)
@@ -102,4 +102,3 @@ export const getHpoWeeklyPlanner = createServerFn({ method: "GET" })
       })),
     };
   });
-

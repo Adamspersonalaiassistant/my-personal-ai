@@ -146,6 +146,23 @@ assert.equal(
 );
 assert.match(pure.plannerGamePlan({}).priorNote, /No prior note/);
 assert.doesNotMatch(pure.plannerGamePlan({}).approach, /Jenni|Amanda/);
+assert.throws(() => pure.validatePlannerStartingPoint(null), /starting/);
+assert.throws(
+  () =>
+    pure.validatePlannerStartingPoint({
+      kind: "current_location",
+      label: "Current Location",
+      address: "Current Location",
+    }),
+  /Validate/,
+);
+const currentStart = pure.validatePlannerStartingPoint({
+  kind: "current_location",
+  label: "Current Location",
+  address: "Current Location",
+  latitude: 40.69,
+  longitude: -74.25,
+});
 const routeDate = "2026-10-01";
 let savedRoutes = [];
 let normalCalls = 0;
@@ -175,6 +192,16 @@ const sessions = {
           : [],
       ),
     })),
+  validateHpoPlannerStartingPoint: async ({ data }) => {
+    if (data.kind === "current_location") return currentStart;
+    return pure.validatePlannerStartingPoint({
+      kind: data.kind,
+      label: data.kind === "hpo_office" ? "HPO Office" : data.address,
+      address: data.address,
+      latitude: 40.7,
+      longitude: -74.2,
+    });
+  },
   chatHpoPlannerGamePlan: async ({ data }) => {
     chatCalls++;
     assert.deepEqual(
@@ -190,6 +217,8 @@ const sessions = {
     pure.validatePlannerSelection(data);
     assert.equal(data.routeDate, routeDate);
     assert.equal(data.selected.length, 3);
+    assert.equal(data.plannerBuild, true);
+    assert.deepEqual(data.startingPoint, currentStart);
     assert.equal(
       data.selected.find((c) => c.accountId === ids[1]).visitType,
       "lunch",
@@ -206,28 +235,26 @@ const sessions = {
         "Road geometry is temporarily unavailable. Retry Finalize Route.",
       );
     const plans = await sessions.prepareHpoPlannerGamePlan({ data });
-    const stops = [...plans]
-      .reverse()
-      .map((c, i) => ({
-        id: `stop-${i}`,
-        route_id: "saved-route",
-        account_id: c.accountId,
-        stop_order: i + 1,
-        status: "planned",
-        visited_at: null,
-        office_name: c.officeName,
-        address: c.address,
-        city: c.city,
-        latitude: c.latitude,
-        longitude: c.longitude,
-        notes: null,
-        visit_summary: null,
-        metadata: {
-          visit_type: data.selected.find((s) => s.accountId === c.accountId)
-            .visitType,
-          game_plan: c.gamePlan,
-        },
-      }));
+    const stops = [...plans].reverse().map((c, i) => ({
+      id: `stop-${i}`,
+      route_id: "saved-route",
+      account_id: c.accountId,
+      stop_order: i + 1,
+      status: "planned",
+      visited_at: null,
+      office_name: c.officeName,
+      address: c.address,
+      city: c.city,
+      latitude: c.latitude,
+      longitude: c.longitude,
+      notes: null,
+      visit_summary: null,
+      metadata: {
+        visit_type: data.selected.find((s) => s.accountId === c.accountId)
+          .visitType,
+        game_plan: c.gamePlan,
+      },
+    }));
     savedRoutes = [
       {
         id: "saved-route",
@@ -238,10 +265,15 @@ const sessions = {
         optimized_duration_seconds: 600,
         optimized_distance_meters: 3200,
         metadata: {
-          route_geometry: stops.map((s) => [s.longitude, s.latitude]),
+          starting_point: currentStart,
+          route_geometry: [
+            [currentStart.longitude, currentStart.latitude],
+            ...stops.map((s) => [s.longitude, s.latitude]),
+          ],
         },
-        start_latitude: null,
-        start_longitude: null,
+        start_address: currentStart.address,
+        start_latitude: currentStart.latitude,
+        start_longitude: currentStart.longitude,
         end_latitude: null,
         end_longitude: null,
         notes: null,
@@ -305,6 +337,19 @@ function App() {
   );
 }
 const root = createRoot(document.getElementById("root"));
+Object.defineProperty(dom.window.navigator, "geolocation", {
+  configurable: true,
+  value: {
+    getCurrentPosition(success) {
+      success({
+        coords: {
+          latitude: currentStart.latitude,
+          longitude: currentStart.longitude,
+        },
+      });
+    },
+  },
+});
 async function settle() {
   await act(async () => {
     await new Promise((r) => setTimeout(r, 20));
@@ -392,6 +437,23 @@ await act(async () => {
 await click(document.querySelector('[aria-label="Send to Emery"]'));
 assert.equal(chatCalls, 1);
 assert.equal(normalCalls, 0);
+await click(button("Choose Starting Point"));
+assert(document.querySelector('[aria-label="Starting Point"]'));
+assert.equal(button("Finalize Route").disabled, true);
+await click(button("Custom Address"));
+const startInput = document.querySelector("#planner-start-address");
+await act(async () => {
+  const setter = Object.getOwnPropertyDescriptor(
+    dom.window.HTMLInputElement.prototype,
+    "value",
+  ).set;
+  setter.call(startInput, "100 Custom Road, Newark, NJ");
+  startInput.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+});
+await click(button("Validate address"));
+assert(document.body.textContent.includes("Starting point confirmed"));
+await click(button("Current Location"));
+assert(document.body.textContent.includes("Starting point confirmed"));
 await click(button("Finalize Route"));
 assert(document.querySelector('[role="dialog"]'));
 assert(
@@ -413,8 +475,10 @@ assert(
   "Road line must render in real Leaflet",
 );
 assert.equal(document.querySelectorAll(".hpo-route-number-tooltip").length, 3);
+assert.equal(document.querySelectorAll(".hpo-route-start-marker").length, 1);
 assert(document.body.textContent.includes("10 min"));
 assert(document.body.textContent.includes("2.0 mi"));
+assert(document.body.textContent.includes("Current Location"));
 assert(document.body.textContent.includes("Emery Game Plan"));
 assert(document.body.textContent.includes("Lunch"));
 assert.deepEqual(
@@ -423,7 +487,7 @@ assert.deepEqual(
 );
 await act(async () => root.unmount());
 console.log(
-  "PASS: selection, exact date, tags, grouped choices, read-only chat, failed finalize/retry, saved classifications/game plan, optimized order, real Leaflet line and numbered stops.",
+  "PASS: selection, exact date, tags, grouped choices, read-only chat, required current start, failed finalize/retry, saved classifications/game plan, optimized order, start-aware Leaflet line and numbered stops.",
 );
 
 // Exercise the actual optimizer with road service responses and transaction faults.
@@ -480,6 +544,11 @@ let rpcFailure = false;
 const realFetch = globalThis.fetch;
 globalThis.fetch = async (url) => {
   requests++;
+  const roadPoints = decodeURIComponent(String(url))
+    .split("/driving/")[1]
+    ?.split("?")[0]
+    ?.split(";")
+    .map((pair) => pair.split(",").map(Number));
   return {
     ok: true,
     json: async () =>
@@ -489,37 +558,31 @@ globalThis.fetch = async (url) => {
             routes: [
               {
                 geometry: {
-                  coordinates: geometry
-                    ? [
-                        [-74.2, 40.7],
-                        [-74.18, 40.72],
-                        [-74.19, 40.71],
-                      ]
-                    : [],
+                  coordinates: geometry ? roadPoints : [],
                 },
               },
             ],
           },
   };
 };
-function dbFor(count = 3, status = "planned") {
+function dbFor(count = 2, status = "planned") {
   const route = {
     id: "optimizer-route",
     status,
     metadata: { source_channel: "hpo_planner:runtime-test" },
-    start_address: null,
+    start_address: "Test Start",
+    start_latitude: 40.69,
+    start_longitude: -74.25,
     end_address: null,
   };
-  const stops = offices
-    .slice(0, count)
-    .map((o, i) => ({
-      id: `s${i}`,
-      stop_order: i + 1,
-      office_name: o.officeName,
-      latitude: o.latitude,
-      longitude: o.longitude,
-      status: "planned",
-    }));
+  const stops = offices.slice(0, count).map((o, i) => ({
+    id: `s${i}`,
+    stop_order: i + 1,
+    office_name: o.officeName,
+    latitude: o.latitude,
+    longitude: o.longitude,
+    status: "planned",
+  }));
   return {
     from(table) {
       const result = {
@@ -565,12 +628,15 @@ async function optimizeTest(db) {
   });
 }
 await optimizeTest(dbFor());
-assert.deepEqual(applied[0].p_stop_ids, ["s0", "s2", "s1"]);
+assert.deepEqual(applied[0].p_stop_ids, ["s1", "s0"]);
 assert.equal(
   applied[0].p_patch.metadata.optimization_engine,
   "open_road_matrix",
 );
-assert.equal(applied[0].p_patch.metadata.route_geometry.length, 3);
+assert.deepEqual(
+  applied[0].p_patch.metadata.route_geometry[0],
+  [-74.25, 40.69],
+);
 const before = applied.length;
 geometry = false;
 await assert.rejects(() => optimizeTest(dbFor()), /Road geometry/);
@@ -590,12 +656,17 @@ await assert.rejects(
   /connect every selected stop/,
 );
 assert.equal(applied.length, before);
+matrix = [
+  [0, 100, 10],
+  [100, 0, 20],
+  [10, 20, 0],
+];
 const callsBefore = requests;
 const single = await optimizeTest(dbFor(1));
-assert.equal(single.driveMinutes, 0);
-assert.equal(single.distanceMiles, 0);
-assert.equal(requests, callsBefore, "One stop needs no road service call");
-await assert.rejects(() => optimizeTest(dbFor(3, "active")), /active/);
+assert(single.driveMinutes > 0);
+assert(single.distanceMiles > 0);
+assert(requests > callsBefore, "One stop still routes from the starting point");
+await assert.rejects(() => optimizeTest(dbFor(2, "active")), /active/);
 matrix = [
   [0, 100, 10],
   [100, 0, 20],
@@ -605,35 +676,243 @@ rpcFailure = true;
 await assert.rejects(() => optimizeTest(dbFor()), /became active/);
 globalThis.fetch = realFetch;
 console.log(
-  "PASS: real optimizer preserves all selected stops, changes order using road times, requires geometry, rejects disconnected roads, handles one stop, and refuses a route that becomes active.",
+  "PASS: real optimizer preserves all selected stops, chooses the first stop from the saved start using road times, saves first-leg metrics and geometry, rejects disconnected roads, handles one stop, and refuses a route that becomes active.",
 );
 
 // Test the actual Planner server handlers: owner scoping, saved history and isolated chat.
-stubs.set('@tanstack/react-start', {
- createServerFn:()=>({ middleware(){return this;},inputValidator(fn){this.validate=fn;return this;},handler(fn){const validate=this.validate;return async(args={})=>fn({data:validate?validate(args.data):args.data,context:args.context});} }),
+stubs.set("@tanstack/react-start", {
+  createServerFn: () => ({
+    middleware() {
+      return this;
+    },
+    inputValidator(fn) {
+      this.validate = fn;
+      return this;
+    },
+    handler(fn) {
+      const validate = this.validate;
+      return async (args = {}) =>
+        fn({
+          data: validate ? validate(args.data) : args.data,
+          context: args.context,
+        });
+    },
+  }),
 });
-let savedPayload=null;
-stubs.set('@/lib/hpo-route.functions',{executeHpoRouteOptimizeCore:async(args)=>{assert.equal(args.plannerSessionId,'server-test');return {driveMinutes:4,distanceMiles:1,optimizedAt:'2026-09-30T00:00:00Z'};}});
-const actualSessions=load('src/lib/hpo-route-session.functions.ts');
-const records={
- hpo_accounts:offices.map((o)=>({...o,id:o.accountId,user_id:'test-user',name:o.officeName,account_type:o.accountType,status:'active',owner_name:'Adam',notes:o.latestNote,next_action:'Follow up',metadata:{}})).concat([{id:'excluded',user_id:'test-user',name:'Excluded',address:'1 Test',status:'active',tags:['exclude_from_adam_route']}]),
- hpo_prospects:[],
- hpo_interactions:[{account_id:ids[0],user_id:'test-user',occurred_at:'2026-09-20',summary:'Saved visit summary',next_action:'Confirm the next meeting',outcome:'receptive'}],
- hpo_contacts:[{account_id:ids[0],user_id:'test-user',name:'Verified Manager',role_title:'Office manager'}],
+let savedPayload = null;
+stubs.set("@/lib/hpo-route.functions", {
+  executeHpoRouteOptimizeCore: async (args) => {
+    assert.equal(args.plannerSessionId, "server-test");
+    return {
+      driveMinutes: 4,
+      distanceMiles: 1,
+      optimizedAt: "2026-09-30T00:00:00Z",
+    };
+  },
+  geocodeHpoAddress: async (address) => ({
+    lat: 40.71,
+    lon: -74.11,
+    displayName: `Validated ${address}`,
+  }),
+});
+const actualSessions = load("src/lib/hpo-route-session.functions.ts");
+const records = {
+  hpo_accounts: offices
+    .map((o) => ({
+      ...o,
+      id: o.accountId,
+      user_id: "test-user",
+      name: o.officeName,
+      account_type: o.accountType,
+      status: "active",
+      owner_name: "Adam",
+      notes: o.latestNote,
+      next_action: "Follow up",
+      metadata: {},
+    }))
+    .concat([
+      {
+        id: "excluded",
+        user_id: "test-user",
+        name: "Excluded",
+        address: "1 Test",
+        status: "active",
+        tags: ["exclude_from_adam_route"],
+      },
+    ]),
+  hpo_prospects: [],
+  hpo_interactions: [
+    {
+      account_id: ids[0],
+      user_id: "test-user",
+      occurred_at: "2026-09-20",
+      summary: "Saved visit summary",
+      next_action: "Confirm the next meeting",
+      outcome: "receptive",
+    },
+  ],
+  hpo_contacts: [
+    {
+      account_id: ids[0],
+      user_id: "test-user",
+      name: "Verified Manager",
+      role_title: "Office manager",
+    },
+  ],
 };
-const serverDB={from(table){assert(table in records,`Unexpected table: ${table}`);let conditions=[];let included=null;let range=null;let limit=null;
- const q={select(){return this;},eq(field,value){conditions.push([field,value]);return this;},in(field,values){included=[field,values];return this;},order(){return this;},range(from,to){range=[from,to];return this;},limit(count){limit=count;return this;},then(resolve,reject){let data=records[table].filter(r=>conditions.every(([f,v])=>r[f]===v));if(included)data=data.filter(r=>included[1].includes(r[included[0]]));if(range)data=data.slice(range[0],range[1]+1);if(limit)data=data.slice(0,limit);return Promise.resolve({data,error:null}).then(resolve,reject);}};return q;},async rpc(name,args){assert.equal(name,'emery_hpo_create_planner_selection');savedPayload=args;return {data:{route_id:'server-route'},error:null};}};
-const serverContext={supabase:serverDB,userId:'test-user'};
-const pool=await actualSessions.getHpoPlannerOffices({context:serverContext});assert.equal(pool.allCandidates.length,4);assert.equal(pool.candidates.length,0);
-const selected=[{accountId:ids[0],visitType:'lunch'}];
-const plans=await actualSessions.prepareHpoPlannerGamePlan({data:{routeDate,selected},context:serverContext});
-assert.equal(plans.length,1);assert.match(plans[0].gamePlan.priorNote,/Saved visit summary/);assert.match(plans[0].gamePlan.approach,/Verified Manager/);
-await assert.rejects(()=>actualSessions.prepareHpoPlannerGamePlan({data:{routeDate,selected:[{accountId:'55555555-5555-4555-8555-555555555555'}]},context:serverContext}),/unavailable or excluded/);
-const originalKey=process.env.OPENAI_API_KEY;process.env.OPENAI_API_KEY='test-only-placeholder';
-globalThis.fetch=async(url,args)=>{assert.equal(url,'https://api.openai.com/v1/responses');const body=JSON.parse(args.body);assert(!body.tools,'Planner must have no web/write tools');const context=body.input[0].content;assert(context.includes('Alpha Medical'));assert(context.includes('Verified Manager'));assert(!context.includes('Bravo Law'));assert(!context.includes('Delta Office'));return {ok:true,json:async()=>({output:[{content:[{type:'output_text',text:'Ask the saved office manager about the recorded next step.'}]}]})};};
-const answer=await actualSessions.chatHpoPlannerGamePlan({data:{routeDate,selected,message:'What should I ask?'},context:serverContext});assert.match(answer.reply,/saved office manager/);
-const serverResult=await actualSessions.buildHpoRouteFromSelection({data:{routeDate,selected,sessionId:'server-test',planningMessages:[{role:'assistant',text:answer.reply}]},context:serverContext});
-assert.equal(serverResult.routeId,'server-route');assert.equal(savedPayload.p_route_date,routeDate);assert.equal(savedPayload.p_stops.length,1);assert.equal(savedPayload.p_stops[0].visit_type,'lunch');assert.match(savedPayload.p_stops[0].game_plan.priorNote,/Saved visit summary/);assert.equal(savedPayload.p_game_plan.discussion[0].text,answer.reply);
-if(originalKey===undefined)delete process.env.OPENAI_API_KEY;else process.env.OPENAI_API_KEY=originalKey;
-globalThis.fetch=realFetch;
-console.log('PASS: actual server handlers scope saved offices, preserve verified notes/contacts, reject missing offices, isolate selected-office chat, and save exact Planner date/classifications/context.');
+const serverDB = {
+  from(table) {
+    assert(table in records, `Unexpected table: ${table}`);
+    let conditions = [];
+    let included = null;
+    let range = null;
+    let limit = null;
+    const q = {
+      select() {
+        return this;
+      },
+      eq(field, value) {
+        conditions.push([field, value]);
+        return this;
+      },
+      in(field, values) {
+        included = [field, values];
+        return this;
+      },
+      order() {
+        return this;
+      },
+      range(from, to) {
+        range = [from, to];
+        return this;
+      },
+      limit(count) {
+        limit = count;
+        return this;
+      },
+      then(resolve, reject) {
+        let data = records[table].filter((r) =>
+          conditions.every(([f, v]) => r[f] === v),
+        );
+        if (included)
+          data = data.filter((r) => included[1].includes(r[included[0]]));
+        if (range) data = data.slice(range[0], range[1] + 1);
+        if (limit) data = data.slice(0, limit);
+        return Promise.resolve({ data, error: null }).then(resolve, reject);
+      },
+    };
+    return q;
+  },
+  async rpc(name, args) {
+    assert.equal(name, "emery_hpo_create_planner_selection");
+    savedPayload = args;
+    return { data: { route_id: "server-route" }, error: null };
+  },
+};
+const serverContext = { supabase: serverDB, userId: "test-user" };
+const pool = await actualSessions.getHpoPlannerOffices({
+  context: serverContext,
+});
+assert.equal(pool.allCandidates.length, 4);
+assert.equal(pool.candidates.length, 0);
+const selected = [{ accountId: ids[0], visitType: "lunch" }];
+const plans = await actualSessions.prepareHpoPlannerGamePlan({
+  data: { routeDate, selected },
+  context: serverContext,
+});
+assert.equal(plans.length, 1);
+assert.match(plans[0].gamePlan.priorNote, /Saved visit summary/);
+assert.match(plans[0].gamePlan.approach, /Verified Manager/);
+await assert.rejects(
+  () =>
+    actualSessions.prepareHpoPlannerGamePlan({
+      data: {
+        routeDate,
+        selected: [{ accountId: "55555555-5555-4555-8555-555555555555" }],
+      },
+      context: serverContext,
+    }),
+  /unavailable or excluded/,
+);
+const originalKey = process.env.OPENAI_API_KEY;
+process.env.OPENAI_API_KEY = "test-only-placeholder";
+globalThis.fetch = async (url, args) => {
+  assert.equal(url, "https://api.openai.com/v1/responses");
+  const body = JSON.parse(args.body);
+  assert(!body.tools, "Planner must have no web/write tools");
+  const context = body.input[0].content;
+  assert(context.includes("Alpha Medical"));
+  assert(context.includes("Verified Manager"));
+  assert(!context.includes("Bravo Law"));
+  assert(!context.includes("Delta Office"));
+  return {
+    ok: true,
+    json: async () => ({
+      output: [
+        {
+          content: [
+            {
+              type: "output_text",
+              text: "Ask the saved office manager about the recorded next step.",
+            },
+          ],
+        },
+      ],
+    }),
+  };
+};
+const answer = await actualSessions.chatHpoPlannerGamePlan({
+  data: { routeDate, selected, message: "What should I ask?" },
+  context: serverContext,
+});
+assert.match(answer.reply, /saved office manager/);
+const validatedCustom = await actualSessions.validateHpoPlannerStartingPoint({
+  data: { kind: "custom_address", address: "100 Custom Road, Newark, NJ" },
+  context: serverContext,
+});
+assert.equal(validatedCustom.address, "Validated 100 Custom Road, Newark, NJ");
+await assert.rejects(
+  () =>
+    actualSessions.buildHpoRouteFromSelection({
+      data: {
+        routeDate,
+        selected,
+        sessionId: "server-test",
+        plannerBuild: true,
+        planningMessages: [],
+      },
+      context: serverContext,
+    }),
+  /starting/,
+);
+const serverResult = await actualSessions.buildHpoRouteFromSelection({
+  data: {
+    routeDate,
+    selected,
+    sessionId: "server-test",
+    plannerBuild: true,
+    startingPoint: validatedCustom,
+    planningMessages: [{ role: "assistant", text: answer.reply }],
+  },
+  context: serverContext,
+});
+assert.equal(serverResult.routeId, "server-route");
+assert.equal(savedPayload.p_route_date, routeDate);
+assert.equal(savedPayload.p_stops.length, 1);
+assert.equal(savedPayload.p_stops[0].visit_type, "lunch");
+assert.match(
+  savedPayload.p_stops[0].game_plan.priorNote,
+  /Saved visit summary/,
+);
+assert.equal(savedPayload.p_game_plan.discussion[0].text, answer.reply);
+assert.equal(
+  savedPayload.p_game_plan.starting_point.address,
+  "Validated 100 Custom Road, Newark, NJ",
+);
+assert.equal(savedPayload.p_game_plan.planner_workflow, true);
+if (originalKey === undefined) delete process.env.OPENAI_API_KEY;
+else process.env.OPENAI_API_KEY = originalKey;
+globalThis.fetch = realFetch;
+console.log(
+  "PASS: actual server handlers validate custom starts, require a Planner start, scope saved offices, preserve verified notes/contacts, isolate selected-office chat, and save exact date/classifications/context.",
+);

@@ -1,7 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { executeHpoRouteOptimizeCore } from "@/lib/hpo-route.functions";
+import {
+  executeHpoRouteOptimizeCore,
+  geocodeHpoAddress,
+} from "@/lib/hpo-route.functions";
 import { ASSISTANT_IDENTITY } from "@/lib/assistant-identity";
 import { MODEL_POLICY } from "@/lib/model-policy";
 import {
@@ -9,7 +12,10 @@ import {
   eligiblePlannerProspect,
   plannerGamePlan,
   plannerTargetKey,
+  HPO_OFFICE_START_ADDRESS,
   validatePlannerSelection,
+  validatePlannerStartingPoint,
+  type PlannerStartingPoint,
   type PlannerTarget,
 } from "@/lib/hpo-planner-selection";
 
@@ -192,6 +198,51 @@ export const prepareHpoPlannerGamePlan = createServerFn({ method: "POST" })
     selectedGamePlans(context.supabase, context.userId, data.selected),
   );
 
+export const validateHpoPlannerStartingPoint = createServerFn({
+  method: "POST",
+})
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (input: {
+      kind: PlannerStartingPoint["kind"];
+      address?: string | null;
+      latitude?: number | null;
+      longitude?: number | null;
+    }) => ({
+      kind: String(input?.kind ?? "") as PlannerStartingPoint["kind"],
+      address: String(input?.address ?? "")
+        .trim()
+        .slice(0, 300),
+      latitude: input?.latitude == null ? null : Number(input.latitude),
+      longitude: input?.longitude == null ? null : Number(input.longitude),
+    }),
+  )
+  .handler(async ({ data }) => {
+    if (data.kind === "current_location") {
+      return validatePlannerStartingPoint({
+        kind: data.kind,
+        label: "Current Location",
+        address: "Current Location",
+        latitude: data.latitude ?? Number.NaN,
+        longitude: data.longitude ?? Number.NaN,
+      });
+    }
+    if (!["hpo_office", "custom_address"].includes(data.kind))
+      throw new Error("Choose where you are starting this route.");
+    const address =
+      data.kind === "hpo_office" ? HPO_OFFICE_START_ADDRESS : data.address;
+    if (!address || address.length < 5)
+      throw new Error("Enter a complete starting address.");
+    const point = await geocodeHpoAddress(address);
+    return validatePlannerStartingPoint({
+      kind: data.kind,
+      label: data.kind === "hpo_office" ? "HPO Office" : address,
+      address: point.displayName || address,
+      latitude: point.lat,
+      longitude: point.lon,
+    });
+  });
+
 // A read-only Emery conversation: no normal conversation rows, memories, action router or web tools.
 export const chatHpoPlannerGamePlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -206,12 +257,10 @@ export const chatHpoPlannerGamePlan = createServerFn({ method: "POST" })
       message: String(input.message ?? "")
         .trim()
         .slice(0, 4000),
-      history: (input.history ?? [])
-        .slice(-12)
-        .map((m) => ({
-          role: m.role === "assistant" ? "assistant" : "user",
-          content: String(m.text).slice(0, 6000),
-        })),
+      history: (input.history ?? []).slice(-12).map((m) => ({
+        role: m.role === "assistant" ? "assistant" : "user",
+        content: String(m.text).slice(0, 6000),
+      })),
     }),
   )
   .handler(async ({ data, context }) => {
@@ -279,19 +328,23 @@ export const buildHpoRouteFromSelection = createServerFn({ method: "POST" })
       selected: PlannerTarget[];
       sessionId?: string | null;
       area?: string | null;
+      plannerBuild?: boolean;
+      startingPoint?: PlannerStartingPoint | null;
       planningMessages?: Array<{ role: "user" | "assistant"; text: string }>;
     }) => ({
       ...validatePlannerSelection(input),
+      plannerBuild: input.plannerBuild === true,
+      startingPoint: input.startingPoint
+        ? validatePlannerStartingPoint(input.startingPoint)
+        : null,
       area:
         String(input.area ?? "")
           .trim()
           .slice(0, 180) || null,
-      planningMessages: (input.planningMessages ?? [])
-        .slice(-12)
-        .map((m) => ({
-          role: m.role === "assistant" ? "assistant" : "user",
-          text: String(m.text).slice(0, 6000),
-        })),
+      planningMessages: (input.planningMessages ?? []).slice(-12).map((m) => ({
+        role: m.role === "assistant" ? "assistant" : "user",
+        text: String(m.text).slice(0, 6000),
+      })),
     }),
   )
   .handler(async ({ data, context }) => {
@@ -299,6 +352,8 @@ export const buildHpoRouteFromSelection = createServerFn({ method: "POST" })
       throw new Error(
         "Reopen Build Route from Planner to start a route session.",
       );
+    if (data.plannerBuild && !data.startingPoint)
+      throw new Error("Choose and validate where you are starting this route.");
     const db = context.supabase as any;
     const plans = await selectedGamePlans(db, context.userId, data.selected);
     const { data: saved, error } = await db.rpc(
@@ -319,6 +374,8 @@ export const buildHpoRouteFromSelection = createServerFn({ method: "POST" })
           game_plan: p.gamePlan,
         })),
         p_game_plan: {
+          planner_workflow: data.plannerBuild,
+          starting_point: data.startingPoint,
           offices: plans.map((p, i) => ({
             accountId: p.accountId,
             prospectId: p.prospectId,

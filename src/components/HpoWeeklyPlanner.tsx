@@ -24,6 +24,8 @@ type Stop = {
   visited_at: string | null;
   latitude: number | null;
   longitude: number | null;
+  distance_meters_from_previous: number | null;
+  drive_seconds_from_previous: number | null;
   metadata: { visit_type?: string; game_plan?: PlannerGamePlan } | null;
   office_name: string | null;
   address: string | null;
@@ -42,11 +44,17 @@ type RoutePlan = {
   status: string;
   start_window: string | null;
   end_window: string | null;
+  start_address: string | null;
   optimized_distance_meters: number | null;
   optimized_duration_seconds: number | null;
   optimized_at: string | null;
   notes: string | null;
-  metadata: (Record<string, unknown> & { game_plan?: { discussion?: Array<{ role: string; text: string }> } }) | null;
+  metadata:
+    | (Record<string, unknown> & {
+        game_plan?: { discussion?: Array<{ role: string; text: string }> };
+        starting_point?: { label?: string; address?: string; kind?: string };
+      })
+    | null;
   start_latitude: number | null;
   start_longitude: number | null;
   end_latitude: number | null;
@@ -62,7 +70,13 @@ type PlannerData = {
   routes: RoutePlan[];
 };
 
-const finishedStatuses = new Set(["completed", "visited", "closed", "skipped", "bad_address"]);
+const finishedStatuses = new Set([
+  "completed",
+  "visited",
+  "closed",
+  "skipped",
+  "bad_address",
+]);
 
 function addDaysKey(value: string, days: number) {
   const [year, month, day] = value.split("-").map(Number);
@@ -93,17 +107,23 @@ function weekLabel(start: string, end: string) {
   const startDate = new Date(start + "T12:00:00");
   const endDate = new Date(end + "T12:00:00");
   if (startDate.getFullYear() !== endDate.getFullYear()) {
-    return `${prettyDate(start, { month: "short", day: "numeric", year: "numeric" })} – ${prettyDate(end, {
+    return `${prettyDate(start, { month: "short", day: "numeric", year: "numeric" })} – ${prettyDate(
+      end,
+      {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      },
+    )}`;
+  }
+  return `${prettyDate(start, { month: "short", day: "numeric" })} – ${prettyDate(
+    end,
+    {
       month: "short",
       day: "numeric",
       year: "numeric",
-    })}`;
-  }
-  return `${prettyDate(start, { month: "short", day: "numeric" })} – ${prettyDate(end, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  })}`;
+    },
+  )}`;
 }
 
 function miles(meters: number | null) {
@@ -121,7 +141,9 @@ function duration(seconds: number | null) {
 }
 
 function statusLabel(value: string) {
-  return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 export function HpoWeeklyPlanner({
@@ -135,7 +157,10 @@ export function HpoWeeklyPlanner({
     routeId?: string | null;
     build?: boolean;
   }) => void;
-  onRouteContextChange?: (routeId: string | null, stopId: string | null) => void;
+  onRouteContextChange?: (
+    routeId: string | null,
+    stopId: string | null,
+  ) => void;
   focusDate?: string | null;
   focusRouteId?: string | null;
 }) {
@@ -147,11 +172,15 @@ export function HpoWeeklyPlanner({
 
   const refresh = useCallback(
     async (weekStart?: string | null) => {
-      const result = (await load({ data: { weekStart: weekStart ?? null } })) as PlannerData;
+      const result = (await load({
+        data: { weekStart: weekStart ?? null },
+      })) as PlannerData;
       setData(result);
       setSelectedDate((current) => {
-        if (current && current >= result.weekStart && current <= result.weekEnd) return current;
-        if (result.today >= result.weekStart && result.today <= result.weekEnd) return result.today;
+        if (current && current >= result.weekStart && current <= result.weekEnd)
+          return current;
+        if (result.today >= result.weekStart && result.today <= result.weekEnd)
+          return result.today;
         const firstPlanned = result.routes[0]?.route_date;
         return firstPlanned ?? result.weekStart;
       });
@@ -165,7 +194,9 @@ export function HpoWeeklyPlanner({
     let cancelled = false;
     setLoading(true);
     const requestedWeek =
-      focusDate && /^\d{4}-\d{2}-\d{2}$/.test(focusDate) ? mondayForKey(focusDate) : null;
+      focusDate && /^\d{4}-\d{2}-\d{2}$/.test(focusDate)
+        ? mondayForKey(focusDate)
+        : null;
     void load({ data: { weekStart: requestedWeek } })
       .then((result) => {
         if (cancelled) return;
@@ -176,13 +207,17 @@ export function HpoWeeklyPlanner({
             ? focusDate
             : next.today >= next.weekStart && next.today <= next.weekEnd
               ? next.today
-              : next.routes[0]?.route_date ?? next.weekStart,
+              : (next.routes[0]?.route_date ?? next.weekStart),
         );
         setError("");
       })
       .catch((cause) => {
         if (!cancelled)
-          setError(cause instanceof Error ? cause.message : "Couldn't open weekly planner.");
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Couldn't open weekly planner.",
+          );
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -193,7 +228,12 @@ export function HpoWeeklyPlanner({
   }, [focusDate, load]);
 
   const weekDays = useMemo(
-    () => (data ? Array.from({ length: 7 }, (_, index) => addDaysKey(data.weekStart, index)) : []),
+    () =>
+      data
+        ? Array.from({ length: 7 }, (_, index) =>
+            addDaysKey(data.weekStart, index),
+          )
+        : [],
     [data],
   );
   const routesByDate = useMemo(() => {
@@ -205,9 +245,13 @@ export function HpoWeeklyPlanner({
     }
     return map;
   }, [data]);
-  const selectedRoutes = selectedDate ? routesByDate.get(selectedDate) ?? [] : [];
+  const selectedRoutes = selectedDate
+    ? (routesByDate.get(selectedDate) ?? [])
+    : [];
   const selectedRoute =
-    selectedRoutes.find((route) => route.id === focusRouteId) ?? selectedRoutes[0] ?? null;
+    selectedRoutes.find((route) => route.id === focusRouteId) ??
+    selectedRoutes[0] ??
+    null;
 
   useEffect(() => {
     onRouteContextChange?.(selectedRoute?.id ?? null, null);
@@ -230,10 +274,14 @@ export function HpoWeeklyPlanner({
     );
   }
 
-  const totalStops = data.routes.reduce((sum, route) => sum + route.stops.length, 0);
+  const totalStops = data.routes.reduce(
+    (sum, route) => sum + route.stops.length,
+    0,
+  );
   const completedStops = data.routes.reduce(
     (sum, route) =>
-      sum + route.stops.filter((stop) => finishedStatuses.has(stop.status)).length,
+      sum +
+      route.stops.filter((stop) => finishedStatuses.has(stop.status)).length,
     0,
   );
 
@@ -242,7 +290,9 @@ export function HpoWeeklyPlanner({
     try {
       await refresh(addDaysKey(data!.weekStart, days));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Couldn't load that week.");
+      setError(
+        cause instanceof Error ? cause.message : "Couldn't load that week.",
+      );
     } finally {
       setLoading(false);
     }
@@ -256,7 +306,10 @@ export function HpoWeeklyPlanner({
   }
 
   function buildRoute(date: string) {
-    openHpoEmery("", `Build Route · ${prettyDate(date)}`, { routeDate: date, plannerBuild: true });
+    openHpoEmery("", `Build Route · ${prettyDate(date)}`, {
+      routeDate: date,
+      plannerBuild: true,
+    });
   }
 
   function workRouteWithEmery(route: RoutePlan) {
@@ -276,7 +329,8 @@ export function HpoWeeklyPlanner({
               <h1 className="text-lg font-semibold">Weekly Planner</h1>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              {weekLabel(data.weekStart, data.weekEnd)} · {data.routes.length} route
+              {weekLabel(data.weekStart, data.weekEnd)} · {data.routes.length}{" "}
+              route
               {data.routes.length === 1 ? "" : "s"} · {totalStops} stops
             </p>
           </div>
@@ -326,7 +380,10 @@ export function HpoWeeklyPlanner({
         <div className="mt-3 grid grid-cols-7 gap-1">
           {weekDays.map((date) => {
             const dayRoutes = routesByDate.get(date) ?? [];
-            const dayStops = dayRoutes.reduce((sum, route) => sum + route.stops.length, 0);
+            const dayStops = dayRoutes.reduce(
+              (sum, route) => sum + route.stops.length,
+              0,
+            );
             const selected = date === selectedDate;
             const today = date === data.today;
             return (
@@ -386,7 +443,23 @@ export function HpoWeeklyPlanner({
                 })}
               </h2>
             </div>
-            {selectedRoute ? <Button type="button" variant="outline" className="min-h-11 shrink-0 gap-1.5 px-3 text-xs" onClick={() => onOpenMap({ routeDate: selectedDate, routeId: selectedRoute.id, build: false })}><MapPinned className="size-4" />Map</Button> : null}
+            {selectedRoute ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11 shrink-0 gap-1.5 px-3 text-xs"
+                onClick={() =>
+                  onOpenMap({
+                    routeDate: selectedDate,
+                    routeId: selectedRoute.id,
+                    build: false,
+                  })
+                }
+              >
+                <MapPinned className="size-4" />
+                Map
+              </Button>
+            ) : null}
           </div>
 
           {!selectedRoutes.length ? (
@@ -394,15 +467,25 @@ export function HpoWeeklyPlanner({
               <RouteIcon className="mx-auto size-7 text-primary" />
               <h3 className="mt-3 text-base font-semibold">No route planned</h3>
               <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-muted-foreground">
-                Select the offices for this day, review your game plan with Emery, then finalize the driving route.
+                Select the offices for this day, review your game plan with
+                Emery, then finalize the driving route.
               </p>
               <div className="mt-4">
-                <Button type="button" className="min-h-12 w-full" onClick={() => buildRoute(selectedDate)}><RouteIcon className="size-4" />Build Route</Button>
+                <Button
+                  type="button"
+                  className="min-h-12 w-full"
+                  onClick={() => buildRoute(selectedDate)}
+                >
+                  <RouteIcon className="size-4" />
+                  Build Route
+                </Button>
               </div>
             </div>
           ) : (
             selectedRoutes.map((route) => {
-              const orderedStops = [...route.stops].sort((a, b) => a.stop_order - b.stop_order);
+              const orderedStops = [...route.stops].sort(
+                (a, b) => a.stop_order - b.stop_order,
+              );
               const completed = orderedStops.filter((stop) =>
                 finishedStatuses.has(stop.status),
               ).length;
@@ -410,6 +493,10 @@ export function HpoWeeklyPlanner({
                 duration(route.optimized_duration_seconds),
                 miles(route.optimized_distance_meters),
               ].filter(Boolean);
+              const startingPoint =
+                route.metadata?.starting_point?.label ||
+                route.start_address ||
+                "Starting point unavailable";
               return (
                 <article
                   key={route.id}
@@ -430,7 +517,9 @@ export function HpoWeeklyPlanner({
                         </h3>
                         <p className="mt-1 text-xs text-muted-foreground">
                           {orderedStops.length} stops · {completed} completed
-                          {routeStats.length ? ` · ${routeStats.join(" · ")}` : ""}
+                          {routeStats.length
+                            ? ` · ${routeStats.join(" · ")}`
+                            : ""}
                         </p>
                       </div>
                       <Button
@@ -447,20 +536,62 @@ export function HpoWeeklyPlanner({
                     {route.notes ? (
                       <div className="mt-3 flex items-start gap-2 rounded-xl border border-border/40 bg-background/35 px-3 py-2.5">
                         <StickyNote className="mt-0.5 size-4 shrink-0 text-primary" />
-                        <p className="text-xs leading-5 text-muted-foreground">{route.notes}</p>
+                        <p className="text-xs leading-5 text-muted-foreground">
+                          {route.notes}
+                        </p>
                       </div>
                     ) : null}
 
                     <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-                      <div className="rounded-xl border border-primary/20 bg-primary/[0.05] px-3 py-2.5">
+                      <div className="rounded-xl border border-primary/20 bg-primary/[0.05] px-3 py-3">
                         <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-primary">
-                          {route.optimized_at ? "Optimized route" : "Saved route"}
-                        </p>
-                        <p className="mt-1 text-xs text-foreground">
                           {route.optimized_at
-                            ? `${orderedStops.length} stops · ${duration(route.optimized_duration_seconds) || "drive time pending"} · ${miles(route.optimized_distance_meters) || "mileage pending"}`
-                            : `${orderedStops.length} stops · open Map to optimize driving order`}
+                            ? "Optimized Route"
+                            : "Saved route"}
                         </p>
+                        {route.optimized_at ? (
+                          <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                            <div className="col-span-2">
+                              <dt className="text-[10px] text-muted-foreground">
+                                Starting point
+                              </dt>
+                              <dd className="mt-0.5 font-semibold text-foreground">
+                                {startingPoint}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="text-[10px] text-muted-foreground">
+                                Stops
+                              </dt>
+                              <dd className="mt-0.5 font-semibold text-foreground">
+                                {orderedStops.length}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="text-[10px] text-muted-foreground">
+                                Drive time
+                              </dt>
+                              <dd className="mt-0.5 font-semibold text-foreground">
+                                {duration(route.optimized_duration_seconds) ||
+                                  "Pending"}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="text-[10px] text-muted-foreground">
+                                Mileage
+                              </dt>
+                              <dd className="mt-0.5 font-semibold text-foreground">
+                                {miles(route.optimized_distance_meters) ||
+                                  "Pending"}
+                              </dd>
+                            </div>
+                          </dl>
+                        ) : (
+                          <p className="mt-1 text-xs text-foreground">
+                            {orderedStops.length} stops · open Map to optimize
+                            driving order
+                          </p>
+                        )}
                       </div>
                       <Button
                         type="button"
@@ -479,18 +610,51 @@ export function HpoWeeklyPlanner({
                     </div>
                   </div>
 
-                  {route.metadata?.game_plan?.discussion?.length ? <details className="border-b border-border/45 px-4 py-3 text-xs leading-5">
-                    <summary className="cursor-pointer font-semibold text-primary">Emery planning discussion</summary>
-                    {route.metadata.game_plan.discussion.map((message, index) => <p key={index} className="mt-2 whitespace-pre-wrap"><strong>{message.role === "user" ? "Adam" : "Emery"}:</strong> {message.text}</p>)}
-                  </details> : null}
-                  {route.optimized_at ? <div className="relative h-[360px] overflow-hidden border-b border-border/45" aria-label="Optimized Planner route map">
-                    <HpoLeafletMap routeOnly offices={[]} selectedKeys={[]} selectedOfficeKey={null} route={route} onSelectOffice={() => undefined} onToggleRouteStop={() => undefined} onBuildRoute={() => undefined} preparing={false} onRefreshPins={() => undefined} />
-                  </div> : null}
+                  {route.metadata?.game_plan?.discussion?.length ? (
+                    <details className="border-b border-border/45 px-4 py-3 text-xs leading-5">
+                      <summary className="cursor-pointer font-semibold text-primary">
+                        Emery planning discussion
+                      </summary>
+                      {route.metadata.game_plan.discussion.map(
+                        (message, index) => (
+                          <p key={index} className="mt-2 whitespace-pre-wrap">
+                            <strong>
+                              {message.role === "user" ? "Adam" : "Emery"}:
+                            </strong>{" "}
+                            {message.text}
+                          </p>
+                        ),
+                      )}
+                    </details>
+                  ) : null}
+                  {route.optimized_at ? (
+                    <div
+                      className="relative h-[410px] overflow-hidden border-b border-border/45"
+                      aria-label="Optimized Planner route map"
+                    >
+                      <HpoLeafletMap
+                        routeOnly
+                        offices={[]}
+                        selectedKeys={[]}
+                        selectedOfficeKey={null}
+                        route={route}
+                        onSelectOffice={() => undefined}
+                        onToggleRouteStop={() => undefined}
+                        onBuildRoute={() => undefined}
+                        preparing={false}
+                        onRefreshPins={() => undefined}
+                      />
+                    </div>
+                  ) : null}
                   <div className="divide-y divide-border/40">
                     {orderedStops.map((stop) => {
-                      const note = stop.visit_summary || stop.notes || stop.visit_outcome;
+                      const note =
+                        stop.visit_summary || stop.notes || stop.visit_outcome;
                       return (
-                        <div key={stop.id} className="grid grid-cols-[32px_minmax(0,1fr)] gap-2.5 p-3.5">
+                        <div
+                          key={stop.id}
+                          className="grid grid-cols-[32px_minmax(0,1fr)] gap-2.5 p-3.5"
+                        >
                           <div
                             className={
                               finishedStatuses.has(stop.status)
@@ -505,32 +669,75 @@ export function HpoWeeklyPlanner({
                               <p className="min-w-0 truncate text-sm font-semibold">
                                 {stop.office_name || "Route stop"}
                               </p>
-                              {stop.metadata?.visit_type ? <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">{stop.metadata.visit_type === "lunch" ? "Lunch" : "Office Visit"}</span> : null}
+                              {stop.metadata?.visit_type ? (
+                                <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                                  {stop.metadata.visit_type === "lunch"
+                                    ? "Lunch"
+                                    : "Office Visit"}
+                                </span>
+                              ) : null}
                               <span className="shrink-0 rounded-full border border-border/45 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
                                 {statusLabel(stop.status)}
                               </span>
                             </div>
                             <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
-                              {[stop.address, stop.city].filter(Boolean).join(", ") || "Address not saved"}
+                              {[stop.address, stop.city]
+                                .filter(Boolean)
+                                .join(", ") || "Address not saved"}
                             </p>
-                            {stop.metadata?.game_plan ? <div className="mt-2 rounded-lg border border-primary/15 bg-primary/[0.04] p-2.5 text-xs leading-5" aria-label={`Game plan for ${stop.office_name}`}>
-                              <p className="text-[10px] font-semibold uppercase text-primary">Emery Game Plan</p>
-                              <p className="mt-1 whitespace-pre-wrap"><strong>Prior note:</strong> {stop.metadata.game_plan.priorNote}</p>
-                              <p className="mt-1"><strong>Context:</strong> {stop.metadata.game_plan.relationshipContext}</p>
-                              <p className="mt-1"><strong>Purpose:</strong> {stop.metadata.game_plan.purpose}</p>
-                              <p className="mt-1"><strong>Approach:</strong> {stop.metadata.game_plan.approach}</p>
-                            </div> : null}
+                            {stop.drive_seconds_from_previous != null ? (
+                              <p className="mt-1 text-[10px] font-medium text-primary">
+                                {Math.round(
+                                  stop.drive_seconds_from_previous / 60,
+                                )}{" "}
+                                min
+                                {stop.distance_meters_from_previous != null
+                                  ? ` · ${(stop.distance_meters_from_previous / 1609.344).toFixed(1)} mi`
+                                  : ""}
+                                {` from ${stop.stop_order === 1 ? "starting point" : "previous stop"}`}
+                              </p>
+                            ) : null}
+                            {stop.metadata?.game_plan ? (
+                              <div
+                                className="mt-2 rounded-lg border border-primary/15 bg-primary/[0.04] p-2.5 text-xs leading-5"
+                                aria-label={`Game plan for ${stop.office_name}`}
+                              >
+                                <p className="text-[10px] font-semibold uppercase text-primary">
+                                  Emery Game Plan
+                                </p>
+                                <p className="mt-1 whitespace-pre-wrap">
+                                  <strong>Prior note:</strong>{" "}
+                                  {stop.metadata.game_plan.priorNote}
+                                </p>
+                                <p className="mt-1">
+                                  <strong>Context:</strong>{" "}
+                                  {stop.metadata.game_plan.relationshipContext}
+                                </p>
+                                <p className="mt-1">
+                                  <strong>Purpose:</strong>{" "}
+                                  {stop.metadata.game_plan.purpose}
+                                </p>
+                                <p className="mt-1">
+                                  <strong>Approach:</strong>{" "}
+                                  {stop.metadata.game_plan.approach}
+                                </p>
+                              </div>
+                            ) : null}
                             {note ? (
                               <div className="mt-2 rounded-lg bg-background/45 px-2.5 py-2">
                                 <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">
                                   Notes
                                 </p>
-                                <p className="mt-1 text-xs leading-5 text-foreground/90">{note}</p>
+                                <p className="mt-1 text-xs leading-5 text-foreground/90">
+                                  {note}
+                                </p>
                               </div>
                             ) : null}
                             {stop.next_action ? (
                               <p className="mt-2 text-[11px] leading-4 text-muted-foreground">
-                                <span className="font-semibold text-foreground">Next:</span>{" "}
+                                <span className="font-semibold text-foreground">
+                                  Next:
+                                </span>{" "}
                                 {stop.next_action}
                                 {stop.next_action_due_at
                                   ? ` · ${new Date(stop.next_action_due_at).toLocaleDateString()}`
@@ -556,4 +763,3 @@ export function HpoWeeklyPlanner({
     </section>
   );
 }
-

@@ -9,6 +9,41 @@ export type PlannerGamePlan = {
   purpose: string;
   approach: string;
 };
+export const HPO_OFFICE_START_ADDRESS = "1320 Adams St, Hoboken, NJ 07030";
+export type PlannerStartingPoint = {
+  kind: "current_location" | "hpo_office" | "custom_address";
+  label: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+};
+export function validatePlannerStartingPoint(
+  value: Partial<PlannerStartingPoint> | null | undefined,
+): PlannerStartingPoint {
+  const kind = String(value?.kind ?? "") as PlannerStartingPoint["kind"];
+  if (!["current_location", "hpo_office", "custom_address"].includes(kind))
+    throw new Error("Choose where you are starting this route.");
+  const latitude = Number(value?.latitude);
+  const longitude = Number(value?.longitude);
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    latitude < -90 ||
+    latitude > 90 ||
+    longitude < -180 ||
+    longitude > 180
+  )
+    throw new Error("Validate the starting point before finalizing.");
+  const address = String(value?.address ?? "")
+    .trim()
+    .slice(0, 300);
+  const label = String(value?.label ?? "")
+    .trim()
+    .slice(0, 180);
+  if (!address || !label)
+    throw new Error("Validate the starting point before finalizing.");
+  return { kind, label, address, latitude, longitude };
+}
 export function plannerTargetKey(target: PlannerTarget) {
   return target.accountId
     ? `account:${target.accountId}`

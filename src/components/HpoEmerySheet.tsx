@@ -8,6 +8,7 @@ import {
   Check,
   ChevronDown,
   Circle,
+  LocateFixed,
   MapPin,
   Route as RouteIcon,
   Search,
@@ -17,8 +18,18 @@ import {
 import brainImage from "@/assets/neural-brain.png";
 import { EmeryVoiceControl } from "@/components/EmeryVoiceControl";
 import { sendEmeryMessage } from "@/lib/emery.functions";
-import { buildHpoRouteFromSelection, getHpoPlannerOffices, prepareHpoPlannerGamePlan, chatHpoPlannerGamePlan } from "@/lib/hpo-route-session.functions";
-import type { PlannerGamePlan } from "@/lib/hpo-planner-selection";
+import {
+  buildHpoRouteFromSelection,
+  getHpoPlannerOffices,
+  prepareHpoPlannerGamePlan,
+  chatHpoPlannerGamePlan,
+  validateHpoPlannerStartingPoint,
+} from "@/lib/hpo-route-session.functions";
+import {
+  HPO_OFFICE_START_ADDRESS,
+  type PlannerGamePlan,
+  type PlannerStartingPoint,
+} from "@/lib/hpo-planner-selection";
 
 const EVENT_NAME = "emery:hpo-chat";
 const MAX_ROUTE_STOPS = 30;
@@ -76,12 +87,17 @@ type MiniMessage = {
   recommendation?: RouteRecommendation | null;
 };
 
-type RecommendationGroup = "Doctors / Medical" | "Attorneys" | "PT / Chiro" | "Other";
+type RecommendationGroup =
+  "Doctors / Medical" | "Attorneys" | "PT / Chiro" | "Other";
 
 export function openHpoEmery(
   prompt = "",
   title = "HPO",
-  options: { autoSend?: boolean; routeDate?: string | null; plannerBuild?: boolean } = {},
+  options: {
+    autoSend?: boolean;
+    routeDate?: string | null;
+    plannerBuild?: boolean;
+  } = {},
 ) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
@@ -103,7 +119,9 @@ function candidateKey(candidate: RouteRecommendationCandidate) {
   return `office:${candidate.officeName}:${candidate.city ?? ""}`;
 }
 
-function categoryFor(candidate: RouteRecommendationCandidate): RecommendationGroup {
+function categoryFor(
+  candidate: RouteRecommendationCandidate,
+): RecommendationGroup {
   const type = [
     candidate.accountType,
     candidate.specialty,
@@ -115,7 +133,8 @@ function categoryFor(candidate: RouteRecommendationCandidate): RecommendationGro
     .toLowerCase();
 
   if (/attorney|law\b|law firm|legal/.test(type)) return "Attorneys";
-  if (/chiropr|physical therapy|\bpt\b|physiotherap/.test(type)) return "PT / Chiro";
+  if (/chiropr|physical therapy|\bpt\b|physiotherap/.test(type))
+    return "PT / Chiro";
   if (
     /primary care|\bpcp\b|provider|doctor|physician|medical|family medicine|internal medicine|urgent care|clinic|health/.test(
       type,
@@ -140,7 +159,12 @@ function tagLabel(tag: string) {
     warm_relationship: "WARM RELATIONSHIP",
     lunch_set: "LUNCH SET",
   };
-  return labels[tag] ?? tag.replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return (
+    labels[tag] ??
+    tag
+      .replace(/[_-]+/g, " ")
+      .replace(/\b\w/g, (letter) => letter.toUpperCase())
+  );
 }
 
 function tagClasses(tag: string) {
@@ -174,12 +198,11 @@ function applySelectionInstruction(
   const set = new Set(currentKeys);
   let changed = false;
 
-  const categoryInstruction = (
-    group: RecommendationGroup,
-    aliases: RegExp,
-  ) => {
+  const categoryInstruction = (group: RecommendationGroup, aliases: RegExp) => {
     if (!aliases.test(text)) return false;
-    const keys = candidates.filter((candidate) => categoryFor(candidate) === group).map(candidateKey);
+    const keys = candidates
+      .filter((candidate) => categoryFor(candidate) === group)
+      .map(candidateKey);
     if (!keys.length) return false;
 
     if (/\b(?:remove|clear|drop|exclude)\b/.test(text)) {
@@ -204,10 +227,15 @@ function applySelectionInstruction(
     "Doctors / Medical",
     /\b(?:doctors?|medical|pcps?|primary care|providers?|physicians?)\b/,
   );
-  categoryInstruction("PT / Chiro", /\b(?:pt|physical therapy|chiro|chiropractors?)\b/);
+  categoryInstruction(
+    "PT / Chiro",
+    /\b(?:pt|physical therapy|chiro|chiropractors?)\b/,
+  );
 
   if (/\b(?:vein|veins|vascular|venous)\b/.test(text)) {
-    const keys = candidates.filter((candidate) => candidate.veinTarget).map(candidateKey);
+    const keys = candidates
+      .filter((candidate) => candidate.veinTarget)
+      .map(candidateKey);
     if (/\b(?:remove|clear|drop|exclude)\b/.test(text)) {
       for (const key of keys) set.delete(key);
       changed = true;
@@ -221,11 +249,15 @@ function applySelectionInstruction(
     }
   }
 
-  const availableTags = [...new Set(candidates.flatMap((candidate) => candidate.tags ?? []))];
+  const availableTags = [
+    ...new Set(candidates.flatMap((candidate) => candidate.tags ?? [])),
+  ];
   for (const tag of availableTags) {
     const phrase = normalizeSelectionText(tag.replace(/[_-]+/g, " "));
     if (!phrase || !text.includes(phrase)) continue;
-    const keys = candidates.filter((candidate) => candidate.tags?.includes(tag)).map(candidateKey);
+    const keys = candidates
+      .filter((candidate) => candidate.tags?.includes(tag))
+      .map(candidateKey);
     if (/\b(?:remove|clear|drop|exclude)\b/.test(text)) {
       for (const key of keys) set.delete(key);
       changed = true;
@@ -294,11 +326,25 @@ export function HpoEmerySheet({
   const loadPlannerOffices = useServerFn(getHpoPlannerOffices);
   const preparePlanner = useServerFn(prepareHpoPlannerGamePlan);
   const askPlanner = useServerFn(chatHpoPlannerGamePlan);
+  const validateStart = useServerFn(validateHpoPlannerStartingPoint);
   const busyRef = useRef(false);
   const [plannerBuild, setPlannerBuild] = useState(false);
-  const [plannerPhase, setPlannerPhase] = useState<"select" | "plan">("select");
-  const [gamePlans, setGamePlans] = useState<RouteRecommendationCandidate[]>([]);
-  const [visitTypes, setVisitTypes] = useState<Record<string, "lunch" | "office_visit">>({});
+  const [plannerPhase, setPlannerPhase] = useState<"select" | "plan" | "start">(
+    "select",
+  );
+  const [gamePlans, setGamePlans] = useState<RouteRecommendationCandidate[]>(
+    [],
+  );
+  const [visitTypes, setVisitTypes] = useState<
+    Record<string, "lunch" | "office_visit">
+  >({});
+  const [startChoice, setStartChoice] = useState<
+    PlannerStartingPoint["kind"] | null
+  >(null);
+  const [startingPoint, setStartingPoint] =
+    useState<PlannerStartingPoint | null>(null);
+  const [customStartAddress, setCustomStartAddress] = useState("");
+  const [validatingStart, setValidatingStart] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -314,12 +360,15 @@ export function HpoEmerySheet({
   const [building, setBuilding] = useState(false);
   const [error, setError] = useState("");
   const [autoPrompt, setAutoPrompt] = useState("");
-  const [recommendation, setRecommendation] = useState<RouteRecommendation | null>(null);
+  const [recommendation, setRecommendation] =
+    useState<RouteRecommendation | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [showAll, setShowAll] = useState(true);
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [officeQuery, setOfficeQuery] = useState("");
-  const [openGroups, setOpenGroups] = useState<Record<RecommendationGroup, boolean>>({
+  const [openGroups, setOpenGroups] = useState<
+    Record<RecommendationGroup, boolean>
+  >({
     "Doctors / Medical": false,
     Attorneys: false,
     "PT / Chiro": false,
@@ -340,10 +389,16 @@ export function HpoEmerySheet({
       setPlannerPhase("select");
       setGamePlans([]);
       setVisitTypes({});
+      setStartChoice(null);
+      setStartingPoint(null);
+      setCustomStartAddress("");
+      setValidatingStart(false);
       setTitle(detail.title || "HPO");
       setSessionRouteDate(detail.routeDate ?? null);
       setDraft(detail.autoSend ? "" : detail.prompt || "");
-      setAutoPrompt(!detail.plannerBuild && detail.autoSend ? detail.prompt || "" : "");
+      setAutoPrompt(
+        !detail.plannerBuild && detail.autoSend ? detail.prompt || "" : "",
+      );
       setMessages([]);
       setRecommendation(null);
       setSelectedKeys([]);
@@ -362,12 +417,22 @@ export function HpoEmerySheet({
       setOpen(true);
       if (detail.plannerBuild) {
         setPending(true);
-        void loadPlannerOffices({}).then((pool) => {
-          if (sessionRef.current !== session) return;
-          setRecommendation({ ...pool, routeDate: detail.routeDate ?? null });
-        }).catch((cause) => {
-          if (sessionRef.current === session) setError(cause instanceof Error ? cause.message : "Couldn't load saved offices.");
-        }).finally(() => { if (sessionRef.current === session) setPending(false); });
+        void loadPlannerOffices({})
+          .then((pool) => {
+            if (sessionRef.current !== session) return;
+            setRecommendation({ ...pool, routeDate: detail.routeDate ?? null });
+          })
+          .catch((cause) => {
+            if (sessionRef.current === session)
+              setError(
+                cause instanceof Error
+                  ? cause.message
+                  : "Couldn't load saved offices.",
+              );
+          })
+          .finally(() => {
+            if (sessionRef.current === session) setPending(false);
+          });
       } else window.setTimeout(() => inputRef.current?.focus(), 80);
     };
     window.addEventListener(EVENT_NAME, handler);
@@ -413,10 +478,9 @@ export function HpoEmerySheet({
 
   const allCandidates = useMemo(() => {
     if (!recommendation) return [];
-    const source =
-      recommendation.allCandidates?.length
-        ? recommendation.allCandidates
-        : recommendation.candidates ?? [];
+    const source = recommendation.allCandidates?.length
+      ? recommendation.allCandidates
+      : (recommendation.candidates ?? []);
     const seen = new Set<string>();
     return source.filter((candidate) => {
       const key = candidateKey(candidate);
@@ -438,7 +502,13 @@ export function HpoEmerySheet({
         counts.set(tag, (counts.get(tag) ?? 0) + 1);
       }
     }
-    const order = ["vein_prospect", "lunch_target", "need_to_visit", "warm_relationship", "lunch_set"];
+    const order = [
+      "vein_prospect",
+      "lunch_target",
+      "need_to_visit",
+      "warm_relationship",
+      "lunch_set",
+    ];
     return [...counts.entries()]
       .sort(([left], [right]) => {
         const leftIndex = order.indexOf(left);
@@ -453,48 +523,59 @@ export function HpoEmerySheet({
       .map(([tag, count]) => ({ tag, count }));
   }, [allCandidates]);
 
-  const visibleCandidates = (showAll
-    ? allCandidates
-    : allCandidates.filter((candidate) => recommendedKeys.has(candidateKey(candidate)))
+  const visibleCandidates = (
+    showAll
+      ? allCandidates
+      : allCandidates.filter((candidate) =>
+          recommendedKeys.has(candidateKey(candidate)),
+        )
   )
-    .filter((candidate) => (activeTag ? candidate.tags?.includes(activeTag) : true))
+    .filter((candidate) =>
+      activeTag ? candidate.tags?.includes(activeTag) : true,
+    )
     .filter((candidate) => {
-    const needle = officeQuery.trim().toLowerCase();
-    if (!needle) return true;
-    return [
-      candidate.officeName,
-      candidate.city,
-      candidate.accountType,
-      candidate.specialty,
-      candidate.relationshipStage,
-      candidate.latestNote,
-      ...(candidate.tags ?? []).map(tagLabel),
-      ...(candidate.reasons ?? []),
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase()
-      .includes(needle);
-  });
+      const needle = officeQuery.trim().toLowerCase();
+      if (!needle) return true;
+      return [
+        candidate.officeName,
+        candidate.city,
+        candidate.accountType,
+        candidate.specialty,
+        candidate.relationshipStage,
+        candidate.latestNote,
+        ...(candidate.tags ?? []).map(tagLabel),
+        ...(candidate.reasons ?? []),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(needle);
+    });
 
   const grouped = useMemo(() => {
-    const result: Record<RecommendationGroup, RouteRecommendationCandidate[]> = {
-      "Doctors / Medical": [],
-      Attorneys: [],
-      "PT / Chiro": [],
-      Other: [],
-    };
-    for (const candidate of visibleCandidates) result[categoryFor(candidate)].push(candidate);
+    const result: Record<RecommendationGroup, RouteRecommendationCandidate[]> =
+      {
+        "Doctors / Medical": [],
+        Attorneys: [],
+        "PT / Chiro": [],
+        Other: [],
+      };
+    for (const candidate of visibleCandidates)
+      result[categoryFor(candidate)].push(candidate);
     return result;
   }, [visibleCandidates]);
 
   const selectedCandidates = useMemo(() => {
     const selectedSet = new Set(selectedKeys);
-    return allCandidates.filter((candidate) => selectedSet.has(candidateKey(candidate)));
+    return allCandidates.filter((candidate) =>
+      selectedSet.has(candidateKey(candidate)),
+    );
   }, [allCandidates, selectedKeys]);
 
   function installRecommendation(next: RouteRecommendation) {
-    const pool = next.allCandidates?.length ? next.allCandidates : next.candidates;
+    const pool = next.allCandidates?.length
+      ? next.allCandidates
+      : next.candidates;
     jumpToTopRef.current = true;
     setRecommendation({ ...next, allCandidates: pool });
     const initial = (next.candidates ?? []).map(candidateKey);
@@ -518,22 +599,45 @@ export function HpoEmerySheet({
       if (plannerPhase !== "plan") return;
       const session = sessionRef.current;
       const prior = messages;
-      setPending(true); setError("");
+      setPending(true);
+      setError("");
       setMessages((current) => [...current, { role: "user", text: clean }]);
       setDraft("");
       try {
-        const result = await askPlanner({ data: {
-          routeDate: sessionRouteDate!,
-          selected: selectedCandidates.map((c) => ({ accountId: c.accountId ?? null, prospectId: c.prospectId ?? null, visitType: visitTypes[candidateKey(c)] ?? "office_visit" })),
-          message: clean, history: prior,
-        }});
-        if (sessionRef.current === session) setMessages((current) => [...current, { role: "assistant", text: result.reply }]);
+        const result = await askPlanner({
+          data: {
+            routeDate: sessionRouteDate!,
+            selected: selectedCandidates.map((c) => ({
+              accountId: c.accountId ?? null,
+              prospectId: c.prospectId ?? null,
+              visitType: visitTypes[candidateKey(c)] ?? "office_visit",
+            })),
+            message: clean,
+            history: prior,
+          },
+        });
+        if (sessionRef.current === session)
+          setMessages((current) => [
+            ...current,
+            { role: "assistant", text: result.reply },
+          ]);
       } catch (cause) {
-        if (sessionRef.current === session) setError(cause instanceof Error ? cause.message : "Couldn't review that question.");
-      } finally { if (sessionRef.current === session) setPending(false); }
+        if (sessionRef.current === session)
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Couldn't review that question.",
+          );
+      } finally {
+        if (sessionRef.current === session) setPending(false);
+      }
       return;
     }
-    const selectionInstruction = applySelectionInstruction(clean, allCandidates, selectedKeys);
+    const selectionInstruction = applySelectionInstruction(
+      clean,
+      allCandidates,
+      selectedKeys,
+    );
     const selectionKeysForTurn = selectionInstruction.changed
       ? selectionInstruction.keys
       : selectedKeys;
@@ -581,7 +685,10 @@ export function HpoEmerySheet({
         },
       });
       if (!("reply" in result) || !result.reply) {
-        throw new Error(("error" in result && result.error) || "Emery couldn't complete that.");
+        throw new Error(
+          ("error" in result && result.error) ||
+            "Emery couldn't complete that.",
+        );
       }
       const routeCommand =
         "hpoRouteCommand" in result ? (result as any).hpoRouteCommand : null;
@@ -596,7 +703,10 @@ export function HpoEmerySheet({
       setMessages((current) => [
         ...current,
         {
-          id: "assistantMessage" in result ? result.assistantMessage?.id : undefined,
+          id:
+            "assistantMessage" in result
+              ? result.assistantMessage?.id
+              : undefined,
           role: "assistant",
           text: nextRecommendation
             ? `I reviewed the territory and ranked the offices below. Tap any office to include or remove it from your route.`
@@ -624,7 +734,11 @@ export function HpoEmerySheet({
         }
       }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Emery couldn't complete that.");
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Emery couldn't complete that.",
+      );
     } finally {
       setPending(false);
       window.setTimeout(() => inputRef.current?.focus(), 60);
@@ -643,7 +757,9 @@ export function HpoEmerySheet({
     setSelectedKeys((current) => {
       if (current.includes(key)) return current.filter((item) => item !== key);
       if (current.length >= MAX_ROUTE_STOPS) {
-        setError(`Keep a single optimized route to ${MAX_ROUTE_STOPS} stops or fewer.`);
+        setError(
+          `Keep a single optimized route to ${MAX_ROUTE_STOPS} stops or fewer.`,
+        );
         return current;
       }
       setError("");
@@ -668,7 +784,8 @@ export function HpoEmerySheet({
   function selectGroup(group: RecommendationGroup) {
     if (pending || building) return;
     const keys = grouped[group].map(candidateKey);
-    const allSelected = keys.length > 0 && keys.every((key) => selectedKeys.includes(key));
+    const allSelected =
+      keys.length > 0 && keys.every((key) => selectedKeys.includes(key));
     setSelectedKeys((current) => {
       const set = new Set(current);
       if (allSelected) {
@@ -681,7 +798,9 @@ export function HpoEmerySheet({
         set.add(key);
       }
       if (keys.some((key) => !set.has(key))) {
-        setError(`I selected the first ${MAX_ROUTE_STOPS} offices only. Keep one optimized route to ${MAX_ROUTE_STOPS} stops or fewer.`);
+        setError(
+          `I selected the first ${MAX_ROUTE_STOPS} offices only. Keep one optimized route to ${MAX_ROUTE_STOPS} stops or fewer.`,
+        );
       } else {
         setError("");
       }
@@ -690,27 +809,58 @@ export function HpoEmerySheet({
   }
 
   async function finishSelection() {
-    if (!selectedCandidates.length || pending || building || !sessionRouteDate) return;
+    if (!selectedCandidates.length || pending || building || !sessionRouteDate)
+      return;
     const session = sessionRef.current;
-    setPending(true); setError("");
+    setPending(true);
+    setError("");
     try {
-      const plans = await preparePlanner({ data: { routeDate: sessionRouteDate, selected: selectedCandidates, sessionId: session } });
+      const plans = await preparePlanner({
+        data: {
+          routeDate: sessionRouteDate,
+          selected: selectedCandidates,
+          sessionId: session,
+        },
+      });
       if (sessionRef.current !== session) return;
       setGamePlans(plans);
       setPlannerPhase("plan");
-      setMessages([{ role: "assistant", text: "Which stops are lunches? Every stop starts as Office Visit. Mark any lunches below, review your saved-history game plan, then tap Finalize Route." }]);
-      setOfficeQuery(""); setActiveTag(null);
+      setMessages([
+        {
+          role: "assistant",
+          text: "Which stops are lunches? Every stop starts as Office Visit. Mark any lunches below, review your saved-history game plan, then tap Finalize Route.",
+        },
+      ]);
+      setOfficeQuery("");
+      setActiveTag(null);
       scrollRef.current?.scrollTo({ top: 0 });
     } catch (cause) {
-      if (sessionRef.current === session) setError(cause instanceof Error ? cause.message : "Couldn't prepare your selected offices.");
-    } finally { if (sessionRef.current === session) setPending(false); }
+      if (sessionRef.current === session)
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "Couldn't prepare your selected offices.",
+        );
+    } finally {
+      if (sessionRef.current === session) setPending(false);
+    }
   }
 
   async function buildRoute() {
-    if (!recommendation || !selectedCandidates.length || building || pending) return;
-    const routeDate = plannerBuild ? sessionRouteDate : recommendation.routeDate || sessionRouteDate;
+    if (!recommendation || !selectedCandidates.length || building || pending)
+      return;
+    const routeDate = plannerBuild
+      ? sessionRouteDate
+      : recommendation.routeDate || sessionRouteDate;
     if (!routeDate) {
-      setError("Choose the route day from Planner first so I know where to save this route.");
+      setError(
+        "Choose the route day from Planner first so I know where to save this route.",
+      );
+      return;
+    }
+    if (plannerBuild && !startingPoint) {
+      setPlannerPhase("start");
+      setError("Choose and validate where you are starting this route.");
       return;
     }
 
@@ -728,15 +878,103 @@ export function HpoEmerySheet({
             visitType: visitTypes[candidateKey(candidate)] ?? "office_visit",
           })),
           planningMessages: plannerBuild ? messages : [],
+          plannerBuild,
+          startingPoint: plannerBuild ? startingPoint : null,
         },
       });
       onChanged?.();
       setOpen(false);
       onRouteBuilt?.(String(result.routeId), String(result.routeDate));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "I couldn't build that route safely.");
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "I couldn't build that route safely.",
+      );
     } finally {
       setBuilding(false);
+    }
+  }
+
+  async function chooseStartingPoint(kind: PlannerStartingPoint["kind"]) {
+    if (validatingStart || building) return;
+    setStartChoice(kind);
+    setStartingPoint(null);
+    setError("");
+    if (kind === "custom_address") return;
+    setValidatingStart(true);
+    try {
+      let latitude: number | null = null;
+      let longitude: number | null = null;
+      if (kind === "current_location") {
+        if (typeof navigator === "undefined" || !navigator.geolocation)
+          throw new Error(
+            "Current Location is unavailable. Choose HPO Office or Custom Address.",
+          );
+        const point = await new Promise<{
+          latitude: number;
+          longitude: number;
+        }>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(
+            (position) =>
+              resolve({
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+              }),
+            () =>
+              reject(
+                new Error(
+                  "Location access was not available. Choose HPO Office or Custom Address.",
+                ),
+              ),
+            { enableHighAccuracy: true, maximumAge: 60_000, timeout: 8_000 },
+          );
+        });
+        latitude = point.latitude;
+        longitude = point.longitude;
+      }
+      const validated = await validateStart({
+        data: {
+          kind,
+          address: kind === "hpo_office" ? HPO_OFFICE_START_ADDRESS : null,
+          latitude,
+          longitude,
+        },
+      });
+      setStartingPoint(validated);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Couldn't validate that starting point.",
+      );
+    } finally {
+      setValidatingStart(false);
+    }
+  }
+
+  async function validateCustomStartingPoint() {
+    if (validatingStart || building) return;
+    setStartChoice("custom_address");
+    setStartingPoint(null);
+    setValidatingStart(true);
+    setError("");
+    try {
+      const validated = await validateStart({
+        data: {
+          kind: "custom_address",
+          address: customStartAddress,
+        },
+      });
+      setStartingPoint(validated);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Couldn't validate that address.",
+      );
+    } finally {
+      setValidatingStart(false);
     }
   }
 
@@ -758,12 +996,21 @@ export function HpoEmerySheet({
         <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border/80 sm:hidden" />
         <div className="flex shrink-0 items-center gap-3 border-b border-border/45 px-4 py-3">
           <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-primary/15 bg-primary/[0.05]">
-            <img src={brainImage} alt="" className="emery-blue-brain size-9 object-cover" />
+            <img
+              src={brainImage}
+              alt=""
+              className="emery-blue-brain size-9 object-cover"
+            />
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold">Emery</p>
             <p className="truncate text-[11px] text-muted-foreground">
-              {title} · {plannerBuild && plannerPhase === "select" ? "Select offices" : "route game plan"}
+              {title} ·{" "}
+              {plannerBuild && plannerPhase === "select"
+                ? "Select offices"
+                : plannerBuild && plannerPhase === "start"
+                  ? "Starting point"
+                  : "route game plan"}
             </p>
           </div>
           <button
@@ -776,17 +1023,25 @@ export function HpoEmerySheet({
           </button>
         </div>
 
-        <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
+        <div
+          ref={scrollRef}
+          className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3"
+        >
           {!messages.length && !pending ? (
             <p className="px-1 text-sm leading-6 text-muted-foreground">
-              {plannerBuild ? "Choose the saved offices you want to visit, then tap Done." : "Emery is reviewing your HPO relationship history and target offices for this route."}
+              {plannerBuild
+                ? "Choose the saved offices you want to visit, then tap Done."
+                : "Emery is reviewing your HPO relationship history and target offices for this route."}
             </p>
           ) : null}
 
           {messages.map((message, index) => {
             if (message.recommendation) {
               return (
-                <div key={`recommendation-${index}`} className="rounded-2xl bg-card px-3.5 py-3 text-sm text-foreground">
+                <div
+                  key={`recommendation-${index}`}
+                  className="rounded-2xl bg-card px-3.5 py-3 text-sm text-foreground"
+                >
                   {message.text}
                 </div>
               );
@@ -794,7 +1049,11 @@ export function HpoEmerySheet({
             return (
               <div
                 key={`${message.role}-${index}`}
-                className={message.role === "user" ? "flex justify-end" : "flex justify-start"}
+                className={
+                  message.role === "user"
+                    ? "flex justify-end"
+                    : "flex justify-start"
+                }
               >
                 <div
                   className={
@@ -814,9 +1073,12 @@ export function HpoEmerySheet({
               <div className="rounded-2xl border border-primary/20 bg-primary/[0.05] p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-foreground">{plannerBuild ? "Select Offices" : "Office game plan"}</p>
+                    <p className="text-sm font-semibold text-foreground">
+                      {plannerBuild ? "Select Offices" : "Office game plan"}
+                    </p>
                     <p className="mt-0.5 text-[10px] text-muted-foreground">
-                      Groups start collapsed. Tap a group to review and select its offices.
+                      Groups start collapsed. Tap a group to review and select
+                      its offices.
                     </p>
                     <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
                       {recommendation.area || "Selected territory"}
@@ -830,7 +1092,9 @@ export function HpoEmerySheet({
                           })}`
                         : ""}
                       {" · "}
-                      {recommendation.eligibleCount ?? allCandidates.length} eligible offices
+                      {recommendation.eligibleCount ??
+                        allCandidates.length}{" "}
+                      eligible offices
                     </p>
                   </div>
                   <span className="shrink-0 rounded-full bg-primary px-2.5 py-1 text-[10px] font-bold text-primary-foreground">
@@ -864,7 +1128,9 @@ export function HpoEmerySheet({
                   <button
                     type="button"
                     onClick={() =>
-                      setActiveTag((current) => (current === "vein_prospect" ? null : "vein_prospect"))
+                      setActiveTag((current) =>
+                        current === "vein_prospect" ? null : "vein_prospect",
+                      )
                     }
                     className={
                       activeTag === "vein_prospect"
@@ -872,9 +1138,15 @@ export function HpoEmerySheet({
                         : "min-h-9 rounded-xl border border-primary/25 bg-background/40 px-3 text-[11px] font-semibold text-primary"
                     }
                   >
-                    Vein prospects {allCandidates.filter((candidate) => candidate.tags?.includes("vein_prospect")).length}
+                    Vein prospects{" "}
+                    {
+                      allCandidates.filter((candidate) =>
+                        candidate.tags?.includes("vein_prospect"),
+                      ).length
+                    }
                   </button>
-                  {!plannerBuild && allCandidates.some((candidate) => candidate.veinTarget) ? (
+                  {!plannerBuild &&
+                  allCandidates.some((candidate) => candidate.veinTarget) ? (
                     <button
                       type="button"
                       onClick={selectVeinTargets}
@@ -918,7 +1190,11 @@ export function HpoEmerySheet({
                         <button
                           key={tag}
                           type="button"
-                          onClick={() => setActiveTag((current) => (current === tag ? null : tag))}
+                          onClick={() =>
+                            setActiveTag((current) =>
+                              current === tag ? null : tag,
+                            )
+                          }
                           className={`shrink-0 rounded-full border px-2.5 py-1.5 text-[9px] font-bold tracking-[0.04em] ${
                             activeTag === tag
                               ? `${tagClasses(tag)} ring-1 ring-current/30`
@@ -951,157 +1227,193 @@ export function HpoEmerySheet({
                   ) : null}
                 </div>
 
-                {!plannerBuild ? <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-                  {[
-                    "Which vein tracker doctors in this territory should I prioritize for lunches, especially offices I have not visited?",
-                    "Compare my selected offices and tell me which ones matter most.",
-                    "Which of these offices have I visited before and what happened?",
-                    "Which attorneys in this territory should I prioritize and why?",
-                    "Which offices have overdue follow-ups or a clear next action?",
-                  ].map((prompt, index) => (
-                    <button
-                      key={prompt}
-                      type="button"
-                      disabled={pending || building}
-                      onClick={() => void sendText(prompt, true)}
-                      className="min-h-9 shrink-0 rounded-xl border border-border bg-background/40 px-3 text-[10px] font-semibold text-foreground disabled:opacity-40"
-                    >
-                      {["Vein lunches", "Compare selected", "Prior visits", "Best attorneys", "Follow-ups"][index]}
-                    </button>
-                  ))}
-                </div> : null}
+                {!plannerBuild ? (
+                  <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                    {[
+                      "Which vein tracker doctors in this territory should I prioritize for lunches, especially offices I have not visited?",
+                      "Compare my selected offices and tell me which ones matter most.",
+                      "Which of these offices have I visited before and what happened?",
+                      "Which attorneys in this territory should I prioritize and why?",
+                      "Which offices have overdue follow-ups or a clear next action?",
+                    ].map((prompt, index) => (
+                      <button
+                        key={prompt}
+                        type="button"
+                        disabled={pending || building}
+                        onClick={() => void sendText(prompt, true)}
+                        className="min-h-9 shrink-0 rounded-xl border border-border bg-background/40 px-3 text-[10px] font-semibold text-foreground disabled:opacity-40"
+                      >
+                        {
+                          [
+                            "Vein lunches",
+                            "Compare selected",
+                            "Prior visits",
+                            "Best attorneys",
+                            "Follow-ups",
+                          ][index]
+                        }
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
 
-              {(["Doctors / Medical", "Attorneys", "PT / Chiro", "Other"] as RecommendationGroup[]).map(
-                (group) => {
-                  const candidates = grouped[group];
-                  if (!candidates.length) return null;
-                  const Icon = categoryIcon(group);
-                  const allGroupSelected = candidates.every((candidate) =>
-                    selectedKeys.includes(candidateKey(candidate)),
-                  );
-                  return (
-                    <div key={group} className="overflow-hidden rounded-2xl border border-border/60 bg-card/50">
-                      <div className="flex items-center gap-2 border-b border-border/45 px-3 py-2.5">
-                        <button
-                          type="button"
-                          aria-expanded={openGroups[group]}
-                          onClick={() =>
-                            setOpenGroups((current) => ({
-                              ...current,
-                              [group]: !current[group],
-                            }))
-                          }
-                          className="flex min-h-10 min-w-0 flex-1 items-center gap-2 text-left"
-                        >
-                          <Icon className="size-4 shrink-0 text-primary" />
-                          <span className="min-w-0 flex-1 text-sm font-semibold">{group}</span>
-                          <span className="text-[10px] text-muted-foreground">
-                            {candidates.length}
-                            {candidates.some((candidate) => selectedKeys.includes(candidateKey(candidate)))
-                              ? ` · ${candidates.filter((candidate) => selectedKeys.includes(candidateKey(candidate))).length} selected`
-                              : ""}
-                          </span>
-                          <ChevronDown
-                            className={`size-4 text-muted-foreground transition-transform ${
-                              openGroups[group] ? "rotate-180" : ""
-                            }`}
-                          />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => selectGroup(group)}
-                          className="min-h-9 shrink-0 rounded-xl border border-border px-2.5 text-[10px] font-semibold text-primary"
-                        >
-                          {allGroupSelected ? "Clear" : "Select all"}
-                        </button>
-                      </div>
+              {(
+                [
+                  "Doctors / Medical",
+                  "Attorneys",
+                  "PT / Chiro",
+                  "Other",
+                ] as RecommendationGroup[]
+              ).map((group) => {
+                const candidates = grouped[group];
+                if (!candidates.length) return null;
+                const Icon = categoryIcon(group);
+                const allGroupSelected = candidates.every((candidate) =>
+                  selectedKeys.includes(candidateKey(candidate)),
+                );
+                return (
+                  <div
+                    key={group}
+                    className="overflow-hidden rounded-2xl border border-border/60 bg-card/50"
+                  >
+                    <div className="flex items-center gap-2 border-b border-border/45 px-3 py-2.5">
+                      <button
+                        type="button"
+                        aria-expanded={openGroups[group]}
+                        onClick={() =>
+                          setOpenGroups((current) => ({
+                            ...current,
+                            [group]: !current[group],
+                          }))
+                        }
+                        className="flex min-h-10 min-w-0 flex-1 items-center gap-2 text-left"
+                      >
+                        <Icon className="size-4 shrink-0 text-primary" />
+                        <span className="min-w-0 flex-1 text-sm font-semibold">
+                          {group}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">
+                          {candidates.length}
+                          {candidates.some((candidate) =>
+                            selectedKeys.includes(candidateKey(candidate)),
+                          )
+                            ? ` · ${candidates.filter((candidate) => selectedKeys.includes(candidateKey(candidate))).length} selected`
+                            : ""}
+                        </span>
+                        <ChevronDown
+                          className={`size-4 text-muted-foreground transition-transform ${
+                            openGroups[group] ? "rotate-180" : ""
+                          }`}
+                        />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => selectGroup(group)}
+                        className="min-h-9 shrink-0 rounded-xl border border-border px-2.5 text-[10px] font-semibold text-primary"
+                      >
+                        {allGroupSelected ? "Clear" : "Select all"}
+                      </button>
+                    </div>
 
-                      {openGroups[group] ? (
-                        <div className="divide-y divide-border/40">
-                          {candidates.map((candidate) => {
-                            const key = candidateKey(candidate);
-                            const selected = selectedKeys.includes(key);
-                            const recommended = recommendedKeys.has(key);
-                            return (
-                              <div
-                                key={key}
-                                role="button"
-                                tabIndex={0}
-                                aria-pressed={selected}
-                                onClick={() => toggleCandidate(candidate)}
-                                onKeyDown={(event) => {
-                                  if (event.key === "Enter" || event.key === " ") {
-                                    event.preventDefault();
-                                    toggleCandidate(candidate);
-                                  }
-                                }}
-                                className={
-                                  selected
-                                    ? "w-full cursor-pointer bg-primary/[0.055] px-3 py-3 text-left"
-                                    : "w-full cursor-pointer px-3 py-3 text-left hover:bg-accent/25"
+                    {openGroups[group] ? (
+                      <div className="divide-y divide-border/40">
+                        {candidates.map((candidate) => {
+                          const key = candidateKey(candidate);
+                          const selected = selectedKeys.includes(key);
+                          const recommended = recommendedKeys.has(key);
+                          return (
+                            <div
+                              key={key}
+                              role="button"
+                              tabIndex={0}
+                              aria-pressed={selected}
+                              onClick={() => toggleCandidate(candidate)}
+                              onKeyDown={(event) => {
+                                if (
+                                  event.key === "Enter" ||
+                                  event.key === " "
+                                ) {
+                                  event.preventDefault();
+                                  toggleCandidate(candidate);
                                 }
-                              >
-                                <div className="flex items-start gap-2.5">
-                                  <div
-                                    className={
-                                      selected
-                                        ? "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"
-                                        : "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground"
-                                    }
-                                  >
-                                    {selected ? <Check className="size-3.5" /> : <Circle className="size-3" />}
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-start justify-between gap-2">
-                                      <div className="min-w-0">
-                                        <p className="text-sm font-semibold leading-5 text-foreground">
-                                          {candidate.officeName}
-                                        </p>
-                                        <p className="mt-0.5 flex flex-wrap gap-x-2 text-[10px] text-muted-foreground">
-                                          {candidate.city ? (
-                                            <span className="inline-flex items-center gap-1">
-                                              <MapPin className="size-3" />
-                                              {candidate.city}
-                                            </span>
-                                          ) : null}
-                                          {candidate.relationshipStage ? (
-                                            <span>{candidate.relationshipStage}</span>
-                                          ) : null}
-                                        </p>
-                                      </div>
-                                      <div className="flex shrink-0 flex-col items-end gap-1">
-                                        <span
-                                          className={
-                                            candidate.priorityLabel === "GO NOW"
-                                              ? "rounded-full bg-primary px-2 py-1 text-[9px] font-bold text-primary-foreground"
-                                              : "rounded-full border border-border px-2 py-1 text-[9px] font-semibold text-foreground"
-                                          }
-                                        >
-                                          {candidate.priorityLabel || "TARGET"}
-                                        </span>
-                                        {recommended ? (
-                                          <span className="text-[9px] font-semibold text-primary">Recommended</span>
-                                        ) : null}
-                                      </div>
-                                    </div>
-
-                                    {candidate.tags?.length ? (
-                                      <div className="mt-2 flex flex-wrap gap-1.5">
-                                        {candidate.tags.map((tag) => (
-                                          <span
-                                            key={tag}
-                                            className={`rounded-full border px-2 py-1 text-[8px] font-bold tracking-[0.05em] ${tagClasses(tag)}`}
-                                          >
-                                            {tagLabel(tag)}
+                              }}
+                              className={
+                                selected
+                                  ? "w-full cursor-pointer bg-primary/[0.055] px-3 py-3 text-left"
+                                  : "w-full cursor-pointer px-3 py-3 text-left hover:bg-accent/25"
+                              }
+                            >
+                              <div className="flex items-start gap-2.5">
+                                <div
+                                  className={
+                                    selected
+                                      ? "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"
+                                      : "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground"
+                                  }
+                                >
+                                  {selected ? (
+                                    <Check className="size-3.5" />
+                                  ) : (
+                                    <Circle className="size-3" />
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-semibold leading-5 text-foreground">
+                                        {candidate.officeName}
+                                      </p>
+                                      <p className="mt-0.5 flex flex-wrap gap-x-2 text-[10px] text-muted-foreground">
+                                        {candidate.city ? (
+                                          <span className="inline-flex items-center gap-1">
+                                            <MapPin className="size-3" />
+                                            {candidate.city}
                                           </span>
-                                        ))}
-                                      </div>
-                                    ) : null}
+                                        ) : null}
+                                        {candidate.relationshipStage ? (
+                                          <span>
+                                            {candidate.relationshipStage}
+                                          </span>
+                                        ) : null}
+                                      </p>
+                                    </div>
+                                    <div className="flex shrink-0 flex-col items-end gap-1">
+                                      <span
+                                        className={
+                                          candidate.priorityLabel === "GO NOW"
+                                            ? "rounded-full bg-primary px-2 py-1 text-[9px] font-bold text-primary-foreground"
+                                            : "rounded-full border border-border px-2 py-1 text-[9px] font-semibold text-foreground"
+                                        }
+                                      >
+                                        {candidate.priorityLabel || "TARGET"}
+                                      </span>
+                                      {recommended ? (
+                                        <span className="text-[9px] font-semibold text-primary">
+                                          Recommended
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  </div>
 
-                                    {candidate.reasons?.length ? (
-                                      <ul className="mt-2 space-y-1">
-                                        {candidate.reasons.slice(0, 3).map((reason) => (
+                                  {candidate.tags?.length ? (
+                                    <div className="mt-2 flex flex-wrap gap-1.5">
+                                      {candidate.tags.map((tag) => (
+                                        <span
+                                          key={tag}
+                                          className={`rounded-full border px-2 py-1 text-[8px] font-bold tracking-[0.05em] ${tagClasses(tag)}`}
+                                        >
+                                          {tagLabel(tag)}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : null}
+
+                                  {candidate.reasons?.length ? (
+                                    <ul className="mt-2 space-y-1">
+                                      {candidate.reasons
+                                        .slice(0, 3)
+                                        .map((reason) => (
                                           <li
                                             key={reason}
                                             className="flex items-start gap-1.5 text-[11px] leading-4 text-foreground/90"
@@ -1110,67 +1422,242 @@ export function HpoEmerySheet({
                                             <span>{reason}</span>
                                           </li>
                                         ))}
-                                      </ul>
-                                    ) : null}
+                                    </ul>
+                                  ) : null}
 
-                                    <div className="mt-2 rounded-lg bg-background/45 px-2.5 py-2">
-                                      <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-                                        Visit objective
-                                      </p>
-                                      <p className="mt-1 text-[11px] leading-4 text-foreground/90">
-                                        {candidate.nextAction ||
-                                          (candidate.kind === "prospect"
-                                            ? "Qualify the relationship and identify the right decision-maker."
-                                            : "Advance the relationship and leave with a clear next step.")}
-                                      </p>
-                                    </div>
-
-                                    {candidate.latestNote ? (
-                                      <details
-                                        className="mt-2"
-                                        onClick={(event) => event.stopPropagation()}
-                                      >
-                                        <summary className="cursor-pointer text-[10px] font-semibold text-primary">
-                                          Recent note
-                                        </summary>
-                                        <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
-                                          {candidate.latestNote}
-                                        </p>
-                                      </details>
-                                    ) : null}
+                                  <div className="mt-2 rounded-lg bg-background/45 px-2.5 py-2">
+                                    <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                                      Visit objective
+                                    </p>
+                                    <p className="mt-1 text-[11px] leading-4 text-foreground/90">
+                                      {candidate.nextAction ||
+                                        (candidate.kind === "prospect"
+                                          ? "Qualify the relationship and identify the right decision-maker."
+                                          : "Advance the relationship and leave with a clear next step.")}
+                                    </p>
                                   </div>
+
+                                  {candidate.latestNote ? (
+                                    <details
+                                      className="mt-2"
+                                      onClick={(event) =>
+                                        event.stopPropagation()
+                                      }
+                                    >
+                                      <summary className="cursor-pointer text-[10px] font-semibold text-primary">
+                                        Recent note
+                                      </summary>
+                                      <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                                        {candidate.latestNote}
+                                      </p>
+                                    </details>
+                                  ) : null}
                                 </div>
                               </div>
-                            );
-                          })}
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                },
-              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
             </section>
           ) : null}
 
           {plannerBuild && plannerPhase === "plan" ? (
             <section className="space-y-3" aria-label="Emery Game Plan">
-              <button type="button" disabled={pending || building} onClick={() => { setPlannerPhase("select"); setGamePlans([]); setMessages([]); }} className="min-h-11 text-sm font-semibold text-primary disabled:opacity-40">Back to offices</button>
+              <button
+                type="button"
+                disabled={pending || building}
+                onClick={() => {
+                  setPlannerPhase("select");
+                  setGamePlans([]);
+                  setMessages([]);
+                }}
+                className="min-h-11 text-sm font-semibold text-primary disabled:opacity-40"
+              >
+                Back to offices
+              </button>
               {gamePlans.map((office) => {
                 const key = candidateKey(office);
-                return <article key={key} className="rounded-2xl border border-border/55 bg-card/50 p-3.5">
-                  <h3 className="text-sm font-semibold">{office.officeName}</h3>
-                  <div className="mt-2 flex gap-2" role="group" aria-label={`Visit type for ${office.officeName}`}>
-                    {([ ["office_visit", "Office Visit"], ["lunch", "Lunch"] ] as const).map(([type, label]) =>
-                      <button key={type} type="button" disabled={building || pending} aria-pressed={(visitTypes[key] ?? "office_visit") === type} onClick={() => setVisitTypes((current) => ({ ...current, [key]: type }))} className={(visitTypes[key] ?? "office_visit") === type ? "min-h-11 rounded-xl bg-primary px-3 text-xs font-semibold text-primary-foreground" : "min-h-11 rounded-xl border border-border px-3 text-xs font-semibold"}>{label}</button>)}
-                  </div>
-                  <dl className="mt-3 space-y-2 text-xs leading-5">
-                    {([["Prior note", office.gamePlan?.priorNote], ["Relationship / follow-up", office.gamePlan?.relationshipContext], ["Visit purpose", office.gamePlan?.purpose], ["Recommended approach", office.gamePlan?.approach]]).map(([label, value]) => <div key={label}><dt className="font-semibold text-primary">{label}</dt><dd className="whitespace-pre-wrap text-foreground/90">{value}</dd></div>)}
-                  </dl>
-                </article>;
+                return (
+                  <article
+                    key={key}
+                    className="rounded-2xl border border-border/55 bg-card/50 p-3.5"
+                  >
+                    <h3 className="text-sm font-semibold">
+                      {office.officeName}
+                    </h3>
+                    <div
+                      className="mt-2 flex gap-2"
+                      role="group"
+                      aria-label={`Visit type for ${office.officeName}`}
+                    >
+                      {(
+                        [
+                          ["office_visit", "Office Visit"],
+                          ["lunch", "Lunch"],
+                        ] as const
+                      ).map(([type, label]) => (
+                        <button
+                          key={type}
+                          type="button"
+                          disabled={building || pending}
+                          aria-pressed={
+                            (visitTypes[key] ?? "office_visit") === type
+                          }
+                          onClick={() =>
+                            setVisitTypes((current) => ({
+                              ...current,
+                              [key]: type,
+                            }))
+                          }
+                          className={
+                            (visitTypes[key] ?? "office_visit") === type
+                              ? "min-h-11 rounded-xl bg-primary px-3 text-xs font-semibold text-primary-foreground"
+                              : "min-h-11 rounded-xl border border-border px-3 text-xs font-semibold"
+                          }
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <dl className="mt-3 space-y-2 text-xs leading-5">
+                      {[
+                        ["Prior note", office.gamePlan?.priorNote],
+                        [
+                          "Relationship / follow-up",
+                          office.gamePlan?.relationshipContext,
+                        ],
+                        ["Visit purpose", office.gamePlan?.purpose],
+                        ["Recommended approach", office.gamePlan?.approach],
+                      ].map(([label, value]) => (
+                        <div key={label}>
+                          <dt className="font-semibold text-primary">
+                            {label}
+                          </dt>
+                          <dd className="whitespace-pre-wrap text-foreground/90">
+                            {value}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </article>
+                );
               })}
             </section>
           ) : null}
-          {pending ? <p className="px-1 text-xs text-muted-foreground">Emery is reviewing…</p> : null}
+          {plannerBuild && plannerPhase === "start" ? (
+            <section className="space-y-3" aria-label="Starting Point">
+              <button
+                type="button"
+                disabled={validatingStart || building}
+                onClick={() => {
+                  setPlannerPhase("plan");
+                  setError("");
+                }}
+                className="min-h-11 text-sm font-semibold text-primary disabled:opacity-40"
+              >
+                Back to game plan
+              </button>
+              <div className="rounded-2xl border border-primary/25 bg-primary/[0.05] p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-primary">
+                  Starting Point
+                </p>
+                <h3 className="mt-1 text-base font-semibold">
+                  Where are you starting this route?
+                </h3>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  Your first office and every stop after it will be optimized
+                  from this point.
+                </p>
+                <div className="mt-3 grid gap-2">
+                  {(
+                    [
+                      ["current_location", "Current Location", LocateFixed],
+                      ["hpo_office", "HPO Office", Building2],
+                      ["custom_address", "Custom Address", MapPin],
+                    ] as const
+                  ).map(([kind, label, Icon]) => (
+                    <button
+                      key={kind}
+                      type="button"
+                      disabled={validatingStart || building}
+                      aria-pressed={startChoice === kind}
+                      onClick={() => void chooseStartingPoint(kind)}
+                      className={
+                        startChoice === kind
+                          ? "flex min-h-12 items-center gap-3 rounded-xl border border-primary bg-primary/10 px-3 text-left text-sm font-semibold text-primary"
+                          : "flex min-h-12 items-center gap-3 rounded-xl border border-border bg-card/70 px-3 text-left text-sm font-semibold text-foreground"
+                      }
+                    >
+                      <Icon className="size-4 shrink-0" />
+                      <span className="flex-1">{label}</span>
+                      {startingPoint?.kind === kind ? (
+                        <Check className="size-4" />
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+                {startChoice === "hpo_office" ? (
+                  <p className="mt-2 px-1 text-[11px] leading-4 text-muted-foreground">
+                    {HPO_OFFICE_START_ADDRESS}
+                  </p>
+                ) : null}
+                {startChoice === "custom_address" ? (
+                  <div className="mt-3 space-y-2">
+                    <label
+                      className="block text-xs font-semibold"
+                      htmlFor="planner-start-address"
+                    >
+                      Starting address
+                    </label>
+                    <input
+                      id="planner-start-address"
+                      value={customStartAddress}
+                      onChange={(event) => {
+                        setCustomStartAddress(event.target.value);
+                        setStartingPoint(null);
+                        setError("");
+                      }}
+                      placeholder="Enter street, city, state, ZIP"
+                      autoComplete="street-address"
+                      className="h-12 w-full rounded-xl border border-input bg-background px-3 text-base outline-none focus:border-primary"
+                    />
+                    <button
+                      type="button"
+                      disabled={
+                        validatingStart || customStartAddress.trim().length < 5
+                      }
+                      onClick={() => void validateCustomStartingPoint()}
+                      className="min-h-11 w-full rounded-xl border border-primary/35 bg-primary/10 px-3 text-sm font-semibold text-primary disabled:opacity-40"
+                    >
+                      {validatingStart ? "Validating…" : "Validate address"}
+                    </button>
+                  </div>
+                ) : null}
+                {startingPoint ? (
+                  <div className="mt-3 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.07] px-3 py-2.5 text-xs leading-5 text-foreground">
+                    <p className="font-semibold text-emerald-600">
+                      Starting point confirmed
+                    </p>
+                    <p className="text-muted-foreground">
+                      {startingPoint.label}
+                      {startingPoint.address !== startingPoint.label
+                        ? ` · ${startingPoint.address}`
+                        : ""}
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+          {pending ? (
+            <p className="px-1 text-xs text-muted-foreground">
+              Emery is reviewing…
+            </p>
+          ) : null}
           {building ? (
             <p className="px-1 text-xs font-medium text-primary">
               Building and optimizing the approved route…
@@ -1188,64 +1675,94 @@ export function HpoEmerySheet({
           <div className="shrink-0 border-t border-border/45 bg-background/98 px-3 py-2">
             <button
               type="button"
-              onClick={() => void (plannerBuild && plannerPhase === "select" ? finishSelection() : buildRoute())}
-              disabled={!selectedCandidates.length || pending || building}
+              onClick={() => {
+                if (plannerBuild && plannerPhase === "select")
+                  return void finishSelection();
+                if (plannerBuild && plannerPhase === "plan") {
+                  setPlannerPhase("start");
+                  setError("");
+                  scrollRef.current?.scrollTo({ top: 0 });
+                  return;
+                }
+                void buildRoute();
+              }}
+              disabled={
+                !selectedCandidates.length ||
+                pending ||
+                building ||
+                validatingStart ||
+                (plannerBuild && plannerPhase === "start" && !startingPoint)
+              }
               className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm disabled:opacity-35"
             >
               <RouteIcon className="size-4" />
               {plannerBuild
-                ? building ? "Finalizing & optimizing…" : plannerPhase === "select" ? "Done" : "Finalize Route"
+                ? building
+                  ? "Finalizing & optimizing…"
+                  : plannerPhase === "select"
+                    ? "Done"
+                    : plannerPhase === "plan"
+                      ? "Choose Starting Point"
+                      : "Finalize Route"
                 : building
-                ? "Building & optimizing…"
-                : `Build this route · ${selectedCandidates.length} stop${
-                    selectedCandidates.length === 1 ? "" : "s"
-                  }`}
+                  ? "Building & optimizing…"
+                  : `Build this route · ${selectedCandidates.length} stop${
+                      selectedCandidates.length === 1 ? "" : "s"
+                    }`}
             </button>
             <p className="mt-1 text-center text-[9px] leading-4 text-muted-foreground">
-              Emery will optimize road order after your office choices are locked.
+              {plannerBuild && plannerPhase === "start"
+                ? "Optimization begins at the confirmed starting point and preserves every selected office."
+                : "Emery will optimize road order after your office choices are locked."}
             </p>
           </div>
         ) : null}
 
-        {!plannerBuild || plannerPhase === "plan" ? <div className="shrink-0 border-t border-border/45 bg-background/96 px-3 pb-[max(0.7rem,env(safe-area-inset-bottom))] pt-2">
-          <div className="flex items-end gap-1.5 rounded-xl border border-input bg-card p-1.5">
-            <textarea
-              ref={inputRef}
-              rows={1}
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder={
-                recommendation
-                  ? "Ask Emery about an office or adjust the game plan…"
-                  : "Tell Emery the towns or territory…"
-              }
-              className="max-h-28 min-h-11 min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-base leading-6 outline-none placeholder:text-muted-foreground/60"
-            />
-            {!plannerBuild ? <EmeryVoiceControl
-              hpoRouteId={routeId ?? null}
-              hpoStopId={stopId ?? null}
-              hpoAccountId={selectedAccountId ?? null}
-              onConversationChanged={() => {
-                onChanged?.();
-                window.setTimeout(() => {
-                  endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
-                }, 80);
-              }}
-            /> : null}
-            <button
-              type="button"
-              onClick={() => void send()}
-              disabled={!draft.trim() || pending || building}
-              className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground disabled:opacity-35"
-              aria-label="Send to Emery"
-            >
-              <ArrowUp className="size-[18px]" />
-            </button>
+        {!plannerBuild || plannerPhase === "plan" ? (
+          <div className="shrink-0 border-t border-border/45 bg-background/96 px-3 pb-[max(0.7rem,env(safe-area-inset-bottom))] pt-2">
+            <div className="flex items-end gap-1.5 rounded-xl border border-input bg-card p-1.5">
+              <textarea
+                ref={inputRef}
+                rows={1}
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                placeholder={
+                  recommendation
+                    ? "Ask Emery about an office or adjust the game plan…"
+                    : "Tell Emery the towns or territory…"
+                }
+                className="max-h-28 min-h-11 min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-base leading-6 outline-none placeholder:text-muted-foreground/60"
+              />
+              {!plannerBuild ? (
+                <EmeryVoiceControl
+                  hpoRouteId={routeId ?? null}
+                  hpoStopId={stopId ?? null}
+                  hpoAccountId={selectedAccountId ?? null}
+                  onConversationChanged={() => {
+                    onChanged?.();
+                    window.setTimeout(() => {
+                      endRef.current?.scrollIntoView({
+                        block: "end",
+                        behavior: "smooth",
+                      });
+                    }, 80);
+                  }}
+                />
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void send()}
+                disabled={!draft.trim() || pending || building}
+                className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground disabled:opacity-35"
+                aria-label="Send to Emery"
+              >
+                <ArrowUp className="size-[18px]" />
+              </button>
+            </div>
           </div>
-        </div> : null}
+        ) : null}
       </section>
     </div>,
     document.body,
   );
 }
-

@@ -46,6 +46,7 @@ export type HpoMapRoute = {
   optimized_distance_meters?: number | null;
   optimized_duration_seconds?: number | null;
   metadata: Record<string, unknown> | null;
+  start_address?: string | null;
   start_latitude: number | null;
   start_longitude: number | null;
   end_latitude: number | null;
