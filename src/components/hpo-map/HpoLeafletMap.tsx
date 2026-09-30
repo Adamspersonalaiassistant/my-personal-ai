@@ -243,19 +243,28 @@ function escapeMapText(value: unknown) {
     .replaceAll("'", "&#039;");
 }
 
-function startMarkerIcon() {
+function startMarkerIcon(compact = false) {
+  const height = compact ? 26 : 31;
+  const width = compact ? 56 : 65;
+  const dot = compact ? 14 : 17;
+  const font = compact ? 8 : 9;
   return L.divIcon({
     className: "hpo-route-start-marker",
-    html: '<div style="display:flex;align-items:center;gap:5px;border:2px solid white;border-radius:999px;background:#0f172a;color:white;padding:5px 8px 5px 6px;box-shadow:0 5px 14px rgba(15,23,42,.38);font:800 9px/1 system-ui,-apple-system,sans-serif;letter-spacing:.08em"><span style="display:grid;place-items:center;width:17px;height:17px;border-radius:999px;background:#22c55e;color:#052e16;font-size:10px">S</span>START</div>',
-    iconSize: [65, 31],
-    iconAnchor: [16, 16],
-    popupAnchor: [16, -13],
+    html: `<div style="display:flex;align-items:center;gap:5px;border:2px solid rgba(255,255,255,.96);border-radius:999px;background:#0b1220;color:white;padding:${compact ? "4px 7px 4px 5px" : "5px 8px 5px 6px"};box-shadow:0 4px 12px rgba(0,0,0,.42);font:800 ${font}px/1 system-ui,-apple-system,sans-serif;letter-spacing:.08em"><span style="display:grid;place-items:center;width:${dot}px;height:${dot}px;border-radius:999px;background:#22c55e;color:#052e16;font-size:${compact ? 8 : 10}px">S</span>START</div>`,
+    iconSize: [width, height],
+    iconAnchor: [compact ? 14 : 16, height / 2],
+    popupAnchor: [compact ? 14 : 16, -(height / 2)],
   });
 }
 
-function numberedStopIcon(order: number, completed: boolean, current: boolean) {
-  const fill = current ? "#075be8" : completed ? "#75a9ef" : "#0b6bff";
-  const size = current ? 34 : 31;
+function numberedStopIcon(
+  order: number,
+  completed: boolean,
+  current: boolean,
+  compact = false,
+) {
+  const fill = current ? "#0877ff" : completed ? "#75a9ef" : "#0b6bff";
+  const size = compact ? (current ? 28 : 24) : current ? 34 : 31;
   return L.divIcon({
     className: "hpo-route-number-tooltip",
     html: `<div style="display:grid;place-items:center;width:${size}px;height:${size}px;border:3px solid white;border-radius:999px;background:${fill};color:white;box-shadow:0 4px 12px rgba(15,23,42,.42);font:800 12px/1 system-ui,-apple-system,sans-serif">${order}</div>`,
@@ -340,7 +349,7 @@ export function HpoLeafletMap({
     routeLayerRef.current = L.layerGroup().addTo(map);
 
     const tiles = L.tileLayer(
-      "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+      "https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png",
       {
         maxZoom: 20,
         minZoom: 5,
@@ -351,9 +360,23 @@ export function HpoLeafletMap({
         keepBuffer: 3,
       },
     );
+    const labels = L.tileLayer(
+      "https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png",
+      {
+        maxZoom: 20,
+        minZoom: 12,
+        subdomains: "abcd",
+        opacity: 0.68,
+        attribution: "",
+        crossOrigin: true,
+        updateWhenIdle: false,
+        keepBuffer: 3,
+      },
+    );
     tiles.on("tileload", () => setTileError(false));
     tiles.on("tileerror", () => setTileError(true));
     tiles.addTo(map);
+    labels.addTo(map);
 
     const resize = () => map.invalidateSize({ pan: false, animate: false });
     const observer =
@@ -500,8 +523,8 @@ export function HpoLeafletMap({
     const coords = routeCoordinates(route);
     if (coords.length >= 2) {
       L.polyline(coords, {
-        color: "#0f172a",
-        weight: 12,
+        color: "#020617",
+        weight: routeOnly ? 9 : 12,
         opacity: 0.3,
         lineCap: "round",
         lineJoin: "round",
@@ -510,27 +533,27 @@ export function HpoLeafletMap({
       }).addTo(layer);
       L.polyline(coords, {
         color: "#ffffff",
-        weight: 9,
-        opacity: 0.94,
+        weight: routeOnly ? 7 : 9,
+        opacity: routeOnly ? 0.82 : 0.94,
         lineCap: "round",
         lineJoin: "round",
         smoothFactor: 1.15,
         interactive: false,
       }).addTo(layer);
       L.polyline(coords, {
-        color: "#0877ff",
-        weight: 6,
+        color: "#1687ff",
+        weight: routeOnly ? 4.8 : 6,
         opacity: 1,
         lineCap: "round",
         lineJoin: "round",
         smoothFactor: 1.15,
       }).addTo(layer);
       const bounds = L.latLngBounds(coords as L.LatLngExpression[]);
-      map.fitBounds(bounds.pad(0.12), {
-        maxZoom: 13,
+      map.fitBounds(bounds.pad(routeOnly ? 0.2 : 0.12), {
+        maxZoom: routeOnly ? 12 : 13,
         animate: false,
-        paddingTopLeft: [18, 18],
-        paddingBottomRight: [18, routeOnly ? 18 : 190],
+        paddingTopLeft: routeOnly ? [32, 34] : [18, 18],
+        paddingBottomRight: routeOnly ? [32, 54] : [18, 190],
       });
     }
     const ordered = [...(route?.stops ?? [])].sort(
@@ -547,7 +570,7 @@ export function HpoLeafletMap({
       const startMarker = L.marker(
         [Number(route!.start_latitude), Number(route!.start_longitude)],
         {
-          icon: startMarkerIcon(),
+          icon: startMarkerIcon(routeOnly),
           keyboard: true,
           zIndexOffset: 1100,
         },
@@ -565,7 +588,7 @@ export function HpoLeafletMap({
       const completed = TERMINAL.has(stop.status);
       const current = stop.id === currentId;
       const marker = L.marker([Number(stop.latitude), Number(stop.longitude)], {
-        icon: numberedStopIcon(stop.stop_order, completed, current),
+        icon: numberedStopIcon(stop.stop_order, completed, current, routeOnly),
         keyboard: true,
         riseOnHover: true,
         zIndexOffset: 1000 + stop.stop_order,
@@ -777,7 +800,7 @@ export function HpoLeafletMap({
       <div className="relative min-h-0 flex-1">
         <div
           ref={containerRef}
-          className={`absolute inset-0 z-0 bg-[#dbe5ee] ${listMode || routeListMode ? "invisible" : ""}`}
+          className={`absolute inset-0 z-0 bg-[#171b22] [&_.leaflet-control-attribution]:!rounded-tl-md [&_.leaflet-control-attribution]:!bg-[#07111f]/80 [&_.leaflet-control-attribution]:!px-1.5 [&_.leaflet-control-attribution]:!py-0.5 [&_.leaflet-control-attribution]:!text-[8px] [&_.leaflet-control-attribution]:!text-white/55 [&_.leaflet-control-attribution_a]:!text-white/70 ${listMode || routeListMode ? "invisible" : ""}`}
           aria-label="Interactive HPO office map"
         />
 
