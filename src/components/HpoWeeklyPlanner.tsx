@@ -819,11 +819,11 @@ export function HpoWeeklyPlanner({
                             <div className="mt-2 flex flex-wrap gap-2">
                               {stop.address ? (
                                 <a
-                                  href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+                                  href={`https://maps.google.com/?saddr=Current+Location&daddr=${encodeURIComponent(
                                     [stop.address, stop.city]
                                       .filter(Boolean)
                                       .join(", "),
-                                  )}&travelmode=driving`}
+                                  )}&dirflg=d`}
                                   target="_blank"
                                   rel="noreferrer"
                                   className="flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-primary px-3 text-[11px] font-semibold text-primary-foreground"
