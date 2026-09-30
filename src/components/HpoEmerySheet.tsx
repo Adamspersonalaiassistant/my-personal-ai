@@ -1101,8 +1101,9 @@ export function HpoEmerySheet({
                       {plannerBuild ? "Select Offices" : "Office game plan"}
                     </p>
                     <p className="mt-0.5 text-[10px] text-muted-foreground">
-                      Groups start collapsed. Tap a group to review and select
-                      its offices.
+                      {plannerBuild && selectionView === "map"
+                        ? "Use the map to find nearby offices and select stops."
+                        : "Search or open a group to review and select offices."}
                     </p>
                     <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
                       {recommendation.area || "Selected territory"}
@@ -1118,7 +1119,7 @@ export function HpoEmerySheet({
                       {" · "}
                       {recommendation.eligibleCount ??
                         allCandidates.length}{" "}
-                      eligible offices
+                      available offices
                     </p>
                   </div>
                   <span className="shrink-0 rounded-full bg-primary px-2.5 py-1 text-[10px] font-bold text-primary-foreground">
