@@ -9,12 +9,16 @@ import {
   MessageCircle,
   Route as RouteIcon,
   StickyNote,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { openHpoEmery } from "@/components/HpoEmerySheet";
 import { HpoLeafletMap } from "@/components/hpo-map/HpoLeafletMap";
 import type { PlannerGamePlan } from "@/lib/hpo-planner-selection";
-import { getHpoWeeklyPlanner } from "@/lib/hpo-weekly-planner.functions";
+import {
+  deleteHpoPlannedRoute,
+  getHpoWeeklyPlanner,
+} from "@/lib/hpo-weekly-planner.functions";
 
 type Stop = {
   id: string;
@@ -165,10 +169,13 @@ export function HpoWeeklyPlanner({
   focusRouteId?: string | null;
 }) {
   const load = useServerFn(getHpoWeeklyPlanner);
+  const deleteRoute = useServerFn(deleteHpoPlannedRoute);
   const [data, setData] = useState<PlannerData | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [routePendingDelete, setRoutePendingDelete] = useState<RoutePlan | null>(null);
+  const [deletingRouteId, setDeletingRouteId] = useState<string | null>(null);
 
   const refresh = useCallback(
     async (weekStart?: string | null) => {
@@ -317,6 +324,28 @@ export function HpoWeeklyPlanner({
       `I'm planning my saved HPO route for ${route.route_date}${route.area ? ` in ${route.area}` : ""}. Use route ID ${route.id} as the route I'm working on. Help me add, remove, reorder, optimize, or review stops and notes. Ask only for information you actually need before making a change.`,
       `Route · ${prettyDate(route.route_date)}`,
     );
+  }
+
+  async function confirmDeleteRoute() {
+    const route = routePendingDelete;
+    if (!route || deletingRouteId) return;
+    setDeletingRouteId(route.id);
+    setError("");
+    try {
+      await deleteRoute({ data: { routeId: route.id } });
+      setRoutePendingDelete(null);
+      await refresh(data!.weekStart);
+      setSelectedDate(route.route_date);
+      onRouteContextChange?.(null, null);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Couldn't delete that route.",
+      );
+    } finally {
+      setDeletingRouteId(null);
+    }
   }
 
   return (
@@ -522,15 +551,31 @@ export function HpoWeeklyPlanner({
                             : ""}
                         </p>
                       </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="min-h-11 shrink-0 gap-1.5 px-3 text-xs"
-                        onClick={() => workRouteWithEmery(route)}
-                      >
-                        <MessageCircle className="size-4" />
-                        Emery
-                      </Button>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="min-h-11 gap-1.5 px-3 text-xs"
+                          onClick={() => workRouteWithEmery(route)}
+                        >
+                          <MessageCircle className="size-4" />
+                          Emery
+                        </Button>
+                        {["planned", "draft"].includes(route.status) &&
+                        !orderedStops.some((stop) =>
+                          finishedStatuses.has(stop.status),
+                        ) ? (
+                          <button
+                            type="button"
+                            onClick={() => setRoutePendingDelete(route)}
+                            className="flex size-11 items-center justify-center rounded-xl border border-border/60 bg-background/45 text-muted-foreground transition hover:border-destructive/40 hover:bg-destructive/[0.06] hover:text-destructive"
+                            aria-label="Delete planned route"
+                            title="Delete planned route"
+                          >
+                            <X className="size-4" />
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
 
                     {route.notes ? (
@@ -758,6 +803,70 @@ export function HpoWeeklyPlanner({
               );
             })
           )}
+        </div>
+      ) : null}
+      {routePendingDelete ? (
+        <div
+          className="fixed inset-0 z-[500] flex items-end justify-center bg-black/55 p-3 backdrop-blur-[2px] sm:items-center"
+          role="presentation"
+          onClick={() => !deletingRouteId && setRoutePendingDelete(null)}
+        >
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-route-title"
+            aria-describedby="delete-route-description"
+            className="w-full max-w-sm rounded-2xl border border-border/60 bg-background p-4 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 id="delete-route-title" className="text-base font-semibold">
+                  Delete this route?
+                </h3>
+                <p
+                  id="delete-route-description"
+                  className="mt-1 text-sm leading-5 text-muted-foreground"
+                >
+                  This will remove the planned route for{" "}
+                  {prettyDate(routePendingDelete.route_date, {
+                    weekday: "long",
+                    month: "long",
+                    day: "numeric",
+                  })}. Your account records and notes will stay intact.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={Boolean(deletingRouteId)}
+                onClick={() => setRoutePendingDelete(null)}
+                className="flex size-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-40"
+                aria-label="Cancel delete route"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11"
+                disabled={Boolean(deletingRouteId)}
+                onClick={() => setRoutePendingDelete(null)}
+              >
+                Keep Route
+              </Button>
+              <Button
+                type="button"
+                className="min-h-11 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={Boolean(deletingRouteId)}
+                onClick={() => void confirmDeleteRoute()}
+              >
+                {deletingRouteId ? "Deleting…" : "Yes, Delete"}
+              </Button>
+            </div>
+          </div>
         </div>
       ) : null}
     </section>
