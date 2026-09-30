@@ -393,6 +393,10 @@ export function HpoLeafletMap({
     const map = mapRef.current;
     const layer = officeLayerRef.current;
     if (!map || !layer || !ready) return;
+    if (routeOnly) {
+      layer.clearLayers();
+      return;
+    }
 
     const render = () => {
       layer.clearLayers();
@@ -483,11 +487,11 @@ export function HpoLeafletMap({
       map.off("zoomend moveend", render);
       layer.clearLayers();
     };
-  }, [filtered, onSelectOffice, ready, selectedOfficeKey, selectedSet]);
+  }, [filtered, onSelectOffice, ready, routeOnly, selectedOfficeKey, selectedSet]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !ready || fitDoneRef.current) return;
+    if (!map || !ready || fitDoneRef.current || routeOnly) return;
     const valid = offices.filter(validOffice);
     if (!valid.length) return;
     const bounds = L.latLngBounds(
@@ -498,7 +502,7 @@ export function HpoLeafletMap({
     );
     map.fitBounds(bounds.pad(0.06), { maxZoom: 10, animate: false });
     fitDoneRef.current = true;
-  }, [offices, ready]);
+  }, [offices, ready, routeOnly]);
 
   useEffect(() => {
     const layer = routeLayerRef.current;
