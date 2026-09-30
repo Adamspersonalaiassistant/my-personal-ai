@@ -340,11 +340,12 @@ export function HpoLeafletMap({
     routeLayerRef.current = L.layerGroup().addTo(map);
 
     const tiles = L.tileLayer(
-      "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
       {
-        maxZoom: 19,
+        maxZoom: 20,
         minZoom: 5,
-        attribution: "© OpenStreetMap contributors",
+        subdomains: "abcd",
+        attribution: "© OpenStreetMap contributors © CARTO",
         crossOrigin: true,
         updateWhenIdle: false,
         keepBuffer: 3,
