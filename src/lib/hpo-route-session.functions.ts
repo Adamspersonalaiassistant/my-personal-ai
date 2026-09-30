@@ -56,6 +56,31 @@ async function officePool(db: any, userId: string, selected?: PlannerTarget[]) {
     rows(prospectsQuery, prospectIds),
   ]);
   const eligibleAccounts = accounts.filter(eligiblePlannerAccount);
+  const latestInteractionByAccount = new Map<string, any>();
+  if (eligibleAccounts.length) {
+    for (let offset = 0; ; offset += 500) {
+      const result = await db
+        .from("hpo_interactions")
+        .select(
+          "account_id,occurred_at,summary,outcome,relationship_signal,next_action,next_action_due_at",
+        )
+        .eq("user_id", userId)
+        .not("account_id", "is", null)
+        .order("occurred_at", { ascending: false })
+        .order("created_at", { ascending: false })
+        .range(offset, offset + 499);
+      if (result.error) throw result.error;
+      for (const interaction of result.data ?? []) {
+        if (
+          interaction.account_id &&
+          !latestInteractionByAccount.has(interaction.account_id)
+        ) {
+          latestInteractionByAccount.set(interaction.account_id, interaction);
+        }
+      }
+      if ((result.data ?? []).length < 500) break;
+    }
+  }
   const candidates = [
     ...eligibleAccounts.map((r: any) => ({
       row: r,
@@ -82,6 +107,9 @@ async function officePool(db: any, userId: string, selected?: PlannerTarget[]) {
         kind: "prospect" as const,
       })),
   ].map(({ row, ...target }) => {
+    const latestInteraction = target.kind === "account"
+      ? latestInteractionByAccount.get(row.id)
+      : null;
     const tags = new Set<string>(
       (Array.isArray(row.tags)
         ? row.tags
@@ -115,9 +143,12 @@ async function officePool(db: any, userId: string, selected?: PlannerTarget[]) {
       accountType: row.account_type ?? row.prospect_type,
       specialty: row.specialty,
       tags: [...tags],
-      latestNote: row.notes,
+      latestNote:
+        latestInteraction?.summary || row.metadata?.visit_note || row.notes || null,
+      latestOutcome: latestInteraction?.outcome ?? null,
+      latestSignal: latestInteraction?.relationship_signal ?? null,
       relationshipStage: row.relationship_stage,
-      nextAction: row.next_action,
+      nextAction: latestInteraction?.next_action || row.next_action,
       latitude: row.latitude,
       longitude: row.longitude,
       row,
