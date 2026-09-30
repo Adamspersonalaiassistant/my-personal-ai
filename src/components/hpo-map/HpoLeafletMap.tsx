@@ -932,6 +932,62 @@ export function HpoLeafletMap({
         ) : null}
       </div>
 
+      {routeOnly && route ? (
+        <div className="shrink-0 border-t border-border bg-background/95 px-3 py-2.5 shadow-[0_-12px_28px_rgba(0,0,0,.28)] backdrop-blur-xl">
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-foreground">
+                {route.optimized_at ? "Optimized route" : "Saved route"} · {route.stops.length} stops
+              </p>
+              <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                {[
+                  route.area || "HPO",
+                  route.route_date
+                    ? new Date(`${route.route_date}T12:00:00`).toLocaleDateString([], {
+                        month: "short",
+                        day: "numeric",
+                      })
+                    : null,
+                  route.optimized_duration_seconds
+                    ? `${Math.round(route.optimized_duration_seconds / 60)} min drive`
+                    : null,
+                  route.optimized_distance_meters
+                    ? `${(route.optimized_distance_meters / 1609.344).toFixed(1)} mi`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            </div>
+            {onOptimizeRoute ? (
+              <button
+                type="button"
+                onClick={onOptimizeRoute}
+                disabled={optimizing}
+                className="min-h-10 shrink-0 rounded-xl bg-primary px-3 text-[11px] font-semibold text-primary-foreground disabled:opacity-45"
+              >
+                {optimizing ? "Optimizing…" : "Optimize"}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() =>
+                onNavigateHpo?.(
+                  route.route_date && route.route_date !== localDateKey()
+                    ? "planner"
+                    : "today",
+                )
+              }
+              className="min-h-10 shrink-0 rounded-xl border border-border px-3 text-[11px] font-semibold text-foreground"
+            >
+              {route.route_date && route.route_date !== localDateKey()
+                ? "Planner"
+                : "Today"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {!routeOnly ? (
         <div className="shrink-0 border-t border-border bg-background/95 px-3 pb-2 pt-2 shadow-[0_-14px_34px_rgba(0,0,0,.3)] backdrop-blur-xl">
           {selectedOffice ? (
@@ -967,7 +1023,7 @@ export function HpoLeafletMap({
                 }`}
               >
                 <a
-                  href={`https://maps.apple.com/?daddr=${encodeURIComponent(
+                  href={`https://maps.google.com/?saddr=Current+Location&daddr=${encodeURIComponent(
                     [selectedOffice.address, selectedOffice.city]
                       .filter(Boolean)
                       .join(", "),
