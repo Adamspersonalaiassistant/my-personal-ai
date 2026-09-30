@@ -599,9 +599,16 @@ Return strict JSON only.`,
         });
         throw noteError;
       }
+      const previousAccountNotes = String(target.notes ?? "").trim();
+      const combinedAccountNotes = previousAccountNotes
+        ? `${previousAccountNotes}\n\n${summary}`
+        : summary;
       const { error: accountError } = await db
         .from("hpo_accounts")
-        .update({ updated_at: new Date().toISOString() })
+        .update({
+          notes: combinedAccountNotes,
+          updated_at: new Date().toISOString(),
+        })
         .eq("user_id", userId)
         .eq("id", target.id);
       if (accountError) throw accountError;
