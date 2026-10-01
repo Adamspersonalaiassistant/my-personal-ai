@@ -621,7 +621,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
       if (typeof navigator !== "undefined" && !navigator.onLine) {
         await queueMutation("hpo.route_stop.add_note", nextStop.id, payload, key);
       } else {
-        await saveNote({
+        const result: any = await saveNote({
           data: {
             stopId: nextStop.id,
             note: payload.notes,
@@ -629,7 +629,34 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
             sourceChannel: "field_ui",
           },
         });
-        setMessage("Note saved to the route and account history without completing the stop.");
+        const intelligence = result?.intelligence;
+        const parts = ["Note saved to the route and account history."];
+        if (intelligence?.nextAction) {
+          parts.push(`Next action: ${intelligence.nextAction}.`);
+        }
+        if (intelligence?.calendarEvent) {
+          const eventAt = new Date(
+            intelligence.calendarEvent.startAt,
+          ).toLocaleString([], {
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          });
+          parts.push(
+            intelligence.calendarEvent.duplicate
+              ? `Calendar already has ${intelligence.calendarEvent.title} for ${eventAt}.`
+              : `Added to Calendar: ${intelligence.calendarEvent.title} — ${eventAt}.`,
+          );
+        } else if (intelligence?.calendarClarification) {
+          parts.push(`Calendar needs one detail: ${intelligence.calendarClarification}`);
+        } else if (intelligence?.analyzed === true && !intelligence?.nextAction) {
+          parts.push("Emery reviewed it and found no structured follow-up or calendar commitment to add.");
+        } else if (intelligence?.analyzed === false) {
+          parts.push("The note is saved; Emery’s structured review did not finish this time.");
+        }
+        parts.push("The stop remains open.");
+        setMessage(parts.join(" "));
         await load();
       }
       await clearHpoDraftNote(nextStop.id).catch(() => undefined);
