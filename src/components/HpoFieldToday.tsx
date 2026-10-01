@@ -1433,7 +1433,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                     {captureMode === "visit"
                       ? "Log visit"
                       : captureMode === "note"
-                        ? nextStop?.notes?.trim()
+                        ? hasCanonicalFieldNote
                           ? "Edit field note"
                           : "Add account note"
                         : captureMode === "followup"
@@ -1444,7 +1444,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                     {captureMode === "visit"
                       ? "Save what happened, the outcome and any next action. Completing the visit advances the route."
                       : captureMode === "note"
-                        ? nextStop?.notes?.trim()
+                        ? hasCanonicalFieldNote
                           ? "Update the locked field note for this stop. The same dated CRM interaction will be updated."
                           : "Add a note without completing this stop. It is saved to the route and account history."
                         : captureMode === "followup"
@@ -1540,7 +1540,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                   : captureMode === "visit"
                     ? "Save Visit"
                     : captureMode === "note"
-                      ? nextStop?.notes?.trim()
+                      ? hasCanonicalFieldNote
                         ? "Update Note"
                         : "Save Note"
                       : captureMode === "followup"
