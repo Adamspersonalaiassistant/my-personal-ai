@@ -410,6 +410,26 @@ export function HpoAccountFieldDetail({
                       <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6">
                         {account.metadata.latest_field_note_summary}
                       </p>
+                      {account.metadata.latest_field_note_outcome ? (
+                        <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                          <span className="font-semibold text-foreground">Outcome:</span>{" "}
+                          {account.metadata.latest_field_note_outcome}
+                        </p>
+                      ) : null}
+                      {account.metadata.latest_field_note_relationship_signal ? (
+                        <p className="mt-1 text-xs font-medium capitalize text-primary">
+                          Relationship signal:{" "}
+                          {String(
+                            account.metadata.latest_field_note_relationship_signal,
+                          ).replaceAll("_", " ")}
+                        </p>
+                      ) : null}
+                      {account.metadata.latest_field_note_next_action ? (
+                        <p className="mt-1 text-xs leading-5 text-primary">
+                          <span className="font-semibold">Next:</span>{" "}
+                          {account.metadata.latest_field_note_next_action}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                 </section>
