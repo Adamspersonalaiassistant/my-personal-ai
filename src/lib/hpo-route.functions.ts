@@ -3115,7 +3115,17 @@ export async function addHpoRouteStopNoteCore(input: {
       (typeof currentMetadata["route_note_saved_at"] === "string"
         ? currentMetadata["route_note_saved_at"]
         : now);
-    const isEdit = Boolean(existingInteraction || previousStopNote);
+    const hasCanonicalFieldNote =
+      Boolean(existingInteraction) ||
+      currentMetadata["route_note_locked"] === true ||
+      typeof currentMetadata["route_note_interaction_id"] === "string";
+    const isEdit = hasCanonicalFieldNote;
+    const legacyVisitSummary =
+      !hasCanonicalFieldNote &&
+      previousStopNote &&
+      !clean(stop.visit_summary)
+        ? previousStopNote
+        : null;
     let interactionId: string | null = existingInteraction?.id ?? null;
 
     if (stop.account_id) {
@@ -3184,6 +3194,7 @@ export async function addHpoRouteStopNoteCore(input: {
       .from("hpo_route_stops")
       .update({
         notes: note,
+        ...(legacyVisitSummary ? { visit_summary: legacyVisitSummary } : {}),
         metadata: stopMetadata,
         updated_at: now,
       })
