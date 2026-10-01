@@ -955,6 +955,18 @@ function ActivityView({
               <span className="block break-words text-xs font-normal leading-5 text-muted-foreground">
                 {i.summary}
               </span>
+              {i.outcome || i.relationship_signal ? (
+                <span className="mt-1 block text-[11px] font-normal text-foreground/85">
+                  {[
+                    i.outcome ? `Outcome: ${i.outcome}` : null,
+                    i.relationship_signal
+                      ? `Signal: ${String(i.relationship_signal).replaceAll("_", " ")}`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+              ) : null}
               {i.metadata &&
               typeof i.metadata === "object" &&
               !Array.isArray(i.metadata) &&
