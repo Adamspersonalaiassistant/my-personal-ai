@@ -1286,7 +1286,7 @@ export function HpoRoutePlanner({
   initialRouteDate = null,
   openBuilderOnMount = false,
 }: {
-  onNavigateHpo?: ((view: "today" | "planner" | "map" | "accounts" | "activity") => void) | undefined;
+  onNavigateHpo?: ((view: "planner" | "map" | "accounts" | "activity") => void) | undefined;
   onRouteContextChange?: ((routeId: string | null) => void) | undefined;
   initialRouteId?: string | null;
   initialRouteDate?: string | null;
