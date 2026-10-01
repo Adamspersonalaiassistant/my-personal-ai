@@ -543,6 +543,9 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
     setCaptureMode(mode);
     if (mode === "visit") setVisitStatus("completed");
     if (mode === "reschedule") setVisitStatus("skipped");
+    if (mode === "note" && nextStop?.notes?.trim()) {
+      setNote(nextStop.notes.trim());
+    }
     setShowNote(true);
   }
 
@@ -1311,7 +1314,8 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                 disabled={working}
                 className="emery-press min-h-12 rounded-xl border border-primary/20 bg-primary/[0.045] px-2 text-xs font-semibold text-primary"
               >
-                <FilePenLine className="mr-1.5 inline size-4" /> Add Note
+                <FilePenLine className="mr-1.5 inline size-4" />{" "}
+                {nextStop?.notes?.trim() ? "Edit Note" : "Add Note"}
               </button>
               <button
                 type="button"
@@ -1422,7 +1426,9 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                     {captureMode === "visit"
                       ? "Log visit"
                       : captureMode === "note"
-                        ? "Add account note"
+                        ? nextStop?.notes?.trim()
+                          ? "Edit field note"
+                          : "Add account note"
                         : captureMode === "followup"
                           ? "Set follow-up"
                           : "Reschedule stop"}
@@ -1431,7 +1437,9 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                     {captureMode === "visit"
                       ? "Save what happened, the outcome and any next action. Completing the visit advances the route."
                       : captureMode === "note"
-                        ? "Add a note without completing this stop. It is saved to the route and account history."
+                        ? nextStop?.notes?.trim()
+                          ? "Update the locked field note for this stop. The same dated CRM interaction will be updated."
+                          : "Add a note without completing this stop. It is saved to the route and account history."
                         : captureMode === "followup"
                           ? "Save the next action and due date without completing this stop."
                           : "Save the reschedule reason and next action. This stop will be closed as rescheduled."}
@@ -1525,7 +1533,9 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                   : captureMode === "visit"
                     ? "Save Visit"
                     : captureMode === "note"
-                      ? "Save Note"
+                      ? nextStop?.notes?.trim()
+                        ? "Update Note"
+                        : "Save Note"
                       : captureMode === "followup"
                         ? "Save Follow-Up"
                         : "Reschedule Stop"}
