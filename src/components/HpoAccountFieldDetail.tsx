@@ -947,7 +947,8 @@ export function HpoAccountFieldDetail({
                             )}
                           </span>
                         </div>
-                        {stop.notes ? (
+                        {stop.metadata?.route_note_locked === true &&
+                        stop.notes ? (
                           <div className="mt-2">
                             <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-primary">
                               Field note
@@ -957,14 +958,16 @@ export function HpoAccountFieldDetail({
                             </p>
                           </div>
                         ) : null}
-                        {stop.visit_summary &&
-                        stop.visit_summary.trim() !== stop.notes?.trim() ? (
+                        {(stop.visit_summary ||
+                          (stop.metadata?.route_note_locked !== true
+                            ? stop.notes
+                            : null)) ? (
                           <div className="mt-2">
                             <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
                               Visit summary
                             </p>
                             <p className="mt-1 whitespace-pre-wrap text-sm leading-6">
-                              {stop.visit_summary}
+                              {stop.visit_summary || stop.notes}
                             </p>
                           </div>
                         ) : null}
