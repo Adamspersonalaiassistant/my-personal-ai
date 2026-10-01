@@ -159,7 +159,13 @@ async function officePool(db: any, userId: string, selected?: PlannerTarget[]) {
       latestOutcome: latestInteraction?.outcome ?? null,
       latestSignal: latestInteraction?.relationship_signal ?? null,
       relationshipStage: row.relationship_stage,
+      relationshipHealth: row.relationship_health ?? null,
       nextAction: latestInteraction?.next_action || row.next_action,
+      nextActionDueAt:
+        latestInteraction?.next_action_due_at || row.next_action_due_at || null,
+      lastTouchAt: row.last_touch_at ?? null,
+      ownerName: row.owner_name ?? null,
+      priority: row.priority ?? null,
       latitude: row.latitude,
       longitude: row.longitude,
       row,
