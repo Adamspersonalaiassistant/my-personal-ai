@@ -8,6 +8,7 @@ import {
   MapPinned,
   MessageCircle,
   Navigation,
+  Pencil,
   Route as RouteIcon,
   StickyNote,
   Trash2,
@@ -40,7 +41,17 @@ type Stop = {
   longitude: number | null;
   distance_meters_from_previous: number | null;
   drive_seconds_from_previous: number | null;
-  metadata: { visit_type?: string; game_plan?: PlannerGamePlan } | null;
+  metadata:
+    | {
+        visit_type?: string;
+        game_plan?: PlannerGamePlan;
+        route_note_saved_at?: string;
+        route_note_updated_at?: string;
+        route_note_locked?: boolean;
+        route_note_version?: number;
+      }
+    | null;
+  updated_at: string | null;
   office_name: string | null;
   address: string | null;
   city: string | null;
@@ -160,6 +171,24 @@ function statusLabel(value: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function fieldNoteTime(stop: Stop, timezone: string) {
+  const value =
+    stop.metadata?.route_note_saved_at ||
+    stop.updated_at ||
+    stop.visited_at;
+  if (!value) return "Saved";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Saved";
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
 export function HpoWeeklyPlanner({
   onOpenMap,
   onRouteContextChange,
@@ -193,6 +222,7 @@ export function HpoWeeklyPlanner({
   const [routePendingDelete, setRoutePendingDelete] = useState<RoutePlan | null>(null);
   const [deletingRouteId, setDeletingRouteId] = useState<string | null>(null);
   const [stopNotes, setStopNotes] = useState<Record<string, string>>({});
+  const [editingNoteStopId, setEditingNoteStopId] = useState<string | null>(null);
   const [savingNoteStopId, setSavingNoteStopId] = useState<string | null>(null);
   const [optimizingRouteId, setOptimizingRouteId] = useState<string | null>(null);
 
@@ -420,6 +450,7 @@ export function HpoWeeklyPlanner({
       }
       setNotice(parts.join(" "));
       setStopNotes((current) => ({ ...current, [stop.id]: "" }));
+      setEditingNoteStopId((current) => (current === stop.id ? null : current));
       await refresh(data!.weekStart);
       if (selectedDate) setSelectedDate(selectedDate);
     } catch (cause) {
@@ -880,8 +911,10 @@ export function HpoWeeklyPlanner({
                   ) : null}
                   <div className="divide-y divide-border/40">
                     {orderedStops.map((stop) => {
+                      const fieldNote = stop.notes?.trim() || "";
                       const note =
-                        stop.visit_summary || stop.notes || stop.visit_outcome;
+                        stop.visit_summary || stop.visit_outcome;
+                      const editingFieldNote = editingNoteStopId === stop.id;
                       return (
                         <div
                           key={stop.id}
@@ -953,33 +986,86 @@ export function HpoWeeklyPlanner({
                                 </button>
                               ) : null}
                             </div>
-                            <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-                              <input
-                                value={stopNotes[stop.id] ?? ""}
-                                onChange={(event) =>
-                                  setStopNotes((current) => ({
-                                    ...current,
-                                    [stop.id]: event.target.value,
-                                  }))
-                                }
-                                placeholder="Add account note…"
-                                className="h-11 min-w-0 rounded-xl border border-border/50 bg-background/45 px-3 text-[16px] outline-none focus:border-primary/35"
-                              />
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="min-h-11 px-3 text-xs"
-                                disabled={
-                                  savingNoteStopId === stop.id ||
-                                  !(stopNotes[stop.id] ?? "").trim()
-                                }
-                                onClick={() => void saveStopNote(stop)}
-                              >
-                                {savingNoteStopId === stop.id
-                                  ? "Saving…"
-                                  : "Save Note"}
-                              </Button>
-                            </div>
+                            {fieldNote && !editingFieldNote ? (
+                              <div className="mt-2 rounded-xl border border-primary/20 bg-primary/[0.045] p-3">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-primary">
+                                      Field note · {fieldNoteTime(stop, data.timezone)}
+                                    </p>
+                                    <p className="mt-1.5 whitespace-pre-wrap text-sm leading-6 text-foreground/90">
+                                      {fieldNote}
+                                    </p>
+                                  </div>
+                                  <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" />
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="mt-3 min-h-11 w-full gap-1.5 text-xs"
+                                  onClick={() => {
+                                    setStopNotes((current) => ({
+                                      ...current,
+                                      [stop.id]: fieldNote,
+                                    }));
+                                    setEditingNoteStopId(stop.id);
+                                  }}
+                                >
+                                  <Pencil className="size-3.5" />
+                                  Edit Note
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="mt-2 grid gap-2">
+                                <textarea
+                                  value={stopNotes[stop.id] ?? ""}
+                                  onChange={(event) =>
+                                    setStopNotes((current) => ({
+                                      ...current,
+                                      [stop.id]: event.target.value,
+                                    }))
+                                  }
+                                  placeholder="Add account note…"
+                                  rows={3}
+                                  className="min-h-24 w-full resize-y rounded-xl border border-border/50 bg-background/45 px-3 py-2.5 text-[16px] leading-6 outline-none focus:border-primary/35"
+                                />
+                                <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="min-h-11 text-xs"
+                                    disabled={
+                                      savingNoteStopId === stop.id ||
+                                      !(stopNotes[stop.id] ?? "").trim()
+                                    }
+                                    onClick={() => void saveStopNote(stop)}
+                                  >
+                                    {savingNoteStopId === stop.id
+                                      ? "Saving…"
+                                      : fieldNote
+                                        ? "Update Note"
+                                        : "Save Note"}
+                                  </Button>
+                                  {fieldNote ? (
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      className="min-h-11 px-3 text-xs"
+                                      disabled={savingNoteStopId === stop.id}
+                                      onClick={() => {
+                                        setStopNotes((current) => ({
+                                          ...current,
+                                          [stop.id]: "",
+                                        }));
+                                        setEditingNoteStopId(null);
+                                      }}
+                                    >
+                                      Cancel
+                                    </Button>
+                                  ) : null}
+                                </div>
+                              </div>
+                            )}
                             {stop.drive_seconds_from_previous != null ? (
                               <p className="mt-1 text-[10px] font-medium text-primary">
                                 {Math.round(
@@ -1021,7 +1107,7 @@ export function HpoWeeklyPlanner({
                             {note ? (
                               <div className="mt-2 rounded-lg bg-background/45 px-2.5 py-2">
                                 <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">
-                                  Notes
+                                  Visit outcome
                                 </p>
                                 <p className="mt-1 text-xs leading-5 text-foreground/90">
                                   {note}
