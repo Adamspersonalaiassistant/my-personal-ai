@@ -88,7 +88,7 @@ type Props = {
   preparing: boolean;
   onRefreshPins: () => void;
   onNavigateHpo?:
-    | ((view: "today" | "planner" | "map" | "accounts" | "activity") => void)
+    | ((view: "planner" | "map" | "accounts" | "activity") => void)
     | undefined;
 };
 
@@ -993,18 +993,10 @@ export function HpoLeafletMap({
             ) : null}
             <button
               type="button"
-              onClick={() =>
-                onNavigateHpo?.(
-                  route.route_date && route.route_date !== localDateKey()
-                    ? "planner"
-                    : "today",
-                )
-              }
+              onClick={() => onNavigateHpo?.("planner")}
               className="min-h-10 shrink-0 rounded-xl border border-border px-3 text-[11px] font-semibold text-foreground"
             >
-              {route.route_date && route.route_date !== localDateKey()
-                ? "Planner"
-                : "Today"}
+              Planner
             </button>
           </div>
         </div>
@@ -1201,18 +1193,10 @@ export function HpoLeafletMap({
             <div className="mt-1.5 flex justify-center">
             <button
               type="button"
-              onClick={() =>
-                onNavigateHpo?.(
-                  route?.route_date && route.route_date !== localDateKey()
-                    ? "planner"
-                    : "today",
-                )
-              }
+              onClick={() => onNavigateHpo?.("planner")}
               className="min-h-8 px-3 text-[10px] font-semibold text-muted-foreground"
             >
-              {route?.route_date && route.route_date !== localDateKey()
-                ? "Open Planner"
-                : "Open Today"}
+              Open Planner
             </button>
             </div>
           ) : null}
