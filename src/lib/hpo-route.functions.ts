@@ -2749,6 +2749,42 @@ async function applySavedHpoNoteIntelligence(input: {
   };
 }
 
+function fieldNoteDateLabel(value: string, timezone: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function fieldNoteAccountEntry(input: {
+  note: string;
+  savedAt: string;
+  updatedAt: string;
+  timezone: string;
+}) {
+  const saved = fieldNoteDateLabel(input.savedAt, input.timezone);
+  const edited =
+    Date.parse(input.updatedAt) > Date.parse(input.savedAt) + 1000
+      ? `\nEdited ${fieldNoteDateLabel(input.updatedAt, input.timezone)}`
+      : "";
+  return `[${saved}] Field note\n${input.note}${edited}`;
+}
+
+function replaceLastText(source: string, search: string, replacement: string) {
+  if (!search) return source;
+  const index = source.lastIndexOf(search);
+  if (index < 0) return source;
+  return (
+    source.slice(0, index) +
+    replacement +
+    source.slice(index + search.length)
+  );
+}
+
 export async function addHpoRouteStopNoteCore(input: {
   db: any;
   userId: string;
@@ -2795,16 +2831,140 @@ export async function addHpoRouteStopNoteCore(input: {
     if (stopError || !stop)
       throw stopError ?? new Error("Route stop not found.");
 
-    const previousNotes = clean(stop.notes);
-    const combinedNotes = previousNotes
-      ? `${previousNotes}\n\n${note}`
-      : note;
+    const now = new Date().toISOString();
+    const currentMetadata =
+      stop.metadata &&
+      typeof stop.metadata === "object" &&
+      !Array.isArray(stop.metadata)
+        ? stop.metadata
+        : {};
+    const previousStopNote = clean(stop.notes);
+
+    let existingInteraction: any = null;
+    if (stop.account_id) {
+      const storedInteractionId =
+        typeof currentMetadata["route_note_interaction_id"] === "string"
+          ? currentMetadata["route_note_interaction_id"]
+          : null;
+
+      if (storedInteractionId) {
+        const lookup = await input.db
+          .from("hpo_interactions")
+          .select("*")
+          .eq("id", storedInteractionId)
+          .eq("user_id", input.userId)
+          .eq("account_id", stop.account_id)
+          .maybeSingle();
+        if (lookup.error) throw lookup.error;
+        existingInteraction = lookup.data ?? null;
+      }
+
+      if (!existingInteraction) {
+        const lookup = await input.db
+          .from("hpo_interactions")
+          .select("*")
+          .eq("user_id", input.userId)
+          .eq("account_id", stop.account_id)
+          .eq("interaction_type", "note")
+          .eq("source_type", "route")
+          .eq("source_ref", stop.id)
+          .order("occurred_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (lookup.error) throw lookup.error;
+        existingInteraction = lookup.data ?? null;
+      }
+    }
+
+    const savedAt =
+      existingInteraction?.occurred_at ||
+      (typeof currentMetadata["route_note_saved_at"] === "string"
+        ? currentMetadata["route_note_saved_at"]
+        : now);
+    const isEdit = Boolean(existingInteraction || previousStopNote);
+    let interactionId: string | null = existingInteraction?.id ?? null;
+
+    if (stop.account_id) {
+      const interactionMetadata = {
+        ...(existingInteraction?.metadata &&
+        typeof existingInteraction.metadata === "object" &&
+        !Array.isArray(existingInteraction.metadata)
+          ? existingInteraction.metadata
+          : {}),
+        route_id: stop.route_id,
+        route_stop_id: stop.id,
+        note_only: true,
+        field_note: true,
+        note_saved_at: savedAt,
+        note_updated_at: now,
+        source_channel: input.sourceChannel ?? "ui",
+        source_message_id: input.sourceMessageId ?? null,
+        non_phi: true,
+      };
+
+      if (existingInteraction?.id) {
+        const updatedInteraction = await input.db
+          .from("hpo_interactions")
+          .update({
+            summary: note,
+            metadata: interactionMetadata,
+          })
+          .eq("id", existingInteraction.id)
+          .eq("user_id", input.userId)
+          .eq("account_id", stop.account_id)
+          .select("id")
+          .single();
+        if (updatedInteraction.error) throw updatedInteraction.error;
+        interactionId = updatedInteraction.data?.id ?? existingInteraction.id;
+      } else {
+        const insertedInteraction = await input.db
+          .from("hpo_interactions")
+          .insert({
+            user_id: input.userId,
+            account_id: stop.account_id,
+            interaction_type: "note",
+            occurred_at: savedAt,
+            summary: note,
+            source_type: "route",
+            source_ref: stop.id,
+            metadata: interactionMetadata,
+          })
+          .select("id")
+          .single();
+        if (insertedInteraction.error) throw insertedInteraction.error;
+        interactionId = insertedInteraction.data?.id ?? null;
+      }
+    }
+
+    const timezone = await getTimezone(input.db, input.userId);
+    const nextAccountEntry = fieldNoteAccountEntry({
+      note,
+      savedAt,
+      updatedAt: now,
+      timezone,
+    });
+    const previousAccountEntry =
+      typeof currentMetadata["route_note_account_entry"] === "string"
+        ? currentMetadata["route_note_account_entry"]
+        : "";
+
+    const stopMetadata = {
+      ...currentMetadata,
+      route_note_interaction_id: interactionId,
+      route_note_saved_at: savedAt,
+      route_note_updated_at: now,
+      route_note_version:
+        Math.max(0, Number(currentMetadata["route_note_version"] ?? 0)) + 1,
+      route_note_locked: true,
+      route_note_account_entry: nextAccountEntry,
+    };
 
     const { data: updatedStop, error: updateError } = await input.db
       .from("hpo_route_stops")
       .update({
-        notes: combinedNotes,
-        updated_at: new Date().toISOString(),
+        notes: note,
+        metadata: stopMetadata,
+        updated_at: now,
       })
       .eq("id", stop.id)
       .eq("user_id", input.userId)
@@ -2812,48 +2972,76 @@ export async function addHpoRouteStopNoteCore(input: {
       .single();
     if (updateError) throw updateError;
 
-    let interactionId: string | null = null;
     if (stop.account_id) {
-      const { data: interaction, error: interactionError } = await input.db
-        .from("hpo_interactions")
-        .insert({
-          user_id: input.userId,
-          account_id: stop.account_id,
-          interaction_type: "note",
-          occurred_at: new Date().toISOString(),
-          summary: note,
-          source_type: "route",
-          source_ref: stop.id,
-          metadata: {
-            route_id: stop.route_id,
-            route_stop_id: stop.id,
-            note_only: true,
-            source_channel: input.sourceChannel ?? "ui",
-            source_message_id: input.sourceMessageId ?? null,
-            non_phi: true,
-          },
-        })
-        .select("id")
-        .single();
-      if (interactionError) throw interactionError;
-      interactionId = interaction?.id ?? null;
-
       const { data: accountRow, error: accountLoadError } = await input.db
         .from("hpo_accounts")
-        .select("notes")
+        .select("notes,metadata,last_touch_at")
         .eq("id", stop.account_id)
         .eq("user_id", input.userId)
         .maybeSingle();
       if (accountLoadError) throw accountLoadError;
+
       const previousAccountNotes = clean(accountRow?.notes);
-      const combinedAccountNotes = previousAccountNotes
-        ? `${previousAccountNotes}\n\n${note}`
-        : note;
+      let combinedAccountNotes = previousAccountNotes;
+      if (previousAccountEntry && previousAccountNotes.includes(previousAccountEntry)) {
+        combinedAccountNotes = replaceLastText(
+          previousAccountNotes,
+          previousAccountEntry,
+          nextAccountEntry,
+        );
+      } else if (
+        previousStopNote &&
+        previousAccountNotes.includes(previousStopNote)
+      ) {
+        combinedAccountNotes = replaceLastText(
+          previousAccountNotes,
+          previousStopNote,
+          nextAccountEntry,
+        );
+      } else if (!previousAccountNotes) {
+        combinedAccountNotes = nextAccountEntry;
+      } else if (!previousAccountNotes.includes(nextAccountEntry)) {
+        combinedAccountNotes = `${previousAccountNotes}\n\n${nextAccountEntry}`;
+      }
+
+      const accountMetadata =
+        accountRow?.metadata &&
+        typeof accountRow.metadata === "object" &&
+        !Array.isArray(accountRow.metadata)
+          ? accountRow.metadata
+          : {};
+      const previousLatestAt =
+        typeof accountMetadata["latest_field_note_at"] === "string"
+          ? accountMetadata["latest_field_note_at"]
+          : null;
+      const shouldSetLatest =
+        !previousLatestAt ||
+        Number.isNaN(Date.parse(previousLatestAt)) ||
+        Date.parse(savedAt) >= Date.parse(previousLatestAt);
+      const nextMetadata = shouldSetLatest
+        ? {
+            ...accountMetadata,
+            latest_field_note_at: savedAt,
+            latest_field_note_updated_at: now,
+            latest_field_note_interaction_id: interactionId,
+            latest_field_note_route_id: stop.route_id,
+            latest_field_note_route_stop_id: stop.id,
+          }
+        : accountMetadata;
+
+      const currentLastTouch = Date.parse(accountRow?.last_touch_at ?? "");
+      const noteTouch = Date.parse(savedAt);
       const { error: accountError } = await input.db
         .from("hpo_accounts")
         .update({
-          notes: combinedAccountNotes,
-          updated_at: new Date().toISOString(),
+          notes: combinedAccountNotes || null,
+          metadata: nextMetadata,
+          last_touch_at:
+            Number.isFinite(noteTouch) &&
+            (!Number.isFinite(currentLastTouch) || noteTouch > currentLastTouch)
+              ? savedAt
+              : accountRow?.last_touch_at ?? null,
+          updated_at: now,
         })
         .eq("id", stop.account_id)
         .eq("user_id", input.userId);
@@ -2861,20 +3049,50 @@ export async function addHpoRouteStopNoteCore(input: {
     } else if (stop.prospect_id) {
       const { data: prospect, error: prospectError } = await input.db
         .from("hpo_prospects")
-        .select("notes")
+        .select("notes,metadata")
         .eq("id", stop.prospect_id)
         .eq("user_id", input.userId)
         .maybeSingle();
       if (prospectError) throw prospectError;
+
       const previousProspectNotes = clean(prospect?.notes);
-      const combinedProspectNotes = previousProspectNotes
-        ? `${previousProspectNotes}\n\nRoute note: ${note}`
-        : `Route note: ${note}`;
+      let combinedProspectNotes = previousProspectNotes;
+      if (previousAccountEntry && previousProspectNotes.includes(previousAccountEntry)) {
+        combinedProspectNotes = replaceLastText(
+          previousProspectNotes,
+          previousAccountEntry,
+          nextAccountEntry,
+        );
+      } else if (previousStopNote && previousProspectNotes.includes(previousStopNote)) {
+        combinedProspectNotes = replaceLastText(
+          previousProspectNotes,
+          previousStopNote,
+          nextAccountEntry,
+        );
+      } else if (!previousProspectNotes) {
+        combinedProspectNotes = nextAccountEntry;
+      } else if (!previousProspectNotes.includes(nextAccountEntry)) {
+        combinedProspectNotes = `${previousProspectNotes}\n\n${nextAccountEntry}`;
+      }
+
+      const prospectMetadata =
+        prospect?.metadata &&
+        typeof prospect.metadata === "object" &&
+        !Array.isArray(prospect.metadata)
+          ? prospect.metadata
+          : {};
       const { error: updateProspectError } = await input.db
         .from("hpo_prospects")
         .update({
-          notes: combinedProspectNotes,
-          updated_at: new Date().toISOString(),
+          notes: combinedProspectNotes || null,
+          metadata: {
+            ...prospectMetadata,
+            latest_field_note_at: savedAt,
+            latest_field_note_updated_at: now,
+            latest_field_note_route_id: stop.route_id,
+            latest_field_note_route_stop_id: stop.id,
+          },
+          updated_at: now,
         })
         .eq("id", stop.prospect_id)
         .eq("user_id", input.userId);
@@ -2890,6 +3108,9 @@ export async function addHpoRouteStopNoteCore(input: {
       officeName: stop.office_name ?? null,
       note,
       interactionId,
+      savedAt,
+      updatedAt: now,
+      isEdit,
       stop: updatedStop,
     };
 
