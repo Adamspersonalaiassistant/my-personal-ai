@@ -2583,6 +2583,17 @@ async function applySavedHpoNoteIntelligence(input: {
     timezone,
   });
 
+  const savedStopMetadata =
+    input.saved.stop?.metadata &&
+    typeof input.saved.stop.metadata === "object" &&
+    !Array.isArray(input.saved.stop.metadata)
+      ? input.saved.stop.metadata
+      : {};
+  const previousDerivedNextAction =
+    typeof savedStopMetadata["route_note_derived_next_action"] === "string"
+      ? clean(savedStopMetadata["route_note_derived_next_action"])
+      : "";
+
   if (input.saved.interactionId) {
     const interactionUpdate = await input.db
       .from("hpo_interactions")
@@ -2597,33 +2608,102 @@ async function applySavedHpoNoteIntelligence(input: {
     if (interactionUpdate.error) throw interactionUpdate.error;
   }
 
+  const now = new Date().toISOString();
+  let currentAccount: any = null;
+  if (input.saved.accountId) {
+    const accountLookup = await input.db
+      .from("hpo_accounts")
+      .select("id,next_action,next_action_due_at,metadata")
+      .eq("id", input.saved.accountId)
+      .eq("user_id", input.userId)
+      .maybeSingle();
+    if (accountLookup.error) throw accountLookup.error;
+    currentAccount = accountLookup.data ?? null;
+  }
+
   if (input.saved.accountId && analysis.nextAction) {
-    const now = new Date().toISOString();
     const accountPatch: Record<string, unknown> = {
       next_action: analysis.nextAction,
       next_action_due_at: analysis.nextActionDueAt,
       updated_at: now,
     };
-
     const accountUpdate = await input.db
       .from("hpo_accounts")
       .update(accountPatch)
       .eq("id", input.saved.accountId)
       .eq("user_id", input.userId);
     if (accountUpdate.error) throw accountUpdate.error;
-
-    const stopPatch: Record<string, unknown> = {
-      next_action: analysis.nextAction,
-      next_action_due_at: analysis.nextActionDueAt,
-      updated_at: now,
-    };
-    const stopUpdate = await input.db
-      .from("hpo_route_stops")
-      .update(stopPatch)
-      .eq("id", input.saved.stopId)
+  } else if (
+    input.saved.accountId &&
+    previousDerivedNextAction &&
+    clean(currentAccount?.next_action) === previousDerivedNextAction
+  ) {
+    const accountUpdate = await input.db
+      .from("hpo_accounts")
+      .update({
+        next_action: null,
+        next_action_due_at: null,
+        updated_at: now,
+      })
+      .eq("id", input.saved.accountId)
       .eq("user_id", input.userId);
-    if (stopUpdate.error) throw stopUpdate.error;
+    if (accountUpdate.error) throw accountUpdate.error;
+  }
 
+  const currentStopNextAction = clean(input.saved.stop?.next_action);
+  const stopPatch: Record<string, unknown> = {
+    metadata: {
+      ...savedStopMetadata,
+      route_note_derived_next_action: analysis.nextAction,
+      route_note_derived_next_action_due_at: analysis.nextActionDueAt,
+      route_note_outcome: analysis.outcome,
+      route_note_relationship_signal: analysis.relationshipSignal,
+    },
+    updated_at: now,
+  };
+  if (analysis.nextAction) {
+    stopPatch["next_action"] = analysis.nextAction;
+    stopPatch["next_action_due_at"] = analysis.nextActionDueAt;
+  } else if (
+    previousDerivedNextAction &&
+    currentStopNextAction === previousDerivedNextAction
+  ) {
+    stopPatch["next_action"] = null;
+    stopPatch["next_action_due_at"] = null;
+  }
+  const stopUpdate = await input.db
+    .from("hpo_route_stops")
+    .update(stopPatch)
+    .eq("id", input.saved.stopId)
+    .eq("user_id", input.userId);
+  if (stopUpdate.error) throw stopUpdate.error;
+
+  if (input.saved.accountId && currentAccount) {
+    const accountMetadata =
+      currentAccount.metadata &&
+      typeof currentAccount.metadata === "object" &&
+      !Array.isArray(currentAccount.metadata)
+        ? currentAccount.metadata
+        : {};
+    if (
+      accountMetadata["latest_field_note_route_stop_id"] === input.saved.stopId
+    ) {
+      const accountMetaUpdate = await input.db
+        .from("hpo_accounts")
+        .update({
+          metadata: {
+            ...accountMetadata,
+            latest_field_note_outcome: analysis.outcome,
+            latest_field_note_relationship_signal: analysis.relationshipSignal,
+            latest_field_note_next_action: analysis.nextAction,
+            latest_field_note_next_action_due_at: analysis.nextActionDueAt,
+          },
+          updated_at: now,
+        })
+        .eq("id", input.saved.accountId)
+        .eq("user_id", input.userId);
+      if (accountMetaUpdate.error) throw accountMetaUpdate.error;
+    }
   }
 
   let calendarEvent: {
@@ -2649,36 +2729,27 @@ async function applySavedHpoNoteIntelligence(input: {
         ? event.endAt
         : new Date(startMs + 60 * 60 * 1000).toISOString();
 
-    const { data: linkedEvents, error: linkedError } = await input.db
+    const linkedEventResult = await input.db
       .from("meetings")
       .select("id,title,meeting_at,end_at,metadata")
       .eq("user_id", input.userId)
       .contains("metadata", { hpo_route_stop_id: input.saved.stopId })
-      .order("meeting_at", { ascending: true })
-      .limit(5);
-    if (linkedError) throw linkedError;
+      .order("meeting_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (linkedEventResult.error) throw linkedEventResult.error;
+    const linkedEvent = linkedEventResult.data ?? null;
 
-    const linked = (linkedEvents ?? []).find((row: any) => {
-      const metadata =
-        row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
-          ? row.metadata
-          : {};
-      return (
-        metadata["source_workflow"] === "hpo_saved_note" ||
-        metadata["hpo_interaction_id"] === input.saved.interactionId
-      );
-    });
-
-    if (linked) {
-      const metadata =
-        linked.metadata &&
-        typeof linked.metadata === "object" &&
-        !Array.isArray(linked.metadata)
-          ? linked.metadata
+    if (linkedEvent) {
+      const linkedMetadata =
+        linkedEvent.metadata &&
+        typeof linkedEvent.metadata === "object" &&
+        !Array.isArray(linkedEvent.metadata)
+          ? linkedEvent.metadata
           : {};
       const nextMetadata = {
-        ...metadata,
-        event_type: event.eventType ?? metadata["event_type"] ?? "event",
+        ...linkedMetadata,
+        event_type: event.eventType ?? linkedMetadata["event_type"] ?? "event",
         hpo_account_id: input.saved.accountId ?? null,
         hpo_route_id: input.saved.routeId,
         hpo_route_stop_id: input.saved.stopId,
@@ -2686,32 +2757,50 @@ async function applySavedHpoNoteIntelligence(input: {
         source_workflow: "hpo_saved_note",
         non_phi: true,
       };
-      const { data: updatedEvent, error: linkedUpdateError } = await input.db
-        .from("meetings")
-        .update({
-          title: event.title,
-          meeting_at: event.startAt,
-          end_at: resolvedEnd,
-          metadata: nextMetadata,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", linked.id)
-        .eq("user_id", input.userId)
-        .select("id,title,meeting_at,end_at,metadata")
-        .single();
-      if (linkedUpdateError) throw linkedUpdateError;
+      const unchanged =
+        clean(linkedEvent.title) === clean(event.title) &&
+        Date.parse(linkedEvent.meeting_at) === Date.parse(event.startAt) &&
+        Date.parse(linkedEvent.end_at ?? "") === Date.parse(resolvedEnd);
 
-      calendarEvent = {
-        id: updatedEvent.id,
-        title: updatedEvent.title,
-        startAt: updatedEvent.meeting_at,
-        endAt: updatedEvent.end_at ?? resolvedEnd,
-        eventType: String(
-          updatedEvent.metadata?.event_type ?? event.eventType ?? "event",
-        ),
-        duplicate: true,
-        updated: true,
-      };
+      if (!unchanged) {
+        const updatedEvent = await input.db
+          .from("meetings")
+          .update({
+            title: event.title,
+            meeting_at: event.startAt,
+            end_at: resolvedEnd,
+            metadata: nextMetadata,
+          })
+          .eq("id", linkedEvent.id)
+          .eq("user_id", input.userId)
+          .select("id,title,meeting_at,end_at,metadata")
+          .single();
+        if (updatedEvent.error) throw updatedEvent.error;
+        const row = updatedEvent.data;
+        calendarEvent = {
+          id: row.id,
+          title: row.title,
+          startAt: row.meeting_at,
+          endAt: row.end_at ?? null,
+          eventType: String(
+            row.metadata?.event_type ?? event.eventType ?? "event",
+          ),
+          duplicate: false,
+          updated: true,
+        };
+      } else {
+        calendarEvent = {
+          id: linkedEvent.id,
+          title: linkedEvent.title,
+          startAt: linkedEvent.meeting_at,
+          endAt: linkedEvent.end_at ?? null,
+          eventType: String(
+            linkedMetadata["event_type"] ?? event.eventType ?? "event",
+          ),
+          duplicate: true,
+          updated: false,
+        };
+      }
     } else {
       const windowStart = new Date(startMs - 5 * 60 * 1000).toISOString();
       const windowEnd = new Date(startMs + 5 * 60 * 1000).toISOString();
@@ -2728,12 +2817,13 @@ async function applySavedHpoNoteIntelligence(input: {
       const duplicate = (nearbyEvents ?? []).find((row: any) => {
         const title = clean(row.title).toLowerCase();
         const metadata =
-          row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+          row.metadata &&
+          typeof row.metadata === "object" &&
+          !Array.isArray(row.metadata)
             ? row.metadata
             : {};
         return (
           metadata["hpo_account_id"] === input.saved.accountId ||
-          metadata["hpo_route_stop_id"] === input.saved.stopId ||
           (requestedTitle &&
             (title === requestedTitle ||
               title.includes(requestedTitle) ||
@@ -2743,13 +2833,37 @@ async function applySavedHpoNoteIntelligence(input: {
       });
 
       if (duplicate) {
+        const duplicateMetadata =
+          duplicate.metadata &&
+          typeof duplicate.metadata === "object" &&
+          !Array.isArray(duplicate.metadata)
+            ? duplicate.metadata
+            : {};
+        const metadata = {
+          ...duplicateMetadata,
+          hpo_account_id: input.saved.accountId ?? null,
+          hpo_route_id: input.saved.routeId,
+          hpo_route_stop_id: input.saved.stopId,
+          hpo_interaction_id: input.saved.interactionId ?? null,
+          source_workflow: "hpo_saved_note",
+          non_phi: true,
+        };
+        const linkedDuplicate = await input.db
+          .from("meetings")
+          .update({ metadata })
+          .eq("id", duplicate.id)
+          .eq("user_id", input.userId)
+          .select("id,title,meeting_at,end_at,metadata")
+          .single();
+        if (linkedDuplicate.error) throw linkedDuplicate.error;
+        const row = linkedDuplicate.data;
         calendarEvent = {
-          id: duplicate.id,
-          title: duplicate.title,
-          startAt: duplicate.meeting_at,
-          endAt: duplicate.end_at ?? null,
+          id: row.id,
+          title: row.title,
+          startAt: row.meeting_at,
+          endAt: row.end_at ?? null,
           eventType: String(
-            duplicate.metadata?.event_type ?? event.eventType ?? "event",
+            row.metadata?.event_type ?? event.eventType ?? "event",
           ),
           duplicate: true,
           updated: false,
@@ -2784,6 +2898,7 @@ async function applySavedHpoNoteIntelligence(input: {
           ] as any;
           calendarEvent = {
             ...reused,
+            duplicate: Boolean(reused?.duplicate),
             updated: Boolean(reused?.updated),
           };
         } else {
@@ -2797,11 +2912,16 @@ async function applySavedHpoNoteIntelligence(input: {
             p_source: "emery",
           });
           if (created.error) throw created.error;
-          const row = Array.isArray(created.data) ? created.data[0] : created.data;
-          if (!row?.id) throw new Error("Calendar event creation returned no record.");
+          const row = Array.isArray(created.data)
+            ? created.data[0]
+            : created.data;
+          if (!row?.id)
+            throw new Error("Calendar event creation returned no record.");
 
           const currentMetadata =
-            row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+            row.metadata &&
+            typeof row.metadata === "object" &&
+            !Array.isArray(row.metadata)
               ? row.metadata
               : {};
           const metadata = {
@@ -2845,6 +2965,34 @@ async function applySavedHpoNoteIntelligence(input: {
           });
         }
       }
+    }
+
+    if (calendarEvent) {
+      const { data: latestStop, error: latestStopError } = await input.db
+        .from("hpo_route_stops")
+        .select("metadata")
+        .eq("id", input.saved.stopId)
+        .eq("user_id", input.userId)
+        .single();
+      if (latestStopError) throw latestStopError;
+      const latestMetadata =
+        latestStop.metadata &&
+        typeof latestStop.metadata === "object" &&
+        !Array.isArray(latestStop.metadata)
+          ? latestStop.metadata
+          : {};
+      const calendarLinkUpdate = await input.db
+        .from("hpo_route_stops")
+        .update({
+          metadata: {
+            ...latestMetadata,
+            route_note_calendar_event_id: calendarEvent.id,
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", input.saved.stopId)
+        .eq("user_id", input.userId);
+      if (calendarLinkUpdate.error) throw calendarLinkUpdate.error;
     }
   }
 
