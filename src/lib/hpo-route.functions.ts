@@ -2781,42 +2781,6 @@ async function applySavedHpoNoteIntelligence(input: {
   };
 }
 
-function fieldNoteDateLabel(value: string, timezone: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function fieldNoteAccountEntry(input: {
-  note: string;
-  savedAt: string;
-  updatedAt: string;
-  timezone: string;
-}) {
-  const saved = fieldNoteDateLabel(input.savedAt, input.timezone);
-  const edited =
-    Date.parse(input.updatedAt) > Date.parse(input.savedAt) + 1000
-      ? `\nEdited ${fieldNoteDateLabel(input.updatedAt, input.timezone)}`
-      : "";
-  return `[${saved}] Field note\n${input.note}${edited}`;
-}
-
-function replaceLastText(source: string, search: string, replacement: string) {
-  if (!search) return source;
-  const index = source.lastIndexOf(search);
-  if (index < 0) return source;
-  return (
-    source.slice(0, index) +
-    replacement +
-    source.slice(index + search.length)
-  );
-}
-
 export async function addHpoRouteStopNoteCore(input: {
   db: any;
   userId: string;
@@ -2968,18 +2932,6 @@ export async function addHpoRouteStopNoteCore(input: {
       }
     }
 
-    const timezone = await getTimezone(input.db, input.userId);
-    const nextAccountEntry = fieldNoteAccountEntry({
-      note,
-      savedAt,
-      updatedAt: now,
-      timezone,
-    });
-    const previousAccountEntry =
-      typeof currentMetadata["route_note_account_entry"] === "string"
-        ? currentMetadata["route_note_account_entry"]
-        : "";
-
     const stopMetadata = {
       ...currentMetadata,
       route_note_interaction_id: interactionId,
@@ -2988,7 +2940,6 @@ export async function addHpoRouteStopNoteCore(input: {
       route_note_version:
         Math.max(0, Number(currentMetadata["route_note_version"] ?? 0)) + 1,
       route_note_locked: true,
-      route_note_account_entry: nextAccountEntry,
     };
 
     const { data: updatedStop, error: updateError } = await input.db
@@ -3007,34 +2958,11 @@ export async function addHpoRouteStopNoteCore(input: {
     if (stop.account_id) {
       const { data: accountRow, error: accountLoadError } = await input.db
         .from("hpo_accounts")
-        .select("notes,metadata,last_touch_at")
+        .select("metadata,last_touch_at")
         .eq("id", stop.account_id)
         .eq("user_id", input.userId)
         .maybeSingle();
       if (accountLoadError) throw accountLoadError;
-
-      const previousAccountNotes = clean(accountRow?.notes);
-      let combinedAccountNotes = previousAccountNotes;
-      if (previousAccountEntry && previousAccountNotes.includes(previousAccountEntry)) {
-        combinedAccountNotes = replaceLastText(
-          previousAccountNotes,
-          previousAccountEntry,
-          nextAccountEntry,
-        );
-      } else if (
-        previousStopNote &&
-        previousAccountNotes.includes(previousStopNote)
-      ) {
-        combinedAccountNotes = replaceLastText(
-          previousAccountNotes,
-          previousStopNote,
-          nextAccountEntry,
-        );
-      } else if (!previousAccountNotes) {
-        combinedAccountNotes = nextAccountEntry;
-      } else if (!previousAccountNotes.includes(nextAccountEntry)) {
-        combinedAccountNotes = `${previousAccountNotes}\n\n${nextAccountEntry}`;
-      }
 
       const accountMetadata =
         accountRow?.metadata &&
@@ -3058,6 +2986,7 @@ export async function addHpoRouteStopNoteCore(input: {
             latest_field_note_interaction_id: interactionId,
             latest_field_note_route_id: stop.route_id,
             latest_field_note_route_stop_id: stop.id,
+            latest_field_note_summary: note,
           }
         : accountMetadata;
 
@@ -3066,7 +2995,6 @@ export async function addHpoRouteStopNoteCore(input: {
       const { error: accountError } = await input.db
         .from("hpo_accounts")
         .update({
-          notes: combinedAccountNotes || null,
           metadata: nextMetadata,
           last_touch_at:
             Number.isFinite(noteTouch) &&
@@ -3081,31 +3009,11 @@ export async function addHpoRouteStopNoteCore(input: {
     } else if (stop.prospect_id) {
       const { data: prospect, error: prospectError } = await input.db
         .from("hpo_prospects")
-        .select("notes,metadata")
+        .select("metadata")
         .eq("id", stop.prospect_id)
         .eq("user_id", input.userId)
         .maybeSingle();
       if (prospectError) throw prospectError;
-
-      const previousProspectNotes = clean(prospect?.notes);
-      let combinedProspectNotes = previousProspectNotes;
-      if (previousAccountEntry && previousProspectNotes.includes(previousAccountEntry)) {
-        combinedProspectNotes = replaceLastText(
-          previousProspectNotes,
-          previousAccountEntry,
-          nextAccountEntry,
-        );
-      } else if (previousStopNote && previousProspectNotes.includes(previousStopNote)) {
-        combinedProspectNotes = replaceLastText(
-          previousProspectNotes,
-          previousStopNote,
-          nextAccountEntry,
-        );
-      } else if (!previousProspectNotes) {
-        combinedProspectNotes = nextAccountEntry;
-      } else if (!previousProspectNotes.includes(nextAccountEntry)) {
-        combinedProspectNotes = `${previousProspectNotes}\n\n${nextAccountEntry}`;
-      }
 
       const prospectMetadata =
         prospect?.metadata &&
@@ -3116,13 +3024,13 @@ export async function addHpoRouteStopNoteCore(input: {
       const { error: updateProspectError } = await input.db
         .from("hpo_prospects")
         .update({
-          notes: combinedProspectNotes || null,
           metadata: {
             ...prospectMetadata,
             latest_field_note_at: savedAt,
             latest_field_note_updated_at: now,
             latest_field_note_route_id: stop.route_id,
             latest_field_note_route_stop_id: stop.id,
+            latest_field_note_summary: note,
           },
           updated_at: now,
         })
