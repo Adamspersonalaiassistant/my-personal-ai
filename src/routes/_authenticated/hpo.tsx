@@ -15,14 +15,12 @@ import {
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { HpoRoutePlanner } from "@/components/HpoRoutePlanner";
-import { HpoFieldToday } from "@/components/HpoFieldToday";
 import { HpoWeeklyPlanner } from "@/components/HpoWeeklyPlanner";
 import { HpoFieldNav, type HpoFieldView } from "@/components/HpoFieldNav";
 import { HpoAccountFieldDetail } from "@/components/HpoAccountFieldDetail";
 import { HpoEmerySheet, openHpoEmery } from "@/components/HpoEmerySheet";
 import { createHpoAccount, logHpoInteraction } from "@/lib/hpo.functions";
 import { getHpoWorkspace, setHpoFieldAccountFollowup } from "@/lib/hpo-workspace.functions";
-import { getHpoFieldToday } from "@/lib/hpo-field.functions";
 import {
   updateVerifiedHpoAccountFacts,
   correctHpoAccountRelationship,
@@ -105,7 +103,6 @@ export const Route = createFileRoute("/_authenticated/hpo")({
 
 function HpoWorkspace() {
   const read = useServerFn(getHpoWorkspace);
-  const readToday = useServerFn(getHpoFieldToday);
   const createAccount = useServerFn(createHpoAccount);
   const logTouch = useServerFn(logHpoInteraction);
   const setFollowup = useServerFn(setHpoFieldAccountFollowup);
@@ -113,7 +110,7 @@ function HpoWorkspace() {
     typeof window !== "undefined"
       ? new URLSearchParams(window.location.search).get("routeId")
       : null;
-  const [view, setView] = useState<View>("map");
+  const [view, setView] = useState<View>("planner");
   const [data, setData] = useState<Workspace | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -125,15 +122,13 @@ function HpoWorkspace() {
   const [page, setPage] = useState(0);
   const [moreLoading, setMoreLoading] = useState(false);
   const [revision, setRevision] = useState(0);
-  const [initialResolved, setInitialResolved] = useState(false);
-  const [todayContext, setTodayContext] = useState<{ routeId: string | null; stopId: string | null }>({ routeId: null, stopId: null });
   const [plannerContext, setPlannerContext] = useState<{ routeId: string | null; stopId: string | null }>({ routeId: null, stopId: null });
   const [mapRouteId, setMapRouteId] = useState<string | null>(requestedRouteId);
   const [mapContextRouteId, setMapContextRouteId] = useState<string | null>(requestedRouteId);
   const [mapRouteDate, setMapRouteDate] = useState<string | null>(null);
   const [mapOpenBuilder, setMapOpenBuilder] = useState(false);
   const [plannerFocusDate, setPlannerFocusDate] = useState<string | null>(null);
-  const [plannerFocusRouteId, setPlannerFocusRouteId] = useState<string | null>(null);
+  const [plannerFocusRouteId, setPlannerFocusRouteId] = useState<string | null>(requestedRouteId);
 
   const handlePlannerRouteContextChange = useCallback(
     (routeId: string | null, stopId: string | null) => {
@@ -161,30 +156,6 @@ function HpoWorkspace() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
-  useEffect(() => {
-    if (initialResolved) return;
-    let cancelled = false;
-    void readToday({})
-      .then((result) => {
-        if (cancelled) return;
-        setTodayContext({
-          routeId: result.route?.id ?? null,
-          stopId: result.nextStop?.id ?? null,
-        });
-        if (
-          !requestedRouteId &&
-          result.route &&
-          (result.route.route_date === result.today ||
-            ["active", "in_progress"].includes(result.route.status))
-        )
-          setView("today");
-        setInitialResolved(true);
-      })
-      .catch(() => setInitialResolved(true));
-    return () => {
-      cancelled = true;
-    };
-  }, [readToday, initialResolved, requestedRouteId]);
 
   async function loadMore() {
     if (!data || moreLoading || !data.hasMore) return;
@@ -207,14 +178,12 @@ function HpoWorkspace() {
   const emeryContextPrompt = account
     ? `I'm looking at ${account.name} in HPO. Help me with this account and use the live HPO record.`
     : view === "planner"
-      ? "I'm in HPO Planner. Help me plan this week, review saved routes, and build or adjust the route for the day I'm viewing."
+      ? "I'm in HPO Planner. Help me plan this week, resume the route I'm working on, review saved routes, and build or adjust the route for the day I'm viewing."
       : view === "map"
         ? "I'm on the HPO map. Help me add offices, build or change my route, or work with the accounts on this map."
-        : view === "today"
-          ? "I'm in HPO Today. Help me run today's route, log visits, change stops, or handle the next action."
-          : view === "accounts"
-            ? "I'm in HPO Accounts. Help me add, update, research, or plan follow-up for an account."
-            : "I'm in HPO Activity. Help me log a visit or touch, update follow-ups, or review recent account activity.";
+        : view === "accounts"
+          ? "I'm in HPO Accounts. Help me add, update, research, or plan follow-up for an account."
+          : "I'm in HPO Activity. Help me log a visit or touch, update follow-ups, or review recent account activity.";
   return (
     <AppShell
       title="HPO"
@@ -265,17 +234,6 @@ function HpoWorkspace() {
                 </Button>
               </div>
             )}
-            {view === "today" && initialResolved ? (
-              <HpoFieldToday
-                key={`today-${revision}`}
-                onOpenMap={() => {
-                  setMapRouteId(null);
-                  setMapRouteDate(null);
-                  setMapOpenBuilder(false);
-                      setView("map");
-                }}
-              />
-            ) : null}
             {view === "planner" ? (
               <HpoWeeklyPlanner
                 key={`planner-${revision}-${plannerFocusDate ?? "none"}-${plannerFocusRouteId ?? "none"}`}
@@ -290,7 +248,7 @@ function HpoWorkspace() {
                 }}
               />
             ) : null}
-            {view === "map" && initialResolved ? (
+            {view === "map" ? (
               <HpoRoutePlanner
                 key={`map-${revision}-${mapRouteId ?? "none"}-${mapRouteDate ?? "none"}-${mapOpenBuilder ? "build" : "browse"}`}
                 initialRouteId={mapRouteId}
@@ -303,8 +261,7 @@ function HpoWorkspace() {
                 }}
               />
             ) : null}
-            {((view === "accounts" || view === "activity") && loading) ||
-            ((view === "today" || view === "map") && !initialResolved) ? (
+            {(view === "accounts" || view === "activity") && loading ? (
               <p className="py-12 text-center text-sm text-muted-foreground">
                 Opening HPO records…
               </p>
@@ -448,15 +405,9 @@ function HpoWorkspace() {
                   ? plannerContext.routeId
                   : view === "map"
                     ? mapContextRouteId
-                    : todayContext.routeId
+                    : null
               }
-              stopId={
-                view === "planner"
-                  ? plannerContext.stopId
-                  : view === "map"
-                    ? null
-                    : todayContext.stopId
-              }
+              stopId={view === "planner" ? plannerContext.stopId : null}
               selectedAccountId={selected}
               surface={`hpo.${view}`}
               onRouteBuilt={(builtRouteId, builtRouteDate) => {
@@ -472,14 +423,6 @@ function HpoWorkspace() {
               }}
               onChanged={() => {
                 void refresh();
-                void readToday({})
-                  .then((result) =>
-                    setTodayContext({
-                      routeId: result.route?.id ?? null,
-                      stopId: result.nextStop?.id ?? null,
-                    }),
-                  )
-                  .catch(() => undefined);
               }}
             />
           </div>
