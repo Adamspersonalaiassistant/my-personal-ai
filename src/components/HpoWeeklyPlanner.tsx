@@ -913,9 +913,15 @@ export function HpoWeeklyPlanner({
                   ) : null}
                   <div className="divide-y divide-border/40">
                     {orderedStops.map((stop) => {
-                      const fieldNote = stop.notes?.trim() || "";
+                      const hasCanonicalFieldNote =
+                        stop.metadata?.route_note_locked === true;
+                      const fieldNote = hasCanonicalFieldNote
+                        ? stop.notes?.trim() || ""
+                        : "";
                       const note =
-                        stop.visit_summary || stop.visit_outcome;
+                        stop.visit_summary ||
+                        (!hasCanonicalFieldNote ? stop.notes : null) ||
+                        stop.visit_outcome;
                       const editingFieldNote = editingNoteStopId === stop.id;
                       return (
                         <div
