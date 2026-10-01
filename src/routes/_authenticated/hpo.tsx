@@ -64,6 +64,16 @@ const field =
   "min-h-12 w-full rounded-md border border-border/70 bg-card/60 px-3 text-base text-foreground outline-none focus:border-primary";
 const date = (value: string | null | undefined) =>
   value ? new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—";
+const dateTime = (value: string | null | undefined) =>
+  value
+    ? new Date(value).toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : "—";
 const attentionLabel = (value: HpoAttentionState) =>
   ({
     overdue: "Follow-up overdue",
@@ -954,7 +964,7 @@ function ActivityView({
                 </span>
               ) : null}
               <span className="block text-[11px] font-normal text-muted-foreground">
-                {date(i.occurred_at)}
+                {dateTime(i.occurred_at)}
                 {i.next_action ? ` · Next: ${i.next_action}` : ""}
               </span>
             </span>
