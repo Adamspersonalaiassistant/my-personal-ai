@@ -3074,6 +3074,7 @@ export async function addHpoRouteStopNoteCore(input: {
         ? stop.metadata
         : {};
     const previousStopNote = clean(stop.notes);
+    const noteSourceRef = `route_note:${stop.id}`;
 
     let existingInteraction: any = null;
     if (stop.account_id) {
@@ -3102,7 +3103,7 @@ export async function addHpoRouteStopNoteCore(input: {
           .eq("account_id", stop.account_id)
           .eq("interaction_type", "note")
           .eq("source_type", "route")
-          .eq("source_ref", stop.id)
+          .in("source_ref", [noteSourceRef, stop.id])
           .order("occurred_at", { ascending: false })
           .limit(1)
           .maybeSingle();
@@ -3152,6 +3153,7 @@ export async function addHpoRouteStopNoteCore(input: {
           .from("hpo_interactions")
           .update({
             summary: note,
+            source_ref: noteSourceRef,
             metadata: interactionMetadata,
           })
           .eq("id", existingInteraction.id)
@@ -3171,7 +3173,7 @@ export async function addHpoRouteStopNoteCore(input: {
             occurred_at: savedAt,
             summary: note,
             source_type: "route",
-            source_ref: stop.id,
+            source_ref: noteSourceRef,
             metadata: interactionMetadata,
           })
           .select("id")
