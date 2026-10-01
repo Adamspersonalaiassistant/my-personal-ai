@@ -1850,7 +1850,17 @@ export async function executeHpoRouteStopOutcomeCore(input: {
       patch["visited_at"] = new Date().toISOString();
     }
     if (input.notes !== undefined) {
-      patch["notes"] = input.notes?.trim() || null;
+      const stopMetadata =
+        stop.metadata &&
+        typeof stop.metadata === "object" &&
+        !Array.isArray(stop.metadata)
+          ? stop.metadata
+          : {};
+      const hasLockedFieldNote =
+        stopMetadata["route_note_locked"] === true && Boolean(clean(stop.notes));
+      if (!hasLockedFieldNote) {
+        patch["notes"] = input.notes?.trim() || null;
+      }
       patch["visit_summary"] = input.notes?.trim() || null;
     }
     if (input.visitOutcome !== undefined) {
@@ -1887,7 +1897,9 @@ export async function executeHpoRouteStopOutcomeCore(input: {
     const outcomeSummary = routeOutcomeSummary(input.status);
     await upsertInteractionForStop(input.db, input.userId, verified, {
       notes:
-        input.notes?.trim() || verified.notes?.trim() || outcomeSummary.note,
+        input.notes?.trim() ||
+        verified.visit_summary?.trim() ||
+        outcomeSummary.note,
       visitOutcome:
         input.visitOutcome?.trim() ||
         verified.visit_outcome?.trim() ||
@@ -3487,7 +3499,17 @@ export const updateHpoRouteStop = createServerFn({ method: "POST" })
         patch["visited_at"] = new Date().toISOString();
     }
     if (data.notes !== undefined) {
-      patch["notes"] = data.notes || null;
+      const stopMetadata =
+        stop.metadata &&
+        typeof stop.metadata === "object" &&
+        !Array.isArray(stop.metadata)
+          ? stop.metadata
+          : {};
+      const hasLockedFieldNote =
+        stopMetadata["route_note_locked"] === true && Boolean(clean(stop.notes));
+      if (!hasLockedFieldNote) {
+        patch["notes"] = data.notes || null;
+      }
       patch["visit_summary"] = data.notes || null;
     }
     if (data.visitOutcome !== undefined)
@@ -3511,7 +3533,10 @@ export const updateHpoRouteStop = createServerFn({ method: "POST" })
     );
     if (TERMINAL.has(interactionStatus)) {
       await upsertInteractionForStop(db, context.userId, updated, {
-        notes: data.notes ?? updated.notes,
+        notes:
+          data.notes ??
+          updated.visit_summary ??
+          (updated.metadata?.route_note_locked ? null : updated.notes),
         visitOutcome: data.visitOutcome ?? updated.visit_outcome,
         nextAction: data.nextAction ?? updated.next_action,
         nextActionDueAt: data.nextActionDueAt ?? updated.next_action_due_at,
