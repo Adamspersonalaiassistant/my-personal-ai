@@ -2633,6 +2633,7 @@ async function applySavedHpoNoteIntelligence(input: {
     endAt: string | null;
     eventType: string;
     duplicate: boolean;
+    updated: boolean;
   } | null = null;
 
   const event = analysis.calendarEvent;
@@ -2643,129 +2644,206 @@ async function applySavedHpoNoteIntelligence(input: {
     Date.parse(event.startAt) > Date.now() - 5 * 60 * 1000
   ) {
     const startMs = Date.parse(event.startAt);
-    const windowStart = new Date(startMs - 5 * 60 * 1000).toISOString();
-    const windowEnd = new Date(startMs + 5 * 60 * 1000).toISOString();
-    const { data: nearbyEvents, error: nearbyError } = await input.db
+    const resolvedEnd =
+      event.endAt && Date.parse(event.endAt) > startMs
+        ? event.endAt
+        : new Date(startMs + 60 * 60 * 1000).toISOString();
+
+    const { data: linkedEvents, error: linkedError } = await input.db
       .from("meetings")
       .select("id,title,meeting_at,end_at,metadata")
       .eq("user_id", input.userId)
-      .gte("meeting_at", windowStart)
-      .lte("meeting_at", windowEnd);
-    if (nearbyError) throw nearbyError;
+      .contains("metadata", { hpo_route_stop_id: input.saved.stopId })
+      .order("meeting_at", { ascending: true })
+      .limit(5);
+    if (linkedError) throw linkedError;
 
-    const officeToken = clean(input.saved.officeName).toLowerCase();
-    const requestedTitle = clean(event.title).toLowerCase();
-    const duplicate = (nearbyEvents ?? []).find((row: any) => {
-      const title = clean(row.title).toLowerCase();
+    const linked = (linkedEvents ?? []).find((row: any) => {
       const metadata =
         row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
           ? row.metadata
           : {};
       return (
-        metadata["hpo_account_id"] === input.saved.accountId ||
-        metadata["hpo_route_stop_id"] === input.saved.stopId ||
-        (requestedTitle &&
-          (title === requestedTitle ||
-            title.includes(requestedTitle) ||
-            requestedTitle.includes(title))) ||
-        (officeToken && title.includes(officeToken))
+        metadata["source_workflow"] === "hpo_saved_note" ||
+        metadata["hpo_interaction_id"] === input.saved.interactionId
       );
     });
 
-    if (duplicate) {
+    if (linked) {
+      const metadata =
+        linked.metadata &&
+        typeof linked.metadata === "object" &&
+        !Array.isArray(linked.metadata)
+          ? linked.metadata
+          : {};
+      const nextMetadata = {
+        ...metadata,
+        event_type: event.eventType ?? metadata["event_type"] ?? "event",
+        hpo_account_id: input.saved.accountId ?? null,
+        hpo_route_id: input.saved.routeId,
+        hpo_route_stop_id: input.saved.stopId,
+        hpo_interaction_id: input.saved.interactionId ?? null,
+        source_workflow: "hpo_saved_note",
+        non_phi: true,
+      };
+      const { data: updatedEvent, error: linkedUpdateError } = await input.db
+        .from("meetings")
+        .update({
+          title: event.title,
+          meeting_at: event.startAt,
+          end_at: resolvedEnd,
+          metadata: nextMetadata,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", linked.id)
+        .eq("user_id", input.userId)
+        .select("id,title,meeting_at,end_at,metadata")
+        .single();
+      if (linkedUpdateError) throw linkedUpdateError;
+
       calendarEvent = {
-        id: duplicate.id,
-        title: duplicate.title,
-        startAt: duplicate.meeting_at,
-        endAt: duplicate.end_at ?? null,
-        eventType: String(duplicate.metadata?.event_type ?? event.eventType ?? "event"),
+        id: updatedEvent.id,
+        title: updatedEvent.title,
+        startAt: updatedEvent.meeting_at,
+        endAt: updatedEvent.end_at ?? resolvedEnd,
+        eventType: String(
+          updatedEvent.metadata?.event_type ?? event.eventType ?? "event",
+        ),
         duplicate: true,
+        updated: true,
       };
     } else {
-      const calendarExecution = await beginExecution({
-        db: input.db,
-        userId: input.userId,
-        domain: "calendar",
-        action: "create_event",
-        idempotencyKey: `${input.idempotencyKey}:saved_note_calendar`,
-        targetType: "hpo_route_stop",
-        targetId: input.saved.stopId,
-        requestPayload: {
-          source: "hpo_saved_note",
-          accountId: input.saved.accountId ?? null,
-          stopId: input.saved.stopId,
-          title: event.title,
-          startAt: event.startAt,
-          endAt: event.endAt,
-          eventType: event.eventType ?? "event",
-        },
-      });
+      const windowStart = new Date(startMs - 5 * 60 * 1000).toISOString();
+      const windowEnd = new Date(startMs + 5 * 60 * 1000).toISOString();
+      const { data: nearbyEvents, error: nearbyError } = await input.db
+        .from("meetings")
+        .select("id,title,meeting_at,end_at,metadata")
+        .eq("user_id", input.userId)
+        .gte("meeting_at", windowStart)
+        .lte("meeting_at", windowEnd);
+      if (nearbyError) throw nearbyError;
 
-      if (
-        calendarExecution.reused &&
-        calendarExecution.status === "completed" &&
-        calendarExecution.resultPayload["savedNoteCalendarEvent"]
-      ) {
-        calendarEvent = calendarExecution.resultPayload[
-          "savedNoteCalendarEvent"
-        ] as typeof calendarEvent;
-      } else {
-        const resolvedEnd =
-          event.endAt && Date.parse(event.endAt) > startMs
-            ? event.endAt
-            : new Date(startMs + 60 * 60 * 1000).toISOString();
-        const created = await input.db.rpc("emery_action_create_event", {
-          p_user_id: input.userId,
-          p_title: event.title,
-          p_start_at: event.startAt,
-          p_end_at: resolvedEnd,
-          p_participants: [],
-          p_event_type: event.eventType ?? "event",
-          p_source: "emery",
-        });
-        if (created.error) throw created.error;
-        const row = Array.isArray(created.data) ? created.data[0] : created.data;
-        if (!row?.id) throw new Error("Calendar event creation returned no record.");
-
-        const currentMetadata =
+      const officeToken = clean(input.saved.officeName).toLowerCase();
+      const requestedTitle = clean(event.title).toLowerCase();
+      const duplicate = (nearbyEvents ?? []).find((row: any) => {
+        const title = clean(row.title).toLowerCase();
+        const metadata =
           row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
             ? row.metadata
             : {};
-        const metadata = {
-          ...currentMetadata,
-          hpo_account_id: input.saved.accountId ?? null,
-          hpo_route_id: input.saved.routeId,
-          hpo_route_stop_id: input.saved.stopId,
-          hpo_interaction_id: input.saved.interactionId ?? null,
-          source_workflow: "hpo_saved_note",
-          non_phi: true,
-        };
-        const metadataUpdate = await input.db
-          .from("meetings")
-          .update({ metadata })
-          .eq("id", row.id)
-          .eq("user_id", input.userId);
-        if (metadataUpdate.error) throw metadataUpdate.error;
+        return (
+          metadata["hpo_account_id"] === input.saved.accountId ||
+          metadata["hpo_route_stop_id"] === input.saved.stopId ||
+          (requestedTitle &&
+            (title === requestedTitle ||
+              title.includes(requestedTitle) ||
+              requestedTitle.includes(title))) ||
+          (officeToken && title.includes(officeToken))
+        );
+      });
 
+      if (duplicate) {
         calendarEvent = {
-          id: row.id,
-          title: row.title || event.title,
-          startAt: row.meeting_at || event.startAt,
-          endAt: row.end_at || resolvedEnd,
-          eventType: String(row.metadata?.event_type ?? event.eventType ?? "event"),
-          duplicate: false,
+          id: duplicate.id,
+          title: duplicate.title,
+          startAt: duplicate.meeting_at,
+          endAt: duplicate.end_at ?? null,
+          eventType: String(
+            duplicate.metadata?.event_type ?? event.eventType ?? "event",
+          ),
+          duplicate: true,
+          updated: false,
         };
-
-        await completeExecution({
+      } else {
+        const calendarExecution = await beginExecution({
           db: input.db,
           userId: input.userId,
-          runId: calendarExecution.id,
-          resultPayload: {
-            savedNoteCalendarEvent: calendarEvent as unknown as Record<string, unknown>,
+          domain: "calendar",
+          action: "create_event",
+          idempotencyKey: `${input.idempotencyKey}:saved_note_calendar`,
+          targetType: "hpo_route_stop",
+          targetId: input.saved.stopId,
+          requestPayload: {
+            source: "hpo_saved_note",
+            accountId: input.saved.accountId ?? null,
+            stopId: input.saved.stopId,
+            title: event.title,
+            startAt: event.startAt,
+            endAt: event.endAt,
+            eventType: event.eventType ?? "event",
           },
-          targetType: "event",
-          targetId: row.id,
         });
+
+        if (
+          calendarExecution.reused &&
+          calendarExecution.status === "completed" &&
+          calendarExecution.resultPayload["savedNoteCalendarEvent"]
+        ) {
+          const reused = calendarExecution.resultPayload[
+            "savedNoteCalendarEvent"
+          ] as any;
+          calendarEvent = {
+            ...reused,
+            updated: Boolean(reused?.updated),
+          };
+        } else {
+          const created = await input.db.rpc("emery_action_create_event", {
+            p_user_id: input.userId,
+            p_title: event.title,
+            p_start_at: event.startAt,
+            p_end_at: resolvedEnd,
+            p_participants: [],
+            p_event_type: event.eventType ?? "event",
+            p_source: "emery",
+          });
+          if (created.error) throw created.error;
+          const row = Array.isArray(created.data) ? created.data[0] : created.data;
+          if (!row?.id) throw new Error("Calendar event creation returned no record.");
+
+          const currentMetadata =
+            row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+              ? row.metadata
+              : {};
+          const metadata = {
+            ...currentMetadata,
+            hpo_account_id: input.saved.accountId ?? null,
+            hpo_route_id: input.saved.routeId,
+            hpo_route_stop_id: input.saved.stopId,
+            hpo_interaction_id: input.saved.interactionId ?? null,
+            source_workflow: "hpo_saved_note",
+            non_phi: true,
+          };
+          const metadataUpdate = await input.db
+            .from("meetings")
+            .update({ metadata })
+            .eq("id", row.id)
+            .eq("user_id", input.userId);
+          if (metadataUpdate.error) throw metadataUpdate.error;
+
+          calendarEvent = {
+            id: row.id,
+            title: row.title || event.title,
+            startAt: row.meeting_at || event.startAt,
+            endAt: row.end_at || resolvedEnd,
+            eventType: String(
+              row.metadata?.event_type ?? event.eventType ?? "event",
+            ),
+            duplicate: false,
+            updated: false,
+          };
+
+          await completeExecution({
+            db: input.db,
+            userId: input.userId,
+            runId: calendarExecution.id,
+            resultPayload: {
+              savedNoteCalendarEvent:
+                calendarEvent as unknown as Record<string, unknown>,
+            },
+            targetType: "event",
+            targetId: row.id,
+          });
+        }
       }
     }
   }
