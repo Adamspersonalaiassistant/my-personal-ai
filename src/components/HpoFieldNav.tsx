@@ -1,12 +1,11 @@
-import { Activity, CalendarDays, Clock3, MapPinned, UsersRound } from "lucide-react";
+import { Activity, CalendarDays, MapPinned, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export type HpoFieldView = "today" | "planner" | "map" | "accounts" | "activity";
+export type HpoFieldView = "planner" | "map" | "accounts" | "activity";
 
 const areas = [
-  { key: "today", label: "Today", icon: Clock3 },
   { key: "planner", label: "Planner", icon: CalendarDays },
-  { key: "map", label: "Map", icon: MapPinned },
+  { key: "map", label: "Maps", icon: MapPinned },
   { key: "accounts", label: "Accounts", icon: UsersRound },
   { key: "activity", label: "Activity", icon: Activity },
 ] as const;
@@ -23,7 +22,7 @@ export function HpoFieldNav({
       aria-label="HPO field areas"
       className="hpo-field-nav shrink-0 border-b border-border bg-background px-3 py-2 sm:px-4"
     >
-      <div className="mx-auto grid max-w-5xl grid-cols-5 gap-1.5">
+      <div className="mx-auto grid max-w-5xl grid-cols-4 gap-1.5">
         {areas.map(({ key, label, icon: Icon }) => (
           <Button
             key={key}
