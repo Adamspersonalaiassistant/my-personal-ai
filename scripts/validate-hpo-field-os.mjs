@@ -260,6 +260,31 @@ check(
     offline.includes('"hpo.route_stop.add_note"'),
 );
 check(
+  "Today canonical field-note UI only enters edit mode for a locked field note",
+  fieldToday.includes("const hasCanonicalFieldNote") &&
+    fieldToday.includes('{hasCanonicalFieldNote ? "Edit Note" : "Add Note"}') &&
+    !fieldToday.includes("? nextStop?.notes?.trim()"),
+);
+check(
+  "field-note save closes the editor and clears the local draft",
+  fieldToday.includes("await clearHpoDraftNote(nextStop.id)") &&
+    fieldToday.includes('setNote("")') &&
+    fieldToday.includes("setShowNote(false)"),
+);
+check(
+  "field-note CRM interactions use a namespaced route-stop source reference",
+  routeFns.includes("const noteSourceRef = `route_note:${stop.id}`;") &&
+    routeFns.includes("source_ref: noteSourceRef") &&
+    routeFns.includes('.in("source_ref", [noteSourceRef, stop.id])'),
+);
+check(
+  "locked field notes stay separate from visit summaries",
+  routeFns.includes('stopMetadata["route_note_locked"] === true') &&
+    routeFns.includes('patch["visit_summary"] = input.notes?.trim() || null') &&
+    accountDetail.includes("Field note") &&
+    accountDetail.includes("Visit summary"),
+);
+check(
   "Today field mode uses canonical route mutations",
   fieldToday.includes("setHpoRouteStopOutcome") &&
     fieldToday.includes("addHpoRouteStops") &&
