@@ -2379,6 +2379,372 @@ export async function executeHpoRouteStopVisitCore(input: {
   }
 }
 
+type SavedHpoNoteAnalysis = {
+  nextAction: string | null;
+  nextActionDueAt: string | null;
+  calendarEvent: {
+    shouldCreate: boolean;
+    title: string | null;
+    startAt: string | null;
+    endAt: string | null;
+    eventType: "lunch" | "meeting" | "appointment" | "event" | null;
+    clarificationQuestion: string | null;
+  };
+};
+
+async function analyzeSavedHpoNote(input: {
+  apiKey: string;
+  note: string;
+  officeName: string;
+  timezone: string;
+}): Promise<SavedHpoNoteAnalysis> {
+  const localNow = new Intl.DateTimeFormat("en-US", {
+    timeZone: input.timezone,
+    dateStyle: "full",
+    timeStyle: "long",
+  }).format(new Date());
+
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${input.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: MODEL_POLICY.action,
+      input: [
+        {
+          role: "system",
+          content: `You are Emery's HPO saved-note analyzer.
+
+Current local time: ${localNow}
+Timezone: ${input.timezone}
+Office: ${input.officeName}
+
+Adam has already pressed Save Note. The original note is already being saved verbatim to the associated HPO record. Your job is ONLY to extract safe structured follow-through from that saved relationship note.
+
+NEXT ACTION
+- Extract one concrete relationship-level next action only when the note explicitly states it or it is the direct operational consequence of a confirmed commitment.
+- Do not invent outreach, meetings, lunches, people, dates, or times.
+- A confirmed scheduled commitment can become the next action, e.g. "Attend lunch with [office]".
+- If there is no confident next action, return null.
+- next_action_due_at must be null unless the note provides enough timing information to resolve an exact timestamp.
+- Resolve relative dates from the supplied current local time.
+- All timestamps must be ISO-8601 with an explicit UTC offset.
+
+CALENDAR
+- Create a calendar event ONLY for a confirmed future commitment such as a lunch, meeting, or appointment that is already scheduled/set/booked/confirmed in the note.
+- The note must provide a usable date AND start time. Do not invent a missing date or time.
+- "Need to schedule", "try to schedule", "follow up", "maybe", "planning to", office hours, and historical/past meetings are NOT calendar events.
+- If there is clearly a confirmed commitment but the date or start time is missing, should_create=false and provide one concise clarification_question.
+- If no end time/duration is given, end_at may be null; the app will use its normal 60-minute event default.
+- Titles should be concise and include the office, e.g. "Lunch — Morris Medical Associates".
+- Never put patient names, DOBs, diagnoses, case/claim numbers, treatment details, or other PHI into the extracted next action or calendar event.
+
+Return strict JSON only.`,
+        },
+        {
+          role: "user",
+          content: [{ type: "input_text", text: input.note }],
+        },
+      ],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "hpo_saved_note_analysis",
+          strict: true,
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              next_action: { type: ["string", "null"] },
+              next_action_due_at: { type: ["string", "null"] },
+              calendar_event: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  should_create: { type: "boolean" },
+                  title: { type: ["string", "null"] },
+                  start_at: { type: ["string", "null"] },
+                  end_at: { type: ["string", "null"] },
+                  event_type: {
+                    type: ["string", "null"],
+                    enum: ["lunch", "meeting", "appointment", "event", null],
+                  },
+                  clarification_question: { type: ["string", "null"] },
+                },
+                required: [
+                  "should_create",
+                  "title",
+                  "start_at",
+                  "end_at",
+                  "event_type",
+                  "clarification_question",
+                ],
+              },
+            },
+            required: ["next_action", "next_action_due_at", "calendar_event"],
+          },
+        },
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Saved-note analysis failed (${response.status}).`);
+  }
+
+  const parsed = JSON.parse(responseText(await response.json()));
+  const dueAt =
+    typeof parsed.next_action_due_at === "string" &&
+    !Number.isNaN(Date.parse(parsed.next_action_due_at))
+      ? new Date(parsed.next_action_due_at).toISOString()
+      : null;
+  const startAt =
+    typeof parsed.calendar_event?.start_at === "string" &&
+    !Number.isNaN(Date.parse(parsed.calendar_event.start_at))
+      ? new Date(parsed.calendar_event.start_at).toISOString()
+      : null;
+  const endAt =
+    typeof parsed.calendar_event?.end_at === "string" &&
+    !Number.isNaN(Date.parse(parsed.calendar_event.end_at))
+      ? new Date(parsed.calendar_event.end_at).toISOString()
+      : null;
+
+  return {
+    nextAction:
+      typeof parsed.next_action === "string" && parsed.next_action.trim()
+        ? parsed.next_action.trim()
+        : null,
+    nextActionDueAt: dueAt,
+    calendarEvent: {
+      shouldCreate: parsed.calendar_event?.should_create === true && Boolean(startAt),
+      title:
+        typeof parsed.calendar_event?.title === "string" &&
+        parsed.calendar_event.title.trim()
+          ? parsed.calendar_event.title.trim()
+          : null,
+      startAt,
+      endAt,
+      eventType: ["lunch", "meeting", "appointment", "event"].includes(
+        String(parsed.calendar_event?.event_type ?? ""),
+      )
+        ? parsed.calendar_event.event_type
+        : null,
+      clarificationQuestion:
+        typeof parsed.calendar_event?.clarification_question === "string" &&
+        parsed.calendar_event.clarification_question.trim()
+          ? parsed.calendar_event.clarification_question.trim()
+          : null,
+    },
+  };
+}
+
+async function applySavedHpoNoteIntelligence(input: {
+  db: any;
+  userId: string;
+  apiKey: string;
+  idempotencyKey: string;
+  saved: any;
+}) {
+  const timezone = await getTimezone(input.db, input.userId);
+  const analysis = await analyzeSavedHpoNote({
+    apiKey: input.apiKey,
+    note: input.saved.note,
+    officeName: input.saved.officeName || "HPO office",
+    timezone,
+  });
+
+  if (input.saved.accountId && analysis.nextAction) {
+    const now = new Date().toISOString();
+    const accountPatch: Record<string, unknown> = {
+      next_action: analysis.nextAction,
+      updated_at: now,
+    };
+    if (analysis.nextActionDueAt) {
+      accountPatch["next_action_due_at"] = analysis.nextActionDueAt;
+    }
+
+    const accountUpdate = await input.db
+      .from("hpo_accounts")
+      .update(accountPatch)
+      .eq("id", input.saved.accountId)
+      .eq("user_id", input.userId);
+    if (accountUpdate.error) throw accountUpdate.error;
+
+    const stopPatch: Record<string, unknown> = {
+      next_action: analysis.nextAction,
+      updated_at: now,
+    };
+    if (analysis.nextActionDueAt) {
+      stopPatch["next_action_due_at"] = analysis.nextActionDueAt;
+    }
+    const stopUpdate = await input.db
+      .from("hpo_route_stops")
+      .update(stopPatch)
+      .eq("id", input.saved.stopId)
+      .eq("user_id", input.userId);
+    if (stopUpdate.error) throw stopUpdate.error;
+
+    if (input.saved.interactionId) {
+      const interactionPatch: Record<string, unknown> = {
+        next_action: analysis.nextAction,
+      };
+      if (analysis.nextActionDueAt) {
+        interactionPatch["next_action_due_at"] = analysis.nextActionDueAt;
+      }
+      const interactionUpdate = await input.db
+        .from("hpo_interactions")
+        .update(interactionPatch)
+        .eq("id", input.saved.interactionId)
+        .eq("user_id", input.userId);
+      if (interactionUpdate.error) throw interactionUpdate.error;
+    }
+  }
+
+  let calendarEvent: {
+    id: string;
+    title: string;
+    startAt: string;
+    endAt: string | null;
+    eventType: string;
+    duplicate: boolean;
+  } | null = null;
+
+  const event = analysis.calendarEvent;
+  if (event.shouldCreate && event.title && event.startAt) {
+    const startMs = Date.parse(event.startAt);
+    const windowStart = new Date(startMs - 5 * 60 * 1000).toISOString();
+    const windowEnd = new Date(startMs + 5 * 60 * 1000).toISOString();
+    const { data: nearbyEvents, error: nearbyError } = await input.db
+      .from("meetings")
+      .select("id,title,meeting_at,end_at,metadata")
+      .eq("user_id", input.userId)
+      .gte("meeting_at", windowStart)
+      .lte("meeting_at", windowEnd);
+    if (nearbyError) throw nearbyError;
+
+    const officeToken = clean(input.saved.officeName).toLowerCase();
+    const duplicate = (nearbyEvents ?? []).find((row: any) => {
+      const title = clean(row.title).toLowerCase();
+      const metadata =
+        row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+          ? row.metadata
+          : {};
+      return (
+        metadata["hpo_account_id"] === input.saved.accountId ||
+        metadata["hpo_route_stop_id"] === input.saved.stopId ||
+        (officeToken && title.includes(officeToken))
+      );
+    });
+
+    if (duplicate) {
+      calendarEvent = {
+        id: duplicate.id,
+        title: duplicate.title,
+        startAt: duplicate.meeting_at,
+        endAt: duplicate.end_at ?? null,
+        eventType: String(duplicate.metadata?.event_type ?? event.eventType ?? "event"),
+        duplicate: true,
+      };
+    } else {
+      const calendarExecution = await beginExecution({
+        db: input.db,
+        userId: input.userId,
+        domain: "calendar",
+        action: "create_event",
+        idempotencyKey: `${input.idempotencyKey}:saved_note_calendar`,
+        targetType: "hpo_route_stop",
+        targetId: input.saved.stopId,
+        requestPayload: {
+          source: "hpo_saved_note",
+          accountId: input.saved.accountId ?? null,
+          stopId: input.saved.stopId,
+          title: event.title,
+          startAt: event.startAt,
+          endAt: event.endAt,
+          eventType: event.eventType ?? "event",
+        },
+      });
+
+      if (
+        calendarExecution.reused &&
+        calendarExecution.status === "completed" &&
+        calendarExecution.resultPayload["savedNoteCalendarEvent"]
+      ) {
+        calendarEvent = calendarExecution.resultPayload[
+          "savedNoteCalendarEvent"
+        ] as typeof calendarEvent;
+      } else {
+        const resolvedEnd =
+          event.endAt && Date.parse(event.endAt) > startMs
+            ? event.endAt
+            : new Date(startMs + 60 * 60 * 1000).toISOString();
+        const created = await input.db.rpc("emery_action_create_event", {
+          p_user_id: input.userId,
+          p_title: event.title,
+          p_start_at: event.startAt,
+          p_end_at: resolvedEnd,
+          p_participants: [],
+          p_event_type: event.eventType ?? "event",
+          p_source: "emery",
+        });
+        if (created.error) throw created.error;
+        const row = Array.isArray(created.data) ? created.data[0] : created.data;
+        if (!row?.id) throw new Error("Calendar event creation returned no record.");
+
+        const currentMetadata =
+          row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+            ? row.metadata
+            : {};
+        const metadata = {
+          ...currentMetadata,
+          hpo_account_id: input.saved.accountId ?? null,
+          hpo_route_id: input.saved.routeId,
+          hpo_route_stop_id: input.saved.stopId,
+          hpo_interaction_id: input.saved.interactionId ?? null,
+          source_workflow: "hpo_saved_note",
+          non_phi: true,
+        };
+        const metadataUpdate = await input.db
+          .from("meetings")
+          .update({ metadata })
+          .eq("id", row.id)
+          .eq("user_id", input.userId);
+        if (metadataUpdate.error) throw metadataUpdate.error;
+
+        calendarEvent = {
+          id: row.id,
+          title: row.title || event.title,
+          startAt: row.meeting_at || event.startAt,
+          endAt: row.end_at || resolvedEnd,
+          eventType: String(row.metadata?.event_type ?? event.eventType ?? "event"),
+          duplicate: false,
+        };
+
+        await completeExecution({
+          db: input.db,
+          userId: input.userId,
+          runId: calendarExecution.id,
+          resultPayload: {
+            savedNoteCalendarEvent: calendarEvent as unknown as Record<string, unknown>,
+          },
+          targetType: "event",
+          targetId: row.id,
+        });
+      }
+    }
+  }
+
+  return {
+    analyzed: true,
+    nextAction: analysis.nextAction,
+    nextActionDueAt: analysis.nextActionDueAt,
+    calendarEvent,
+    calendarClarification: analysis.calendarEvent.clarificationQuestion,
+  };
+}
+
 export async function addHpoRouteStopNoteCore(input: {
   db: any;
   userId: string;
@@ -2560,18 +2926,59 @@ export const addHpoRouteStopNote = createServerFn({ method: "POST" })
       sourceChannel: clean(input.sourceChannel) || "ui",
     }),
   )
-  .handler(async ({ data, context }) =>
-    addHpoRouteStopNoteCore({
-      db: context.supabase as any,
+  .handler(async ({ data, context }) => {
+    const db = context.supabase as any;
+    const idempotencyKey =
+      data.idempotencyKey ??
+      `ui:${crypto.randomUUID()}:hpo.route_stop.add_note`;
+    const saved = await addHpoRouteStopNoteCore({
+      db,
       userId: context.userId,
       stopId: data.stopId,
       note: data.note,
-      idempotencyKey:
-        data.idempotencyKey ??
-        `ui:${crypto.randomUUID()}:hpo.route_stop.add_note`,
+      idempotencyKey,
       sourceChannel: data.sourceChannel,
-    }),
-  );
+    });
+
+    const apiKey = process.env["OPENAI_API_KEY"];
+    if (!apiKey) {
+      return {
+        ...saved,
+        intelligence: {
+          analyzed: false,
+          nextAction: null,
+          nextActionDueAt: null,
+          calendarEvent: null,
+          calendarClarification: null,
+          error: "ai_service_not_configured",
+        },
+      };
+    }
+
+    try {
+      const intelligence = await applySavedHpoNoteIntelligence({
+        db,
+        userId: context.userId,
+        apiKey,
+        idempotencyKey,
+        saved,
+      });
+      return { ...saved, intelligence };
+    } catch (error) {
+      console.error("Saved HPO note intelligence failed", error);
+      return {
+        ...saved,
+        intelligence: {
+          analyzed: false,
+          nextAction: null,
+          nextActionDueAt: null,
+          calendarEvent: null,
+          calendarClarification: null,
+          error: "saved_note_intelligence_failed",
+        },
+      };
+    }
+  });
 
 export const updateHpoRouteStop = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
