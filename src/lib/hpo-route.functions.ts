@@ -2559,11 +2559,9 @@ async function applySavedHpoNoteIntelligence(input: {
     const now = new Date().toISOString();
     const accountPatch: Record<string, unknown> = {
       next_action: analysis.nextAction,
+      next_action_due_at: analysis.nextActionDueAt,
       updated_at: now,
     };
-    if (analysis.nextActionDueAt) {
-      accountPatch["next_action_due_at"] = analysis.nextActionDueAt;
-    }
 
     const accountUpdate = await input.db
       .from("hpo_accounts")
@@ -2574,11 +2572,9 @@ async function applySavedHpoNoteIntelligence(input: {
 
     const stopPatch: Record<string, unknown> = {
       next_action: analysis.nextAction,
+      next_action_due_at: analysis.nextActionDueAt,
       updated_at: now,
     };
-    if (analysis.nextActionDueAt) {
-      stopPatch["next_action_due_at"] = analysis.nextActionDueAt;
-    }
     const stopUpdate = await input.db
       .from("hpo_route_stops")
       .update(stopPatch)
@@ -2589,10 +2585,8 @@ async function applySavedHpoNoteIntelligence(input: {
     if (input.saved.interactionId) {
       const interactionPatch: Record<string, unknown> = {
         next_action: analysis.nextAction,
+        next_action_due_at: analysis.nextActionDueAt,
       };
-      if (analysis.nextActionDueAt) {
-        interactionPatch["next_action_due_at"] = analysis.nextActionDueAt;
-      }
       const interactionUpdate = await input.db
         .from("hpo_interactions")
         .update(interactionPatch)
@@ -2612,7 +2606,12 @@ async function applySavedHpoNoteIntelligence(input: {
   } | null = null;
 
   const event = analysis.calendarEvent;
-  if (event.shouldCreate && event.title && event.startAt) {
+  if (
+    event.shouldCreate &&
+    event.title &&
+    event.startAt &&
+    Date.parse(event.startAt) > Date.now() - 5 * 60 * 1000
+  ) {
     const startMs = Date.parse(event.startAt);
     const windowStart = new Date(startMs - 5 * 60 * 1000).toISOString();
     const windowEnd = new Date(startMs + 5 * 60 * 1000).toISOString();
@@ -2625,6 +2624,7 @@ async function applySavedHpoNoteIntelligence(input: {
     if (nearbyError) throw nearbyError;
 
     const officeToken = clean(input.saved.officeName).toLowerCase();
+    const requestedTitle = clean(event.title).toLowerCase();
     const duplicate = (nearbyEvents ?? []).find((row: any) => {
       const title = clean(row.title).toLowerCase();
       const metadata =
@@ -2634,6 +2634,10 @@ async function applySavedHpoNoteIntelligence(input: {
       return (
         metadata["hpo_account_id"] === input.saved.accountId ||
         metadata["hpo_route_stop_id"] === input.saved.stopId ||
+        (requestedTitle &&
+          (title === requestedTitle ||
+            title.includes(requestedTitle) ||
+            requestedTitle.includes(title))) ||
         (officeToken && title.includes(officeToken))
       );
     });
