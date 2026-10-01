@@ -806,9 +806,15 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
 
   async function removeQueuedStop(stopId: string, officeName: string) {
     if (!route?.id || working || offline || pendingCount) return;
-    if (!window.confirm(`Remove ${officeName || "this stop"} from today's route?`)) return;
+    if (
+      !window.confirm(
+        `Remove ${officeName || "this stop"} from today's route? The HPO account, notes, and visit history will stay saved.`,
+      )
+    )
+      return;
     setWorking(true);
     setError(null);
+    setMessage(null);
     try {
       await removeStop({
         data: {
@@ -818,7 +824,33 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
           sourceChannel: "field_ui",
         },
       });
-      setMessage(`${officeName || "Stop"} removed. Completed-stop history was preserved.`);
+
+      let optimizationMessage = "";
+      try {
+        const position = await currentPosition();
+        const optimized: any = await reoptimize({
+          data: {
+            routeId: route.id,
+            latitude: position?.latitude ?? null,
+            longitude: position?.longitude ?? null,
+            idempotencyKey: `field:${crypto.randomUUID()}:hpo.route.reoptimize_after_remove`,
+            sourceChannel: "field_ui",
+          },
+        });
+        optimizationMessage =
+          optimized.remaining > 1
+            ? ` Remaining route re-optimized · ${optimized.driveMinutes} min · ${optimized.distanceMiles} mi.`
+            : optimized.remaining === 1
+              ? " One stop remains."
+              : " No stops remain.";
+      } catch {
+        optimizationMessage =
+          " The stop was removed, but automatic re-optimization could not finish. Use Re-optimize Remaining when convenient.";
+      }
+
+      setMessage(
+        `${officeName || "Stop"} removed from today's route. Account history was preserved.${optimizationMessage}`,
+      );
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not remove this stop.");
@@ -1158,16 +1190,17 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                           <ArrowDown className="size-4" />
                         </Button>
                         <Button
-                          size="icon"
+                          type="button"
                           variant="ghost"
-                          className="size-11 text-rose-500"
+                          className="min-h-11 gap-1.5 px-2 text-[10px] font-semibold text-rose-500"
                           disabled={working}
                           onClick={() =>
                             void removeQueuedStop(stop.id, stop.office_name || "this stop")
                           }
                           aria-label={`Remove ${stop.office_name || "stop"} from route`}
                         >
-                          <Trash2 className="size-4" />
+                          <Trash2 className="size-3.5" />
+                          Remove
                         </Button>
                       </>
                     ) : null}
@@ -1296,6 +1329,22 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                 Skip
               </button>
             </div>
+            {!TERMINAL.has(String(nextStop.status)) && !offline && !pendingCount ? (
+              <button
+                type="button"
+                onClick={() =>
+                  void removeQueuedStop(
+                    nextStop.id,
+                    nextStop.office_name || "this stop",
+                  )
+                }
+                disabled={working}
+                className="emery-press mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-rose-500/25 bg-rose-500/[0.045] px-3 text-xs font-semibold text-rose-500 disabled:opacity-40"
+              >
+                <Trash2 className="size-4" />
+                Remove Stop
+              </button>
+            ) : null}
           </section>
 
           {accountContext ? (
