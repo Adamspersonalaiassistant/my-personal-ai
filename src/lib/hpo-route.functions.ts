@@ -2380,6 +2380,8 @@ export async function executeHpoRouteStopVisitCore(input: {
 }
 
 type SavedHpoNoteAnalysis = {
+  outcome: string | null;
+  relationshipSignal: "positive" | "neutral" | "negative" | "mixed" | null;
   nextAction: string | null;
   nextActionDueAt: string | null;
   calendarEvent: {
@@ -2423,6 +2425,12 @@ Office: ${input.officeName}
 
 Adam has already pressed Save Note. The original note is already being saved verbatim to the associated HPO record. Your job is ONLY to extract safe structured follow-through from that saved relationship note.
 
+OUTCOME + RELATIONSHIP SIGNAL
+- outcome: a short factual description of what this interaction accomplished or revealed, only when directly supported by the note. Do not invent a conclusion.
+- relationship_signal: choose positive, neutral, negative, mixed, or null based only on explicit evidence in the note.
+- Do NOT change account relationship stage, priority, or close/won status. Those remain separate deliberate CRM decisions.
+- If the note does not support an outcome or signal, return null.
+
 NEXT ACTION
 - Extract one concrete relationship-level next action only when the note explicitly states it or it is the direct operational consequence of a confirmed commitment.
 - Do not invent outreach, meetings, lunches, people, dates, or times.
@@ -2439,7 +2447,7 @@ CALENDAR
 - If there is clearly a confirmed commitment but the date or start time is missing, should_create=false and provide one concise clarification_question.
 - If no end time/duration is given, end_at may be null; the app will use its normal 60-minute event default.
 - Titles should be concise and include the office, e.g. "Lunch — Morris Medical Associates".
-- Never put patient names, DOBs, diagnoses, case/claim numbers, treatment details, or other PHI into the extracted next action or calendar event.
+- Never put patient names, DOBs, diagnoses, case/claim numbers, treatment details, or other PHI into the extracted outcome, relationship signal, next action, or calendar event.
 
 Return strict JSON only.`,
         },
@@ -2457,6 +2465,11 @@ Return strict JSON only.`,
             type: "object",
             additionalProperties: false,
             properties: {
+              outcome: { type: ["string", "null"] },
+              relationship_signal: {
+                type: ["string", "null"],
+                enum: ["positive", "neutral", "negative", "mixed", null],
+              },
               next_action: { type: ["string", "null"] },
               next_action_due_at: { type: ["string", "null"] },
               calendar_event: {
@@ -2483,7 +2496,13 @@ Return strict JSON only.`,
                 ],
               },
             },
-            required: ["next_action", "next_action_due_at", "calendar_event"],
+            required: [
+              "outcome",
+              "relationship_signal",
+              "next_action",
+              "next_action_due_at",
+              "calendar_event",
+            ],
           },
         },
       },
@@ -2512,6 +2531,15 @@ Return strict JSON only.`,
       : null;
 
   return {
+    outcome:
+      typeof parsed.outcome === "string" && parsed.outcome.trim()
+        ? parsed.outcome.trim()
+        : null,
+    relationshipSignal: ["positive", "neutral", "negative", "mixed"].includes(
+      String(parsed.relationship_signal ?? ""),
+    )
+      ? parsed.relationship_signal
+      : null,
     nextAction:
       typeof parsed.next_action === "string" && parsed.next_action.trim()
         ? parsed.next_action.trim()
@@ -2555,6 +2583,27 @@ async function applySavedHpoNoteIntelligence(input: {
     timezone,
   });
 
+  if (input.saved.interactionId) {
+    const interactionUpdate = await input.db
+      .from("hpo_interactions")
+      .update({
+        outcome: analysis.outcome,
+        relationship_signal: analysis.relationshipSignal,
+        next_action: analysis.nextAction,
+        next_action_due_at: analysis.nextActionDueAt,
+        metadata: {
+          ...(input.saved.stop?.metadata &&
+          typeof input.saved.stop.metadata === "object" &&
+          !Array.isArray(input.saved.stop.metadata)
+            ? {}
+            : {}),
+        },
+      })
+      .eq("id", input.saved.interactionId)
+      .eq("user_id", input.userId);
+    if (interactionUpdate.error) throw interactionUpdate.error;
+  }
+
   if (input.saved.accountId && analysis.nextAction) {
     const now = new Date().toISOString();
     const accountPatch: Record<string, unknown> = {
@@ -2582,18 +2631,6 @@ async function applySavedHpoNoteIntelligence(input: {
       .eq("user_id", input.userId);
     if (stopUpdate.error) throw stopUpdate.error;
 
-    if (input.saved.interactionId) {
-      const interactionPatch: Record<string, unknown> = {
-        next_action: analysis.nextAction,
-        next_action_due_at: analysis.nextActionDueAt,
-      };
-      const interactionUpdate = await input.db
-        .from("hpo_interactions")
-        .update(interactionPatch)
-        .eq("id", input.saved.interactionId)
-        .eq("user_id", input.userId);
-      if (interactionUpdate.error) throw interactionUpdate.error;
-    }
   }
 
   let calendarEvent: {
@@ -2742,6 +2779,8 @@ async function applySavedHpoNoteIntelligence(input: {
 
   return {
     analyzed: true,
+    outcome: analysis.outcome,
+    relationshipSignal: analysis.relationshipSignal,
     nextAction: analysis.nextAction,
     nextActionDueAt: analysis.nextActionDueAt,
     calendarEvent,
