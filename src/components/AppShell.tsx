@@ -86,7 +86,7 @@ const moreItems = [
 
 const RETURN_KEY = "emery:return";
 const PREFILL_KEY = "emery:prefill";
-const EMERY_BUILD_ID = "2026-10-01-hpo-crm-field-notes-v5";
+const EMERY_BUILD_ID = "2026-10-01-hpo-planner-first-v6";
 
 export function AppShell({
   title,
