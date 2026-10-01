@@ -1705,7 +1705,7 @@ export const getHpoAccountFieldContext = createServerFn({ method: "POST" })
       db
         .from("hpo_route_stops")
         .select(
-          "id,route_id,stop_order,status,visited_at,visit_summary,visit_outcome,next_action,next_action_due_at,updated_at",
+          "id,route_id,stop_order,status,visited_at,notes,visit_summary,visit_outcome,next_action,next_action_due_at,metadata,updated_at",
         )
         .eq("account_id", data.accountId)
         .eq("user_id", context.userId)
