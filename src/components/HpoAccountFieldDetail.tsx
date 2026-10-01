@@ -878,7 +878,14 @@ export function HpoAccountFieldDetail({
                           </p>
                         ) : null}
                         {interaction.outcome ? (
-                          <p className="mt-1 text-xs text-muted-foreground">{interaction.outcome}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Outcome: {interaction.outcome}
+                          </p>
+                        ) : null}
+                        {interaction.relationship_signal ? (
+                          <p className="mt-1 text-xs font-medium capitalize text-primary">
+                            Relationship signal: {String(interaction.relationship_signal).replaceAll("_", " ")}
+                          </p>
                         ) : null}
                         {interaction.next_action ? (
                           <p className="mt-2 text-xs font-medium text-primary">
