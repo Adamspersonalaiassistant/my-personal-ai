@@ -59,6 +59,8 @@ type RouteRecommendationCandidate = {
   specialty?: string | null;
   relationshipStage?: string | null;
   relationshipHealth?: string | null;
+  ownerName?: string | null;
+  priority?: number | null;
   nextAction?: string | null;
   nextActionDueAt?: string | null;
   lastTouchAt?: string | null;
@@ -525,6 +527,7 @@ export function HpoEmerySheet({
       if (!needle) return true;
       return [
         candidate.officeName,
+        candidate.address,
         candidate.city,
         candidate.accountType,
         candidate.specialty,
@@ -1465,17 +1468,22 @@ export function HpoEmerySheet({
                                       <p className="text-sm font-semibold leading-5 text-foreground">
                                         {candidate.officeName}
                                       </p>
-                                      <p className="mt-0.5 flex flex-wrap gap-x-2 text-[10px] text-muted-foreground">
-                                        {candidate.city ? (
-                                          <span className="inline-flex items-center gap-1">
-                                            <MapPin className="size-3" />
-                                            {candidate.city}
+                                      {candidate.address ? (
+                                        <p className="mt-1 flex items-start gap-1 text-[10px] leading-4 text-muted-foreground">
+                                          <MapPin className="mt-0.5 size-3 shrink-0" />
+                                          <span>{candidate.address}</span>
+                                        </p>
+                                      ) : null}
+                                      <p className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
+                                        {candidate.accountType || candidate.specialty ? (
+                                          <span>
+                                            {[candidate.accountType, candidate.specialty]
+                                              .filter(Boolean)
+                                              .join(" · ")}
                                           </span>
                                         ) : null}
                                         {candidate.relationshipStage ? (
-                                          <span>
-                                            {candidate.relationshipStage}
-                                          </span>
+                                          <span>{candidate.relationshipStage}</span>
                                         ) : null}
                                       </p>
                                     </div>
@@ -1538,19 +1546,17 @@ export function HpoEmerySheet({
                                     </p>
                                   </div>
 
-                                  {candidate.latestNote ? (
-                                    <div
-                                      className="mt-2 rounded-lg border border-border/45 bg-background/45 px-2.5 py-2"
-                                      onClick={(event) => event.stopPropagation()}
-                                    >
-                                      <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-primary">
-                                        Latest note
-                                      </p>
-                                      <p className="mt-1 whitespace-pre-wrap text-[11px] leading-4 text-muted-foreground">
-                                        {candidate.latestNote}
-                                      </p>
-                                    </div>
-                                  ) : null}
+                                  <div
+                                    className="mt-2 rounded-lg border border-border/45 bg-background/45 px-2.5 py-2"
+                                    onClick={(event) => event.stopPropagation()}
+                                  >
+                                    <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-primary">
+                                      Latest note
+                                    </p>
+                                    <p className="mt-1 whitespace-pre-wrap text-[11px] leading-4 text-muted-foreground">
+                                      {candidate.latestNote || "No visit note saved yet."}
+                                    </p>
+                                  </div>
                                 </div>
                               </div>
                             </div>
