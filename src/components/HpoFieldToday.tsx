@@ -647,9 +647,11 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
             minute: "2-digit",
           });
           parts.push(
-            intelligence.calendarEvent.duplicate
-              ? `Calendar already has ${intelligence.calendarEvent.title} for ${eventAt}.`
-              : `Added to Calendar: ${intelligence.calendarEvent.title} — ${eventAt}.`,
+            intelligence.calendarEvent.updated
+              ? `Updated Calendar: ${intelligence.calendarEvent.title} — ${eventAt}.`
+              : intelligence.calendarEvent.duplicate
+                ? `Calendar already has ${intelligence.calendarEvent.title} for ${eventAt}.`
+                : `Added to Calendar: ${intelligence.calendarEvent.title} — ${eventAt}.`,
           );
         } else if (intelligence?.calendarClarification) {
           parts.push(`Calendar needs one detail: ${intelligence.calendarClarification}`);
