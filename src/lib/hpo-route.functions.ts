@@ -2591,13 +2591,6 @@ async function applySavedHpoNoteIntelligence(input: {
         relationship_signal: analysis.relationshipSignal,
         next_action: analysis.nextAction,
         next_action_due_at: analysis.nextActionDueAt,
-        metadata: {
-          ...(input.saved.stop?.metadata &&
-          typeof input.saved.stop.metadata === "object" &&
-          !Array.isArray(input.saved.stop.metadata)
-            ? {}
-            : {}),
-        },
       })
       .eq("id", input.saved.interactionId)
       .eq("user_id", input.userId);
