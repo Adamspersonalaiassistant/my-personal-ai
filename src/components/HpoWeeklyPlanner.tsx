@@ -10,6 +10,7 @@ import {
   Navigation,
   Route as RouteIcon,
   StickyNote,
+  Trash2,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,10 @@ import {
   addHpoRouteStopNote,
   optimizeHpoRoute,
 } from "@/lib/hpo-route.functions";
+import {
+  removeHpoRouteStop,
+  reoptimizeHpoRouteRemaining,
+} from "@/lib/hpo-field.functions";
 import {
   deleteHpoPlannedRoute,
   getHpoWeeklyPlanner,
@@ -177,10 +182,14 @@ export function HpoWeeklyPlanner({
   const deleteRoute = useServerFn(deleteHpoPlannedRoute);
   const saveRouteNote = useServerFn(addHpoRouteStopNote);
   const optimizeRoute = useServerFn(optimizeHpoRoute);
+  const removeStop = useServerFn(removeHpoRouteStop);
+  const reoptimizeRemaining = useServerFn(reoptimizeHpoRouteRemaining);
   const [data, setData] = useState<PlannerData | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [removingStopId, setRemovingStopId] = useState<string | null>(null);
   const [routePendingDelete, setRoutePendingDelete] = useState<RoutePlan | null>(null);
   const [deletingRouteId, setDeletingRouteId] = useState<string | null>(null);
   const [stopNotes, setStopNotes] = useState<Record<string, string>>({});
@@ -393,6 +402,64 @@ export function HpoWeeklyPlanner({
     }
   }
 
+  async function removePlannerStop(route: RoutePlan, stop: Stop) {
+    if (removingStopId || finishedStatuses.has(stop.status)) return;
+    if (
+      !window.confirm(
+        `Remove ${stop.office_name || "this stop"} from this route? The account, notes, and completed visit history will stay saved.`,
+      )
+    )
+      return;
+
+    setRemovingStopId(stop.id);
+    setError("");
+    setNotice("");
+    try {
+      await removeStop({
+        data: {
+          routeId: route.id,
+          stopId: stop.id,
+          idempotencyKey: `planner:${crypto.randomUUID()}:hpo.route.remove_stop`,
+          sourceChannel: "planner_ui",
+        },
+      });
+
+      let suffix = "";
+      try {
+        const optimized: any = await reoptimizeRemaining({
+          data: {
+            routeId: route.id,
+            latitude: null,
+            longitude: null,
+            idempotencyKey: `planner:${crypto.randomUUID()}:hpo.route.reoptimize_after_remove`,
+            sourceChannel: "planner_ui",
+          },
+        });
+        suffix =
+          optimized.remaining > 1
+            ? ` Remaining route re-optimized · ${optimized.driveMinutes} min · ${optimized.distanceMiles} mi.`
+            : optimized.remaining === 1
+              ? " One stop remains."
+              : " No stops remain.";
+      } catch {
+        suffix =
+          " The stop was removed, but automatic re-optimization could not finish.";
+      }
+
+      setNotice(
+        `${stop.office_name || "Stop"} removed from the route. Account history was preserved.${suffix}`,
+      );
+      await refresh(data!.weekStart);
+      setSelectedDate(route.route_date);
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Couldn't remove that stop.",
+      );
+    } finally {
+      setRemovingStopId(null);
+    }
+  }
+
   async function confirmDeleteRoute() {
     const route = routePendingDelete;
     if (!route || deletingRouteId) return;
@@ -521,6 +588,11 @@ export function HpoWeeklyPlanner({
       {error ? (
         <div className="rounded-xl border border-destructive/35 bg-card/40 px-3 py-2 text-xs text-destructive">
           {error}
+        </div>
+      ) : null}
+      {notice ? (
+        <div className="rounded-xl border border-primary/20 bg-primary/[0.05] px-3 py-2 text-xs text-foreground">
+          {notice}
         </div>
       ) : null}
 
@@ -840,6 +912,17 @@ export function HpoWeeklyPlanner({
                                   Address needed
                                 </button>
                               )}
+                              {!finishedStatuses.has(stop.status) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => void removePlannerStop(route, stop)}
+                                  disabled={removingStopId === stop.id}
+                                  className="flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-rose-500/25 bg-rose-500/[0.045] px-3 text-[11px] font-semibold text-rose-500 disabled:opacity-40"
+                                >
+                                  <Trash2 className="size-3.5" />
+                                  {removingStopId === stop.id ? "Removing…" : "Remove Stop"}
+                                </button>
+                              ) : null}
                             </div>
                             <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                               <input
