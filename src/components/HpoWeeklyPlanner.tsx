@@ -382,7 +382,7 @@ export function HpoWeeklyPlanner({
     setSavingNoteStopId(stop.id);
     setError("");
     try {
-      await saveRouteNote({
+      const result: any = await saveRouteNote({
         data: {
           stopId: stop.id,
           note,
@@ -390,6 +390,35 @@ export function HpoWeeklyPlanner({
           sourceChannel: "planner_ui",
         },
       });
+      const intelligence = result?.intelligence;
+      const parts = [
+        `Note saved to ${stop.office_name || "the account"}.`,
+      ];
+      if (intelligence?.nextAction) {
+        parts.push(`Next action: ${intelligence.nextAction}.`);
+      }
+      if (intelligence?.calendarEvent) {
+        const eventAt = new Date(
+          intelligence.calendarEvent.startAt,
+        ).toLocaleString([], {
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        });
+        parts.push(
+          intelligence.calendarEvent.duplicate
+            ? `Calendar already has ${intelligence.calendarEvent.title} for ${eventAt}.`
+            : `Added to Calendar: ${intelligence.calendarEvent.title} — ${eventAt}.`,
+        );
+      } else if (intelligence?.calendarClarification) {
+        parts.push(`Calendar needs one detail: ${intelligence.calendarClarification}`);
+      } else if (intelligence?.analyzed === true && !intelligence?.nextAction) {
+        parts.push("Emery reviewed it and found no structured follow-up or calendar commitment to add.");
+      } else if (intelligence?.analyzed === false) {
+        parts.push("The note is saved; Emery’s structured review did not finish this time.");
+      }
+      setNotice(parts.join(" "));
       setStopNotes((current) => ({ ...current, [stop.id]: "" }));
       await refresh(data!.weekStart);
       if (selectedDate) setSelectedDate(selectedDate);
