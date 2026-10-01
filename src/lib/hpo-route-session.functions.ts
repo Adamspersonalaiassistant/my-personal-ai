@@ -20,11 +20,13 @@ import {
 } from "@/lib/hpo-planner-selection";
 
 async function officePool(db: any, userId: string, selected?: PlannerTarget[]) {
-  const accountsQuery = db
+  const accountsBaseQuery = db
     .from("hpo_accounts")
     .select("*")
-    .eq("user_id", userId)
-    .eq("status", "active");
+    .eq("user_id", userId);
+  const accountsQuery = selected
+    ? accountsBaseQuery
+    : accountsBaseQuery.eq("status", "active");
   const prospectsQuery = db
     .from("hpo_prospects")
     .select("*")
@@ -55,7 +57,15 @@ async function officePool(db: any, userId: string, selected?: PlannerTarget[]) {
     rows(accountsQuery, accountIds),
     rows(prospectsQuery, prospectIds),
   ]);
-  const eligibleAccounts = accounts.filter(eligiblePlannerAccount);
+  // Discovery can apply route eligibility rules. Once Adam has selected an
+  // office, however, Finalize Route must preserve that exact saved record by ID
+  // instead of changing eligibility underneath an in-progress route.
+  const eligibleAccounts = selected
+    ? accounts.filter((row: any) => Boolean(row.address?.trim()))
+    : accounts.filter(eligiblePlannerAccount);
+  const eligibleProspects = selected
+    ? prospects.filter((row: any) => Boolean(row.address?.trim()))
+    : prospects.filter(eligiblePlannerProspect);
   const latestInteractionByAccount = new Map<string, any>();
   if (eligibleAccounts.length) {
     for (let offset = 0; ; offset += 500) {
@@ -88,10 +98,10 @@ async function officePool(db: any, userId: string, selected?: PlannerTarget[]) {
       prospectId: null,
       kind: "account" as const,
     })),
-    ...prospects
-      .filter(eligiblePlannerProspect)
+    ...eligibleProspects
       .filter(
         (p: any) =>
+          selected ||
           !eligibleAccounts.some(
             (a: any) =>
               a.id === p.promoted_account_id ||
@@ -159,10 +169,12 @@ async function officePool(db: any, userId: string, selected?: PlannerTarget[]) {
     const byKey = new Map(candidates.map((c) => [plannerTargetKey(c), c]));
     return selected.map((target) => {
       const candidate = byKey.get(plannerTargetKey(target));
-      if (!candidate)
+      if (!candidate) {
+        const requestedId = target.accountId || target.prospectId || "unknown";
         throw new Error(
-          "A selected office is unavailable or excluded. Return to office selection; no offices have been changed.",
+          `A selected office could not be loaded from its saved record (${requestedId}). Your route selections are still intact on this screen. Retry Finalize Route; only go back if you want to change the offices.`,
         );
+      }
       return candidate;
     });
   }
