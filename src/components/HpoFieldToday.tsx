@@ -163,6 +163,9 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
   const [nearbyOptions, setNearbyOptions] = useState<any[]>([]);
 
   const nextStop = data?.nextStop ?? null;
+  const hasCanonicalFieldNote =
+    nextStop?.metadata?.route_note_locked === true &&
+    Boolean(nextStop?.notes?.trim());
   const route = data?.route ?? null;
   const routeDays = routeWeek(route?.route_date);
   const activeRouteDay = route?.route_date
@@ -543,8 +546,10 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
     setCaptureMode(mode);
     if (mode === "visit") setVisitStatus("completed");
     if (mode === "reschedule") setVisitStatus("skipped");
-    if (mode === "note" && nextStop?.notes?.trim()) {
+    if (mode === "note" && hasCanonicalFieldNote) {
       setNote(nextStop.notes.trim());
+    } else if (mode === "note") {
+      setNote("");
     }
     setShowNote(true);
   }
@@ -1317,7 +1322,7 @@ export function HpoFieldToday({ onOpenMap }: { onOpenMap?: () => void }) {
                 className="emery-press min-h-12 rounded-xl border border-primary/20 bg-primary/[0.045] px-2 text-xs font-semibold text-primary"
               >
                 <FilePenLine className="mr-1.5 inline size-4" />{" "}
-                {nextStop?.notes?.trim() ? "Edit Note" : "Add Note"}
+                {hasCanonicalFieldNote ? "Edit Note" : "Add Note"}
               </button>
               <button
                 type="button"
