@@ -2346,6 +2346,7 @@ export async function executeHpoRouteStopVisitCore(input: {
         .from("hpo_interactions")
         .select("id,source_ref")
         .eq("user_id", input.userId)
+        .eq("interaction_type", "visit")
         .eq("source_type", "route")
         .eq("source_ref", outcome.stop.id)
         .maybeSingle();
