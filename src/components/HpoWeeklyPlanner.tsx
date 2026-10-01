@@ -308,10 +308,18 @@ export function HpoWeeklyPlanner({
     selectedRoutes.find((route) => route.id === focusRouteId) ??
     selectedRoutes[0] ??
     null;
+  const selectedRouteNextStop = selectedRoute
+    ? [...selectedRoute.stops]
+        .sort((a, b) => a.stop_order - b.stop_order)
+        .find((stop) => !finishedStatuses.has(stop.status)) ?? null
+    : null;
 
   useEffect(() => {
-    onRouteContextChange?.(selectedRoute?.id ?? null, null);
-  }, [onRouteContextChange, selectedRoute?.id]);
+    onRouteContextChange?.(
+      selectedRoute?.id ?? null,
+      selectedRouteNextStop?.id ?? null,
+    );
+  }, [onRouteContextChange, selectedRoute?.id, selectedRouteNextStop?.id]);
 
   useEffect(
     () => () => {
@@ -407,6 +415,7 @@ export function HpoWeeklyPlanner({
   }
 
   async function saveStopNote(stop: Stop) {
+    onRouteContextChange?.(stop.route_id, stop.id);
     const note = (stopNotes[stop.id] ?? "").trim();
     if (!note || savingNoteStopId) return;
     setSavingNoteStopId(stop.id);
@@ -465,6 +474,7 @@ export function HpoWeeklyPlanner({
   }
 
   async function removePlannerStop(route: RoutePlan, stop: Stop) {
+    onRouteContextChange?.(route.id, stop.id);
     if (removingStopId || finishedStatuses.has(stop.status)) return;
     if (
       !window.confirm(
@@ -968,6 +978,7 @@ export function HpoWeeklyPlanner({
                                   )}&dirflg=d`}
                                   target="_blank"
                                   rel="noreferrer"
+                                  onClick={() => onRouteContextChange?.(route.id, stop.id)}
                                   className="flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-primary px-3 text-[11px] font-semibold text-primary-foreground"
                                 >
                                   <Navigation className="size-3.5" />
@@ -1012,6 +1023,7 @@ export function HpoWeeklyPlanner({
                                   variant="outline"
                                   className="mt-3 min-h-11 w-full gap-1.5 text-xs"
                                   onClick={() => {
+                                    onRouteContextChange?.(route.id, stop.id);
                                     setStopNotes((current) => ({
                                       ...current,
                                       [stop.id]: fieldNote,
@@ -1027,6 +1039,7 @@ export function HpoWeeklyPlanner({
                               <div className="mt-2 grid gap-2">
                                 <textarea
                                   value={stopNotes[stop.id] ?? ""}
+                                  onFocus={() => onRouteContextChange?.(route.id, stop.id)}
                                   onChange={(event) =>
                                     setStopNotes((current) => ({
                                       ...current,
