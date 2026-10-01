@@ -32,6 +32,19 @@ function dateLabel(value: string | null | undefined) {
   return date.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
 }
 
+function dateTimeLabel(value: string | null | undefined) {
+  if (!value) return "Not recorded";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not recorded";
+  return date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function titleCase(value: string | null | undefined) {
   if (!value) return "";
   return value
@@ -826,7 +839,7 @@ export function HpoAccountFieldDetail({
                             {interaction.interaction_type || "interaction"}
                           </p>
                           <span className="text-xs text-muted-foreground">
-                            {dateLabel(interaction.occurred_at)}
+                            {dateTimeLabel(interaction.occurred_at)}
                           </span>
                         </div>
                         {interaction.metadata?.spoken_with ? (
@@ -837,6 +850,14 @@ export function HpoAccountFieldDetail({
                         <p className="mt-2 whitespace-pre-wrap text-sm leading-6">
                           {interaction.summary}
                         </p>
+                        {interaction.metadata?.note_updated_at &&
+                        interaction.metadata?.note_saved_at &&
+                        interaction.metadata.note_updated_at !==
+                          interaction.metadata.note_saved_at ? (
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            Edited {dateTimeLabel(interaction.metadata.note_updated_at)}
+                          </p>
+                        ) : null}
                         {interaction.outcome ? (
                           <p className="mt-1 text-xs text-muted-foreground">{interaction.outcome}</p>
                         ) : null}
@@ -873,11 +894,25 @@ export function HpoAccountFieldDetail({
                             {String(stop.status).replaceAll("_", " ")}
                           </p>
                           <span className="text-xs text-muted-foreground">
-                            {dateLabel(stop.visited_at || stop.updated_at)}
+                            {dateTimeLabel(
+                              stop.metadata?.route_note_saved_at ||
+                                stop.visited_at ||
+                                stop.updated_at,
+                            )}
                           </span>
                         </div>
-                        {stop.visit_summary ? (
-                          <p className="mt-2 text-sm leading-6">{stop.visit_summary}</p>
+                        {stop.notes || stop.visit_summary ? (
+                          <p className="mt-2 whitespace-pre-wrap text-sm leading-6">
+                            {stop.notes || stop.visit_summary}
+                          </p>
+                        ) : null}
+                        {stop.metadata?.route_note_updated_at &&
+                        stop.metadata?.route_note_saved_at &&
+                        stop.metadata.route_note_updated_at !==
+                          stop.metadata.route_note_saved_at ? (
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            Edited {dateTimeLabel(stop.metadata.route_note_updated_at)}
+                          </p>
                         ) : null}
                       </article>
                     ))}
