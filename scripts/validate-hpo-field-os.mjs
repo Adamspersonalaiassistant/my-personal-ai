@@ -13,6 +13,7 @@ function check(name, ok) {
 }
 
 const planner = read("src/components/HpoRoutePlanner.tsx");
+const weeklyPlanner = read("src/components/HpoWeeklyPlanner.tsx");
 const leaflet = read("src/components/hpo-map/HpoLeafletMap.tsx");
 const routeFns = read("src/lib/hpo-route.functions.ts");
 const geocode = read("src/lib/hpo-geocode.ts");
@@ -123,10 +124,10 @@ check(
     !planner.includes("result.routes[0]?.id"),
 );
 check(
-  "Route creation defaults to today and exposes one optimize-and-start action",
+  "Route creation defaults to today while returning execution to Planner",
   planner.includes("useState(data.today)") &&
     planner.includes("Optimize & Start Route") &&
-    planner.includes('onNavigateHpo?.("today")'),
+    leaflet.includes('onNavigateHpo?.("planner")'),
 );
 check(
   "Leaflet uses a reliable no-key street basemap and teardrop office pins",
@@ -136,9 +137,10 @@ check(
     leaflet.includes("iconAnchor: [size / 2, Math.round(size * 1.25)]"),
 );
 check(
-  "Leaflet is map-first with search, filters, compact controls, and an account tray",
+  "Leaflet is map-first with search, filters, compact controls, and Planner return",
   leaflet.includes("Search HPO accounts, offices or towns") &&
-    leaflet.includes('onNavigateHpo?.("today")') &&
+    leaflet.includes('onNavigateHpo?.("planner")') &&
+    !leaflet.includes('onNavigateHpo?.("today")') &&
     leaflet.includes("Fit offices") &&
     leaflet.includes("Build today's route"),
 );
@@ -198,11 +200,24 @@ check(
   routeFns.includes("${key}:followup") && routeFns.includes("executeHpoRouteStopFollowupCore"),
 );
 check(
-  "HPO has exactly four field-first areas",
-  /type HpoFieldView = "today" \| "map" \| "accounts" \| "activity"/.test(hpoNav) &&
-    ["today", "map", "accounts", "activity"].every((key) => hpoNav.includes(`key: "${key}"`)) &&
-    (hpoNav.match(/key: "(today|map|accounts|activity)"/g) ?? []).length === 4 &&
-    hpoRoute.includes("<HpoFieldNav view={view} onChange={setView} />"),
+  "HPO has exactly four Planner-first areas",
+  /type HpoFieldView = "planner" \| "map" \| "accounts" \| "activity"/.test(hpoNav) &&
+    ["planner", "map", "accounts", "activity"].every((key) => hpoNav.includes(`key: "${key}"`)) &&
+    (hpoNav.match(/key: "(planner|map|accounts|activity)"/g) ?? []).length === 4 &&
+    !hpoNav.includes('key: "today"') &&
+    hpoNav.includes('label: "Planner"') &&
+    hpoNav.includes('label: "Maps"') &&
+    hpoNav.includes('label: "Accounts"') &&
+    hpoNav.includes('label: "Activity"') &&
+    hpoRoute.includes('useState<View>("planner")') &&
+    !hpoRoute.includes("HpoFieldToday"),
+);
+check(
+  "Planner carries the live route and next-stop context into Emery",
+  weeklyPlanner.includes("selectedRouteNextStop") &&
+    weeklyPlanner.includes("selectedRouteNextStop?.id ?? null") &&
+    weeklyPlanner.includes("onRouteContextChange?.(route.id, stop.id)") &&
+    hpoRoute.includes('view === "planner" ? plannerContext.stopId : null'),
 );
 check(
   "legacy HPO dashboard and secondary tools are removed",
