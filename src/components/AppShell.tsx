@@ -86,7 +86,7 @@ const moreItems = [
 
 const RETURN_KEY = "emery:return";
 const PREFILL_KEY = "emery:prefill";
-const EMERY_BUILD_ID = "2026-10-01-hpo-route-edit-stop-v1";
+const EMERY_BUILD_ID = "2026-10-01-hpo-smart-save-note-v1";
 
 export function AppShell({
   title,
