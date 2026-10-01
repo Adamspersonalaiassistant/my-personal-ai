@@ -978,15 +978,41 @@ export async function executeHpoRouteReoptimizeCore(input: {
     const route = await loadRoute(db, input.userId, input.routeId);
     const stops = await loadStops(db, input.userId, input.routeId);
     const open = stops.filter((stop: any) => !TERMINAL.has(String(stop.status)));
-    if (open.length <= 1) {
+    if (open.length === 0) {
+      const reoptimizedAt = new Date().toISOString();
+      const metadata =
+        route.metadata && typeof route.metadata === "object" && !Array.isArray(route.metadata)
+          ? route.metadata
+          : {};
+      const { error: routeUpdateError } = await db
+        .from("hpo_route_plans")
+        .update({
+          status: "active",
+          optimized_at: reoptimizedAt,
+          optimized_distance_meters: 0,
+          optimized_duration_seconds: 0,
+          metadata: {
+            ...metadata,
+            route_geometry_remaining: null,
+            reoptimized_at: reoptimizedAt,
+            reoptimization_engine: "open_road_matrix",
+            reoptimization_execution_run_id: run.id,
+          },
+          updated_at: reoptimizedAt,
+        })
+        .eq("id", route.id)
+        .eq("user_id", input.userId);
+      if (routeUpdateError) throw routeUpdateError;
+
       const result = {
         ok: true,
         action,
         executionRunId: run.id,
-        reordered: open.map((stop: any) => stop.id),
-        remaining: open.length,
+        reordered: [],
+        remaining: 0,
         driveMinutes: 0,
         distanceMiles: 0,
+        reoptimizedAt,
         reused: run.reused,
       };
       await completeExecution({
@@ -1119,6 +1145,9 @@ export async function executeHpoRouteReoptimizeCore(input: {
       .from("hpo_route_plans")
       .update({
         status: "active",
+        optimized_at: reoptimizedAt,
+        optimized_distance_meters: Math.round(totalDistance),
+        optimized_duration_seconds: Math.round(totalDuration),
         metadata: {
           ...metadata,
           route_geometry_remaining: geometry,
