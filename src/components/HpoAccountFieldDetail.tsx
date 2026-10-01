@@ -396,6 +396,25 @@ export function HpoAccountFieldDetail({
                 </div>
               </section>
 
+              {account.metadata?.latest_field_note_summary ? (
+                <section className="rounded-2xl border border-border/70 bg-card/60 p-4">
+                  <div className="flex items-start gap-3">
+                    <FileText className="mt-0.5 size-5 shrink-0 text-primary" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        Latest field note
+                      </p>
+                      <p className="mt-1 text-xs text-primary">
+                        {dateTimeLabel(account.metadata.latest_field_note_at)}
+                      </p>
+                      <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6">
+                        {account.metadata.latest_field_note_summary}
+                      </p>
+                    </div>
+                  </div>
+                </section>
+              ) : null}
+
               <section>
                 <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                   Quick actions
