@@ -947,10 +947,26 @@ export function HpoAccountFieldDetail({
                             )}
                           </span>
                         </div>
-                        {stop.notes || stop.visit_summary ? (
-                          <p className="mt-2 whitespace-pre-wrap text-sm leading-6">
-                            {stop.notes || stop.visit_summary}
-                          </p>
+                        {stop.notes ? (
+                          <div className="mt-2">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-primary">
+                              Field note
+                            </p>
+                            <p className="mt-1 whitespace-pre-wrap text-sm leading-6">
+                              {stop.notes}
+                            </p>
+                          </div>
+                        ) : null}
+                        {stop.visit_summary &&
+                        stop.visit_summary.trim() !== stop.notes?.trim() ? (
+                          <div className="mt-2">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                              Visit summary
+                            </p>
+                            <p className="mt-1 whitespace-pre-wrap text-sm leading-6">
+                              {stop.visit_summary}
+                            </p>
+                          </div>
                         ) : null}
                         {stop.metadata?.route_note_updated_at &&
                         stop.metadata?.route_note_saved_at &&
