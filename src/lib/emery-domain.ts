@@ -6,7 +6,7 @@ export type DomainRoute = {
   reason: string;
 };
 
-const HPO = /\b(hpo|hudson pro|patient management|pcc|pip|workers? comp|referral source|attorney office|provider office|marketing route|office visit|lunch meeting|referrals?|account visit)\b/i;
+const HPO = /\b(hpo|hudson pro|patient management|pcc|pip|workers? comp|referral source|attorney(?: office)?|law firm|lawyer|provider(?: office)?|doctor|medical office|mri|radiology|orthopedic|referral partner|marketing route|office visit|lunch meeting|business lunch|business dinner|networking event|industry event|referrals?|account visit)\b/i;
 const PERSONAL = /\b(personal|family|denice|bryson|home|house|credit|budget|money|finance|workout|golf|music|dj|rave|routine|habit|birthday|vacation|appointment)\b/i;
 
 /**

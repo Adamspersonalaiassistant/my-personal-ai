@@ -559,7 +559,7 @@ CORE MODEL
 - due_at is an optional DEADLINE. It means when the task must be finished by. It is not automatically a Calendar block.
 - scheduled_start_at and scheduled_end_at are an optional TIME BLOCK on Emery Calendar.
 - reminder_at is an optional notification time.
-- Events/meetings/lunches are Calendar commitments and need a start time.
+- Events/meetings/lunches/dinners are Calendar commitments and need a start time.
 - If Adam says he has free time, asks what tasks he can do, asks what is overdue, or asks for planning advice without authorizing a write, recognized=false. The main Emery model will answer using current task context.
 
 WRITE PERMISSION
@@ -587,7 +587,7 @@ ACTION RULES
 - create_event: title + scheduled_start_at required; default to 60 minutes only when Adam gives no end/duration.
 - reschedule_event: exact target_id + new scheduled_start_at. Preserve existing duration if no new end is supplied.
 - create_reminder: use only for a standalone notification not naturally attached to a task/event.
-- For lunch events, event_type=lunch.
+- For lunch events, event_type=lunch. For dinner events, event_type=dinner.
 - Resolve relative dates using the supplied current local time.
 - All timestamps must be ISO-8601 with an explicit UTC offset.
 - If an essential detail is genuinely missing or multiple existing records could match, needs_clarification=true and ask ONE concise question. In that case operations must be empty.
@@ -642,7 +642,7 @@ ${context}`,
                     target_id: { type: ["string", "null"] },
                     event_type: {
                       type: ["string", "null"],
-                      enum: ["lunch", "meeting", "appointment", "event", "task", null],
+                      enum: ["lunch", "dinner", "meeting", "appointment", "event", "task", null],
                     },
                   },
                   required: [

@@ -16,6 +16,7 @@ import { VOICE_PROFILE_CONTRACT } from "@/lib/voice-profile";
 import { processVoiceStudioTurn } from "@/lib/voice-studio.functions";
 import { processCalendarAction } from "@/lib/calendar-agent";
 import { processHpoAction } from "@/lib/hpo-action-controller";
+import { processHpoActivity } from "@/lib/hpo-activity-controller";
 import { processHpoRouteStopAction } from "@/lib/hpo-route-action-controller";
 import { processHpoFieldReadCommand } from "@/lib/hpo-field-read-controller";
 import {
@@ -77,6 +78,22 @@ function hpoConfirmation(result: any) {
       : `Updated ${result.accountName}.`;
   }
   return "Updated the HPO relationship record.";
+}
+function hpoActivityConfirmation(result: any) {
+  if (result?.needsClarification && result?.question) return String(result.question);
+  if (!result?.recognized) return null;
+  if (!result?.performed) {
+    if (result?.error) return "I understood the HPO Activity update, but I couldn’t save it. I’m not going to claim it was logged.";
+    return null;
+  }
+  const labels: Record<string, string> = { office_visit: "Office visit", lunch: "Lunch", dinner: "Dinner", event: "Event" };
+  const activityLabel = labels[String(result.activityType)] || "Activity";
+  const title = result.activityTitle || activityLabel;
+  if (result.action === "schedule_activity") return "Added " + title + " to HPO Activity → " + activityLabel + ". I’ll ask you for a recap the next morning.";
+  if (result.alreadySaved) return "That " + activityLabel.toLowerCase() + " recap is already saved in HPO Activity.";
+  return result.nextAction
+    ? "Saved " + title + " under HPO Activity → " + activityLabel + ". Next: " + result.nextAction + "."
+    : "Saved " + title + " under HPO Activity → " + activityLabel + ".";
 }
 function hpoRouteStopConfirmation(result: any) {
   if (result?.needsClarification && result?.question) return String(result.question);
@@ -964,11 +981,32 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
             nextStopId: null,
             nextStopName: null,
           };
-    const hpoAction =
+    const hpoActivity =
       hpoEligible &&
       !hpoFieldRead.recognized &&
       !hpoRouteCommand.recognized &&
       !routeStopAction.recognized
+        ? await processHpoActivity({
+            db,
+            userId,
+            apiKey,
+            message: data.message,
+            recent: turnRecent.filter((x: any) => x.id !== userMessage.id),
+            timezone: profile?.timezone ?? "America/New_York",
+            sourceMessageId: userMessage.id,
+            selectedAccountId: data.source.selectedAccountId ?? null,
+            calendarAction,
+          }).catch((error: any) => {
+            console.error("HPO Activity controller failed", error);
+            return { recognized: false, performed: false, needsClarification: false, question: null, action: "none", activityType: null, activityTitle: null, meetingId: null, accountId: null, accountName: null, recordId: null, nextAction: null, dueAt: null, error: "hpo_activity_failed" };
+          })
+        : { recognized: false, performed: false, needsClarification: false, question: null, action: "none", activityType: null, activityTitle: null, meetingId: null, accountId: null, accountName: null, recordId: null, nextAction: null, dueAt: null };
+    const hpoAction =
+      hpoEligible &&
+      !hpoFieldRead.recognized &&
+      !hpoRouteCommand.recognized &&
+      !routeStopAction.recognized &&
+      !hpoActivity.recognized
         ? await processHpoAction({
             db,
             userId,
@@ -1049,12 +1087,13 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
     const hpoFieldReadReply = hpoFieldReadConfirmation(hpoFieldRead);
     const hpoRouteCommandReply = hpoRouteCommandConfirmation(hpoRouteCommand);
     const routeStopReply = hpoRouteStopConfirmation(routeStopAction);
+    const hpoActivityReply = hpoActivityConfirmation(hpoActivity);
     const hpoReply = hpoConfirmation(hpoAction);
     const calendarReply = calendarConfirmation(
       calendarAction,
       profile?.timezone ?? "America/New_York",
     );
-    const primaryHpoReply = hpoRouteCommandReply ?? routeStopReply ?? hpoReply ?? hpoFieldReadReply;
+    const primaryHpoReply = hpoRouteCommandReply ?? routeStopReply ?? hpoActivityReply ?? hpoReply ?? hpoFieldReadReply;
     if (primaryHpoReply) {
       const combinedReply =
         calendarAction.performed && calendarReply
@@ -1079,6 +1118,7 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
             hpo_field_read: hpoFieldRead,
             hpo_route_command: hpoRouteCommand,
             hpo_route_stop_action: routeStopAction,
+            hpo_activity: hpoActivity,
             hpo_action: hpoAction,
           },
         })
@@ -1105,16 +1145,20 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
             ? hpoRouteCommand.action
             : routeStopAction.action !== "none"
               ? routeStopAction.action
-              : hpoAction.action !== "none"
+              : hpoActivity.action !== "none"
+                ? hpoActivity.action
+                : hpoAction.action !== "none"
                 ? hpoAction.action
                 : hpoFieldRead.action,
         status:
           hpoRouteCommand.needsClarification ||
           routeStopAction.needsClarification ||
+          hpoActivity.needsClarification ||
           hpoAction.needsClarification
             ? "clarification"
             : hpoRouteCommand.error ||
                 ("error" in routeStopAction && routeStopAction.error) ||
+                ("error" in hpoActivity && hpoActivity.error) ||
                 ("error" in hpoAction && hpoAction.error)
               ? "error"
               : "ok",
@@ -1141,6 +1185,7 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
         hpoFieldRead,
         hpoRouteCommand,
         routeStopAction,
+        hpoActivity,
         hpoAction,
         userMessage: {
           id: userMessage.id,

@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
-  CalendarDays,
   ChevronRight,
   FileText,
   MessageCircle,
@@ -19,6 +18,7 @@ import { HpoWeeklyPlanner } from "@/components/HpoWeeklyPlanner";
 import { HpoFieldNav, type HpoFieldView } from "@/components/HpoFieldNav";
 import { HpoAccountFieldDetail } from "@/components/HpoAccountFieldDetail";
 import { HpoEmerySheet, openHpoEmery } from "@/components/HpoEmerySheet";
+import { HpoActivityView } from "@/components/HpoActivityView";
 import { createHpoAccount, logHpoInteraction } from "@/lib/hpo.functions";
 import { getHpoWorkspace, setHpoFieldAccountFollowup } from "@/lib/hpo-workspace.functions";
 import {
@@ -43,7 +43,6 @@ import "@/components/hpo-accounts.css";
 type View = HpoFieldView;
 type Workspace = Awaited<ReturnType<typeof getHpoWorkspace>>;
 type Account = Workspace["accounts"][number];
-type Touch = Workspace["interactions"][number];
 const CONTROLLED_PROSPECT_WRITE_FUNCTIONS = [
   updateVerifiedHpoAccountFacts,
   correctHpoAccountRelationship,
@@ -62,16 +61,6 @@ const field =
   "min-h-12 w-full rounded-md border border-border/70 bg-card/60 px-3 text-base text-foreground outline-none focus:border-primary";
 const date = (value: string | null | undefined) =>
   value ? new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—";
-const dateTime = (value: string | null | undefined) =>
-  value
-    ? new Date(value).toLocaleString(undefined, {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      })
-    : "—";
 const attentionLabel = (value: HpoAttentionState) =>
   ({
     overdue: "Follow-up overdue",
@@ -111,6 +100,11 @@ function HpoWorkspace() {
       ? new URLSearchParams(window.location.search).get("routeId")
       : null;
   const [view, setView] = useState<View>("planner");
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("activity") === "1") setView("activity");
+  }, []);
   const [data, setData] = useState<Workspace | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -293,25 +287,10 @@ function HpoWorkspace() {
               />
             ) : null}
             {view === "activity" && data ? (
-              <ActivityView
-                data={data}
-                onOpen={setSelected}
-                onLog={(accountId, kind) => {
-                  const target = data.accounts.find((item) => item.id === accountId);
-                  openHpoEmery(
-                    kind === "visit"
-                      ? `Log an HPO office visit${target ? ` for ${target.name}` : ""}. Ask me what happened and who I spoke with, then save it.`
-                      : `Log an HPO relationship touch${target ? ` for ${target.name}` : ""}. Ask me for the missing details and save it.`,
-                    "Activity",
-                  );
-                }}
-                onFollowup={(accountId) => {
-                  const target = data.accounts.find((item) => item.id === accountId);
-                  openHpoEmery(
-                    `Update the next HPO follow-up${target ? ` for ${target.name}` : ""}. Ask me only for the missing action or date, then save it.`,
-                    "Follow-up",
-                  );
-                }}
+              <HpoActivityView
+                data={data as any}
+                onOpenAccount={setSelected}
+                onAskEmery={(prompt, title) => openHpoEmery(prompt, title)}
                 onMore={() => void loadMore()}
                 loading={moreLoading}
               />
@@ -769,177 +748,6 @@ function QuickNoteSheet({
     </div>
   );
 }
-function ActivityView({
-  data,
-  onOpen,
-  onLog,
-  onFollowup,
-  onMore,
-  loading,
-}: {
-  data: Workspace;
-  onOpen: (id: string) => void;
-  onLog: (id?: string, kind?: string) => void;
-  onFollowup: (id: string) => void;
-  onMore: () => void;
-  loading: boolean;
-}) {
-  const [filter, setFilter] = useState("all");
-  const names = new Map(data.accounts.map((a) => [a.id, a.name]));
-  const today = Date.now();
-  const due = data.accounts
-    .filter(
-      (a) => a.next_action && a.next_action_due_at && Date.parse(a.next_action_due_at) <= today,
-    )
-    .sort(
-      (a, b) => Date.parse(a.next_action_due_at || "") - Date.parse(b.next_action_due_at || ""),
-    );
-  const items = data.interactions.filter(
-    (i) =>
-      filter === "all" ||
-      (filter === "visit" ? i.interaction_type === "visit" : i.interaction_type !== "visit"),
-  );
-  return (
-    <section className="space-y-3">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-        <div className="min-w-0">
-          <h1 className="text-lg font-semibold">Activity</h1>
-          <p className="text-xs text-muted-foreground">{data.interactions.length} recent touches</p>
-        </div>
-        <div className="grid grid-cols-2 gap-1.5">
-          <Button className="h-11 px-2.5 text-xs" onClick={() => onLog("", "visit")}>
-            <Plus /> Log Visit
-          </Button>
-          <Button
-            variant="outline"
-            className="h-11 px-2.5 text-xs"
-            onClick={() => onLog("", "call")}
-          >
-            Log Touch
-          </Button>
-        </div>
-      </div>
-      {due.length > 0 && (
-        <div className="rounded-2xl border border-border bg-card px-3 py-3 shadow-sm">
-          <h2 className="mb-1 text-xs font-semibold uppercase text-primary">
-            Follow-ups due · {due.length}
-          </h2>
-          {due.slice(0, 8).map((a) => (
-            <div
-              key={a.id}
-              className="flex min-h-14 items-center gap-2 border-b border-border/35 py-2 last:border-0"
-            >
-              <Button
-                variant="ghost"
-                onClick={() => onOpen(a.id)}
-                className="h-auto min-h-11 min-w-0 flex-1 justify-start whitespace-normal text-left"
-              >
-                <span className="min-w-0 break-words">
-                  <strong className="block text-xs">{a.name}</strong>
-                  <span className="text-xs font-normal text-muted-foreground">{a.next_action}</span>
-                </span>
-              </Button>
-              <Button
-                variant="outline"
-                className="h-11 shrink-0 px-2 text-xs"
-                onClick={() => onFollowup(a.id)}
-              >
-                Update
-              </Button>
-            </div>
-          ))}
-        </div>
-      )}
-      {data.meetings.length > 0 && (
-        <div className="rounded-2xl border border-border bg-card p-3 shadow-sm">
-          <h2 className="mb-2 text-xs font-semibold uppercase text-primary">Upcoming</h2>
-          {data.meetings.slice(0, 5).map((meeting) => (
-            <div key={meeting.id} className="flex gap-2 py-1.5 text-xs">
-              <CalendarDays className="size-4 shrink-0 text-primary" />
-              <span className="min-w-0 break-words">{meeting.title || "HPO event"}</span>
-              <time className="ml-auto shrink-0 text-muted-foreground">
-                {date(meeting.meeting_at)}
-              </time>
-            </div>
-          ))}
-        </div>
-      )}
-      <div className="flex gap-1.5 overflow-x-auto pb-1">
-        {(
-          [
-            ["all", "All"],
-            ["visit", "Visits"],
-            ["touch", "Other touches"],
-          ] as const
-        ).map(([key, label]) => (
-          <Button
-            key={key}
-            variant="ghost"
-            className={`h-11 shrink-0 rounded-xl border border-border px-3 text-xs ${filter === key ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground"}`}
-            onClick={() => setFilter(key)}
-          >
-            {label}
-          </Button>
-        ))}
-      </div>
-      <div className="space-y-2">
-        {items.map((i: Touch) => (
-          <Button
-            key={i.id}
-            variant="ghost"
-            onClick={() => onOpen(i.account_id)}
-            className="h-auto min-h-[76px] w-full justify-start rounded-2xl border border-border bg-card px-3 py-3 text-left shadow-sm hover:bg-muted/40"
-          >
-            <span className="min-w-0 whitespace-normal">
-              <span className="block text-sm font-semibold">
-                {names.get(i.account_id) || "Account"}{" "}
-                <span className="font-normal capitalize text-primary">· {i.interaction_type}</span>
-              </span>
-              <span className="block break-words text-xs font-normal leading-5 text-muted-foreground">
-                {i.summary}
-              </span>
-              {i.outcome || i.relationship_signal ? (
-                <span className="mt-1 block text-[11px] font-normal text-foreground/85">
-                  {[
-                    i.outcome ? `Outcome: ${i.outcome}` : null,
-                    i.relationship_signal
-                      ? `Signal: ${String(i.relationship_signal).replaceAll("_", " ")}`
-                      : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </span>
-              ) : null}
-              {i.metadata &&
-              typeof i.metadata === "object" &&
-              !Array.isArray(i.metadata) &&
-              typeof i.metadata["spoken_with"] === "string" ? (
-                <span className="block text-[11px] font-normal text-primary">
-                  Spoke with {i.metadata["spoken_with"]}
-                </span>
-              ) : null}
-              <span className="block text-[11px] font-normal text-muted-foreground">
-                {dateTime(i.occurred_at)}
-                {i.next_action ? ` · Next: ${i.next_action}` : ""}
-              </span>
-            </span>
-          </Button>
-        ))}
-        {!items.length && (
-          <p className="py-10 text-center text-sm text-muted-foreground">
-            No activity in this view yet.
-          </p>
-        )}
-      </div>
-      {data.hasMore && (
-        <Button variant="outline" className="h-11 w-full" onClick={onMore} disabled={loading}>
-          {loading ? "Loading…" : "Earlier activity"}
-        </Button>
-      )}
-    </section>
-  );
-}
-
 function Sheet({
   title,
   onClose,

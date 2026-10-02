@@ -39,18 +39,19 @@ export const getHpoWorkspace = createServerFn({ method: "GET" })
       db
         .from("hpo_interactions")
         .select(
-          "id,account_id,contact_id,interaction_type,occurred_at,summary,outcome,relationship_signal,next_action,next_action_due_at,metadata",
+          "id,account_id,contact_id,interaction_type,activity_type,activity_title,meeting_id,occurred_at,summary,outcome,relationship_signal,next_action,next_action_due_at,metadata",
         )
         .eq("user_id", context.userId)
         .order("occurred_at", { ascending: false })
         .range(data.page * 50, data.page * 50 + 49),
       db
         .from("meetings")
-        .select("id,title,meeting_at,metadata")
+        .select("id,title,meeting_at,end_at,participants,metadata")
         .eq("user_id", context.userId)
-        .gte("meeting_at", new Date().toISOString())
+        .gte("meeting_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+        .lte("meeting_at", new Date(Date.now() + 120 * 24 * 60 * 60 * 1000).toISOString())
         .order("meeting_at")
-        .limit(40),
+        .limit(120),
       db
         .from("hpo_interactions")
         .select("account_id,occurred_at")
@@ -99,7 +100,9 @@ export const getHpoWorkspace = createServerFn({ method: "GET" })
           !Array.isArray(meta) &&
           (meta["domain"] === "hpo" ||
             meta["hpo"] === true ||
-            typeof meta["hpo_account_id"] === "string")
+            typeof meta["hpo_account_id"] === "string" ||
+            typeof meta["account_id"] === "string" ||
+            typeof meta["hpo_activity_type"] === "string")
         );
       }),
       accountLimitReached: (accounts.data?.length ?? 0) === 1000,
