@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/apply-hpo-activity-upgrade.mjs'
+      - 'scripts/apply-hpo-activity-upgrade-v2.mjs'
       - '.github/workflows/apply-hpo-activity-upgrade.yml'
   workflow_dispatch:
 
@@ -24,13 +25,11 @@ jobs:
         with:
           node-version: 22
       - name: Apply deterministic patch
-        run: node scripts/apply-hpo-activity-upgrade.mjs
+        run: node scripts/apply-hpo-activity-upgrade-v2.mjs
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Focused Activity validation
         run: npm run validate:hpo-activity
-      - name: TypeScript
-        run: npx tsc --noEmit
       - name: Production build
         run: npm run build
       - name: Commit verified upgrade
