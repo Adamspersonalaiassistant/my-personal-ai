@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { routeEmeryCapabilities } from "../src/lib/emery/capability-router.ts";
 import { createEmptyRequestContext } from "../src/lib/emery/orchestration.types.ts";
+import { buildUnifiedVoiceContextPrompt } from "../src/lib/emery/voice-context-prompt.ts";
 
 const hpoContext = createEmptyRequestContext({
   userId: "user-1",
@@ -52,6 +53,25 @@ const personalWhileRouting = routeEmeryCapabilities({
 assert.notEqual(personalWhileRouting.domain, "hpo", "an active HPO route must not hijack a personal turn");
 assert.equal(personalWhileRouting.needsPersonalMemory, true);
 
+const prompt = buildUnifiedVoiceContextPrompt({
+  currentContext: {
+    observedAt: "2026-10-04T18:00:00.000Z",
+    localDate: "2026-10-04",
+    timezone: "America/New_York",
+    mode: "hpo",
+    domain: "hpo",
+    authority: { route: "field_session", stop: "field_session" },
+    request: hpoContext,
+  },
+  capabilityRoute: next,
+  actionPlan: { goal: "read next stop", reads: ["hpo.route.read"], writes: [], intents: [] },
+  loadPolicy: { loadHpoOperatingContext: false, loadPersonalMemory: false, loadCalendarContext: false },
+});
+assert(prompt.includes("AUTHORITATIVE CURRENT EMERY CONTEXT"));
+assert(prompt.includes("route-1"));
+assert(prompt.includes("hpo.route.get_next_stop"));
+assert(prompt.includes("canonical controller results/receipts"));
+
 const voiceContextSource = fs.readFileSync(
   new URL("../src/lib/emery/voice-request-context.ts", import.meta.url),
   "utf8",
@@ -64,8 +84,20 @@ const unifiedVoiceSource = fs.readFileSync(
   new URL("../src/lib/emery/unified-voice-context.ts", import.meta.url),
   "utf8",
 );
+const unifiedVoiceFunctionsSource = fs.readFileSync(
+  new URL("../src/lib/emery/unified-voice.functions.ts", import.meta.url),
+  "utf8",
+);
+const voiceRuntimeSource = fs.readFileSync(
+  new URL("../src/lib/emery/voice-runtime.ts", import.meta.url),
+  "utf8",
+);
 const voiceFunctionsSource = fs.readFileSync(
   new URL("../src/lib/voice.functions.ts", import.meta.url),
+  "utf8",
+);
+const voiceControlSource = fs.readFileSync(
+  new URL("../src/components/EmeryVoiceControl.tsx", import.meta.url),
   "utf8",
 );
 
@@ -78,18 +110,28 @@ assert(voiceBridgeSource.includes("processEmeryMultiIntentDayPlan"));
 assert(unifiedVoiceSource.includes("loadPolicy.loadPersonalMemory"));
 assert(unifiedVoiceSource.includes("loadPolicy.loadCalendarContext"));
 assert(unifiedVoiceSource.includes("loadPolicy.loadHpoOperatingContext"));
+assert(unifiedVoiceFunctionsSource.includes("readVoiceHpoFieldStateCore"));
+assert(unifiedVoiceFunctionsSource.includes("executeVoiceHpoRouteStopCore"));
+assert(unifiedVoiceFunctionsSource.includes("executeVoiceHpoRelationshipCore"));
+assert(unifiedVoiceFunctionsSource.includes("executeVoiceHpoRouteCommandCore"));
+assert(unifiedVoiceFunctionsSource.includes("executeVoiceCalendarCore"));
+assert(voiceRuntimeSource.includes("executeUnifiedVoiceHpoFieldRead as executeVoiceHpoFieldRead"));
+assert(voiceRuntimeSource.includes("refreshUnifiedVoiceContext as refreshVoiceContext"));
 
-// Final Phase 3 integration requirement: live Voice must consume the shared bridge/context.
+// Final Phase 3 integration requirements intentionally left as tiny edits:
+// 1) Realtime session bootstrap loads the unified context and injects its compact authoritative block.
+// 2) EmeryVoiceControl imports its operational tools from the one-brain runtime barrel.
 assert(
   voiceFunctionsSource.includes("loadUnifiedVoiceContext"),
-  "voice.functions.ts must use the unified Voice context loader",
+  "voice.functions.ts must use the unified Voice context loader for session bootstrap",
 );
 assert(
-  voiceFunctionsSource.includes("readVoiceHpoFieldStateCore") &&
-    voiceFunctionsSource.includes("executeVoiceHpoRouteStopCore") &&
-    voiceFunctionsSource.includes("executeVoiceHpoRelationshipCore") &&
-    voiceFunctionsSource.includes("executeVoiceHpoRouteCommandCore"),
-  "Voice HPO tools must delegate to the shared one-brain action bridge",
+  voiceFunctionsSource.includes("buildUnifiedVoiceContextPrompt"),
+  "voice.functions.ts must inject the compact authoritative one-brain context into Realtime instructions",
+);
+assert(
+  voiceControlSource.includes('from "@/lib/emery/voice-runtime"'),
+  "EmeryVoiceControl must use the one-brain runtime barrel for operational Voice tools",
 );
 
 console.log("Emery Phase 3 one-brain validation passed.");
