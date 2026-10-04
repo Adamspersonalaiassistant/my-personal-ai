@@ -68,6 +68,7 @@ export function EmeryBrainCanvas({ state, compact = false }: { state: EmeryVisua
 
       for (let i = 0; i < particles.length; i += 1) {
         const p = particles[i];
+        if (!p) continue;
         const angle =
           p.angle +
           time * p.speed * motion * (state === "thinking" || state === "planning" ? 1.55 : 1);
@@ -82,6 +83,7 @@ export function EmeryBrainCanvas({ state, compact = false }: { state: EmeryVisua
 
         if (i > 0 && i % 3 === 0) {
           const previous = particles[i - 1];
+          if (!previous) continue;
           const pa = previous.angle + time * previous.speed * motion;
           const px = cx + Math.cos(pa) * previous.radius;
           const py = cy + Math.sin(pa) * previous.radius * 0.77;
