@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import type { EmeryEvaluationSignal } from "@/lib/emery/evaluation";
 
 export type RuntimeEvent = {
   channel: "chat" | "capture" | "shortcut" | "voice" | "system" | "hpo";
@@ -35,4 +36,41 @@ export async function recordRuntimeEvent(
   } catch (error) {
     console.error("Emery runtime telemetry failed", error);
   }
+}
+
+export async function recordEvaluationSignal(
+  db: any,
+  userId: string,
+  input: {
+    channel: RuntimeEvent["channel"];
+    domain?: string | null;
+    model?: string | null;
+    signal: EmeryEvaluationSignal;
+    metadata?: Record<string, unknown>;
+  },
+) {
+  const signal = input.signal;
+  return recordRuntimeEvent(db, userId, {
+    channel: input.channel,
+    eventType: "evaluation_signal",
+    domain: input.domain ?? null,
+    action: signal.category,
+    status: signal.passed ? "ok" : "error",
+    model: input.model ?? null,
+    metadata: {
+      ...(input.metadata ?? {}),
+      evaluation: {
+        category: signal.category,
+        passed: signal.passed,
+        score: signal.score,
+        severity: signal.severity,
+        source: signal.source,
+        request: signal.request ?? null,
+        expected: signal.expected ?? null,
+        observed: signal.observed ?? null,
+        observedAt: signal.observedAt,
+        metadata: signal.metadata ?? {},
+      },
+    },
+  });
 }
