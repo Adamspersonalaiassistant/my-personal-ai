@@ -521,7 +521,7 @@ function Chat() {
 
             <div className="mt-3 grid min-w-0 gap-3 2xl:grid-cols-[minmax(0,760px)_300px] 2xl:justify-center">
               <div className="min-w-0">
-                 <div className="mb-4 hidden sm:block 2xl:hidden">
+                 <div className="mb-4 2xl:hidden">
                   <OperatingContextCard />
                 </div>
 
