@@ -39,7 +39,11 @@ const nextPolicy = contextLoadPolicy(next);
 assert.equal(nextPolicy.isFocusedOperationalHpo, true);
 assert.equal(nextPolicy.loadPersonalMemory, false);
 assert.equal(nextPolicy.loadCalendarContext, false);
-assert.equal(nextPolicy.loadHpoOperatingContext, true);
+assert.equal(
+  nextPolicy.loadHpoOperatingContext,
+  false,
+  "focused HPO reads must rely on Current Context + canonical controllers, not the broad HPO agent snapshot",
+);
 
 const arrived = routeEmeryCapabilities({ message: "I’m here.", context: hpoContext });
 assert(arrived.candidateCapabilities.includes("hpo.route_stop.arrive"));
@@ -91,6 +95,17 @@ assert.equal(
   "general/personal Emery must preserve the existing broad Calendar/task context",
 );
 assert.deepEqual(emptyActionContext().tasks, []);
+
+const broadHpo = routeEmeryCapabilities({
+  message: "Which HPO accounts should I prioritize this week?",
+  context: hpoContext,
+});
+assert.equal(broadHpo.needsHpoContext, true);
+assert.equal(
+  contextLoadPolicy(broadHpo).loadHpoOperatingContext,
+  true,
+  "broad HPO judgment should retain the richer HPO operating snapshot",
+);
 
 const nearby = routeEmeryCapabilities({
   message: "Find the closest office near me",
