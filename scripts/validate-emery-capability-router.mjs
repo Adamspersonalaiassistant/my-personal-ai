@@ -129,17 +129,29 @@ assert.equal(blocked.receipts[0]?.status, "safe_noop");
 assert.equal(blocked.receipts[0]?.error?.failureCode, "CAPABILITY_UNAVAILABLE");
 
 const chatSource = fs.readFileSync(new URL("../src/lib/emery.functions.ts", import.meta.url), "utf8");
-assert(
-  chatSource.includes("routeEmeryCapabilities"),
-  "central Emery Chat must invoke the deterministic capability router before broad context/model work",
+const fieldReadSource = fs.readFileSync(
+  new URL("../src/lib/hpo-field-read-controller.ts", import.meta.url),
+  "utf8",
 );
+const routerCall = chatSource.indexOf("const capabilityRoute = routeEmeryCapabilities");
+const plannerCall = chatSource.indexOf("const actionPlan = planEmeryRequest(data.message)");
+assert(routerCall >= 0, "central Emery Chat must invoke the deterministic capability router");
 assert(
-  chatSource.indexOf("routeEmeryCapabilities") < chatSource.indexOf("planEmeryRequest(data.message)"),
+  routerCall < plannerCall,
   "capability routing must happen before the existing planner",
 );
 assert(
-  chatSource.includes("needsPersonalMemory") && chatSource.includes("needsCalendar"),
-  "central Emery Chat must use router needs to avoid unrelated context loading",
+  chatSource.includes("capabilityRoute.needsPersonalMemory") &&
+    chatSource.includes("capabilityRoute.needsCalendar"),
+  "central Emery Chat must use router needs to avoid unrelated personal-memory and Calendar loading",
+);
+assert(
+  chatSource.includes("capabilityRoute.needsHpoContext"),
+  "central Emery Chat must use the router to scope HPO context loading",
+);
+assert(
+  fieldReadSource.includes("whos next") || fieldReadSource.includes("who(?: is|s) next"),
+  "the deterministic HPO field reader must recognize natural ‘Who’s next?’ phrasing after normalization",
 );
 
 console.log(
