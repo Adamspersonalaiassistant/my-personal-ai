@@ -128,7 +128,7 @@ export function AppShell({ title, children, padded = true, askEmery }: { title: 
   }
 
   return (
-    <div className="relative mx-auto grid h-[100dvh] w-full max-w-[1240px] grid-cols-1 overflow-hidden bg-background text-foreground md:my-4 md:h-[calc(100dvh-32px)] md:grid-cols-[220px_minmax(0,1fr)] md:rounded-2xl md:border md:border-border/70 md:shadow-[0_24px_80px_rgba(0,0,0,.42)]">
+    <div className="relative mx-auto grid h-[100dvh] w-full max-w-[1680px] grid-cols-1 overflow-hidden bg-background text-foreground md:my-4 md:h-[calc(100dvh-32px)] md:grid-cols-[228px_minmax(0,1fr)] md:rounded-2xl md:border md:border-border/70 md:shadow-[0_24px_80px_rgba(0,0,0,.42)]">
       <div className="emery-grid pointer-events-none absolute inset-0 z-0 opacity-70" aria-hidden="true" />
       <aside className="relative z-20 hidden min-h-0 overflow-hidden border-r border-sidebar-border bg-sidebar/95 md:flex md:flex-col">
         <div className="flex shrink-0 items-center gap-3 px-4 pb-5 pt-5">
