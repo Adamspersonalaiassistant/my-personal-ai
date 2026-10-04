@@ -39,7 +39,7 @@ Supported visual states:
 
 `idle`, `listening`, `thinking`, `remembering`, `searching`, `planning`, `using_tool`, `executing`, `syncing`, `speaking`, `waiting`, `success`, `error`.
 
-The Core is not allowed to invent backend activity. Chat and Voice feed it observable runtime state only.
+The Core is not allowed to invent backend activity. Chat and Voice feed it observable runtime state only. The Canvas now pauses when the browser is backgrounded or the Core is offscreen, with reduced particle density/DPR on small devices.
 
 ### Chat
 
@@ -53,6 +53,8 @@ The Core is not allowed to invent backend activity. Chat and Voice feed it obser
 - uses a compact Core on iPhone
 - distinguishes truthful Chat states such as syncing attachments, thinking, success and error
 - consumes live Voice runtime states through `onVisualStateChange`
+
+The desktop AppShell now allows a wide command-center canvas up to 1680px while preserving a separate mobile layout.
 
 ### Voice
 
@@ -78,7 +80,7 @@ HPO remains exactly:
 
 Planner remains the primary workflow. `HpoWeeklyPlanner`, `HpoRoutePlanner`, account detail, activity, route persistence, notes, follow-ups, Field Session and canonical write paths are protected.
 
-Leaflet remains the map engine. Phase 9 changes only map chrome/control/popup presentation through scoped CSS.
+Leaflet remains the map engine. Phase 9 changes only map chrome/control/popup presentation through scoped CSS. Activity now uses the shared Emery information hierarchy, and account/detail dialogs inherit the same professional HPO presentation without changing their save/action paths.
 
 ### British Emery voice
 
@@ -106,17 +108,16 @@ Do not introduce MapLibre/WebGL mapping.
 
 ## Remaining Phase 9 work for the final polish pass
 
-The remaining work should be treated as validation and bounded presentation polish, not a redesign restart:
+The implementation is now at the final validation/polish gate. Do not restart or broaden the redesign. Remaining work:
 
 1. Compile/type-check the current branch and repair only Phase 9 regressions.
-2. Run `npm run validate:phase9` plus the Phase 1–8 regression validators that still apply.
+2. Run `npm run validate:phase9` plus applicable Phase 1–8 regression validators.
 3. Smoke-test Chat Core states from typed Chat and live Voice.
 4. Verify desktop/iPhone spacing, keyboard/safe-area behavior, and Voice overlay layering.
-5. Apply only bounded visual polish to Calendar and secondary surfaces if they visibly diverge from the new shared tokens.
-6. Verify HPO Planner/Maps/Accounts/Activity visually while preserving all workflows.
-7. Verify Leaflet map/search/pins/selection/routes.
-8. Confirm the British Voice profile still starts correctly from a fresh Realtime session.
-9. Do not merge or publish until the branch is green and production smoke testing is complete.
+5. Apply only bounded presentation polish to `HpoWeeklyPlanner`, the Accounts list, or Calendar if browser smoke testing proves a visual inconsistency. Do not alter workflow/business logic.
+6. Verify HPO Planner/Maps/Accounts/Activity and Leaflet map/search/pins/selection/routes.
+7. Confirm the British Voice profile still starts correctly from a fresh Realtime session.
+8. Do not merge or publish until the branch is green and production smoke testing is complete.
 
 ## Definition of done
 
