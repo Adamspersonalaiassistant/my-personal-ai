@@ -131,6 +131,7 @@ export async function loadUnifiedVoiceContext(input: {
         selectedCharacters: 0,
         semanticConfidence: null,
       };
+  const memoryPrompt = buildSmartMemoryPrompt(memoryContext);
 
   const voiceTasks = taskResult.data ?? [];
   const nowMs = Date.now();
@@ -164,9 +165,11 @@ export async function loadUnifiedVoiceContext(input: {
     profile: profileResult.data ?? null,
     voiceProfile: voiceResult.data ?? null,
     config: configResult.data ?? null,
-    memories: memoryContext.selected,
+    // Keep raw rows only when there is no digest, so Realtime does not receive the
+    // same long memory set twice. memoryPrompt always preserves provenance.
+    memories: memoryContext.digest ? [] : memoryContext.selected,
     memoryContext,
-    memoryPrompt: buildSmartMemoryPrompt(memoryContext),
+    memoryPrompt,
     actions,
     focus: buildExecutiveFocus(actions),
     recent,
