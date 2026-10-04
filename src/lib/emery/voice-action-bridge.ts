@@ -7,6 +7,23 @@ import { processHpoRouteStopAction } from "@/lib/hpo-route-action-controller";
 import { processEmeryMultiIntentDayPlan } from "./multi-intent-executor.ts";
 import { prepareVoiceRequest, type VoiceUiContext } from "./voice-request-context.ts";
 
+function fieldReadMessage(request: string) {
+  const text = request
+    .toLowerCase()
+    .replace(/[’']/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // The Capability Router has already resolved these short pronoun questions to
+  // the current HPO relationship. Reuse the canonical account-context read
+  // instead of asking the field controller to independently resolve the pronoun.
+  if (/\b(what did she say|what did he say|what did they say|what did them say)\b/.test(text)) {
+    return "What happened here last time?";
+  }
+  return request;
+}
+
 export async function readVoiceHpoFieldStateCore(input: {
   db: any;
   userId: string;
@@ -24,7 +41,7 @@ export async function readVoiceHpoFieldStateCore(input: {
   const result = await processHpoFieldReadCommand({
     db: input.db,
     userId: input.userId,
-    message: input.request,
+    message: fieldReadMessage(input.request),
     context: prepared.currentContext,
   });
   return { result, prepared };
