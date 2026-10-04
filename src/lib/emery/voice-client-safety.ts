@@ -1,4 +1,7 @@
-export type RealtimeControlChannel = Pick<RTCDataChannel, "readyState" | "send">;
+export type RealtimeControlChannel = {
+  readyState: string;
+  send(data: string): void;
+};
 
 function send(channel: RealtimeControlChannel | null | undefined, event: Record<string, unknown>) {
   if (!channel || channel.readyState !== "open") return false;
