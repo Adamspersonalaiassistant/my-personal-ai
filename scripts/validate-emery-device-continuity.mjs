@@ -80,8 +80,9 @@ const chatSource = fs.readFileSync(
   new URL("../src/routes/_authenticated/chat.tsx", import.meta.url),
   "utf8",
 );
-const appShellSource = fs.readFileSync(
-  new URL("../src/components/AppShell.tsx", import.meta.url),
+const rootSource = fs.readFileSync(new URL("../src/routes/__root.tsx", import.meta.url), "utf8");
+const bootstrapSource = fs.readFileSync(
+  new URL("../src/components/EmeryDeviceContinuityBootstrap.tsx", import.meta.url),
   "utf8",
 );
 const centralSource = fs.readFileSync(
@@ -101,14 +102,12 @@ assert(captureSource.includes("deviceSourceMetadata"));
 assert(captureSource.includes("Same Emery · same conversation"));
 assert(deviceHookSource.includes('register("/emery-sw.js"'));
 assert(deviceHookSource.includes("deviceSourceMetadata"));
+assert(bootstrapSource.includes("useEmeryDeviceContinuity"));
+assert(rootSource.includes("EmeryDeviceContinuityBootstrap"));
 
 assert(
   chatSource.includes("useEmeryDeviceContinuity") || chatSource.includes("deviceSourceMetadata"),
   "Main Chat must tag turns with presentation-only device continuity metadata",
-);
-assert(
-  appShellSource.includes("useEmeryDeviceContinuity"),
-  "AppShell must initialize the shared PWA/service-worker continuity hook once",
 );
 assert(
   centralSource.includes("normalizeDeviceSourceMetadata"),
@@ -125,6 +124,7 @@ assert(centralSource.includes("touchCapable"));
 
 assert(iphoneSource.includes("same Emery"));
 assert(iphoneSource.includes("same memory"));
-assert(iphoneSource.includes("same lifelong main conversation"));
+assert(iphoneSource.includes("same main conversation"));
+assert(iphoneSource.includes("server-backed Emery"));
 
 console.log("Emery Phase 8 device continuity validation passed.");
