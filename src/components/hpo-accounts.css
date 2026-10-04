@@ -52,6 +52,40 @@
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--foreground) 3%, transparent);
 }
 
+.hpo-crm [role="dialog"] {
+  border-color: color-mix(in srgb, var(--foreground) 13%, transparent);
+  background: var(--surface);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--foreground) 4%, transparent),
+    0 24px 70px rgba(0, 0, 0, 0.42);
+}
+
+.hpo-crm [role="dialog"] :is(input, textarea, select) {
+  border-color: color-mix(in srgb, var(--foreground) 15%, transparent);
+  background: var(--elevated);
+}
+
+.hpo-crm [role="dialog"] :is(input, textarea, select):focus {
+  border-color: color-mix(in srgb, var(--primary) 62%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.hpo-crm [aria-labelledby="hpo-account-detail-title"] {
+  background:
+    radial-gradient(circle at 85% -12%, color-mix(in srgb, var(--live) 7%, transparent), transparent 19rem),
+    var(--surface);
+}
+
+.hpo-crm [aria-labelledby="hpo-account-detail-title"] > header {
+  border-color: color-mix(in srgb, var(--live) 12%, var(--border));
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+}
+
+.hpo-crm [aria-labelledby="hpo-account-detail-title"] details {
+  border-color: color-mix(in srgb, var(--foreground) 11%, transparent);
+  background: color-mix(in srgb, var(--elevated) 62%, transparent);
+}
+
 .hpo-crm .leaflet-container {
   background: #07101b;
   color: var(--foreground);
