@@ -107,6 +107,8 @@ assert(voiceBridgeSource.includes("processHpoFieldReadCommand"));
 assert(voiceBridgeSource.includes("processHpoRouteStopAction"));
 assert(voiceBridgeSource.includes("processHpoAction"));
 assert(voiceBridgeSource.includes("processEmeryMultiIntentDayPlan"));
+assert(voiceBridgeSource.includes("what did she say"));
+assert(voiceBridgeSource.includes('return "What happened here last time?"'));
 assert(unifiedVoiceSource.includes("loadPolicy.loadPersonalMemory"));
 assert(unifiedVoiceSource.includes("loadPolicy.loadCalendarContext"));
 assert(unifiedVoiceSource.includes("loadPolicy.loadHpoOperatingContext"));
