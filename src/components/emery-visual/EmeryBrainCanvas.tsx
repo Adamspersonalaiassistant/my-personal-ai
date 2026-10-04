@@ -33,7 +33,8 @@ export function EmeryBrainCanvas({ state, compact = false }: { state: EmeryVisua
     let width = 0;
     let height = 0;
     let particles: Particle[] = [];
-    let visible = document.visibilityState === "visible";
+    let documentVisible = document.visibilityState === "visible";
+    let elementVisible = true;
 
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
@@ -54,9 +55,11 @@ export function EmeryBrainCanvas({ state, compact = false }: { state: EmeryVisua
       }));
     };
 
+    const canAnimate = () => documentVisible && elementVisible && width > 0 && height > 0;
+
     const draw = (time: number) => {
       frame = 0;
-      if (!visible || width <= 0 || height <= 0) return;
+      if (!canAnimate()) return;
       context.clearRect(0, 0, width, height);
       const cx = width / 2;
       const cy = height / 2;
@@ -94,25 +97,44 @@ export function EmeryBrainCanvas({ state, compact = false }: { state: EmeryVisua
         }
       }
 
-      if (!reducedMotion.matches) frame = window.requestAnimationFrame(draw);
+      if (!reducedMotion.matches && canAnimate()) frame = window.requestAnimationFrame(draw);
     };
 
-    const observer = new ResizeObserver(resize);
-    observer.observe(canvas);
-    const onVisibility = () => {
-      visible = document.visibilityState === "visible";
-      if (visible && !frame) frame = window.requestAnimationFrame(draw);
-      if (!visible && frame) {
+    const restart = () => {
+      if (canAnimate() && !frame) frame = window.requestAnimationFrame(draw);
+      if (!canAnimate() && frame) {
         window.cancelAnimationFrame(frame);
         frame = 0;
       }
     };
+
+    const resizeObserver = new ResizeObserver(() => {
+      resize();
+      restart();
+    });
+    resizeObserver.observe(canvas);
+
+    const visibilityObserver = new IntersectionObserver(
+      ([entry]) => {
+        elementVisible = Boolean(entry?.isIntersecting);
+        restart();
+      },
+      { rootMargin: "80px", threshold: 0.01 },
+    );
+    visibilityObserver.observe(canvas);
+
+    const onVisibility = () => {
+      documentVisible = document.visibilityState === "visible";
+      restart();
+    };
     document.addEventListener("visibilitychange", onVisibility);
+
     resize();
     draw(performance.now());
 
     return () => {
-      observer.disconnect();
+      resizeObserver.disconnect();
+      visibilityObserver.disconnect();
       document.removeEventListener("visibilitychange", onVisibility);
       if (frame) window.cancelAnimationFrame(frame);
     };
