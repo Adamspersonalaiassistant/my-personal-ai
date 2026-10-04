@@ -45,6 +45,13 @@ const pronoun = routeEmeryCapabilities({
 });
 assert(pronoun.candidateCapabilities.includes("hpo.account.get_context"));
 
+const undo = routeEmeryCapabilities({
+  message: "Undo that.",
+  context: hpoContext,
+  domainHint: "hpo",
+});
+assert(undo.candidateCapabilities.includes("execution.undo"));
+
 const personalWhileRouting = routeEmeryCapabilities({
   message: "Remind me what I told you about my family",
   context: hpoContext,
@@ -88,12 +95,12 @@ const unifiedVoiceFunctionsSource = fs.readFileSync(
   new URL("../src/lib/emery/unified-voice.functions.ts", import.meta.url),
   "utf8",
 );
-const voiceRuntimeSource = fs.readFileSync(
-  new URL("../src/lib/emery/voice-runtime.ts", import.meta.url),
+const unifiedRealtimeSource = fs.readFileSync(
+  new URL("../src/lib/emery/unified-realtime.functions.ts", import.meta.url),
   "utf8",
 );
-const voiceFunctionsSource = fs.readFileSync(
-  new URL("../src/lib/voice.functions.ts", import.meta.url),
+const voiceRuntimeSource = fs.readFileSync(
+  new URL("../src/lib/emery/voice-runtime.ts", import.meta.url),
   "utf8",
 );
 const voiceControlSource = fs.readFileSync(
@@ -117,23 +124,16 @@ assert(unifiedVoiceFunctionsSource.includes("executeVoiceHpoRouteStopCore"));
 assert(unifiedVoiceFunctionsSource.includes("executeVoiceHpoRelationshipCore"));
 assert(unifiedVoiceFunctionsSource.includes("executeVoiceHpoRouteCommandCore"));
 assert(unifiedVoiceFunctionsSource.includes("executeVoiceCalendarCore"));
+assert(unifiedRealtimeSource.includes("loadUnifiedVoiceContext"));
+assert(unifiedRealtimeSource.includes("buildUnifiedVoiceContextPrompt"));
+assert(unifiedRealtimeSource.includes('Use execute_hpo_route_command for route changes AND for “Undo that”'));
+assert(unifiedRealtimeSource.includes("Only say an action succeeded when the tool reports performed=true"));
+assert(voiceRuntimeSource.includes("createUnifiedRealtimeClientSecret as createRealtimeClientSecret"));
 assert(voiceRuntimeSource.includes("executeUnifiedVoiceHpoFieldRead as executeVoiceHpoFieldRead"));
 assert(voiceRuntimeSource.includes("refreshUnifiedVoiceContext as refreshVoiceContext"));
-
-// Final Phase 3 integration requirements intentionally left as tiny edits:
-// 1) Realtime session bootstrap loads the unified context and injects its compact authoritative block.
-// 2) EmeryVoiceControl imports its operational tools from the one-brain runtime barrel.
-assert(
-  voiceFunctionsSource.includes("loadUnifiedVoiceContext"),
-  "voice.functions.ts must use the unified Voice context loader for session bootstrap",
-);
-assert(
-  voiceFunctionsSource.includes("buildUnifiedVoiceContextPrompt"),
-  "voice.functions.ts must inject the compact authoritative one-brain context into Realtime instructions",
-);
 assert(
   voiceControlSource.includes('from "@/lib/emery/voice-runtime"'),
-  "EmeryVoiceControl must use the one-brain runtime barrel for operational Voice tools",
+  "EmeryVoiceControl must use the one-brain runtime barrel for Realtime bootstrap and operational Voice tools",
 );
 
 console.log("Emery Phase 3 one-brain validation passed.");
