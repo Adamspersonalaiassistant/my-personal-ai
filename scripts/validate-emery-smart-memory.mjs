@@ -161,6 +161,10 @@ const smartSource = fs.readFileSync(
   new URL("../src/lib/emery/smart-memory.ts", import.meta.url),
   "utf8",
 );
+const chatAdapterSource = fs.readFileSync(
+  new URL("../src/lib/emery/chat-smart-memory.ts", import.meta.url),
+  "utf8",
+);
 const voiceSource = fs.readFileSync(
   new URL("../src/lib/emery/unified-voice-context.ts", import.meta.url),
   "utf8",
@@ -182,6 +186,8 @@ assert(smartSource.includes("semanticRerank"));
 assert(smartSource.includes("No relevant durable personal memory selected."));
 assert(smartSource.includes("contains_phi"));
 assert(smartSource.includes("manual_correction"));
+assert(chatAdapterSource.includes("retrieveSmartMemories"));
+assert(chatAdapterSource.includes("buildSmartMemoryPrompt"));
 assert(voiceSource.includes("retrieveSmartMemories"));
 assert(voiceSource.includes("const memoryPrompt = buildSmartMemoryPrompt"));
 assert(voiceSource.includes("memories: memoryContext.digest ? [] : memoryContext.selected"));
@@ -190,11 +196,11 @@ assert(voicePromptSource.includes("Structured domain truth"));
 assert(hpoSource.includes("rankHpoRelationshipAccounts"));
 assert(hpoSource.includes("Structured HPO CRM truth outranks personal durable memory"));
 
-// Final Phase 5 integration gate. Normal Chat must consume the same smart-memory
-// retrieval/digest as Voice instead of keeping the legacy lexical-only path.
+// Final Phase 5 integration gate. Normal Chat needs only the shared adapter; the
+// retrieval, digesting, budgets, authority, and fallbacks stay in one module.
 assert(
-  chatSource.includes("retrieveSmartMemories") && chatSource.includes("buildSmartMemoryPrompt"),
-  "central Emery Chat must consume Phase 5 smart memory retrieval and prompt output",
+  chatSource.includes("buildChatSmartMemoryContext"),
+  "central Emery Chat must consume the Phase 5 shared smart-memory adapter",
 );
 
 console.log("Emery Phase 5 smart memory validation passed.");
