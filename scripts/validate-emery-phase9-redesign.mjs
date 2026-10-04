@@ -12,12 +12,14 @@ const shell = read("src/components/AppShell.tsx");
 const voice = read("src/components/EmeryVoiceControl.tsx");
 const hpo = read("src/routes/_authenticated/hpo.tsx");
 const hpoNav = read("src/components/HpoFieldNav.tsx");
+const hpoActivity = read("src/components/HpoActivityView.tsx");
 const hpoCss = read("src/components/hpo-accounts.css");
 const presence = read("src/components/emery-visual/EmeryPresence.tsx");
 const brainCore = read("src/components/emery-visual/EmeryBrainCore.tsx");
 const brainCanvas = read("src/components/emery-visual/EmeryBrainCanvas.tsx");
 const brainRings = read("src/components/emery-visual/EmeryBrainRings.tsx");
 const visualTypes = read("src/components/emery-visual/emery-visual.types.ts");
+const visualRuntime = read("src/lib/emery/visual-runtime.ts");
 const britishVoice = read("docs/EMERY_BRITISH_VOICE_REFERENCE.md");
 
 for (const token of [
@@ -39,6 +41,8 @@ assert(styles.includes("emery-live-glow"), "live intelligence glow utility must 
 
 assert(chat.includes("<EmeryPresence"), "Chat must render the Emery Core presence");
 assert(chat.includes("onVisualStateChange={setVoiceVisualState}"), "Chat must consume real Voice visual state");
+assert(chat.includes('setChatVisualState("syncing")') || chat.includes('selectedFiles.length ? "syncing" : "thinking"'), "Chat attachment sync must drive truthful Core state");
+assert(chat.includes('setChatVisualState("success")'), "Chat completion must expose a bounded success state");
 assert(chat.includes("deviceSourceMetadata()"), "Phase 8 device continuity must remain in Chat");
 assert(chat.includes("sendEmeryMessage"), "Chat must preserve the canonical Emery send path");
 assert(chat.includes("getMainConversationPage"), "Chat must preserve the one main conversation history");
@@ -73,6 +77,8 @@ assert(brainCore.includes("EmeryBrainRings"), "Emery Core must keep the SVG ring
 assert(brainCanvas.includes("requestAnimationFrame"), "Canvas visualization should animate without a second renderer");
 assert(brainRings.includes("<svg"), "precise HUD geometry should use SVG");
 assert(presence.includes("Connected"), "desktop presence should show a restrained connectivity signal");
+assert(visualRuntime.includes('"emery:visual-state"'), "shared visual runtime event channel must remain bounded and presentation-only");
+assert(!visualRuntime.toLowerCase().includes("supabase"), "visual runtime must not become a second persistence system");
 
 for (const label of ["Planner", "Maps", "Accounts", "Activity"]) {
   assert(hpoNav.includes(`label: \"${label}\"`), `HPO nav must preserve ${label}`);
@@ -82,6 +88,9 @@ assert(hpo.includes("HpoWeeklyPlanner"), "Planner must remain the primary HPO wo
 assert(hpo.includes("HpoRoutePlanner"), "existing HPO route builder/map workflow must remain");
 assert(hpoCss.includes(".leaflet-container"), "HPO visual polish must keep Leaflet");
 assert(!hpo.includes("MapLibre"), "Phase 9 must not reintroduce MapLibre");
+assert(hpoActivity.includes("CommandPanel"), "HPO Activity should use the shared professional Emery panel language");
+assert(hpoActivity.includes("SectionHeading"), "HPO Activity should use the shared information hierarchy");
+assert(hpoActivity.includes("Tell Emery what happened"), "HPO Activity recap workflow must remain intact");
 
 assert(shell.includes('to="/chat"'), "App shell must keep Emery as the primary destination");
 assert(shell.includes('to="/hpo"'), "App shell must keep HPO");
