@@ -1,5 +1,6 @@
 import { isAmbientAddressedTurn } from "./ambient-context.ts";
 import { routeEmeryCapabilities } from "./capability-router.ts";
+import { resolveEntity } from "./entity-resolver.ts";
 import {
   EMERY_CANONICAL_EVAL_CORPUS,
   type EmeryCanonicalEvalCase,
@@ -152,13 +153,34 @@ export function runCanonicalEvalCase(test: EmeryCanonicalEvalCase): EmeryEvaluat
   return signals;
 }
 
+function canonicalEntityResolutionSignals(): EmeryEvaluationSignal[] {
+  const result = resolveEntity("Macri Law Firm", [
+    { id: "macri", name: "The Macri Law Firm", address: "1719 NJ-10, Parsippany" },
+    { id: "other", name: "Other Injury Lawyers", address: "Newark" },
+  ]);
+  const passed = result.status === "resolved" && result.value.id === "macri";
+  return [
+    createEvaluationSignal({
+      id: "entity-resolution:macri",
+      category: "entity_resolution",
+      passed,
+      severity: passed ? "info" : "high",
+      source: "canonical_eval",
+      request: "Resolve Macri Law Firm",
+      expected: "macri",
+      observed: result.status === "resolved" ? result.value.id : result.status,
+      metadata: { fixture: "Macri Law Firm" },
+    }),
+  ];
+}
+
 export function runCanonicalEmeryEvaluations(
   corpus: EmeryCanonicalEvalCase[] = EMERY_CANONICAL_EVAL_CORPUS,
 ) {
-  const signals = corpus.flatMap(runCanonicalEvalCase);
+  const signals = [...corpus.flatMap(runCanonicalEvalCase), ...canonicalEntityResolutionSignals()];
   return {
     corpusVersion: 1,
-    cases: corpus.length,
+    cases: corpus.length + 1,
     signals,
     summary: summarizeEvaluationSignals(signals),
   };
