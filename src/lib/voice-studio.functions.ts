@@ -8,9 +8,9 @@ import {
   type RealtimeVoiceId,
 } from "@/lib/voice-profile";
 import {
-  EMERY_DOMINICAN_ENGLISH_REFERENCE,
-  EMERY_FEMININE_AUDITION_VOICE_IDS,
-} from "@/lib/dominican-voice-reference";
+  EMERY_BRITISH_AUDITION_VOICE_IDS,
+  EMERY_BRITISH_ENGLISH_REFERENCE,
+} from "@/lib/british-voice-reference";
 
 type VoiceStudioDb = any;
 
@@ -51,15 +51,15 @@ function namedVoice(text: string): RealtimeVoiceId | null {
   return null;
 }
 
-function feminineAuditionCandidate(value: unknown): value is RealtimeVoiceId {
+function approvedAuditionCandidate(value: unknown): value is RealtimeVoiceId {
   return (
     typeof value === "string" &&
-    (EMERY_FEMININE_AUDITION_VOICE_IDS as readonly string[]).includes(value)
+    (EMERY_BRITISH_AUDITION_VOICE_IDS as readonly string[]).includes(value)
   );
 }
 
 function auditionCandidates() {
-  return [...EMERY_FEMININE_AUDITION_VOICE_IDS] as RealtimeVoiceId[];
+  return [...EMERY_BRITISH_AUDITION_VOICE_IDS] as RealtimeVoiceId[];
 }
 
 function wantsPreview(text: string) {
@@ -86,27 +86,29 @@ function stableVoicePatchFromText(text: string) {
   const request = text.toLowerCase();
   const patch: Record<string, unknown> = {};
 
-  if (/\b(dominican|dominicana|dominican latina)\b/.test(request)) {
-    patch["accent"] = EMERY_DOMINICAN_ENGLISH_REFERENCE.target.identity;
-    patch["accent_description"] = EMERY_DOMINICAN_ENGLISH_REFERENCE.ttsInstruction;
-    patch["accent_reference"] = "Dominican Republic / Santo Domingo Spanish-first bilingual English";
+  if (/\b(british|british english|english accent|uk accent|modern rp|received pronunciation|southern british)\b/.test(request)) {
+    patch["accent"] = EMERY_BRITISH_ENGLISH_REFERENCE.target.accent;
+    patch["accent_description"] = EMERY_BRITISH_ENGLISH_REFERENCE.ttsInstruction;
+    patch["accent_reference"] = "Contemporary refined Southern British / modern RP English";
     patch["gender_presentation"] = "feminine";
-  } else if (/\b(latina|latin american|latin-american|latino)\b/.test(request)) {
-    patch["accent"] =
-      "Natural Latina / Latin-American vocal character in fluent, polished English; warm rhythmic color with clear diction.";
-    patch["accent_description"] =
-      "Fluent natural English with a subtle Latina / Latin-American vocal character. Keep the rhythm and color audible but controlled, warm, modern, and clear. Do not assume a nationality or caricature an accent; Adam should choose the regional flavor and intensity.";
+  }
+  if (/\b(jarvis|jarvis-like|jarvis style|jarvis-style)\b/.test(request)) {
+    patch["presence"] =
+      "composed, intelligent, discreet, quietly authoritative, warm but restrained, highly competent, with subtle dry wit when appropriate";
+    patch["refinement_note"] =
+      "Jarvis-like qualities mean composure, anticipation, precision, efficiency, restrained dry wit, and low-drama confidence only. Remain Emery's own original feminine British voice; never imitate a specific actor or fictional character performance.";
   }
   if (/accent.*(lighter|less|subtler|more subtle)|less.*accent/.test(request)) {
     patch["accent_intensity"] = 0.18;
   }
   if (/accent.*(stronger|more|noticeable)|more.*accent/.test(request)) {
-    patch["accent_intensity"] = 0.38;
+    patch["accent_intensity"] = 0.58;
   }
   if (/\b(early 30s|early thirties)\b/.test(request)) patch["age_impression"] = "early 30s";
+  if (/\b(mid 30s|mid-thirties|mid thirties)\b/.test(request)) patch["age_impression"] = "mid-30s";
   if (/\b(woman|female|feminine)\b/.test(request)) patch["gender_presentation"] = "feminine";
-  if (/perfect english|fluent english|speaks? english perfectly/.test(request)) {
-    patch["english_fluency"] = "fully fluent, precise, natural English";
+  if (/perfect english|fluent english|speaks? english perfectly|native british english/.test(request)) {
+    patch["english_fluency"] = "native, polished British English";
   }
 
   return patch;
@@ -209,11 +211,16 @@ async function recordDesignNote(
 function previewInstructions(profile: any) {
   const delivery = safeObject(profile?.delivery_preferences);
   const stable = safeObject(profile?.stable_identity);
+  const stableAccent =
+    typeof stable["accent_description"] === "string" && stable["accent_description"]
+      ? String(stable["accent_description"])
+      : EMERY_BRITISH_ENGLISH_REFERENCE.ttsInstruction;
   const parts = [
     "Speak as Emery, a highly intelligent, emotionally aware female personal AI companion.",
-    EMERY_DOMINICAN_ENGLISH_REFERENCE.ttsInstruction,
+    stableAccent,
     "The requested presentation is feminine. Do not masculinize the voice.",
-    "Sound natural, warm, confident, relaxed, conversational, and polished without sounding corporate or theatrical.",
+    "Sound natural, composed, quietly confident, conversational, precise, and polished without sounding corporate or theatrical.",
+    "Jarvis-like means calm, concise, anticipatory, precise, and subtly dry—not imitation of a recognizable fictional or actor performance.",
     "Pronounce Emery as Em-er-rie.",
   ];
 
@@ -254,7 +261,7 @@ async function makePreview(apiKey: string, voiceId: RealtimeVoiceId, profile: an
     body: JSON.stringify({
       model: "gpt-4o-mini-tts",
       voice: voiceId,
-      input: EMERY_DOMINICAN_ENGLISH_REFERENCE.previewScript,
+      input: EMERY_BRITISH_ENGLISH_REFERENCE.previewScript,
       instructions: previewInstructions(profile),
       response_format: "mp3",
       speed: clamp(safeObject(profile?.delivery_preferences)["pace"], 0.75, 1.25, 1),
@@ -300,7 +307,6 @@ async function verifyRealtimeCandidate(apiKey: string, userId: string, voiceId: 
   const payload = (await response.json()) as { value?: string };
   return Boolean(payload.value);
 }
-
 
 function parseJsonObject(text: string) {
   const trimmed = text.trim().replace(/^~~~json\s*/i, "").replace(/~~~$/i, "").trim();
@@ -354,7 +360,7 @@ async function synthesizeProfile(
         {
           role: "system",
           content:
-            "Extract Adam's explicitly stated or clearly confirmed Emery Voice preferences from the conversation. Return JSON only. Do not invent preferences he did not express. Numbers are 0 to 1 except pace, which is 0.75 to 1.25. Preserve one stable Emery identity across contexts. The current stored Voice Profile contains researched Dominican-English fields that are authoritative unless Adam explicitly changes them; do not weaken, generalize, erase, or replace the Dominican Republic / Santo Domingo target with a generic Latina or generic Spanish accent. Preserve feminine presentation and the user's female-only audition requirement.",
+            "Extract Adam's explicitly stated or clearly confirmed Emery Voice preferences from the conversation. Return JSON only. Do not invent preferences he did not express. Numbers are 0 to 1 except pace, which is 0.75 to 1.25. Preserve one stable Emery identity across contexts. The currently approved stored Voice Profile is authoritative. Do not revive an older regional/accent brief from history unless Adam explicitly asks to restore it. The current default target is an original feminine British English Emery voice with contemporary refined Southern British / modern RP character and Jarvis-like composure, anticipation, precision and efficiency without imitation of a specific actor or fictional character performance. Preserve feminine presentation unless Adam explicitly changes it.",
         },
         {
           role: "user",
@@ -374,22 +380,31 @@ async function synthesizeProfile(
   const currentDelivery = safeObject(currentProfile?.delivery_preferences);
   const fallback: SynthesizedProfile = {
     stable_identity: {
-      description: EMERY_DOMINICAN_ENGLISH_REFERENCE.target.identity,
-      tone: "natural, conversational, grounded, lively, expressive, polished",
+      description: EMERY_BRITISH_ENGLISH_REFERENCE.target.identity,
+      accent: EMERY_BRITISH_ENGLISH_REFERENCE.target.accent,
+      accent_description: EMERY_BRITISH_ENGLISH_REFERENCE.ttsInstruction,
+      gender_presentation: "feminine",
+      tone: "composed, precise, conversational, quietly confident, understated",
       ...safeObject(currentProfile?.stable_identity),
     },
     delivery_preferences: {
-      pace: clamp(currentDelivery["pace"], 0.75, 1.25, 1),
-      warmth: clamp(currentDelivery["warmth"], 0, 1, 0.65),
-      expressiveness: clamp(currentDelivery["expressiveness"], 0, 1, 0.55),
-      energy: clamp(currentDelivery["energy"], 0, 1, 0.5),
-      brevity: clamp(currentDelivery["brevity"], 0, 1, 0.65),
+      pace: clamp(currentDelivery["pace"], 0.75, 1.25, EMERY_BRITISH_ENGLISH_REFERENCE.realtime.pace),
+      warmth: clamp(currentDelivery["warmth"], 0, 1, EMERY_BRITISH_ENGLISH_REFERENCE.realtime.warmth),
+      expressiveness: clamp(
+        currentDelivery["expressiveness"],
+        0,
+        1,
+        EMERY_BRITISH_ENGLISH_REFERENCE.realtime.expressiveness,
+      ),
+      energy: clamp(currentDelivery["energy"], 0, 1, EMERY_BRITISH_ENGLISH_REFERENCE.realtime.energy),
+      brevity: clamp(currentDelivery["brevity"], 0, 1, EMERY_BRITISH_ENGLISH_REFERENCE.realtime.brevity),
     },
     contextual_preferences: {
-      general: "Natural and conversational.",
-      hpo: "Confident, concise, strategic, and operational without becoming sterile.",
-      personal: "Warm, relaxed, emotionally aware, and direct.",
-      serious: "Calm, grounded, precise, and unhurried.",
+      general:
+        "Natural contemporary British delivery: concise, perceptive, composed and conversational, with understated confidence and occasional subtle dry wit.",
+      hpo: "Calm executive field assistant: confident, concise, strategic, decisive and operational without becoming sterile.",
+      personal: "Warm, familiar, emotionally present and direct while staying composed and natural.",
+      serious: "Calm, grounded, precise, measured and unhurried.",
       ...safeObject(currentProfile?.contextual_preferences),
     },
     pronunciation_preferences: {
@@ -410,16 +425,36 @@ async function synthesizeProfile(
       ...safeObject(parsed["stable_identity"]),
     },
     delivery_preferences: {
-      pace: clamp(rawDelivery["pace"] ?? currentDelivery["pace"], 0.75, 1.25, 1),
-      warmth: clamp(rawDelivery["warmth"] ?? currentDelivery["warmth"], 0, 1, 0.65),
+      pace: clamp(
+        rawDelivery["pace"] ?? currentDelivery["pace"],
+        0.75,
+        1.25,
+        EMERY_BRITISH_ENGLISH_REFERENCE.realtime.pace,
+      ),
+      warmth: clamp(
+        rawDelivery["warmth"] ?? currentDelivery["warmth"],
+        0,
+        1,
+        EMERY_BRITISH_ENGLISH_REFERENCE.realtime.warmth,
+      ),
       expressiveness: clamp(
         rawDelivery["expressiveness"] ?? currentDelivery["expressiveness"],
         0,
         1,
-        0.55,
+        EMERY_BRITISH_ENGLISH_REFERENCE.realtime.expressiveness,
       ),
-      energy: clamp(rawDelivery["energy"] ?? currentDelivery["energy"], 0, 1, 0.5),
-      brevity: clamp(rawDelivery["brevity"] ?? currentDelivery["brevity"], 0, 1, 0.65),
+      energy: clamp(
+        rawDelivery["energy"] ?? currentDelivery["energy"],
+        0,
+        1,
+        EMERY_BRITISH_ENGLISH_REFERENCE.realtime.energy,
+      ),
+      brevity: clamp(
+        rawDelivery["brevity"] ?? currentDelivery["brevity"],
+        0,
+        1,
+        EMERY_BRITISH_ENGLISH_REFERENCE.realtime.brevity,
+      ),
     },
     contextual_preferences: {
       ...safeObject(currentProfile?.contextual_preferences),
@@ -540,6 +575,10 @@ async function saveApprovedProfile(
         context_refresh_tool: true,
         same_conversation_persistence: true,
         durable_memory_persistence: true,
+        approved_voice_id: voiceId,
+        audition_voice_ids: auditionCandidates(),
+        british_english_reference_loaded: true,
+        jarvis_inspired_delivery_not_voice_imitation: true,
       },
       approved_at: approvedAt,
       version: Number(profile.version ?? 1) + 1,
@@ -572,7 +611,7 @@ export async function processVoiceStudioTurn({
       ),
     );
   const designFeedback =
-    /\b(warm|warmer|friendly|friendlier|slow|slower|fast|faster|measured|calm|calmer|grounded|energetic|energy|expressive|restrained|brief|concise|detailed|natural|robotic|corporate|casual|formal|professional|confident|authoritative|playful|serious|accent|latina|latino|latin american|latin-american|bilingual|spanish|dominican|dominicana|american|british|new york|new jersey|southern|female|feminine|mentor|friend|age|young|younger|mature|20s|30s|40s|50s|pitch|deeper|higher|lower)\b/i.test(
+    /\b(warm|warmer|friendly|friendlier|slow|slower|fast|faster|measured|calm|calmer|grounded|energetic|energy|expressive|restrained|brief|concise|detailed|natural|robotic|corporate|casual|formal|professional|confident|authoritative|playful|serious|accent|american|british|english|uk|rp|received pronunciation|southern|female|feminine|jarvis|mentor|friend|age|young|younger|mature|20s|30s|40s|50s|pitch|deeper|higher|lower)\b/i.test(
       text,
     ) || /\b(?:2[0-9]|3[0-9]|4[0-9]|5[0-9])\b/.test(text);
   const maybeStudioTurn =
@@ -586,17 +625,12 @@ export async function processVoiceStudioTurn({
 
   const profile = await ensureProfile(db, userId);
 
-  if (candidate && !feminineAuditionCandidate(candidate)) {
+  if (candidate && !approvedAuditionCandidate(candidate)) {
     return {
       stage: "candidate_blocked" as const,
       operationSucceeded: false,
       voiceId: candidate,
-      note:
-        candidate === "marin"
-          ? "Marin was already rejected by Adam as too generic/American for Emery."
-          : candidate === "cedar"
-            ? "Cedar was rejected by Adam as masculine/off-target. Emery is now locked to the feminine audition path."
-            : "That provider voice is outside Emery's female-only audition allowlist.",
+      note: "That provider voice is outside Emery's current British-feminine audition allowlist. Adam can explicitly reopen the pool if he wants to compare it later.",
       candidates: auditionCandidates(),
     };
   }
@@ -917,7 +951,7 @@ export async function processVoiceStudioTurn({
       approvedVoiceId: profile.base_voice_id ?? null,
       candidates: auditionCandidates(),
       note:
-        "Voice Studio is active in the normal Emery conversation. Adam's Dominican female-English design brief is saved. Only the feminine audition candidates returned here should be suggested or previewed.",
+        "Voice Studio is active in the normal Emery conversation. Adam's current British female voice target is the saved starting point. Only the current audition candidates returned here should be suggested or previewed unless Adam explicitly reopens the pool.",
     };
   }
 
