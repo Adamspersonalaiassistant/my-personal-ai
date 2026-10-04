@@ -18,13 +18,16 @@ export function contextLoadPolicy(route: CapabilityRoute): EmeryContextLoadPolic
     route.needsHpoContext &&
     !route.needsPersonalMemory &&
     !route.needsCalendar &&
+    route.confidence >= 0.94 &&
     route.candidateCapabilities.length > 0;
 
   return {
-    loadHpoOperatingContext: route.needsHpoContext,
+    // Focused field commands already have authoritative Current Context + canonical
+    // controllers, so loading the broad HPO agent snapshot would be redundant.
+    loadHpoOperatingContext: route.needsHpoContext && !isFocusedOperationalHpo,
     loadPersonalMemory: route.needsPersonalMemory,
     // Preserve Emery's existing broad Calendar/task context for general or personal
-    // turns. The optimization intentionally narrows only clearly focused HPO field work.
+    // turns. Narrow it only for clearly deterministic HPO field operations.
     loadCalendarContext: route.needsCalendar || !isFocusedOperationalHpo,
     loadLocation: route.needsLocation,
     isFocusedOperationalHpo,
