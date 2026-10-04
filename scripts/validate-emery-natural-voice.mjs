@@ -52,10 +52,7 @@ assert.equal(
   }),
   "short_follow_up",
 );
-assert.equal(
-  classifyVoiceTurn({ transcript: "Actually Thursday", now: 10_000 }),
-  "correction",
-);
+assert.equal(classifyVoiceTurn({ transcript: "Actually Thursday", now: 10_000 }), "correction");
 
 const corrected = contextualizeVoiceCorrection("Actually Thursday", [
   { role: "user", text: "Follow up Tuesday" },
@@ -76,9 +73,7 @@ assert(correctedWhenCurrentTranscriptAlreadyPersisted.includes("Follow up Tuesda
 assert(!correctedWhenCurrentTranscriptAlreadyPersisted.includes("action: “Actually Thursday”"));
 
 assert.equal(
-  contextualizeVoiceCorrection("Follow up Thursday", [
-    { role: "user", text: "Follow up Tuesday" },
-  ]),
+  contextualizeVoiceCorrection("Follow up Thursday", [{ role: "user", text: "Follow up Tuesday" }]),
   "Follow up Thursday",
 );
 

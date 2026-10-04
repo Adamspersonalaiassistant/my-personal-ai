@@ -507,7 +507,9 @@ export function EmeryVoiceControl({
           break;
         case "error": {
           const message = event.error?.message || "Emery Voice hit a recoverable session error.";
-          const expectedCancellation = /cancel|no active response|output audio buffer/i.test(message);
+          const expectedCancellation = /cancel|no active response|output audio buffer/i.test(
+            message,
+          );
           if (expectedCancellation && activeRef.current) {
             setStatus("listening");
             break;

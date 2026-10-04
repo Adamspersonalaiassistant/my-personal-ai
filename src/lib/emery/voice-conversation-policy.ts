@@ -2,12 +2,7 @@ export const VOICE_FOLLOW_UP_WINDOW_MS = 18_000;
 export const VOICE_ECHO_WINDOW_MS = 8_000;
 
 export type VoiceTurnDisposition =
-  | "normal"
-  | "correction"
-  | "short_follow_up"
-  | "stop_speaking"
-  | "end_session"
-  | "likely_echo";
+  "normal" | "correction" | "short_follow_up" | "stop_speaking" | "end_session" | "likely_echo";
 
 export function normalizeVoiceText(value: string) {
   return String(value ?? "")
@@ -130,13 +125,11 @@ export function contextualizeVoiceCorrection(
 ) {
   if (!isVoiceCorrectionTurn(request)) return request;
   const requestNorm = normalizeVoiceText(request);
-  const previousUser = [...recent]
-    .reverse()
-    .find((turn) => {
-      if (turn.role !== "user") return false;
-      const candidate = String(turn.text ?? "").trim();
-      return Boolean(candidate) && normalizeVoiceText(candidate) !== requestNorm;
-    });
+  const previousUser = [...recent].reverse().find((turn) => {
+    if (turn.role !== "user") return false;
+    const candidate = String(turn.text ?? "").trim();
+    return Boolean(candidate) && normalizeVoiceText(candidate) !== requestNorm;
+  });
   const prior = String(previousUser?.text ?? "").trim();
   if (!prior) return request;
   return `${request}\n\nVOICE CORRECTION: This corrects the immediately previous user-requested action: “${prior.slice(0, 500)}”. Resolve the same target from authoritative current context and recent conversation. Replace/supersede the corrected detail; do not create a duplicate action.`;
