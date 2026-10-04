@@ -509,7 +509,7 @@ function Chat() {
         <div
           ref={scrollRef}
           onScroll={handleScroll}
-          className="emery-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-8 pt-3 [touch-action:pan-y] [-webkit-overflow-scrolling:touch] sm:px-5 md:px-6 lg:px-8"
+          className="emery-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-8 pt-2 [touch-action:pan-y] [-webkit-overflow-scrolling:touch] sm:px-5 sm:pt-3 md:px-6 lg:px-8"
           aria-label="Emery conversation"
         >
           <div className="mx-auto w-full max-w-[1120px]">
@@ -521,7 +521,7 @@ function Chat() {
 
             <div className="mt-3 grid min-w-0 gap-3 2xl:grid-cols-[minmax(0,760px)_300px] 2xl:justify-center">
               <div className="min-w-0">
-                <div className="mb-4 2xl:hidden">
+                 <div className="mb-4 2xl:hidden">
                   <OperatingContextCard />
                 </div>
 
@@ -577,7 +577,7 @@ function Chat() {
                     {messages.map((message) =>
                       message.role === "user" ? (
                         <div key={message.id} className="flex justify-end pl-8 sm:pl-20">
-                          <div className="max-w-[92%] rounded-2xl rounded-br-md border border-primary/30 bg-primary/90 px-4 py-2.5 text-[15px] leading-6 text-primary-foreground shadow-[0_8px_24px_rgba(0,0,0,0.14)] sm:max-w-[82%]">
+                           <div className="emery-user-message max-w-[92%] rounded-lg border px-4 py-3 text-[15px] leading-6 text-foreground sm:max-w-[82%]">
                             {message.attachments.length ? (
                               <div
                                 className={`grid gap-2 ${message.attachments.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}
@@ -601,15 +601,15 @@ function Chat() {
                           </div>
                         </div>
                       ) : (
-                        <div key={message.id} className="group flex items-start gap-3 pr-1 sm:pr-10">
-                          <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-live/15 bg-live/[0.035]">
+                        <div key={message.id} className="group flex min-w-0 items-start gap-2.5 pr-1 sm:gap-3 sm:pr-10">
+                          <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md border border-live/20 bg-live/[0.045] sm:size-9 sm:rounded-xl">
                             <img
                               src={brainImage}
                               alt=""
                               className="emery-blue-brain size-8 object-cover"
                             />
                           </div>
-                          <div className="max-w-[calc(100%-3rem)] whitespace-pre-wrap pt-0.5 text-[15px] leading-7 text-foreground/95 sm:max-w-[88%]">
+                          <div className="emery-assistant-message min-w-0 max-w-[calc(100%-2.625rem)] whitespace-pre-wrap break-words rounded-md border border-live/10 px-3 py-2.5 text-[15px] leading-7 text-foreground/95 sm:max-w-[88%]">
                             {cleanAssistantText(message.text)}
                           </div>
                         </div>
@@ -678,7 +678,7 @@ function Chat() {
           </Button>
         ) : null}
 
-        <div className="z-20 shrink-0 border-t border-border/55 bg-background/94 px-3 pb-[max(.65rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl sm:px-5 md:px-7">
+         <div className="z-20 shrink-0 border-t border-border/55 bg-surface/90 px-3 pb-[max(.65rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl sm:px-5 md:px-7">
           {voiceStudioState ? (
             <CommandPanel variant="elevated" className="mx-auto mb-2 max-w-2xl p-3">
               {voiceStudioState.stage === "previewed" ? (
@@ -789,7 +789,7 @@ function Chat() {
 
           <form
             onSubmit={send}
-            className="emery-glass mx-auto flex max-w-2xl items-end gap-1 rounded-2xl border border-input/80 p-1.5 shadow-[0_14px_36px_rgba(0,0,0,.28)] focus-within:border-primary/50 sm:gap-1.5"
+             className="emery-composer mx-auto flex max-w-2xl items-end gap-1 rounded-lg border border-input/80 p-1.5 focus-within:border-live/45 sm:gap-1.5"
           >
             <input
               ref={fileInputRef}
@@ -840,7 +840,7 @@ function Chat() {
             <Button
               type="submit"
               aria-label="Send"
-              className="emery-press size-11 shrink-0 rounded-xl bg-primary shadow-[0_0_20px_rgba(59,130,246,.16)] disabled:opacity-30"
+               className="emery-press size-11 shrink-0 rounded-md bg-primary shadow-[0_0_20px_color-mix(in_srgb,var(--primary)_16%,transparent)] disabled:opacity-30"
               disabled={(!draft.trim() && selectedFiles.length === 0) || pending}
             >
               <ArrowUp className="size-[18px]" strokeWidth={2.2} />

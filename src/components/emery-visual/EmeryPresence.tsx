@@ -16,16 +16,16 @@ export function EmeryPresence({
 }) {
   if (compact) {
     return (
-      <div className="flex items-center justify-between gap-3 px-1 py-2 sm:hidden">
-        <div className="flex min-w-0 items-center gap-3">
-          <EmeryBrainCore state={state} compact />
-          <div className="min-w-0">
-            <p className="emery-kicker">Emery Core</p>
-            <h1 className="mt-0.5 truncate text-xl font-semibold tracking-[-0.02em]">Emery</h1>
-            <div className="mt-2"><EmeryStateLabel state={state} /></div>
-          </div>
+      <section className="emery-mobile-deck relative isolate h-[210px] w-full overflow-hidden rounded-lg border border-live/15 sm:hidden" aria-label="Emery Core">
+        <div className="emery-grid pointer-events-none absolute inset-0 opacity-70" aria-hidden="true" />
+        <div className="emery-deck-arc pointer-events-none absolute left-1/2 top-[12px] size-[174px] -translate-x-1/2 rounded-full" aria-hidden="true" />
+        <div className="absolute inset-x-4 top-3 z-10 flex items-center justify-between gap-2 text-[9px] font-semibold uppercase tracking-[0.12em]">
+          <span className="text-live">Emery Core</span>
+          <span className="text-secondary-foreground">Personal Intelligence</span>
         </div>
-      </div>
+        <div className="absolute inset-x-0 top-[20px] flex justify-center"><EmeryBrainCore state={state} compact /></div>
+        <div className="absolute inset-x-0 bottom-3 z-10 flex justify-center"><EmeryStateLabel state={state} /></div>
+      </section>
     );
   }
 
