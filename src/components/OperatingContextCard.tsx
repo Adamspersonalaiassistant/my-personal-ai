@@ -31,82 +31,32 @@ export function OperatingContextCard() {
         console.error("Operating context failed", error);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [load]);
 
   if (!snapshot) return null;
-
   const focus = snapshot.focus.task
-    ? {
-        eyebrow: "Focus now",
-        title: snapshot.focus.task.title,
-        meta: `Priority ${snapshot.focus.task.priority}${snapshot.focus.task.due_at ? ` · due ${new Date(snapshot.focus.task.due_at).toLocaleDateString()}` : ""}`,
-        to: "/tasks" as const,
-      }
+    ? { eyebrow: "Focus now", title: snapshot.focus.task.title, meta: `Priority ${snapshot.focus.task.priority}${snapshot.focus.task.due_at ? ` · due ${new Date(snapshot.focus.task.due_at).toLocaleDateString()}` : ""}`, to: "/tasks" as const }
     : snapshot.focus.project_needing_next_action
-      ? {
-          eyebrow: "Needs a next move",
-          title: snapshot.focus.project_needing_next_action.name,
-          meta: "Active project without a next action",
-          to: "/projects" as const,
-        }
+      ? { eyebrow: "Needs a next move", title: snapshot.focus.project_needing_next_action.name, meta: "Active project without a next action", to: "/projects" as const }
       : snapshot.focus.meeting
-        ? {
-            eyebrow: "Next conversation",
-            title: snapshot.focus.meeting.title || "Upcoming meeting",
-            meta: snapshot.focus.meeting.meeting_at
-              ? new Date(snapshot.focus.meeting.meeting_at).toLocaleString([], {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                })
-              : "Upcoming",
-            to: "/meetings" as const,
-          }
+        ? { eyebrow: "Next conversation", title: snapshot.focus.meeting.title || "Upcoming meeting", meta: snapshot.focus.meeting.meeting_at ? new Date(snapshot.focus.meeting.meeting_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "Upcoming", to: "/meetings" as const }
         : null;
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-border/40 bg-card/28">
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        aria-expanded={open}
-        className="emery-press flex min-h-[54px] w-full items-center gap-3 px-3.5 py-2.5 text-left hover:bg-white/[0.025]"
-      >
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/[0.06] text-primary">
-          <Sparkles className="size-3.5" />
-        </div>
+    <section className="overflow-hidden rounded-2xl border border-live/10 bg-surface/80 shadow-[inset_0_1px_0_rgba(255,255,255,.025)]">
+      <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} className="emery-press flex min-h-[58px] w-full items-center gap-3 px-3.5 py-2.5 text-left hover:bg-elevated/70">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-live/15 bg-live/[0.045] text-live"><Sparkles className="size-4" /></div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-primary/80">
-              {focus?.eyebrow ?? "Context"}
-            </span>
-            <span className="text-[10px] text-muted-foreground">
-              {snapshot.tasks.length} tasks · {snapshot.projects.length} projects
-            </span>
-          </div>
-          <p className="mt-0.5 truncate text-[13px] font-medium text-foreground/92">
-            {focus?.title ?? "Nothing urgent is competing for your attention."}
-          </p>
+          <div className="flex items-center gap-2"><span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-live/85">{focus?.eyebrow ?? "Current context"}</span><span className="text-[9px] text-muted-foreground">{snapshot.tasks.length} tasks · {snapshot.projects.length} projects</span></div>
+          <p className="mt-1 truncate text-[13px] font-medium text-foreground/94">{focus?.title ?? "Nothing urgent is competing for your attention."}</p>
         </div>
-        <ChevronDown
-          className={`size-4 shrink-0 text-muted-foreground transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-        />
+        <ChevronDown className={`size-4 shrink-0 text-muted-foreground transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open ? (
-        <div className="border-t border-border/35 px-3.5 pb-3.5 pt-3">
-          {focus ? (
-            <Link
-              to={focus.to}
-              className="block rounded-xl bg-primary/[0.045] px-3 py-2.5 hover:bg-primary/[0.07]"
-            >
-              <p className="text-[11px] font-medium text-foreground">{focus.title}</p>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">{focus.meta}</p>
-            </Link>
-          ) : null}
-
+        <div className="border-t border-border/45 px-3.5 pb-3.5 pt-3">
+          {focus ? <Link to={focus.to} className="block rounded-xl border border-primary/10 bg-primary/[0.04] px-3 py-2.5 hover:bg-primary/[0.07]"><p className="text-[11px] font-medium text-foreground">{focus.title}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{focus.meta}</p></Link> : null}
           <div className="mt-2 grid grid-cols-4 gap-1.5">
             <ContextLink to="/tasks" icon={CheckSquare} value={snapshot.tasks.length} label="Tasks" />
             <ContextLink to="/projects" icon={FolderKanban} value={snapshot.projects.length} label="Projects" />
@@ -119,25 +69,6 @@ export function OperatingContextCard() {
   );
 }
 
-function ContextLink({
-  to,
-  icon: Icon,
-  value,
-  label,
-}: {
-  to: "/tasks" | "/projects" | "/meetings" | "/settings";
-  icon: typeof CheckSquare;
-  value: number;
-  label: string;
-}) {
-  return (
-    <Link
-      to={to}
-      className="emery-press flex min-w-0 flex-col items-center rounded-xl px-1.5 py-2 text-center hover:bg-white/[0.025]"
-    >
-      <Icon className="size-3.5 text-primary/85" />
-      <span className="mt-1 text-xs font-semibold">{value}</span>
-      <span className="truncate text-[8px] uppercase tracking-[0.09em] text-muted-foreground">{label}</span>
-    </Link>
-  );
+function ContextLink({ to, icon: Icon, value, label }: { to: "/tasks" | "/projects" | "/meetings" | "/settings"; icon: typeof CheckSquare; value: number; label: string }) {
+  return <Link to={to} className="emery-press flex min-w-0 flex-col items-center rounded-xl border border-transparent px-1.5 py-2 text-center hover:border-border/60 hover:bg-elevated"><Icon className="size-3.5 text-primary/85" /><span className="mt-1 text-xs font-semibold">{value}</span><span className="truncate text-[8px] uppercase tracking-[0.09em] text-muted-foreground">{label}</span></Link>;
 }
