@@ -543,7 +543,7 @@ function Accounts({
           return (
             <article
               key={a.id}
-              className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
+              className="hpo-account-card min-w-0 overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
             >
               <Button
                 type="button"
