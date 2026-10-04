@@ -678,7 +678,7 @@ function Chat() {
           </Button>
         ) : null}
 
-         <div className="z-20 shrink-0 border-t border-border/55 bg-surface/90 px-3 pb-2 pt-2 backdrop-blur-xl sm:px-5 md:px-7">
+         <div className="z-20 shrink-0 border-t border-border/55 bg-surface/90 px-3 pb-[max(.65rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl sm:px-5 md:px-7">
           {voiceStudioState ? (
             <CommandPanel variant="elevated" className="mx-auto mb-2 max-w-2xl p-3">
               {voiceStudioState.stage === "previewed" ? (
