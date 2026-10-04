@@ -1,0 +1,62 @@
+name: Validate Emery Phase 9
+
+on:
+  push:
+    branches: [emery-phase9-professional-redesign]
+    paths:
+      - 'src/**'
+      - 'scripts/validate-emery-phase9-redesign.mjs'
+      - 'docs/EMERY_PHASE9_REDESIGN_STATE.md'
+      - 'package.json'
+      - 'bun.lock'
+      - '.lovable/plan.md'
+      - '.github/workflows/validate-phase9.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  phase9:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Phase 9 redesign contract
+        run: bun run validate:phase9
+      - name: Orchestration regression
+        run: bun run validate:orchestration
+      - name: HPO account regression
+        run: bun run validate:hpo-account
+      - name: HPO activity regression
+        run: bun run validate:hpo-activity
+      - name: TypeScript
+        run: bunx tsc --noEmit
+      - name: Focused Phase 9 lint
+        run: >-
+          bunx eslint --rule 'prettier/prettier: off'
+          src/components/AppShell.tsx
+          src/components/EmeryVoiceControl.tsx
+          src/components/OperatingContextCard.tsx
+          src/components/HpoFieldNav.tsx
+          src/components/HpoActivityView.tsx
+          src/components/emery-visual/EmeryBrainCanvas.tsx
+          src/components/emery-visual/EmeryBrainCore.tsx
+          src/components/emery-visual/EmeryBrainRings.tsx
+          src/components/emery-visual/EmeryPresence.tsx
+          src/components/emery-visual/EmeryStateLabel.tsx
+          src/components/emery-visual/emery-visual.types.ts
+          src/components/ui/emery/CommandPanel.tsx
+          src/components/ui/emery/ContextStrip.tsx
+          src/components/ui/emery/IntelligenceMetric.tsx
+          src/components/ui/emery/SectionHeading.tsx
+          src/components/ui/emery/StatusChip.tsx
+          src/lib/emery/visual-runtime.ts
+          src/routes/_authenticated/chat.tsx
+      - name: Production build
+        run: bun run build
