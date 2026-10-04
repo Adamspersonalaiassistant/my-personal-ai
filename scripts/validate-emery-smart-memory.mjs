@@ -165,12 +165,12 @@ const voiceSource = fs.readFileSync(
   new URL("../src/lib/emery/unified-voice-context.ts", import.meta.url),
   "utf8",
 );
-const hpoSource = fs.readFileSync(
-  new URL("../src/lib/hpo-agent-context.ts", import.meta.url),
+const voicePromptSource = fs.readFileSync(
+  new URL("../src/lib/emery/voice-context-prompt.ts", import.meta.url),
   "utf8",
 );
-const realtimeSource = fs.readFileSync(
-  new URL("../src/lib/emery/unified-realtime.functions.ts", import.meta.url),
+const hpoSource = fs.readFileSync(
+  new URL("../src/lib/hpo-agent-context.ts", import.meta.url),
   "utf8",
 );
 const chatSource = fs.readFileSync(
@@ -183,19 +183,18 @@ assert(smartSource.includes("No relevant durable personal memory selected."));
 assert(smartSource.includes("contains_phi"));
 assert(smartSource.includes("manual_correction"));
 assert(voiceSource.includes("retrieveSmartMemories"));
-assert(voiceSource.includes("memoryPrompt: buildSmartMemoryPrompt"));
+assert(voiceSource.includes("const memoryPrompt = buildSmartMemoryPrompt"));
+assert(voiceSource.includes("memories: memoryContext.digest ? [] : memoryContext.selected"));
+assert(voicePromptSource.includes("SMART DURABLE MEMORY CONTEXT"));
+assert(voicePromptSource.includes("Structured domain truth"));
 assert(hpoSource.includes("rankHpoRelationshipAccounts"));
 assert(hpoSource.includes("Structured HPO CRM truth outranks personal durable memory"));
 
-// Final Phase 5 integration gates. Normal Chat and Realtime Voice must consume the
-// same smart-memory retrieval/digest rather than keeping a separate lexical path.
+// Final Phase 5 integration gate. Normal Chat must consume the same smart-memory
+// retrieval/digest as Voice instead of keeping the legacy lexical-only path.
 assert(
   chatSource.includes("retrieveSmartMemories") && chatSource.includes("buildSmartMemoryPrompt"),
   "central Emery Chat must consume Phase 5 smart memory retrieval and prompt output",
-);
-assert(
-  realtimeSource.includes("memoryPrompt"),
-  "Realtime Voice instructions must prefer the Phase 5 memoryPrompt/digest",
 );
 
 console.log("Emery Phase 5 smart memory validation passed.");
