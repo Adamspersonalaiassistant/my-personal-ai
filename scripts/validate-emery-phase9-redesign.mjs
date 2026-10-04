@@ -92,9 +92,9 @@ assert(hpoActivity.includes("CommandPanel"), "HPO Activity should use the shared
 assert(hpoActivity.includes("SectionHeading"), "HPO Activity should use the shared information hierarchy");
 assert(hpoActivity.includes("Tell Emery what happened"), "HPO Activity recap workflow must remain intact");
 
-assert(shell.includes('to="/chat"'), "App shell must keep Emery as the primary destination");
-assert(shell.includes('to="/hpo"'), "App shell must keep HPO");
-assert(shell.includes('to="/calendar"'), "App shell must keep Calendar");
+assert(shell.includes('to="/chat"') || shell.includes('to: "/chat"'), "App shell must keep Emery as the primary destination");
+assert(shell.includes('to="/hpo"') || shell.includes('to: "/hpo"'), "App shell must keep HPO");
+assert(shell.includes('to="/calendar"') || shell.includes('to: "/calendar"'), "App shell must keep Calendar");
 assert(shell.includes("max-w-[1680px]"), "desktop command center must use available large-screen space");
 assert(shell.includes("md:hidden"), "mobile navigation must remain distinct from desktop layout");
 assert(shell.includes("md:flex"), "desktop navigation must remain responsive");
