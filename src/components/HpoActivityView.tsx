@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { CalendarDays, CheckCircle2, Clock3, MessageCircle, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CommandPanel } from "@/components/ui/emery/CommandPanel";
+import { SectionHeading } from "@/components/ui/emery/SectionHeading";
+import { StatusChip } from "@/components/ui/emery/StatusChip";
 
 type ActivityType = "office_visit" | "lunch" | "dinner" | "event";
 type Account = { id: string; name: string };
@@ -107,23 +110,35 @@ export function HpoActivityView({ data, onOpenAccount, onAskEmery, onMore, loadi
     "Add an HPO activity. Use exactly one type: Office visit, Lunch, Dinner, or Event. Office visits are routine in-person office relationship visits. Lunches and dinners are business meals with doctors, attorneys, providers, referral partners, or offices. Events are networking or industry relationship events such as Paramus MRI Oktoberfest. If it is future, put it on my calendar and set the next-day recap workflow. If it already happened and you do not have the recap, ask me what happened before saving it.";
 
   return (
-    <section className="space-y-3">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-        <div className="min-w-0">
-          <h1 className="text-lg font-semibold">Activity</h1>
-          <p className="text-xs text-muted-foreground">Office visits, meals, and relationship events</p>
+    <section className="space-y-4">
+      <CommandPanel variant="glass" className="overflow-hidden">
+        <SectionHeading
+          eyebrow="Relationship Intelligence"
+          title="Activity"
+          description="Office visits, meals, events and follow-up signals in one field history."
+          action={
+            <Button
+              className="emery-press h-11 gap-2 rounded-xl px-3 text-xs"
+              onClick={() => onAskEmery(addPrompt, "Add activity")}
+            >
+              <Plus className="size-4" />
+              Add
+            </Button>
+          }
+        />
+        <div className="mt-4 flex flex-wrap gap-2">
+          <StatusChip tone="live">{history.length} logged</StatusChip>
+          {upcoming.length ? <StatusChip tone="neutral">{upcoming.length} upcoming</StatusChip> : null}
+          {recapNeeded.length ? <StatusChip tone="warning">{recapNeeded.length} recap needed</StatusChip> : null}
         </div>
-        <Button className="h-11 px-3 text-xs" onClick={() => onAskEmery(addPrompt, "Add activity")}>
-          <Plus className="size-4" /> Add
-        </Button>
-      </div>
+      </CommandPanel>
 
       <label className="block">
         <span className="sr-only">Activity type</span>
         <select
           value={filter}
           onChange={(event) => setFilter(event.target.value as "all" | ActivityType)}
-          className="h-12 w-full rounded-xl border border-border bg-card px-3 text-base text-foreground outline-none focus:border-primary"
+          className="h-12 w-full rounded-xl border border-border/70 bg-elevated px-3 text-base text-foreground outline-none transition focus:border-primary"
         >
           {options.map(([value, optionLabel]) => (
             <option key={value} value={value}>
@@ -135,13 +150,13 @@ export function HpoActivityView({ data, onOpenAccount, onAskEmery, onMore, loadi
 
       {recapNeeded.length > 0 && (
         <div className="space-y-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-primary">
-            Recap needed · {recapNeeded.length}
-          </h2>
+          <p className="emery-kicker px-1">Recap needed · {recapNeeded.length}</p>
           {recapNeeded.map(({ row, type }) => (
-            <article key={row.id} className="rounded-2xl border border-primary/30 bg-card p-3 shadow-sm">
-              <div className="flex items-start gap-2">
-                <Clock3 className="mt-0.5 size-4 shrink-0 text-primary" />
+            <CommandPanel key={row.id} variant="elevated" active className="p-3.5">
+              <div className="flex items-start gap-3">
+                <div className="emery-icon-well flex size-9 shrink-0 rounded-xl">
+                  <Clock3 className="size-4" />
+                </div>
                 <div className="min-w-0 flex-1">
                   <p className="break-words text-sm font-semibold">{row.title || labels[type]}</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
@@ -151,7 +166,7 @@ export function HpoActivityView({ data, onOpenAccount, onAskEmery, onMore, loadi
               </div>
               <Button
                 variant="outline"
-                className="mt-3 h-11 w-full gap-2"
+                className="emery-press mt-3 h-11 w-full gap-2 rounded-xl border-primary/20 bg-primary/[0.045]"
                 onClick={() =>
                   onAskEmery(
                     `I need to recap my HPO ${labels[type]} “${row.title || labels[type]}” from ${dateTime(row.meeting_at)}. Ask me what happened, who I spoke with, the outcome, and any follow-up, then save it under HPO Activity → ${labels[type]}.`,
@@ -159,41 +174,40 @@ export function HpoActivityView({ data, onOpenAccount, onAskEmery, onMore, loadi
                   )
                 }
               >
-                <MessageCircle className="size-4" /> Tell Emery what happened
+                <MessageCircle className="size-4" />
+                Tell Emery what happened
               </Button>
-            </article>
+            </CommandPanel>
           ))}
         </div>
       )}
 
       {upcoming.length > 0 && (
         <div className="space-y-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Upcoming
-          </h2>
+          <p className="emery-kicker px-1 text-muted-foreground">Upcoming</p>
           {upcoming.map(({ row, type }) => (
-            <article key={row.id} className="rounded-2xl border border-border bg-card p-3 shadow-sm">
-              <div className="flex items-start gap-2">
-                <CalendarDays className="mt-0.5 size-4 shrink-0 text-primary" />
+            <CommandPanel key={row.id} className="p-3.5">
+              <div className="flex items-start gap-3">
+                <div className="emery-icon-well flex size-9 shrink-0 rounded-xl">
+                  <CalendarDays className="size-4" />
+                </div>
                 <div className="min-w-0">
                   <p className="break-words text-sm font-semibold">{row.title || labels[type]}</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {labels[type]} · {dateTime(row.meeting_at)}
                   </p>
-                  <p className="mt-1 text-[11px] text-primary">
+                  <p className="mt-1 text-[11px] text-live">
                     Emery will ask for a recap the next morning.
                   </p>
                 </div>
               </div>
-            </article>
+            </CommandPanel>
           ))}
         </div>
       )}
 
       <div className="space-y-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          History
-        </h2>
+        <p className="emery-kicker px-1 text-muted-foreground">History</p>
         {history.map(({ row, type }) => {
           const accountName = row.account_id ? accountNames.get(row.account_id) : null;
           return (
@@ -202,15 +216,17 @@ export function HpoActivityView({ data, onOpenAccount, onAskEmery, onMore, loadi
               type="button"
               onClick={() => row.account_id && onOpenAccount(row.account_id)}
               disabled={!row.account_id}
-              className="min-h-[84px] w-full rounded-2xl border border-border bg-card px-3 py-3 text-left shadow-sm enabled:hover:bg-muted/40 disabled:cursor-default"
+              className="emery-press emery-panel-matte min-h-[84px] w-full rounded-2xl border px-3.5 py-3 text-left enabled:hover:border-primary/25 enabled:hover:bg-elevated disabled:cursor-default"
             >
-              <span className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" />
+              <span className="flex items-start gap-3">
+                <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl bg-success/10 text-success">
+                  <CheckCircle2 className="size-4" />
+                </span>
                 <span className="min-w-0 flex-1">
                   <span className="block break-words text-sm font-semibold">
                     {row.activity_title || accountName || labels[type]}
                   </span>
-                  <span className="mt-0.5 block text-xs font-medium text-primary">
+                  <span className="mt-0.5 block text-xs font-medium text-live">
                     {labels[type]}
                     {accountName ? ` · ${accountName}` : ""}
                   </span>
@@ -239,14 +255,14 @@ export function HpoActivityView({ data, onOpenAccount, onAskEmery, onMore, loadi
           );
         })}
         {!history.length && !recapNeeded.length && !upcoming.length && (
-          <p className="py-10 text-center text-sm text-muted-foreground">
-            No activity in this category yet.
-          </p>
+          <CommandPanel className="py-10 text-center">
+            <p className="text-sm text-muted-foreground">No activity in this category yet.</p>
+          </CommandPanel>
         )}
       </div>
 
       {data.hasMore && (
-        <Button variant="outline" className="h-11 w-full" onClick={onMore} disabled={loading}>
+        <Button variant="outline" className="emery-press h-11 w-full rounded-xl" onClick={onMore} disabled={loading}>
           {loading ? "Loading…" : "Earlier activity"}
         </Button>
       )}
