@@ -26,8 +26,36 @@ import {
 } from "@/lib/emery/voice-client-safety";
 import { useAmbientContext } from "@/lib/emery/use-ambient-context";
 import { EmeryAmbientContextToggle } from "@/components/EmeryAmbientContextToggle";
+import type { EmeryVisualState } from "@/components/emery-visual/emery-visual.types";
 
 type VoiceStatus = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "error";
+
+function visualStateForVoiceStatus(status: VoiceStatus): EmeryVisualState {
+  if (status === "connecting") return "syncing";
+  if (status === "listening") return "listening";
+  if (status === "thinking") return "thinking";
+  if (status === "speaking") return "speaking";
+  if (status === "error") return "error";
+  return "idle";
+}
+
+function visualStateForTool(name: string): EmeryVisualState {
+  if (name === "search_web") return "searching";
+  if (name === "refresh_emery_context" || name === "get_hpo_field_state") return "remembering";
+  if (name === "execute_hpo_route_command") return "planning";
+  if (name === "update_voice_delivery") return "syncing";
+  if (
+    [
+      "execute_calendar_action",
+      "execute_hpo_action",
+      "execute_hpo_route_stop_action",
+      "execute_hpo_route_note",
+    ].includes(name)
+  ) {
+    return "executing";
+  }
+  return "using_tool";
+}
 
 async function currentHpoVoiceLocation(request: string) {
   if (
@@ -73,11 +101,13 @@ type RealtimeEvent = {
 
 export function EmeryVoiceControl({
   onConversationChanged,
+  onVisualStateChange,
   hpoRouteId,
   hpoStopId,
   hpoAccountId,
 }: {
   onConversationChanged?: () => void;
+  onVisualStateChange?: (state: EmeryVisualState) => void;
   hpoRouteId?: string | null;
   hpoStopId?: string | null;
   hpoAccountId?: string | null;
@@ -119,6 +149,10 @@ export function EmeryVoiceControl({
   const lastAssistantTranscriptRef = useRef("");
   const lastAssistantAtRef = useRef(0);
   const followUpUntilRef = useRef(0);
+
+  useEffect(() => {
+    onVisualStateChange?.(visualStateForVoiceStatus(status));
+  }, [onVisualStateChange, status]);
 
   const refreshReadiness = useCallback(async () => {
     try {
@@ -234,11 +268,13 @@ export function EmeryVoiceControl({
       const rawArguments = event.arguments ?? event.item?.arguments ?? "{}";
       if (!callId || !name || processedToolCallsRef.current.has(callId)) return;
       processedToolCallsRef.current.add(callId);
+      onVisualStateChange?.(visualStateForTool(name));
 
       let args: { query?: string; request?: string } = {};
       try {
         args = JSON.parse(rawArguments) as { query?: string; request?: string };
       } catch {
+        onVisualStateChange?.("error");
         sendToolOutput(callId, "The tool arguments were invalid. Ask Adam briefly to retry.");
         return;
       }
@@ -407,6 +443,7 @@ export function EmeryVoiceControl({
 
         sendToolOutput(callId, `Unknown tool: ${name}`);
       } catch {
+        onVisualStateChange?.("error");
         sendToolOutput(
           callId,
           "That tool is temporarily unavailable. Answer without inventing its result.",
@@ -424,6 +461,7 @@ export function EmeryVoiceControl({
       hpoStopId,
       hpoAccountId,
       onConversationChanged,
+      onVisualStateChange,
       refreshContext,
       searchWeb,
       sendToolOutput,
@@ -771,8 +809,8 @@ export function EmeryVoiceControl({
         disabled={status === "connecting"}
         className={`emery-press relative flex size-11 shrink-0 items-center justify-center rounded-xl transition disabled:cursor-wait disabled:opacity-70 ${
           active
-            ? "bg-primary text-primary-foreground shadow-[0_0_22px_rgba(41,142,255,0.28)]"
-            : "text-primary/85 hover:bg-primary/[0.07]"
+            ? "bg-live text-background shadow-[0_0_26px_rgba(34,211,238,0.24)]"
+            : "text-live hover:bg-live/[0.08]"
         }`}
       >
         {status === "connecting" ? (
@@ -783,17 +821,14 @@ export function EmeryVoiceControl({
           <Mic className="size-[18px]" strokeWidth={1.9} />
         )}
         {ready === false && !active ? (
-          <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-amber-400 ring-2 ring-background" />
+          <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-warning ring-2 ring-background" />
         ) : null}
       </button>
 
       {active ? (
         <div className="pointer-events-none fixed left-1/2 top-[max(4.4rem,env(safe-area-inset-top))] z-[80] flex -translate-x-1/2 flex-col items-center gap-2">
-          <div className="flex items-center gap-2 rounded-full border border-primary/18 bg-background/92 px-3 py-2 text-xs font-medium shadow-lg backdrop-blur-2xl">
-            <span className="relative flex size-2">
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary/50" />
-              <span className="relative inline-flex size-2 rounded-full bg-primary" />
-            </span>
+          <div className="emery-glass flex items-center gap-2 rounded-full border border-live/20 px-3 py-2 text-xs font-medium text-foreground shadow-lg">
+            <span className="emery-status-pulse size-2 rounded-full bg-live" />
             <span>
               {status === "speaking"
                 ? "Emery is speaking"
@@ -811,7 +846,7 @@ export function EmeryVoiceControl({
       ) : null}
 
       {error ? (
-        <div className="fixed inset-x-3 bottom-[calc(6rem+env(safe-area-inset-bottom))] z-[80] mx-auto max-w-md rounded-2xl border border-destructive/25 bg-background/96 p-3 shadow-xl backdrop-blur-2xl">
+        <div className="emery-panel-elevated fixed inset-x-3 bottom-[calc(6rem+env(safe-area-inset-bottom))] z-[80] mx-auto max-w-md rounded-2xl border border-destructive/25 p-3 shadow-xl">
           <div className="flex items-start gap-2">
             <Radio className="mt-0.5 size-4 shrink-0 text-destructive" />
             <p className="min-w-0 flex-1 text-xs leading-5 text-foreground/90">{error}</p>
@@ -837,7 +872,7 @@ export function EmeryVoiceControl({
           role="presentation"
         >
           <section
-            className="emery-sheet-in w-full rounded-t-[1.6rem] border-t border-border/55 bg-background/98 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:mx-auto sm:max-w-md sm:rounded-2xl sm:border"
+            className="emery-sheet-in emery-panel-elevated w-full rounded-t-[1.6rem] border-t border-border/55 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:mx-auto sm:max-w-md sm:rounded-2xl sm:border"
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"
@@ -845,20 +880,18 @@ export function EmeryVoiceControl({
           >
             <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-white/15 sm:hidden" />
             <div className="flex items-start gap-3">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/[0.07] text-primary">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-live/10 text-live">
                 <Mic className="size-[18px]" />
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold">Voice infrastructure is ready.</p>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  The secure Realtime connection, same-Emery memory/history, interruption handling,
-                  speech transcription, current-context refresh, and live web search are wired. The
-                  remaining step is approving Emery’s final voice identity.
+                  Secure Realtime voice shares this same Emery conversation, memory, current context,
+                  actions and tools. Approve the final voice identity before the first live session.
                 </p>
                 {selectedVoice ? (
                   <p className="mt-2 text-[11px] text-muted-foreground">
-                    Stored voice: <span className="text-foreground">{selectedVoice}</span> ·
-                    awaiting approval
+                    Stored voice: <span className="text-foreground">{selectedVoice}</span> · awaiting approval
                   </p>
                 ) : null}
               </div>
@@ -871,12 +904,12 @@ export function EmeryVoiceControl({
                 <X className="size-4" />
               </button>
             </div>
-            <div className="mt-4 rounded-xl border border-primary/12 bg-primary/[0.035] p-3">
+            <div className="mt-4 rounded-xl border border-live/15 bg-live/[0.04] p-3">
               <div className="flex items-start gap-2">
-                <Search className="mt-0.5 size-3.5 shrink-0 text-primary" />
+                <Search className="mt-0.5 size-3.5 shrink-0 text-live" />
                 <p className="text-[11px] leading-5 text-muted-foreground">
-                  Once the voice is approved, this same mic becomes the live conversation control.
-                  No second assistant and no second conversation are created.
+                  Once approved, this microphone becomes the live control for the same Emery Core shown
+                  in Chat. There is no second assistant and no second conversation.
                 </p>
               </div>
             </div>
