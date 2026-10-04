@@ -15,7 +15,7 @@ import {
   refreshVoiceContext,
   searchWebForVoice,
   updateVoiceDeliveryFromLive,
-} from "@/lib/voice.functions";
+} from "@/lib/emery/voice-runtime";
 
 type VoiceStatus = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "error";
 
