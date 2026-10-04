@@ -6,6 +6,7 @@ export function buildUnifiedVoiceContextPrompt(context: {
   capabilityRoute?: any;
   actionPlan?: any;
   loadPolicy?: any;
+  memoryPrompt?: string | null;
 }) {
   const current = context.currentContext;
   if (!current) return "";
@@ -64,7 +65,8 @@ export function buildUnifiedVoiceContextPrompt(context: {
     route ? `CURRENT CAPABILITY ROUTE:\n${JSON.stringify(route)}` : "",
     plan ? `CURRENT EXISTING-PLANNER PLAN:\n${JSON.stringify(plan)}` : "",
     context.loadPolicy ? `CURRENT CONTEXT LOAD POLICY:\n${JSON.stringify(context.loadPolicy)}` : "",
-    "Use this server-resolved context before stale client hints or natural-language inference. For writes, a model interpretation is never proof of execution; only canonical controller results/receipts authorize a success confirmation.",
+    context.memoryPrompt ? `SMART DURABLE MEMORY CONTEXT:\n${context.memoryPrompt}` : "",
+    "Use this server-resolved context before stale client hints or natural-language inference. Structured domain truth (including HPO CRM records) outranks durable personal memory. For writes, a model interpretation is never proof of execution; only canonical controller results/receipts authorize a success confirmation.",
   ]
     .filter(Boolean)
     .join("\n\n");
