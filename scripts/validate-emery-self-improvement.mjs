@@ -15,7 +15,7 @@ import {
 import { resolveEntity } from "../src/lib/emery/entity-resolver.ts";
 
 const canonical = runCanonicalEmeryEvaluations();
-assert.equal(canonical.cases, EMERY_CANONICAL_EVAL_CORPUS.length);
+assert.equal(canonical.cases, EMERY_CANONICAL_EVAL_CORPUS.length + 1);
 assert(canonical.cases >= 15, "Phase 7 canonical corpus should cover the real Emery/Jarvis workflows");
 assert.equal(
   canonical.summary.failed,
@@ -27,6 +27,7 @@ assert(canonical.summary.categories.some((item) => item.category === "capability
 assert(canonical.summary.categories.some((item) => item.category === "context_accuracy"));
 assert(canonical.summary.categories.some((item) => item.category === "voice_correction"));
 assert(canonical.summary.categories.some((item) => item.category === "memory_retrieval"));
+assert(canonical.summary.categories.some((item) => item.category === "entity_resolution"));
 
 const resolvedEntity = resolveEntity("Macri Law Firm", [
   { id: "macri", name: "The Macri Law Firm", address: "1719 NJ-10, Parsippany" },
