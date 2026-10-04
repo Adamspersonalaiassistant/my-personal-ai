@@ -111,6 +111,14 @@ export function deviceContinuityPrompt(input: {
   return `DEVICE CONTINUITY:\n- Current presentation surface: ${deviceClass}; platform=${platform}; display=${displayMode}; touch=${input.touchCapable === true ? "yes" : input.touchCapable === false ? "no" : "unknown"}.\n- This is presentation context only. It must never create a separate Emery identity, memory, planner, conversation, CRM, or execution state.\n- The same server-side conversation, durable memory, Current Context, Capability Router, planner, controllers, execution receipts, HPO state, and Calendar state remain authoritative across iPhone and computer.\n- On phone, keep interaction concise and touch-friendly when brevity helps. On desktop, richer formatting is acceptable when useful. Do not change factual content merely because the device changed.\n- Never claim native iOS, Siri, Action Button, Contacts, Photos, Files, Calendar, or Reminders access unless the connected app/Shortcut/tool actually confirms it.`;
 }
 
+export function prepareDeviceContinuity(raw: Record<string, unknown> | null | undefined) {
+  const metadata = normalizeDeviceSourceMetadata(raw);
+  return {
+    metadata,
+    prompt: deviceContinuityPrompt(metadata),
+  } as const;
+}
+
 export const ONE_EMERY_DEVICE_CONTRACT = `ONE EMERY DEVICE CONTRACT:
 - Emery is one assistant across iPhone PWA, mobile browser, desktop browser, and future native entry points.
 - Device metadata changes presentation only; it never forks memory, identity, conversation, routing, or action state.
