@@ -50,7 +50,7 @@ const moreItems = [
 
 const RETURN_KEY = "emery:return";
 const PREFILL_KEY = "emery:prefill";
-const EMERY_BUILD_ID = "2026-10-04-phase9-mobile-command-v1";
+const EMERY_BUILD_ID = "2026-10-04-phase9-mobile-jarvis-v1";
 
 export function AppShell({ title, children, padded = true, askEmery }: { title: string; children: ReactNode; padded?: boolean; askEmery?: string }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -152,10 +152,10 @@ export function AppShell({ title, children, padded = true, askEmery }: { title: 
       </aside>
 
       <div className="relative z-10 flex min-h-0 min-w-0 flex-col overflow-hidden">
-        <header className="z-40 flex min-h-[54px] shrink-0 items-center justify-between border-b border-border/55 bg-surface/90 px-3 pb-1.5 pt-[max(0.35rem,env(safe-area-inset-top))] backdrop-blur-lg sm:px-5">
+        <header className={`z-40 flex shrink-0 items-center justify-between border-b border-border/55 bg-surface/90 px-3 pt-[max(0.35rem,env(safe-area-inset-top))] backdrop-blur-lg sm:px-5 ${onChat ? "min-h-[44px] pb-1 md:min-h-[54px]" : "min-h-[54px] pb-1.5"}`}>
           <div className="flex min-w-0 items-center gap-2.5">
             {!onChat ? <Link to="/chat" onClick={rememberEmeryHandoff} className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-live/18 bg-live/[0.035] md:hidden" aria-label="Open Emery"><img src={brainImage} alt="" className="emery-blue-brain size-8 object-cover" /></Link> : null}
-            <div className="min-w-0"><p className="truncate text-[13px] font-semibold uppercase tracking-[0.08em] sm:text-base sm:normal-case sm:tracking-normal">{onChat ? "Emery" : title}</p>{!onChat ? <p className="hidden truncate text-[10px] uppercase tracking-[.12em] text-muted-foreground md:block">Emery System</p> : null}</div>
+             <div className="min-w-0"><p className="truncate text-[13px] font-semibold uppercase tracking-[0.08em] sm:text-base sm:normal-case sm:tracking-normal">{onChat ? "Emery" : title}</p>{!onChat ? <p className="hidden truncate text-[10px] uppercase tracking-[.12em] text-muted-foreground md:block">Emery System</p> : null}</div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             {!onChat && !onHpo ? <EmeryVoiceControl /> : null}

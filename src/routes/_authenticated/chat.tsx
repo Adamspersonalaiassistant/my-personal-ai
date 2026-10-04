@@ -512,8 +512,10 @@ function Chat() {
           className="emery-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-8 pt-2 [touch-action:pan-y] [-webkit-overflow-scrolling:touch] sm:px-5 sm:pt-3 md:px-6 lg:px-8"
           aria-label="Emery conversation"
         >
-          <div className="mx-auto w-full max-w-[1120px]">
+          <div className="-mx-3 -mt-2 mb-3 sm:hidden">
             <EmeryPresence state={visualState} compact />
+          </div>
+          <div className="mx-auto w-full max-w-[1120px]">
             <EmeryPresence
               state={visualState}
               subtitle="One conversation. One memory. One intelligence across your work and life."

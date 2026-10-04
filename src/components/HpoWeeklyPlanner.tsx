@@ -556,11 +556,11 @@ export function HpoWeeklyPlanner({
 
   return (
     <section className="min-w-0 space-y-4">
-      <div className="rounded-2xl border border-border/55 bg-card/35 p-3.5 shadow-sm">
+      <div className="rounded-lg border border-live/15 bg-surface/90 p-3.5 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <CalendarDays className="size-5 text-primary" />
+               <CalendarDays className="size-5 text-live" />
               <h1 className="text-lg font-semibold">Weekly Planner</h1>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">

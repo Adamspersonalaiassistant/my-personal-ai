@@ -18,7 +18,7 @@ export function EmeryBrainCore({
     <div
       className={cn(
         "relative isolate grid shrink-0 place-items-center rounded-full",
-        compact ? "size-[138px]" : "size-[188px] lg:size-[208px]",
+        compact ? "size-[168px]" : "size-[188px] lg:size-[208px]",
         className,
       )}
       aria-hidden="true"
@@ -27,12 +27,12 @@ export function EmeryBrainCore({
       <div className="emery-core-halo absolute inset-[9%] rounded-full blur-md" />
       <EmeryBrainCanvas state={state} compact={compact} />
       <EmeryBrainRings state={state} />
-      <div className={cn("emery-core-center relative z-10 grid place-items-center rounded-full border border-live/10 bg-background/40", compact ? "size-[68px]" : "size-[92px] lg:size-[102px]", active && "emery-live-glow")}>
+      <div className={cn("emery-core-center relative z-10 grid place-items-center rounded-full border border-live/20 bg-background/40", compact ? "size-[88px]" : "size-[92px] lg:size-[102px]", active && "emery-live-glow")}>
         <img
           src={brainImage}
           alt=""
           draggable={false}
-          className={cn("emery-blue-brain object-contain", compact ? "size-[62px]" : "size-[84px] lg:size-[92px]", state === "idle" ? "emery-breathe" : "")}
+          className={cn("emery-blue-brain object-contain", compact ? "size-[80px]" : "size-[84px] lg:size-[92px]", state === "idle" ? "emery-breathe" : "")}
         />
       </div>
     </div>
