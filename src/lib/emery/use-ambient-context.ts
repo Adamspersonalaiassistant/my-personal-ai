@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   appendAmbientSnippet,
+  ambientUserRequest,
   buildAmbientResponseInstructions,
   deleteRealtimeAmbientItems,
   isAmbientAddressedTurn,
@@ -9,6 +10,10 @@ import {
   setRealtimeAmbientMode,
   type AmbientSnippet,
 } from "./ambient-context.ts";
+import {
+  isVoiceEndSessionCommand,
+  isVoiceStopSpeakingCommand,
+} from "./voice-conversation-policy.ts";
 
 type ChannelLike = {
   readyState: string;
@@ -18,6 +23,8 @@ type ChannelLike = {
 export type AmbientTranscriptResult = {
   handled: boolean;
   addressed: boolean;
+  addressedRequest: string | null;
+  clientCommand: "stop_speaking" | "end_session" | null;
   persistTranscript: boolean;
   responseRequested: boolean;
 };
@@ -76,6 +83,8 @@ export function useAmbientContext(getChannel: () => ChannelLike | null) {
         return {
           handled: false,
           addressed: false,
+          addressedRequest: null,
+          clientCommand: null,
           persistTranscript: true,
           responseRequested: false,
         };
@@ -86,6 +95,8 @@ export function useAmbientContext(getChannel: () => ChannelLike | null) {
         return {
           handled: true,
           addressed: false,
+          addressedRequest: null,
+          clientCommand: null,
           persistTranscript: false,
           responseRequested: false,
         };
@@ -93,6 +104,12 @@ export function useAmbientContext(getChannel: () => ChannelLike | null) {
 
       const active = pruneNow();
       if (isAmbientAddressedTurn(transcript)) {
+        const addressedRequest = ambientUserRequest(transcript) || transcript;
+        const clientCommand = isVoiceEndSessionCommand(addressedRequest)
+          ? "end_session"
+          : isVoiceStopSpeakingCommand(addressedRequest)
+            ? "stop_speaking"
+            : null;
         const instructions = buildAmbientResponseInstructions({
           snippets: active,
           currentTurn: transcript,
@@ -100,8 +117,12 @@ export function useAmbientContext(getChannel: () => ChannelLike | null) {
         return {
           handled: true,
           addressed: true,
+          addressedRequest,
+          clientCommand,
           persistTranscript: true,
-          responseRequested: requestRealtimeAmbientResponse(getChannel(), instructions),
+          responseRequested: clientCommand
+            ? false
+            : requestRealtimeAmbientResponse(getChannel(), instructions),
         };
       }
 
@@ -117,6 +138,8 @@ export function useAmbientContext(getChannel: () => ChannelLike | null) {
       return {
         handled: true,
         addressed: false,
+        addressedRequest: null,
+        clientCommand: null,
         persistTranscript: false,
         responseRequested: false,
       };
