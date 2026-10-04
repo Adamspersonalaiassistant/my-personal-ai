@@ -16,7 +16,8 @@
     "validate:hpo-crm-write": "node --experimental-strip-types scripts/validate-hpo-crm-write-layer.mjs",
     "validate:orchestration": "node --experimental-strip-types scripts/validate-emery-orchestration.mjs",
     "validate:hpo-account": "node scripts/validate-hpo-account-experience.mjs",
-    "validate:hpo-activity": "node scripts/validate-hpo-activity-workflow.mjs"
+    "validate:hpo-activity": "node scripts/validate-hpo-activity-workflow.mjs",
+    "validate:phase9": "node scripts/validate-emery-phase9-redesign.mjs"
   },
   "overrides": {
     "rolldown": "1.2.1"
@@ -60,7 +61,7 @@
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
     "embla-carousel-react": "^8.6.0",
-    "input-otp": "^1.4.2",
+    "input-otp": "^1.4.1",
     "lucide-react": "^0.575.0",
     "react": "^19.2.0",
     "react-day-picker": "^9.14.0",
