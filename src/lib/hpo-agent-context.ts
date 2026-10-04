@@ -1,4 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { rankHpoRelationshipAccounts } from "@/lib/emery/hpo-smart-relevance";
+
 type JsonRecord = Record<string, unknown>;
 
 function object(value: unknown): JsonRecord {
@@ -97,21 +99,37 @@ export async function loadHpoAgentContext(db: any, userId: string, assignment: s
   const prospects = prospectsResult.data ?? [];
   const accountMap = new Map<string, any>(accounts.map((account: any) => [account.id, account]));
   const contactMap = new Map<string, any>(contacts.map((contact: any) => [contact.id, contact]));
+  const activeRouteAccountIds = (routeStopsResult.data ?? [])
+    .filter((stop: any) =>
+      stop.account_id && !["completed", "visited", "skipped", "closed", "bad_address"].includes(String(stop.status ?? "")),
+    )
+    .map((stop: any) => String(stop.account_id));
+  const smartAccountRanks = rankHpoRelationshipAccounts({
+    query: assignment,
+    accounts,
+    contacts,
+    interactions: interactionsResult.data ?? [],
+    currentRouteAccountIds: activeRouteAccountIds,
+    limit: 40,
+  });
+  const smartAccountScore = new Map(
+    smartAccountRanks.map((rank, index) => [rank.accountId, rank.score + Math.max(0, 4 - index * 0.08)]),
+  );
 
   const rankedAccounts = accounts
     .map((account: any) => ({
       account,
       relevance:
-        scoreText(
-          [
-            account.name, account.account_type, account.specialty, account.territory, account.city,
-            account.owner_name, account.relationship_stage, account.relationship_health,
-            account.next_action, account.opportunity, account.blockers, account.notes,
-            ...(Array.isArray(account.tags) ? account.tags : []),
-          ].filter(Boolean).join(" "),
-          requestTokens,
-        ) +
-        Number(account.priority ?? 3) / 10 +
+        (smartAccountScore.get(String(account.id)) ??
+          scoreText(
+            [
+              account.name, account.account_type, account.specialty, account.territory, account.city,
+              account.owner_name, account.relationship_stage, account.relationship_health,
+              account.next_action, account.opportunity, account.blockers, account.notes,
+              ...(Array.isArray(account.tags) ? account.tags : []),
+            ].filter(Boolean).join(" "),
+            requestTokens,
+          ) + Number(account.priority ?? 3) / 10) +
         Math.min(Number(account.metadata?.historical_referral_count ?? 0), 150) / 500,
     }))
     .sort((a: any, b: any) => b.relevance - a.relevance)
@@ -207,6 +225,12 @@ export async function loadHpoAgentContext(db: any, userId: string, assignment: s
         "Rank for business value first. Explain why-now and the visit objective. Then optimize the approved shortlist for road time.",
       learning_loop:
         "Completed visit notes and follow-ups become future relationship evidence; do not treat route planning as a static address list.",
+    },
+    retrieval_policy: {
+      authority:
+        "Structured HPO CRM truth outranks personal durable memory and model inference for account, contact, interaction, route, and referral facts.",
+      ranking:
+        "Current/active-route relationship evidence, matching structured interactions and contacts, explicit account fields, recency, and account priority are ranked before generic lexical account matches.",
     },
     data_health: {
       active_accounts: accounts.length,
