@@ -4,7 +4,12 @@ import { processHpoAction } from "@/lib/hpo-action-controller";
 import { processHpoFieldReadCommand } from "@/lib/hpo-field-read-controller";
 import { processHpoRouteCommand } from "@/lib/hpo-route-command-controller";
 import { processHpoRouteStopAction } from "@/lib/hpo-route-action-controller";
-import { contextualizeVoiceCorrection } from "./voice-conversation-policy.ts";
+import { recordEvaluationSignal } from "@/lib/runtime-telemetry";
+import { createEvaluationSignal } from "./evaluation.ts";
+import {
+  contextualizeVoiceCorrection,
+  isVoiceCorrectionTurn,
+} from "./voice-conversation-policy.ts";
 import { processEmeryMultiIntentDayPlan } from "./multi-intent-executor.ts";
 import { prepareVoiceRequest, type VoiceUiContext } from "./voice-request-context.ts";
 
@@ -20,6 +25,39 @@ function fieldReadMessage(request: string) {
     return "What happened here last time?";
   }
   return request;
+}
+
+async function recordVoiceCorrectionEvaluation(input: {
+  db: any;
+  userId: string;
+  request: string;
+  domain: string;
+  result: { performed?: boolean; needsClarification?: boolean; action?: string | null };
+}) {
+  if (!isVoiceCorrectionTurn(input.request)) return;
+  const passed = input.result.performed === true;
+  await recordEvaluationSignal(input.db, input.userId, {
+    channel: "voice",
+    domain: input.domain,
+    signal: createEvaluationSignal({
+      category: "voice_correction",
+      passed,
+      severity: passed ? "info" : input.result.needsClarification ? "medium" : "high",
+      source: "user_correction",
+      request: input.request,
+      expected: "correction supersedes the prior intended action without creating a duplicate",
+      observed: passed
+        ? `canonical correction performed via ${input.result.action ?? "controller"}`
+        : input.result.needsClarification
+          ? "canonical controller requested clarification before changing state"
+          : "canonical controller did not confirm the correction",
+      metadata: {
+        correctionApplied: passed,
+        needsClarification: input.result.needsClarification === true,
+        action: input.result.action ?? null,
+      },
+    }),
+  });
 }
 
 export async function readVoiceHpoFieldStateCore(input: {
@@ -103,6 +141,13 @@ export async function executeVoiceHpoRelationshipCore(input: {
     sourceMessageId: input.sourceMessageId ?? null,
     selectedAccountId: input.ui?.accountId ?? prepared.resolved.accountId,
   });
+  await recordVoiceCorrectionEvaluation({
+    db: input.db,
+    userId: input.userId,
+    request: input.request,
+    domain: "hpo",
+    result,
+  });
   return { result, prepared };
 }
 
@@ -142,6 +187,13 @@ export async function executeVoiceCalendarCore(input: {
     upcomingMeetings: input.upcomingMeetings ?? [],
     requestId: input.requestId ?? null,
     sourceChannel: "voice",
+  });
+  await recordVoiceCorrectionEvaluation({
+    db: input.db,
+    userId: input.userId,
+    request: input.request,
+    domain: "calendar",
+    result,
   });
   return { result, prepared };
 }
