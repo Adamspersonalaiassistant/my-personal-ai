@@ -60,6 +60,12 @@ type VoiceStudioState =
   | { stage: "previewed"; voiceId: string; audioDataUri: string }
   | { stage: "approved"; voiceId: string };
 
+type HpoRouteCommandSummary = {
+  performed?: boolean;
+  routeId?: string | null;
+  action?: string | null;
+};
+
 const quickPrompts = [
   "What should I focus on?",
   "What do I have going on?",
@@ -424,7 +430,10 @@ function Chat() {
         window.dispatchEvent(new Event("emery-voice-profile-updated"));
       }
 
-      const hpoRouteCommand = "hpoRouteCommand" in result ? (result as any).hpoRouteCommand : null;
+      const hpoRouteCommand =
+        "hpoRouteCommand" in result
+          ? ((result as { hpoRouteCommand?: HpoRouteCommandSummary | null }).hpoRouteCommand ?? null)
+          : null;
       if (
         hpoRouteCommand?.performed &&
         hpoRouteCommand?.routeId &&
