@@ -7,6 +7,7 @@ import {
   Clipboard,
   Files,
   Keyboard,
+  Laptop,
   Mic2,
   ShieldCheck,
   Smartphone,
@@ -36,18 +37,25 @@ function IPhoneSetup() {
       <div className="mx-auto max-w-2xl space-y-5 pb-4">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-primary/80">
-            One Emery · one bridge
+            One Emery · every screen
           </p>
           <h1 className="mt-1.5 text-[1.55rem] font-semibold tracking-[-0.035em]">
-            Connect Emery to your iPhone once.
+            Use the same Emery on iPhone and computer.
           </h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            The Shortcut is only an entry point. Dictated or typed input goes into the same Emery,
-            the same memory, and the same lifelong main conversation you already use in the app.
+            The PWA, browser, Voice, and Shortcut are only entry points. They all return to the same
+            Emery, the same memory, the same main conversation, the same HPO state, and the same
+            canonical action system.
           </p>
         </div>
 
         <section className="overflow-hidden rounded-2xl border border-border/40 bg-card/28">
+          <StatusRow
+            icon={Laptop}
+            title="iPhone + computer continuity"
+            detail="Ready · both devices use the same server-backed Emery state"
+            ready
+          />
           <StatusRow
             icon={Mic2}
             title="Dictated capture"
@@ -62,14 +70,28 @@ function IPhoneSetup() {
           />
           <StatusRow
             icon={CalendarDays}
-            title="Calendar & Reminders"
-            detail="Not connected yet · iOS permissions are separate and future integrations must be added explicitly"
+            title="Native iOS Calendar & Reminders"
+            detail="Not connected yet · native iOS permissions remain separate from Emery's internal Calendar"
           />
           <StatusRow
             icon={Files}
             title="Photos & Files"
             detail="App uploads work now; Shortcut access still depends on the iOS actions you choose to add"
           />
+        </section>
+
+        <section className="rounded-2xl border border-border/40 bg-card/28 p-4">
+          <div className="flex items-start gap-3">
+            <Smartphone className="mt-0.5 size-4 shrink-0 text-primary" />
+            <div>
+              <p className="text-sm font-semibold">Install Emery like an app</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                On iPhone, open Emery in Safari and use Share → Add to Home Screen. On a supported
+                desktop browser, install the Emery web app when the browser offers it. Both launch
+                the same server-backed Emery; installing never creates another account or memory.
+              </p>
+            </div>
+          </div>
         </section>
 
         <section className="rounded-2xl border border-primary/14 bg-primary/[0.035] p-4">
@@ -81,14 +103,18 @@ function IPhoneSetup() {
               <p className="text-sm font-semibold">Create one Shortcut named Emery</p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
                 You do not need separate Emery shortcuts for HPO, Personal, or general thoughts.
-                Emery routes the content after it reaches her.
+                Emery routes the content after it reaches the same brain.
               </p>
             </div>
           </div>
 
           <ol className="mt-4 space-y-3 text-sm leading-6">
-            <Step number="1">Add <strong>Dictate Text</strong> and set Stop Listening to After Pause.</Step>
-            <Step number="2">Add <strong>URL Encode</strong> for the dictated text.</Step>
+            <Step number="1">
+              Add <strong>Dictate Text</strong> and set Stop Listening to After Pause.
+            </Step>
+            <Step number="2">
+              Add <strong>URL Encode</strong> for the dictated text.
+            </Step>
             <Step number="3">
               Add <strong>Current Date</strong> and format it as ISO 8601. This is only used to prevent
               an accidental duplicate autosend.
@@ -96,7 +122,9 @@ function IPhoneSetup() {
             <Step number="4">
               Add a <strong>URL</strong> action and use the template below.
             </Step>
-            <Step number="5">Add <strong>Open URLs</strong>.</Step>
+            <Step number="5">
+              Add <strong>Open URLs</strong>.
+            </Step>
             <Step number="6">
               Add the Shortcut to your Home Screen, Action Button, or invoke it with Siri by saying
               “Emery.”
@@ -127,9 +155,10 @@ function IPhoneSetup() {
             <div>
               <p className="text-sm font-semibold">Phone permissions stay under your control.</p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                Connecting the Emery Shortcut does not give Emery blanket access to your iPhone.
-                Calendar, Reminders, Photos, Files, Contacts, and other permissions are requested by
-                iOS only when a Shortcut action or future integration actually needs them.
+                Connecting the Emery Shortcut or installing the PWA does not give Emery blanket
+                access to your iPhone. Calendar, Reminders, Photos, Files, Contacts, and other native
+                permissions are requested only when an explicit Shortcut action or future native
+                integration actually needs them.
               </p>
             </div>
           </div>
