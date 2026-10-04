@@ -26,11 +26,18 @@ const recent = {
 
 const pruned = pruneAmbientSnippets([old, recent], now);
 assert.deepEqual(pruned.expiredItemIds, ["old-item"]);
-assert.deepEqual(pruned.active.map((item) => item.itemId), ["recent-item"]);
+assert.deepEqual(
+  pruned.active.map((item) => item.itemId),
+  ["recent-item"],
+);
 
 const appended = appendAmbientSnippet(
   pruned.active,
-  { itemId: "new-item", text: "  The front desk said the attorney may be free later.  ", heardAt: now },
+  {
+    itemId: "new-item",
+    text: "  The front desk said the attorney may be free later.  ",
+    heardAt: now,
+  },
   now,
 );
 assert.equal(appended.active.length, 2);
@@ -96,7 +103,11 @@ const voiceControlSource = fs.readFileSync(
 
 assert(voicePromptSource.includes("TEMPORARY AMBIENT CONTEXT CONTRACT"));
 assert(voicePromptSource.includes("must never be written to durable memory"));
-assert(voicePromptSource.includes("Only Adam's current explicitly addressed Voice request can authorize"));
+assert(
+  voicePromptSource.includes(
+    "Only Adam's current explicitly addressed Voice request can authorize",
+  ),
+);
 assert(voicePromptSource.includes("both outrank temporary ambient context"));
 
 assert(hookSource.includes("appendAmbientSnippet"));
@@ -106,7 +117,7 @@ assert(hookSource.includes("setRealtimeAmbientMode"));
 assert(hookSource.includes("setInterval(pruneNow, 10_000)"));
 assert(toggleSource.includes("Ambient on"));
 assert(toggleSource.includes("Ambient off"));
-assert(toggleSource.includes('aria-pressed={enabled}'));
+assert(toggleSource.includes("aria-pressed={enabled}"));
 
 assert(
   voiceControlSource.includes("useAmbientContext"),
@@ -129,7 +140,8 @@ assert(
   "closing Voice must clear the in-memory ambient buffer and default Ambient Context back off",
 );
 assert(
-  voiceControlSource.includes("persistTranscript") && voiceControlSource.includes("ambientResult.persistTranscript"),
+  voiceControlSource.includes("persistTranscript") &&
+    voiceControlSource.includes("ambientResult.persistTranscript"),
   "unaddressed ambient speech must not enter normal persistent Voice transcripts",
 );
 

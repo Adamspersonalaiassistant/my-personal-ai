@@ -24,6 +24,8 @@ import {
   stopCurrentRealtimeSpeech,
   voiceEventBelongsToAttempt,
 } from "@/lib/emery/voice-client-safety";
+import { useAmbientContext } from "@/lib/emery/use-ambient-context";
+import { EmeryAmbientContextToggle } from "@/components/EmeryAmbientContextToggle";
 
 type VoiceStatus = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "error";
 
@@ -101,6 +103,10 @@ export function EmeryVoiceControl({
 
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const channelRef = useRef<RTCDataChannel | null>(null);
+  const ambient = useAmbientContext(() => channelRef.current);
+  const resetAmbient = ambient.reset;
+  const handleAmbientTranscript = ambient.handleTranscript;
+  const applyAmbientMode = ambient.applyMode;
   const streamRef = useRef<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const savedEventsRef = useRef(new Set<string>());
@@ -146,6 +152,7 @@ export function EmeryVoiceControl({
     lastAssistantTranscriptRef.current = "";
     lastAssistantAtRef.current = 0;
     followUpUntilRef.current = 0;
+    resetAmbient();
 
     const channel = channelRef.current;
     channelRef.current = null;
@@ -173,7 +180,7 @@ export function EmeryVoiceControl({
     processedToolCallsRef.current.clear();
     releaseExclusiveEmeryVoice(closeVoice);
     setStatus("idle");
-  }, []);
+  }, [resetAmbient]);
 
   useEffect(() => closeVoice, [closeVoice]);
 
@@ -456,6 +463,30 @@ export function EmeryVoiceControl({
           break;
         case "conversation.item.input_audio_transcription.completed":
           if (event.transcript && event.item_id) {
+            const ambientResult = handleAmbientTranscript({
+              itemId: event.item_id,
+              transcript: event.transcript,
+            });
+            if (ambientResult.handled) {
+              if (ambientResult.clientCommand === "stop_speaking") {
+                if (responseActiveRef.current) stopCurrentRealtimeSpeech(channelRef.current);
+                responseActiveRef.current = false;
+                followUpUntilRef.current = Date.now() + VOICE_FOLLOW_UP_WINDOW_MS;
+                setStatus("listening");
+                return;
+              }
+              if (ambientResult.clientCommand === "end_session") {
+                if (responseActiveRef.current) stopCurrentRealtimeSpeech(channelRef.current);
+                closeVoice();
+                return;
+              }
+              if (ambientResult.persistTranscript) {
+                void saveTranscript("user", event.transcript, `voice:user:${event.item_id}`);
+              }
+              if (ambientResult.addressed) setStatus("thinking");
+              return;
+            }
+
             const disposition = classifyVoiceTurn({
               transcript: event.transcript,
               lastAssistantTranscript: lastAssistantTranscriptRef.current,
@@ -520,7 +551,7 @@ export function EmeryVoiceControl({
         }
       }
     },
-    [closeVoice, handleToolCall, saveTranscript],
+    [closeVoice, handleAmbientTranscript, handleToolCall, saveTranscript],
   );
 
   const startVoice = useCallback(async () => {
@@ -644,6 +675,7 @@ export function EmeryVoiceControl({
       channel.onopen = () => {
         if (!isCurrentAttempt()) return;
         activeRef.current = true;
+        applyAmbientMode();
         setStatus("listening");
       };
       channel.onmessage = (message) => {
@@ -716,7 +748,7 @@ export function EmeryVoiceControl({
       setError(message);
       setStatus("error");
     }
-  }, [closeVoice, handleRealtimeEvent, mintSecret, refreshReadiness, status]);
+  }, [applyAmbientMode, closeVoice, handleRealtimeEvent, mintSecret, refreshReadiness, status]);
 
   const active = ["listening", "thinking", "speaking"].includes(status);
 
@@ -756,7 +788,7 @@ export function EmeryVoiceControl({
       </button>
 
       {active ? (
-        <div className="pointer-events-none fixed left-1/2 top-[max(4.4rem,env(safe-area-inset-top))] z-[80] -translate-x-1/2">
+        <div className="pointer-events-none fixed left-1/2 top-[max(4.4rem,env(safe-area-inset-top))] z-[80] flex -translate-x-1/2 flex-col items-center gap-2">
           <div className="flex items-center gap-2 rounded-full border border-primary/18 bg-background/92 px-3 py-2 text-xs font-medium shadow-lg backdrop-blur-2xl">
             <span className="relative flex size-2">
               <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary/50" />
@@ -770,6 +802,11 @@ export function EmeryVoiceControl({
                   : "Emery is listening"}
             </span>
           </div>
+          <EmeryAmbientContextToggle
+            enabled={ambient.enabled}
+            snippetCount={ambient.snippetCount}
+            onToggle={ambient.toggle}
+          />
         </div>
       ) : null}
 
