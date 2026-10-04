@@ -120,7 +120,7 @@ export function routeEmeryCapabilities(input: CapabilityRouterInput): Capability
       text,
     );
   const calendarSignal =
-    /\b(calendar|appointment|meeting|scheduled|schedule|today at|tomorrow at|at noon|this afternoon|this morning)\b/.test(
+    /\b(calendar|appointment|meeting|scheduled|schedule|task|tasks|remind|reminder|deadline|due|event|to do|todo|today at|tomorrow at|at noon|this afternoon|this morning)\b/.test(
       text,
     );
   const memorySignal =
@@ -175,7 +175,7 @@ export function routeEmeryCapabilities(input: CapabilityRouterInput): Capability
   }
   if (calendarSignal) {
     add(candidates, "calendar.read");
-    reasons.push("calendar context");
+    reasons.push("calendar/task context");
   }
   if (memorySignal) {
     add(candidates, "memory.retrieve");
@@ -205,7 +205,8 @@ export function routeEmeryCapabilities(input: CapabilityRouterInput): Capability
     !memorySignal &&
     domain !== "mixed" &&
     !/\b(personal|family|home|money|finance|health|music|dj)\b/.test(text);
-  const needsPersonalMemory = memorySignal || (!pureOperationalHpo && domain !== "hpo" && !calendarSignal);
+  const needsPersonalMemory =
+    memorySignal || (!pureOperationalHpo && domain !== "hpo" && !calendarSignal);
   if (needsPersonalMemory) add(candidates, "memory.retrieve");
 
   const needsCalendar = calendarSignal || candidates.has("calendar.read");
