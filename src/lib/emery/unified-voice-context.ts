@@ -1,10 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { loadHpoAgentContext } from "@/lib/hpo-agent-context";
-import {
-  buildExecutiveFocus,
-  readConversationState,
-  selectRelevantMemories,
-} from "@/lib/emery-intelligence";
+import { buildExecutiveFocus, readConversationState } from "@/lib/emery-intelligence";
+import { buildSmartMemoryPrompt, retrieveSmartMemories } from "./smart-memory.ts";
 import { prepareVoiceRequest, type VoiceUiContext } from "./voice-request-context.ts";
 
 export async function loadUnifiedVoiceContext(input: {
@@ -42,11 +39,13 @@ export async function loadUnifiedVoiceContext(input: {
     loadPolicy.loadPersonalMemory
       ? input.db
           .from("memories")
-          .select("id,title,content,memory_type,importance,confidence,created_at,updated_at")
+          .select(
+            "id,title,content,memory_type,importance,confidence,source_type,source_ref,person_id,project_id,metadata,expires_at,created_at,updated_at",
+          )
           .eq("user_id", input.userId)
           .order("importance", { ascending: false })
           .order("updated_at", { ascending: false })
-          .limit(100)
+          .limit(120)
       : Promise.resolve({ data: [] }),
     input.db
       .from("voice_profiles")
@@ -106,19 +105,32 @@ export async function loadUnifiedVoiceContext(input: {
   }));
 
   const memoryMaxItems = Math.min(
-    30,
-    Math.max(6, Number(configResult.data?.memory_max_items ?? 16)),
+    20,
+    Math.max(4, Number(configResult.data?.memory_max_items ?? 12)),
   );
   const memoryMaxCharacters = Math.min(
-    12000,
-    Math.max(2000, Number(configResult.data?.memory_max_characters ?? 6500)),
+    10000,
+    Math.max(1600, Number(configResult.data?.memory_max_characters ?? 5200)),
   );
-  const selected = loadPolicy.loadPersonalMemory
-    ? selectRelevantMemories(memoryResult.data ?? [], input.query, recent, {
+  const memoryContext = loadPolicy.loadPersonalMemory
+    ? await retrieveSmartMemories({
+        apiKey: process.env["OPENAI_API_KEY"] ?? null,
+        memories: memoryResult.data ?? [],
+        query: input.query,
+        recent,
         maxItems: memoryMaxItems,
         maxCharacters: memoryMaxCharacters,
+        allowSemantic: true,
       })
-    : [];
+    : {
+        selected: [],
+        digest: null,
+        strategy: "none" as const,
+        semanticUsed: false,
+        candidateCount: 0,
+        selectedCharacters: 0,
+        semanticConfidence: null,
+      };
 
   const voiceTasks = taskResult.data ?? [];
   const nowMs = Date.now();
@@ -152,7 +164,9 @@ export async function loadUnifiedVoiceContext(input: {
     profile: profileResult.data ?? null,
     voiceProfile: voiceResult.data ?? null,
     config: configResult.data ?? null,
-    memories: selected,
+    memories: memoryContext.selected,
+    memoryContext,
+    memoryPrompt: buildSmartMemoryPrompt(memoryContext),
     actions,
     focus: buildExecutiveFocus(actions),
     recent,
