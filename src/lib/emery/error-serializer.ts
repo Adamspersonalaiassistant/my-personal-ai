@@ -21,24 +21,36 @@ function classifyFailure(input: {
   const status = input.status;
 
   if (/timeout|timed out|aborted/.test(message) || code === "timeout") return "TIMEOUT";
+  if (/offline_conflict|stale|changed after|refresh before retrying/.test(message))
+    return "STALE_STATE";
   if (
     /network|fetch failed|failed to fetch|connection|offline|econn|enotfound/.test(message) ||
     /network|econn|enotfound/.test(code)
   )
     return "NETWORK_FAILURE";
-  if (status === 401 || status === 403 || /permission|forbidden|unauthorized|row-level security|rls/.test(message))
+  if (
+    status === 401 ||
+    status === 403 ||
+    /permission|forbidden|unauthorized|row-level security|rls/.test(message)
+  )
     return "PERMISSION_DENIED";
-  if (/offline_conflict|stale|changed after|refresh before retrying/.test(message)) return "STALE_STATE";
-  if (status === 409 || code === "23505" || /conflict|duplicate key|unique constraint/.test(message))
+  if (
+    status === 409 ||
+    code === "23505" ||
+    /conflict|duplicate key|unique constraint/.test(message)
+  )
     return "WRITE_CONFLICT";
-  if (/ambiguous|which .* do you mean|multiple matches/.test(message)) return "AMBIGUOUS_ENTITY";
+  if (/ambiguous|which .* do you mean|multiple matches/.test(message))
+    return "AMBIGUOUS_ENTITY";
   if (/dependency|prerequisite/.test(message)) return "DEPENDENCY_FAILED";
-  if (/routing|route optimization|road-time routing|route geometry/.test(message)) return "ROUTING_FAILURE";
+  if (/routing|route optimization|road-time routing|route geometry/.test(message))
+    return "ROUTING_FAILURE";
   if (/not configured|unavailable|no registered executor|not connected/.test(message))
     return "CAPABILITY_UNAVAILABLE";
   if (/missing context|which route|which stop|which account|current .* required/.test(message))
     return "MISSING_CONTEXT";
-  if (/validation|invalid|required|must be|cannot be empty/.test(message)) return "VALIDATION_FAILED";
+  if (/validation|invalid|required|must be|cannot be empty/.test(message))
+    return "VALIDATION_FAILED";
   return "UNKNOWN_FAILURE";
 }
 
