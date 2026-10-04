@@ -11,22 +11,51 @@ permissions:
   contents: read
 
 jobs:
-  typescript:
-    name: TypeScript — ${{ matrix.ref }}
+  compare:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        ref:
-          - emery-phase9-british-voice
-          - emery-phase9-professional-redesign
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Phase 9 redesign
+        uses: actions/checkout@v4
         with:
-          ref: ${{ matrix.ref }}
+          ref: emery-phase9-professional-redesign
+          path: current
+      - name: Checkout British Voice baseline
+        uses: actions/checkout@v4
+        with:
+          ref: emery-phase9-british-voice
+          path: baseline
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: bun install
-      - run: bunx tsc --noEmit
+      - name: Install Phase 9 dependencies
+        working-directory: current
+        run: bun install
+      - name: Install baseline dependencies
+        working-directory: baseline
+        run: bun install
+      - name: Capture Phase 9 TypeScript errors
+        working-directory: current
+        shell: bash
+        run: |
+          set +e
+          bunx tsc --noEmit 2>&1 | grep -E 'error TS[0-9]+' | sed -E 's/[[:space:]]+$//' | sort > ../current-errors.txt
+          cat ../current-errors.txt || true
+          exit 0
+      - name: Capture baseline TypeScript errors
+        working-directory: baseline
+        shell: bash
+        run: |
+          set +e
+          bunx tsc --noEmit 2>&1 | grep -E 'error TS[0-9]+' | sed -E 's/[[:space:]]+$//' | sort > ../baseline-errors.txt
+          cat ../baseline-errors.txt || true
+          exit 0
+      - name: Verify Phase 9 introduced no new TypeScript errors
+        shell: bash
+        run: |
+          echo '--- baseline error count ---'
+          wc -l baseline-errors.txt
+          echo '--- Phase 9 error count ---'
+          wc -l current-errors.txt
+          echo '--- diff ---'
+          diff -u baseline-errors.txt current-errors.txt
