@@ -46,6 +46,6 @@ export async function buildChatSmartMemoryContext(input: {
     memoryMaxCharacters,
     selected: memoryContext.selected,
     memoryContext,
-    memoryBlock: buildSmartMemoryPrompt(memoryContext),
+    memoryBlock: input.enabled ? buildSmartMemoryPrompt(memoryContext) : "",
   };
 }
