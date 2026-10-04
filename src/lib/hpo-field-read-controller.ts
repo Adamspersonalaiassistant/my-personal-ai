@@ -57,7 +57,7 @@ function requestedReadAction(message: string): HpoFieldReadAction {
   }
 
   if (
-    /\b(whats next|what is next|next stop|next office|where am i going next|where should i go next|who is next)\b/.test(
+    /\b(whats next|what is next|next stop|next office|where am i going next|where should i go next|whos next|who is next)\b/.test(
       text,
     )
   ) {
