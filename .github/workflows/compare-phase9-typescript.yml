@@ -57,5 +57,7 @@ jobs:
           wc -l baseline-errors.txt
           echo '--- Phase 9 error count ---'
           wc -l current-errors.txt
-          echo '--- diff ---'
-          diff -u baseline-errors.txt current-errors.txt
+          echo '--- new errors not present in baseline ---'
+          comm -23 current-errors.txt baseline-errors.txt > new-errors.txt
+          cat new-errors.txt || true
+          test ! -s new-errors.txt
