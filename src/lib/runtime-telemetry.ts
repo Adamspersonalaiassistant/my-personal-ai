@@ -50,6 +50,7 @@ export async function recordEvaluationSignal(
   },
 ) {
   const signal = input.signal;
+  const safeRequest = signal.source === "canonical_eval" ? signal.request ?? null : null;
   return recordRuntimeEvent(db, userId, {
     channel: input.channel,
     eventType: "evaluation_signal",
@@ -65,7 +66,8 @@ export async function recordEvaluationSignal(
         score: signal.score,
         severity: signal.severity,
         source: signal.source,
-        request: signal.request ?? null,
+        request: safeRequest,
+        requestStored: safeRequest != null,
         expected: signal.expected ?? null,
         observed: signal.observed ?? null,
         observedAt: signal.observedAt,
