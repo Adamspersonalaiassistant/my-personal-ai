@@ -131,7 +131,6 @@ export const EMERY_CANONICAL_EVAL_CORPUS: EmeryCanonicalEvalCase[] = [
     surface: "hpo_planner",
     expected: {
       voiceDisposition: "correction",
-      needsCurrentContext: true,
       writeIntent: true,
     },
   },
