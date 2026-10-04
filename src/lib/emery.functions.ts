@@ -26,9 +26,10 @@ import {
 import { recentExecutionReceipts } from "@/lib/execution-ledger";
 import { executionCapabilityPrompt } from "@/lib/execution-capabilities";
 import { executeCanonicalTaskCreate } from "@/lib/execution-kernel";
-import { planEmeryRequest } from "@/lib/emery/planner";
 import { processEmeryMultiIntentDayPlan } from "@/lib/emery/multi-intent-executor";
 import { buildEmeryContext } from "@/lib/emery/context-engine";
+import { prepareEmeryRequestRouting } from "@/lib/emery/request-routing";
+import { emptyActionContext } from "@/lib/emery/context-load-policy";
 
 const STABLE_RUNTIME_POLICY = `EXECUTION POLICY:
 - There is one Emery across chat, capture, Shortcut, Voice, Calendar, HPO, memory, and future integrations.
@@ -632,7 +633,11 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
       emeryContext?.domain === "hpo" && inferredRoute.domain === "general"
         ? { ...inferredRoute, domain: "hpo" as const, reason: "Authoritative current HPO context" }
         : inferredRoute;
-    const actionPlan = planEmeryRequest(data.message);
+    const { capabilityRoute, loadPolicy, actionPlan } = prepareEmeryRequestRouting({
+      message: data.message,
+      context: emeryContext?.request ?? null,
+      domainHint: emeryContext?.domain ?? route.domain,
+    });
     const hpoPlanned = actionPlan.intents.some(
       (intent) => intent.capability.startsWith("hpo.") || intent.capability === "entities",
     );
@@ -646,6 +651,8 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
       ...data.source,
       domain: route.domain,
       emery_identity: "central-v1",
+      capability_route: capabilityRoute,
+      context_load_policy: loadPolicy,
       current_context: emeryContext
         ? {
             version: emeryContext.version,
@@ -752,20 +759,22 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
             : null,
         }
       : null;
-    const hpoContext = hpoEligible
-      ? await loadHpoAgentContext(db, userId, data.message).catch((error: any) => {
-          console.error("Central Emery HPO context failed", error);
-          return null;
-        })
-      : null;
-    const hpoPlanningContext = hpoEligible
-      ? await loadHpoPlanningSessionContext(db, userId, data.source as SourceMetadata).catch(
-          (error: any) => {
-            console.error("HPO planning-session context failed", error);
+    const hpoContext =
+      hpoEligible && loadPolicy.loadHpoOperatingContext
+        ? await loadHpoAgentContext(db, userId, data.message).catch((error: any) => {
+            console.error("Central Emery HPO context failed", error);
             return null;
-          },
-        )
-      : null;
+          })
+        : null;
+    const hpoPlanningContext =
+      hpoEligible && loadPolicy.loadHpoOperatingContext
+        ? await loadHpoPlanningSessionContext(db, userId, data.source as SourceMetadata).catch(
+            (error: any) => {
+              console.error("HPO planning-session context failed", error);
+              return null;
+            },
+          )
+        : null;
     const [
       { data: profile },
       { data: memories },
@@ -778,12 +787,14 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
         .select("display_name,assistant_name,timezone,profile_summary")
         .eq("user_id", userId)
         .maybeSingle(),
-      db
-        .from("memories")
-        .select("id,title,content,memory_type,importance,confidence,created_at,updated_at")
-        .eq("user_id", userId)
-        .order("importance", { ascending: false })
-        .limit(100),
+      loadPolicy.loadPersonalMemory
+        ? db
+            .from("memories")
+            .select("id,title,content,memory_type,importance,confidence,created_at,updated_at")
+            .eq("user_id", userId)
+            .order("importance", { ascending: false })
+            .limit(100)
+        : Promise.resolve({ data: [] }),
       db
         .from("voice_profiles")
         .select(
@@ -798,7 +809,9 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
         )
         .eq("user_id", userId)
         .maybeSingle(),
-      actionContext(db, userId),
+      loadPolicy.loadCalendarContext
+        ? actionContext(db, userId)
+        : Promise.resolve(emptyActionContext()),
     ]);
     const multiIntent = await processEmeryMultiIntentDayPlan({
       db,
@@ -899,38 +912,57 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
           : null,
       } as const;
     }
-    const calendarAction = await processCalendarAction({
-      db,
-      userId,
-      apiKey,
-      message: data.message,
-      recent: turnRecent.filter((x: any) => x.id !== userMessage.id),
-      timezone: profile?.timezone ?? "America/New_York",
-      openTasks: actions.tasks ?? [],
-      upcomingMeetings: actions.meetings ?? [],
-      sourceMessageId: userMessage.id,
-      sourceChannel: String(data.source.entryPoint ?? "text"),
-    }).catch((error: any) => {
-      console.error("Calendar action controller failed", error);
-      return {
-        recognized: false,
-        performed: false,
-        partialSuccess: false,
-        needsClarification: false,
-        question: null,
-        action: "none",
-        recordId: null,
-        title: null,
-        scheduledFor: null,
-        endsAt: null,
-        dueAt: null,
-        eventType: null,
-        items: [],
-        notificationScheduled: false,
-        pushConnected: null,
-        error: "calendar_action_failed",
-      };
-    });
+    const calendarAction = loadPolicy.loadCalendarContext
+      ? await processCalendarAction({
+          db,
+          userId,
+          apiKey,
+          message: data.message,
+          recent: turnRecent.filter((x: any) => x.id !== userMessage.id),
+          timezone: profile?.timezone ?? "America/New_York",
+          openTasks: actions.tasks ?? [],
+          upcomingMeetings: actions.meetings ?? [],
+          sourceMessageId: userMessage.id,
+          sourceChannel: String(data.source.entryPoint ?? "text"),
+        }).catch((error: any) => {
+          console.error("Calendar action controller failed", error);
+          return {
+            recognized: false,
+            performed: false,
+            partialSuccess: false,
+            needsClarification: false,
+            question: null,
+            action: "none",
+            recordId: null,
+            title: null,
+            scheduledFor: null,
+            endsAt: null,
+            dueAt: null,
+            eventType: null,
+            items: [],
+            notificationScheduled: false,
+            pushConnected: null,
+            error: "calendar_action_failed",
+          };
+        })
+      : {
+          recognized: false,
+          performed: false,
+          partialSuccess: false,
+          needsClarification: false,
+          question: null,
+          action: "none",
+          recordId: null,
+          title: null,
+          scheduledFor: null,
+          endsAt: null,
+          dueAt: null,
+          eventType: null,
+          items: [],
+          notificationScheduled: false,
+          pushConnected: null,
+          error: null,
+        };
     const hpoFieldRead = hpoEligible
       ? await processHpoFieldReadCommand({
           db,

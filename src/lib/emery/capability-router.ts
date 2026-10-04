@@ -1,8 +1,5 @@
 import { inferEmeryDomain, type EmeryDomain } from "../emery-domain.ts";
-import {
-  CAPABILITY_REGISTRY,
-  type RegisteredCapabilityAction,
-} from "./capability-registry.ts";
+import { CAPABILITY_REGISTRY, type RegisteredCapabilityAction } from "./capability-registry.ts";
 import type { RequestContext } from "./orchestration.types.ts";
 
 export type CapabilityRoute = {
@@ -33,10 +30,7 @@ function normalized(value: string) {
     .trim();
 }
 
-function add(
-  set: Set<RegisteredCapabilityAction>,
-  ...actions: RegisteredCapabilityAction[]
-) {
+function add(set: Set<RegisteredCapabilityAction>, ...actions: RegisteredCapabilityAction[]) {
   for (const action of actions) {
     if (CAPABILITY_REGISTRY[action]) set.add(action);
   }
@@ -48,10 +42,10 @@ function hasHpoCurrentContext(context?: RequestContext | null) {
     context.surface.startsWith("hpo_") ||
     Boolean(
       context.currentRouteId ||
-        context.currentStopId ||
-        context.selectedAccountId ||
-        context.selectedProspectId ||
-        context.fieldSessionId,
+      context.currentStopId ||
+      context.selectedAccountId ||
+      context.selectedProspectId ||
+      context.fieldSessionId,
     )
   );
 }
@@ -108,9 +102,8 @@ export function routeEmeryCapabilities(input: CapabilityRouterInput): Capability
     );
   const noteSignal =
     /\b(add|save|log|record|leave)\s+(?:a\s+)?note\b|\bnote\s+(?:for|on|to)\b/.test(text);
-  const followupSignal = /\b(follow up|followup|follow-up|call back|check back|reach back out)\b/.test(
-    text,
-  );
+  const followupSignal =
+    /\b(follow up|followup|follow-up|call back|check back|reach back out)\b/.test(text);
   const routeWriteSignal =
     /\b(only remaining stop|only stop|forget the other stops|make that my route|add .* stop|remove .* stop|optimize|reoptimize|reorder)\b/.test(
       text,
@@ -120,7 +113,7 @@ export function routeEmeryCapabilities(input: CapabilityRouterInput): Capability
       text,
     );
   const calendarSignal =
-    /\b(calendar|appointment|meeting|scheduled|schedule|task|tasks|remind|reminder|deadline|due|event|to do|todo|today at|tomorrow at|at noon|this afternoon|this morning)\b/.test(
+    /\b(calendar|appointment|meetings?|scheduled|schedule|task|tasks|remind|reminder|deadline|due|event|to do|todo|today at|tomorrow at|at noon|this afternoon|this morning)\b/.test(
       text,
     );
   const memorySignal =
@@ -132,7 +125,8 @@ export function routeEmeryCapabilities(input: CapabilityRouterInput): Capability
       text,
     );
   const deicticHpoSignal =
-    currentHpo && /\b(here|there|this office|this account|she|he|they|them|that office)\b/.test(text);
+    currentHpo &&
+    /\b(here|there|this office|this account|she|he|they|them|that office)\b/.test(text);
 
   if (arrivalSignal) {
     add(candidates, "hpo.route_stop.arrive");
