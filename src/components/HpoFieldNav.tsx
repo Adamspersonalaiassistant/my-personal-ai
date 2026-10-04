@@ -10,32 +10,31 @@ const areas = [
   { key: "activity", label: "Activity", icon: Activity },
 ] as const;
 
-export function HpoFieldNav({
-  view,
-  onChange,
-}: {
-  view: HpoFieldView;
-  onChange: (view: HpoFieldView) => void;
-}) {
+export function HpoFieldNav({ view, onChange }: { view: HpoFieldView; onChange: (view: HpoFieldView) => void }) {
   return (
-    <nav
-      aria-label="HPO field areas"
-      className="hpo-field-nav shrink-0 border-b border-border bg-background px-3 py-2 sm:px-4"
-    >
-      <div className="mx-auto grid max-w-5xl grid-cols-4 gap-1.5">
-        {areas.map(({ key, label, icon: Icon }) => (
-          <Button
-            key={key}
-            type="button"
-            variant={view === key ? "default" : "outline"}
-            onClick={() => onChange(key)}
-            aria-current={view === key ? "page" : undefined}
-            className="h-12 min-w-0 flex-col gap-0.5 rounded-xl px-0.5 text-[11px] font-semibold shadow-none sm:flex-row sm:gap-2 sm:text-sm"
-          >
-            <Icon className="size-4 shrink-0" aria-hidden="true" />
-            <span className="truncate">{label}</span>
-          </Button>
-        ))}
+    <nav aria-label="HPO field areas" className="hpo-field-nav shrink-0 border-b border-border px-3 py-2 sm:px-4">
+      <div className="mx-auto flex max-w-5xl items-center gap-1 rounded-2xl border border-border/60 bg-surface/75 p-1 shadow-[0_10px_28px_rgba(0,0,0,.16)]">
+        {areas.map(({ key, label, icon: Icon }) => {
+          const active = view === key;
+          return (
+            <Button
+              key={key}
+              type="button"
+              variant="ghost"
+              onClick={() => onChange(key)}
+              aria-current={active ? "page" : undefined}
+              className={`emery-press relative h-12 min-w-0 flex-1 flex-col gap-0.5 rounded-xl border px-0.5 text-[11px] font-semibold shadow-none sm:flex-row sm:gap-2 sm:text-sm ${
+                active
+                  ? "border-primary/25 bg-primary/12 text-primary shadow-[inset_0_0_0_1px_rgba(59,130,246,.05)]"
+                  : "border-transparent text-muted-foreground hover:border-border/60 hover:bg-elevated hover:text-foreground"
+              }`}
+            >
+              <Icon className="size-4 shrink-0" aria-hidden="true" />
+              <span className="truncate">{label}</span>
+              {active ? <span aria-hidden="true" className="absolute inset-x-5 -bottom-1 h-px bg-gradient-to-r from-transparent via-live to-transparent" /> : null}
+            </Button>
+          );
+        })}
       </div>
     </nav>
   );
