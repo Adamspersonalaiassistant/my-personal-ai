@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import brainImage from "@/assets/neural-brain.png";
 import { supabase } from "@/integrations/supabase/client";
 import { getMainConversationPage } from "@/lib/chat-history.functions";
+import { deviceSourceMetadata } from "@/lib/emery/device-continuity";
 import { sendEmeryMessage } from "@/lib/emery.functions";
 
 export const Route = createFileRoute("/_authenticated/chat")({
@@ -348,7 +349,18 @@ function Chat() {
 
     try {
       const uploaded = await uploadFiles();
-      const result = await askEmery({ data: { message: clean, attachments: uploaded } });
+      const result = await askEmery({
+        data: {
+          message: clean,
+          attachments: uploaded,
+          source: {
+            entryPoint: "chat",
+            inputMode: "typed",
+            surface: "chat",
+            ...deviceSourceMetadata(),
+          },
+        },
+      });
       if (!("reply" in result) || !result.reply) {
         throw new Error(("error" in result && result.error) || "Something went wrong.");
       }
@@ -688,7 +700,7 @@ function Chat() {
                   <button
                     type="button"
                     onClick={() => setVoiceStudioState(null)}
-                    className="emery-press flex size-9 items-center justify-center rounded-lg text-muted-foreground"
+                    className="emery-press flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground"
                     aria-label="Dismiss voice approval"
                   >
                     <X className="size-4" />
