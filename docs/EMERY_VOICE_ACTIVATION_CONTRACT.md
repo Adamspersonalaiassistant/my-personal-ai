@@ -2,6 +2,14 @@
 
 This file defines the production boundary for Emery Voice Studio, explicit voice approval, and live Realtime activation.
 
+## Current approved voice direction
+
+The current approved voice target is documented in `docs/EMERY_BRITISH_VOICE_REFERENCE.md`.
+
+Emery is an **original feminine British English voice** with contemporary refined Southern British / modern RP character, calm intelligence, quiet authority, concise phrasing, understated warmth, and restrained dry humour. The delivery may be Jarvis-inspired in composure, anticipation, precision, and efficiency, but it must never imitate a specific actor or fictional character voice.
+
+The approved built-in Realtime base voice is currently `shimmer`. Exact accent realization depends on provider/model support; the stored Voice Profile remains the source of truth for delivery guidance.
+
 ## One Emery
 
 Voice never creates a second assistant, second memory system, or second conversation.
@@ -17,7 +25,7 @@ The live microphone must use:
 
 ## Infrastructure already wired
 
-`src/lib/voice.functions.ts` provides:
+`src/lib/voice.functions.ts` and the unified Realtime Voice layer provide:
 
 - authenticated Realtime client-secret minting
 - OpenAI Realtime model: `gpt-realtime-2.1`
@@ -60,13 +68,13 @@ The flow is:
 
 1. Adam starts Voice Studio naturally in the main Emery chat.
 2. Emery asks one useful design question at a time and records the design brief/preferences.
-3. Emery offers only built-in Realtime candidates from the central allowlist; provider docs currently recommend `marin` and `cedar` as quality starting points, without assigning invented personality/gender/accent traits.
+3. Emery offers only supported built-in Realtime candidates allowed by the current Voice Profile. Provider voice names are acoustic starting points, not guaranteed personality, age, accent, or gender labels.
 4. When Adam requests a candidate preview, the backend first validates that candidate against the Realtime provider.
 5. If validation succeeds, the backend generates an actual AI TTS preview using the current draft Voice Profile. The app clearly labels the preview as AI-generated.
 6. Previewing is not approval. Any design refinement after a preview invalidates that preview for approval and requires a fresh preview.
-7. Adam must explicitly approve the exact successfully previewed candidate. The UI can send the explicit approval sentence for him.
+7. Adam must explicitly approve the exact successfully previewed candidate unless he directly authorizes a profile/base-voice replacement through an authenticated administrative change, in which case the prior profile must still be versioned first.
 8. Approval re-validates the candidate against Realtime, versions the existing profile, stores the full approved profile, writes `approved_at`, and only then unlocks the microphone.
-9. Adam taps the same mic in the main Emery chat for the first live Realtime conversation.
+9. Adam taps the same mic in the main Emery chat for the live Realtime conversation.
 
 Voice Studio never creates a second assistant, conversation, memory system, or HPO persona.
 
@@ -90,7 +98,7 @@ Before replacing an already-approved base voice, preserve the old row in `voice_
 
 The Realtime plumbing accepts both:
 
-- built-in voice IDs such as `marin` or `cedar`
+- supported built-in voice IDs
 - custom voice IDs beginning with `voice_`
 
 Do not claim a custom voice exists until the provider actually returns a custom voice ID. Custom voice creation may require account eligibility plus provider consent/sample requirements.
@@ -115,15 +123,17 @@ Realtime receives Adam's audio natively. Input transcription is also enabled for
 
 Semantic VAD uses low eagerness so short thinking pauses are less likely to be treated as the end of Adam's thought.
 
-## Acceptance test after final voice approval
+## Acceptance test after voice approval or replacement
 
 1. Tap the mic in Emery.
 2. iOS/browser asks for microphone permission only when needed.
 3. Speak naturally with pauses and self-corrections.
-4. Interrupt Emery mid-answer; she should stop and listen.
-5. Ask a current-news/current-fact question; Realtime Emery should invoke live web search.
-6. End the voice session.
-7. Confirm the spoken user and Emery turns appear in the same text chat.
-8. Start a new voice session and confirm continuity from saved profile/memory/history.
+4. Confirm Emery presents as a natural feminine British voice: composed, concise, precise, understated, and conversational rather than theatrical.
+5. Interrupt Emery mid-answer; she should stop and listen.
+6. Ask a current-news/current-fact question; Realtime Emery should invoke live web search.
+7. Ask an HPO question and confirm the British delivery remains concise and executive while the same canonical tools/context are used.
+8. End the voice session.
+9. Confirm the spoken user and Emery turns appear in the same text chat.
+10. Start a new voice session and confirm continuity from saved profile/memory/history.
 
-If these pass, Emery Voice V1 is active.
+If these pass, the current Emery Voice profile is active and stable for the Phase 9 redesign.
