@@ -132,7 +132,11 @@ export async function executeVoiceCalendarCore(input: {
     userId: input.userId,
     apiKey: input.apiKey,
     message: input.request,
-    recent: input.recent ?? [],
+    recent: (input.recent ?? []).flatMap((item) =>
+      typeof item.role === "string" && typeof item.text === "string"
+        ? [{ role: item.role, text: item.text }]
+        : [],
+    ),
     timezone: prepared.currentContext.timezone,
     openTasks: input.openTasks ?? [],
     upcomingMeetings: input.upcomingMeetings ?? [],

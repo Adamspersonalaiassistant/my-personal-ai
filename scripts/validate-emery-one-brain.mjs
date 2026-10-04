@@ -16,12 +16,20 @@ const hpoContext = createEmptyRequestContext({
   selectedAccountId: "account-2",
 });
 
-const next = routeEmeryCapabilities({ message: "Who’s next?", context: hpoContext, domainHint: "hpo" });
+const next = routeEmeryCapabilities({
+  message: "Who’s next?",
+  context: hpoContext,
+  domainHint: "hpo",
+});
 assert(next.candidateCapabilities.includes("hpo.route.get_next_stop"));
 assert.equal(next.needsPersonalMemory, false);
 assert.equal(next.needsCalendar, false);
 
-const arrived = routeEmeryCapabilities({ message: "I’m here", context: hpoContext, domainHint: "hpo" });
+const arrived = routeEmeryCapabilities({
+  message: "I’m here",
+  context: hpoContext,
+  domainHint: "hpo",
+});
 assert(arrived.candidateCapabilities.includes("hpo.route_stop.arrive"));
 
 const lastTime = routeEmeryCapabilities({
@@ -57,7 +65,11 @@ const personalWhileRouting = routeEmeryCapabilities({
   context: hpoContext,
   domainHint: "hpo",
 });
-assert.notEqual(personalWhileRouting.domain, "hpo", "an active HPO route must not hijack a personal turn");
+assert.notEqual(
+  personalWhileRouting.domain,
+  "hpo",
+  "an active HPO route must not hijack a personal turn",
+);
 assert.equal(personalWhileRouting.needsPersonalMemory, true);
 
 const prompt = buildUnifiedVoiceContextPrompt({
@@ -72,7 +84,11 @@ const prompt = buildUnifiedVoiceContextPrompt({
   },
   capabilityRoute: next,
   actionPlan: { goal: "read next stop", reads: ["hpo.route.read"], writes: [], intents: [] },
-  loadPolicy: { loadHpoOperatingContext: false, loadPersonalMemory: false, loadCalendarContext: false },
+  loadPolicy: {
+    loadHpoOperatingContext: false,
+    loadPersonalMemory: false,
+    loadCalendarContext: false,
+  },
 });
 assert(prompt.includes("AUTHORITATIVE CURRENT EMERY CONTEXT"));
 assert(prompt.includes("route-1"));
@@ -126,9 +142,19 @@ assert(unifiedVoiceFunctionsSource.includes("executeVoiceHpoRouteCommandCore"));
 assert(unifiedVoiceFunctionsSource.includes("executeVoiceCalendarCore"));
 assert(unifiedRealtimeSource.includes("loadUnifiedVoiceContext"));
 assert(unifiedRealtimeSource.includes("buildUnifiedVoiceContextPrompt"));
-assert(unifiedRealtimeSource.includes('Use execute_hpo_route_command for route changes AND for “Undo that”'));
-assert(unifiedRealtimeSource.includes("Only say an action succeeded when the tool reports performed=true"));
-assert(voiceRuntimeSource.includes("createUnifiedRealtimeClientSecret as createRealtimeClientSecret"));
+assert(
+  unifiedRealtimeSource.includes(
+    "Use execute_hpo_route_command for route changes AND for “Undo that”",
+  ),
+);
+assert(
+  unifiedRealtimeSource.includes(
+    "Only say an action succeeded when the tool reports performed=true",
+  ),
+);
+assert(
+  voiceRuntimeSource.includes("createUnifiedRealtimeClientSecret as createRealtimeClientSecret"),
+);
 assert(voiceRuntimeSource.includes("executeUnifiedVoiceHpoFieldRead as executeVoiceHpoFieldRead"));
 assert(voiceRuntimeSource.includes("refreshUnifiedVoiceContext as refreshVoiceContext"));
 assert(

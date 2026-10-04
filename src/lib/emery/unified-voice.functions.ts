@@ -36,7 +36,8 @@ async function mainConversation(db: any, userId: string) {
     })
     .select("id,metadata")
     .single();
-  if (createError || !created) throw createError ?? new Error("Could not create Emery conversation");
+  if (createError || !created)
+    throw createError ?? new Error("Could not create Emery conversation");
   return created;
 }
 
@@ -74,8 +75,12 @@ export const executeUnifiedVoiceCalendarAction = createServerFn({ method: "POST"
       accountId?: string | null;
       prospectId?: string | null;
     }) => ({
-      request: String(input?.request ?? "").trim().slice(0, 2000),
-      idempotencyKey: input?.idempotencyKey ? String(input.idempotencyKey).trim().slice(0, 240) : null,
+      request: String(input?.request ?? "")
+        .trim()
+        .slice(0, 2000),
+      idempotencyKey: input?.idempotencyKey
+        ? String(input.idempotencyKey).trim().slice(0, 240)
+        : null,
       surface: input?.surface ? String(input.surface).slice(0, 120) : null,
       routeId: input?.routeId ? String(input.routeId).slice(0, 80) : null,
       stopId: input?.stopId ? String(input.stopId).slice(0, 80) : null,
@@ -149,7 +154,9 @@ export const executeUnifiedVoiceHpoAction = createServerFn({ method: "POST" })
       surface?: string | null;
       requestId?: string | null;
     }) => ({
-      request: String(input?.request ?? "").trim().slice(0, 3000),
+      request: String(input?.request ?? "")
+        .trim()
+        .slice(0, 3000),
       accountId: input?.accountId ? String(input.accountId).slice(0, 80) : null,
       prospectId: input?.prospectId ? String(input.prospectId).slice(0, 80) : null,
       routeId: input?.routeId ? String(input.routeId).slice(0, 80) : null,
@@ -221,7 +228,9 @@ export const executeUnifiedVoiceHpoFieldRead = createServerFn({ method: "POST" }
       prospectId?: string | null;
       surface?: string | null;
     }) => ({
-      request: String(input?.request ?? "").trim().slice(0, 2000),
+      request: String(input?.request ?? "")
+        .trim()
+        .slice(0, 2000),
       routeId: input?.routeId ? String(input.routeId).slice(0, 80) : null,
       stopId: input?.stopId ? String(input.stopId).slice(0, 80) : null,
       accountId: input?.accountId ? String(input.accountId).slice(0, 80) : null,
@@ -280,7 +289,9 @@ export const executeUnifiedVoiceHpoRouteStopAction = createServerFn({ method: "P
       prospectId?: string | null;
       surface?: string | null;
     }) => ({
-      request: String(input?.request ?? "").trim().slice(0, 5000),
+      request: String(input?.request ?? "")
+        .trim()
+        .slice(0, 5000),
       requestId: input?.requestId ? String(input.requestId).slice(0, 240) : null,
       routeId: input?.routeId ? String(input.routeId).slice(0, 80) : null,
       stopId: input?.stopId ? String(input.stopId).slice(0, 80) : null,
@@ -349,7 +360,9 @@ export const executeUnifiedVoiceHpoRouteCommand = createServerFn({ method: "POST
       latitude?: number | null;
       longitude?: number | null;
     }) => ({
-      request: String(input?.request ?? "").trim().slice(0, 4000),
+      request: String(input?.request ?? "")
+        .trim()
+        .slice(0, 4000),
       requestId: input?.requestId ? String(input.requestId).slice(0, 240) : null,
       routeId: input?.routeId ? String(input.routeId).slice(0, 80) : null,
       stopId: input?.stopId ? String(input.stopId).slice(0, 80) : null,
@@ -451,7 +464,9 @@ export const refreshUnifiedVoiceContext = createServerFn({ method: "POST" })
       prospectId?: string | null;
       surface?: string | null;
     }) => ({
-      query: String(input?.query ?? "").trim().slice(0, 1200),
+      query: String(input?.query ?? "")
+        .trim()
+        .slice(0, 1200),
       routeId: input?.routeId ? String(input.routeId).slice(0, 80) : null,
       stopId: input?.stopId ? String(input.stopId).slice(0, 80) : null,
       accountId: input?.accountId ? String(input.accountId).slice(0, 80) : null,
@@ -470,7 +485,10 @@ export const refreshUnifiedVoiceContext = createServerFn({ method: "POST" })
       ui: voiceUi(data),
     });
     const memories = current.memories
-      .map((item: any) => `[${item.memory_type}] ${item.title ? `${item.title}: ` : ""}${item.content}`)
+      .map(
+        (item: any) =>
+          `[${item.memory_type}] ${item.title ? `${item.title}: ` : ""}${item.content}`,
+      )
       .join("\n");
     return {
       result: [
@@ -495,7 +513,6 @@ export const refreshUnifiedVoiceContext = createServerFn({ method: "POST" })
       ]
         .filter(Boolean)
         .join("\n\n"),
-      currentContext: current.currentContext,
       capabilityRoute: current.capabilityRoute,
       actionPlan: current.actionPlan,
       loadPolicy: current.loadPolicy,

@@ -24,72 +24,80 @@ export async function loadUnifiedVoiceContext(input: {
   const loadPolicy = prepared.routing.loadPolicy;
   const now = new Date().toISOString();
 
-  const [profileResult, memoryResult, voiceResult, configResult, taskResult, projectResult, meetingResult, recentResult] =
-    await Promise.all([
-      input.db
-        .from("profiles")
-        .select("display_name, assistant_name, timezone, profile_summary")
-        .eq("user_id", input.userId)
-        .maybeSingle(),
-      loadPolicy.loadPersonalMemory
-        ? input.db
-            .from("memories")
-            .select("id,title,content,memory_type,importance,confidence,created_at,updated_at")
-            .eq("user_id", input.userId)
-            .order("importance", { ascending: false })
-            .order("updated_at", { ascending: false })
-            .limit(100)
-        : Promise.resolve({ data: [] }),
-      input.db
-        .from("voice_profiles")
-        .select(
-          "base_voice_id,stable_identity,delivery_preferences,contextual_preferences,pronunciation_preferences,provider_capabilities,approved_at,version",
-        )
-        .eq("user_id", input.userId)
-        .maybeSingle(),
-      input.db
-        .from("emery_config")
-        .select("response_verbosity,memory_max_items,memory_max_characters,proactive_focus_enabled")
-        .eq("user_id", input.userId)
-        .maybeSingle(),
-      loadPolicy.loadCalendarContext
-        ? input.db
-            .from("tasks")
-            .select(
-              "id,title,details,status,priority,due_at,scheduled_start_at,scheduled_end_at,reminder_at,estimated_minutes,metadata,project_id",
-            )
-            .eq("user_id", input.userId)
-            .neq("status", "completed")
-            .order("priority", { ascending: false })
-            .limit(12)
-        : Promise.resolve({ data: [] }),
-      loadPolicy.loadCalendarContext
-        ? input.db
-            .from("projects")
-            .select("id,name,description,status,priority,goal,next_action")
-            .eq("user_id", input.userId)
-            .eq("status", "active")
-            .order("priority", { ascending: false })
-            .limit(8)
-        : Promise.resolve({ data: [] }),
-      loadPolicy.loadCalendarContext
-        ? input.db
-            .from("meetings")
-            .select("id,title,meeting_at,end_at,participants,metadata")
-            .eq("user_id", input.userId)
-            .gte("meeting_at", now)
-            .order("meeting_at", { ascending: true })
-            .limit(8)
-        : Promise.resolve({ data: [] }),
-      input.db
-        .from("conversation_messages")
-        .select("role,content,created_at")
-        .eq("user_id", input.userId)
-        .eq("conversation_id", input.conversation.id)
-        .in("role", ["user", "assistant"])
-        .order("created_at", { ascending: false })
-        .limit(16),
-    ]);
+  const [
+    profileResult,
+    memoryResult,
+    voiceResult,
+    configResult,
+    taskResult,
+    projectResult,
+    meetingResult,
+    recentResult,
+  ] = await Promise.all([
+    input.db
+      .from("profiles")
+      .select("display_name, assistant_name, timezone, profile_summary")
+      .eq("user_id", input.userId)
+      .maybeSingle(),
+    loadPolicy.loadPersonalMemory
+      ? input.db
+          .from("memories")
+          .select("id,title,content,memory_type,importance,confidence,created_at,updated_at")
+          .eq("user_id", input.userId)
+          .order("importance", { ascending: false })
+          .order("updated_at", { ascending: false })
+          .limit(100)
+      : Promise.resolve({ data: [] }),
+    input.db
+      .from("voice_profiles")
+      .select(
+        "base_voice_id,stable_identity,delivery_preferences,contextual_preferences,pronunciation_preferences,provider_capabilities,approved_at,version",
+      )
+      .eq("user_id", input.userId)
+      .maybeSingle(),
+    input.db
+      .from("emery_config")
+      .select("response_verbosity,memory_max_items,memory_max_characters,proactive_focus_enabled")
+      .eq("user_id", input.userId)
+      .maybeSingle(),
+    loadPolicy.loadCalendarContext
+      ? input.db
+          .from("tasks")
+          .select(
+            "id,title,details,status,priority,due_at,scheduled_start_at,scheduled_end_at,reminder_at,estimated_minutes,metadata,project_id",
+          )
+          .eq("user_id", input.userId)
+          .neq("status", "completed")
+          .order("priority", { ascending: false })
+          .limit(12)
+      : Promise.resolve({ data: [] }),
+    loadPolicy.loadCalendarContext
+      ? input.db
+          .from("projects")
+          .select("id,name,description,status,priority,goal,next_action")
+          .eq("user_id", input.userId)
+          .eq("status", "active")
+          .order("priority", { ascending: false })
+          .limit(8)
+      : Promise.resolve({ data: [] }),
+    loadPolicy.loadCalendarContext
+      ? input.db
+          .from("meetings")
+          .select("id,title,meeting_at,end_at,participants,metadata")
+          .eq("user_id", input.userId)
+          .gte("meeting_at", now)
+          .order("meeting_at", { ascending: true })
+          .limit(8)
+      : Promise.resolve({ data: [] }),
+    input.db
+      .from("conversation_messages")
+      .select("role,content,created_at")
+      .eq("user_id", input.userId)
+      .eq("conversation_id", input.conversation.id)
+      .in("role", ["user", "assistant"])
+      .order("created_at", { ascending: false })
+      .limit(16),
+  ]);
 
   const recent = (recentResult.data ?? []).reverse().map((row: any) => ({
     role: row.role as "user" | "assistant",

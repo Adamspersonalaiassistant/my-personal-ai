@@ -42,10 +42,10 @@ function hasHpoCurrentContext(context?: RequestContext | null) {
     context.surface.startsWith("hpo_") ||
     Boolean(
       context.currentRouteId ||
-        context.currentStopId ||
-        context.selectedAccountId ||
-        context.selectedProspectId ||
-        context.fieldSessionId,
+      context.currentStopId ||
+      context.selectedAccountId ||
+      context.selectedProspectId ||
+      context.fieldSessionId,
     )
   );
 }
@@ -117,7 +117,7 @@ export function routeEmeryCapabilities(input: CapabilityRouterInput): Capability
       text,
     );
   const memorySignal =
-    /\b(remember|do you remember|what did i say|what did i tell you|last time we talked|my preference|my preferences|about me)\b/.test(
+    /\b(remember|do you remember|remind me|what did i say|what did i tell you|what i told you|last time we talked|my preference|my preferences|about me)\b/.test(
       text,
     );
   const locationSignal =
@@ -125,8 +125,7 @@ export function routeEmeryCapabilities(input: CapabilityRouterInput): Capability
       text,
     );
   const deicticHpoSignal =
-    currentHpo &&
-    /\b(here|there|this office|this account|that office|that account)\b/.test(text);
+    currentHpo && /\b(here|there|this office|this account|that office|that account)\b/.test(text);
 
   if (arrivalSignal) {
     add(candidates, "hpo.route_stop.arrive");

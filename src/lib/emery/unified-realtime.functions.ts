@@ -37,7 +37,8 @@ async function mainConversation(db: any, userId: string) {
     })
     .select("id,metadata")
     .single();
-  if (createError || !created) throw createError ?? new Error("Could not create Emery conversation");
+  if (createError || !created)
+    throw createError ?? new Error("Could not create Emery conversation");
   return created;
 }
 
@@ -79,7 +80,9 @@ function voiceStyleInstruction(profile: any) {
       : null,
     stable?.english_fluency ? `- English delivery: ${stable.english_fluency}.` : null,
     stable?.presence ? `- Presence: ${stable.presence}.` : null,
-    stable?.refinement_note ? `- Latest explicit voice refinement: ${stable.refinement_note}.` : null,
+    stable?.refinement_note
+      ? `- Latest explicit voice refinement: ${stable.refinement_note}.`
+      : null,
     stable?.avoid
       ? `- Avoid: ${Array.isArray(stable.avoid) ? stable.avoid.join(", ") : String(stable.avoid)}.`
       : null,
@@ -225,7 +228,8 @@ const realtimeTools = [
   {
     type: "function",
     name: "execute_calendar_action",
-    description: "Execute a canonical Emery Calendar/Tasks action only when Adam explicitly authorizes it.",
+    description:
+      "Execute a canonical Emery Calendar/Tasks action only when Adam explicitly authorizes it.",
     parameters: toolRequestSchema,
   },
   {
@@ -259,7 +263,8 @@ const realtimeTools = [
   {
     type: "function",
     name: "execute_hpo_route_note",
-    description: "Save an explicit non-PHI HPO field-route note through the existing canonical route-note chain.",
+    description:
+      "Save an explicit non-PHI HPO field-route note through the existing canonical route-note chain.",
     parameters: toolRequestSchema,
   },
   {
@@ -341,7 +346,11 @@ export const createUnifiedRealtimeClientSecret = createServerFn({ method: "POST"
     });
 
     if (!response.ok) {
-      console.error("Unified Realtime client secret failed", response.status, await response.text());
+      console.error(
+        "Unified Realtime client secret failed",
+        response.status,
+        await response.text(),
+      );
       return { error: "Emery couldn't start a secure voice session right now." } as const;
     }
 
@@ -350,7 +359,8 @@ export const createUnifiedRealtimeClientSecret = createServerFn({ method: "POST"
       expires_at?: number;
       session?: { id?: string };
     };
-    if (!payload.value) return { error: "The voice service returned an invalid session token." } as const;
+    if (!payload.value)
+      return { error: "The voice service returned an invalid session token." } as const;
 
     return {
       clientSecret: payload.value,

@@ -20,7 +20,11 @@ import {
 type VoiceStatus = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "error";
 
 async function currentHpoVoiceLocation(request: string) {
-  if (!/\b(from here|where i am|current location|remaining|rest of (?:the )?route|nearby|backup|within \d{1,2} minutes?|where should i go|where can i go|minutes? left)\b/i.test(request)) {
+  if (
+    !/\b(from here|where i am|current location|remaining|rest of (?:the )?route|nearby|backup|within \d{1,2} minutes?|where should i go|where can i go|minutes? left)\b/i.test(
+      request,
+    )
+  ) {
     return { latitude: null as number | null, longitude: null as number | null };
   }
   if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -173,7 +177,9 @@ export function EmeryVoiceControl({
       if (!clean || savedEventsRef.current.has(eventKey)) return;
       savedEventsRef.current.add(eventKey);
       try {
-        await persistTranscript({ data: { role, text: clean, eventKey, sessionId: sessionIdRef.current } });
+        await persistTranscript({
+          data: { role, text: clean, eventKey, sessionId: sessionIdRef.current },
+        });
         onConversationChanged?.();
       } catch (caught) {
         console.error("Voice transcript persistence failed", caught);
@@ -378,10 +384,28 @@ export function EmeryVoiceControl({
 
         sendToolOutput(callId, `Unknown tool: ${name}`);
       } catch {
-        sendToolOutput(callId, "That tool is temporarily unavailable. Answer without inventing its result.");
+        sendToolOutput(
+          callId,
+          "That tool is temporarily unavailable. Answer without inventing its result.",
+        );
       }
     },
-    [executeCalendarAction, executeHpoAction, executeHpoFieldRead, executeHpoRouteCommand, executeHpoRouteStopAction, executeHpoRouteNote, hpoRouteId, hpoStopId, hpoAccountId, onConversationChanged, refreshContext, searchWeb, sendToolOutput, updateVoiceDelivery],
+    [
+      executeCalendarAction,
+      executeHpoAction,
+      executeHpoFieldRead,
+      executeHpoRouteCommand,
+      executeHpoRouteStopAction,
+      executeHpoRouteNote,
+      hpoRouteId,
+      hpoStopId,
+      hpoAccountId,
+      onConversationChanged,
+      refreshContext,
+      searchWeb,
+      sendToolOutput,
+      updateVoiceDelivery,
+    ],
   );
 
   const handleRealtimeEvent = useCallback(
@@ -719,7 +743,8 @@ export function EmeryVoiceControl({
                 </p>
                 {selectedVoice ? (
                   <p className="mt-2 text-[11px] text-muted-foreground">
-                    Stored voice: <span className="text-foreground">{selectedVoice}</span> · awaiting approval
+                    Stored voice: <span className="text-foreground">{selectedVoice}</span> ·
+                    awaiting approval
                   </p>
                 ) : null}
               </div>
