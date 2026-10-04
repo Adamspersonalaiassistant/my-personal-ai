@@ -130,6 +130,22 @@
   .emery-surface { background: var(--surface); border: 1px solid var(--border); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--foreground) 3%, transparent); }
   .emery-glow { box-shadow: 0 0 24px color-mix(in srgb, var(--primary) 18%, transparent); }
   .emery-live-glow { box-shadow: 0 0 28px color-mix(in srgb, var(--live) 16%, transparent); }
+  .emery-core-halo { background: radial-gradient(circle, color-mix(in srgb, var(--live) 14%, transparent), color-mix(in srgb, var(--primary) 5%, transparent) 44%, transparent 72%); }
+  .emery-core-center { box-shadow: inset 0 0 34px color-mix(in srgb, var(--live) 6%, transparent); }
+  .emery-mobile-deck {
+    background: radial-gradient(ellipse 42% 64% at 50% 48%, color-mix(in srgb, var(--primary) 16%, transparent), transparent 100%),
+      radial-gradient(ellipse 60% 65% at 50% 60%, color-mix(in srgb, var(--live) 7%, transparent), transparent 100%),
+      var(--surface);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--live) 12%, transparent), inset 0 -28px 50px color-mix(in srgb, var(--background) 60%, transparent);
+  }
+  .emery-deck-arc { border: 1px solid color-mix(in srgb, var(--live) 10%, transparent); box-shadow: 0 0 40px color-mix(in srgb, var(--primary) 10%, transparent); }
+  .emery-deck-arc::before, .emery-deck-arc::after { content: ""; position: absolute; inset: 10px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--primary) 8%, transparent); }
+  .emery-deck-arc::after { inset: -8px; border-style: dashed; border-color: color-mix(in srgb, var(--live) 8%, transparent); }
+  .emery-user-message { border-color: color-mix(in srgb, var(--primary) 32%, transparent); background: color-mix(in srgb, var(--accent) 62%, var(--surface)); box-shadow: inset 2px 0 color-mix(in srgb, var(--primary) 55%, transparent), 0 8px 24px color-mix(in srgb, var(--background) 32%, transparent); overflow-wrap: anywhere; }
+  .emery-assistant-message { background: color-mix(in srgb, var(--surface) 58%, transparent); box-shadow: inset 2px 0 color-mix(in srgb, var(--live) 36%, transparent); overflow-wrap: anywhere; }
+  .emery-composer { background: color-mix(in srgb, var(--elevated) 92%, transparent); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--foreground) 5%, transparent), 0 12px 32px color-mix(in srgb, var(--background) 60%, transparent); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+  .emery-mobile-nav { background: color-mix(in srgb, var(--surface) 90%, transparent); box-shadow: 0 -8px 32px color-mix(in srgb, var(--background) 65%, transparent); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+  .emery-nav-active { background: color-mix(in srgb, var(--live) 6%, transparent); box-shadow: inset 0 1px color-mix(in srgb, var(--live) 26%, transparent); }
   .emery-panel-matte { background: var(--surface); border-color: var(--border); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--foreground) 3%, transparent); }
   .emery-panel-glass { background: color-mix(in srgb, var(--surface) 88%, transparent); border-color: color-mix(in srgb, var(--foreground) 12%, transparent); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--foreground) 4%, transparent); backdrop-filter: blur(14px) saturate(112%); -webkit-backdrop-filter: blur(14px) saturate(112%); }
   .emery-panel-elevated { background: var(--elevated); border-color: color-mix(in srgb, var(--foreground) 13%, transparent); box-shadow: 0 14px 34px rgba(0,0,0,.24); }
@@ -166,4 +182,4 @@
 
 @media (min-width: 768px) { body { padding: 0; } }
 @media (prefers-reduced-motion: reduce) { *,*::before,*::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
-@media (prefers-reduced-transparency: reduce) { .emery-glass,.emery-glass-strong,.emery-panel-glass { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--surface); } }
+@media (prefers-reduced-transparency: reduce) { .emery-glass,.emery-glass-strong,.emery-panel-glass,.emery-composer,.emery-mobile-nav { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--surface); } }

@@ -50,7 +50,7 @@ const moreItems = [
 
 const RETURN_KEY = "emery:return";
 const PREFILL_KEY = "emery:prefill";
-const EMERY_BUILD_ID = "2026-10-01-hpo-planner-first-v6";
+const EMERY_BUILD_ID = "2026-10-04-phase9-mobile-command-v1";
 
 export function AppShell({ title, children, padded = true, askEmery }: { title: string; children: ReactNode; padded?: boolean; askEmery?: string }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -152,10 +152,10 @@ export function AppShell({ title, children, padded = true, askEmery }: { title: 
       </aside>
 
       <div className="relative z-10 flex min-h-0 min-w-0 flex-col overflow-hidden">
-        <header className="z-40 flex min-h-[54px] shrink-0 items-center justify-between border-b border-border/65 bg-surface/95 px-3 pb-1.5 pt-[max(0.35rem,env(safe-area-inset-top))] backdrop-blur-lg sm:px-5">
+        <header className="z-40 flex min-h-[54px] shrink-0 items-center justify-between border-b border-border/55 bg-surface/90 px-3 pb-1.5 pt-[max(0.35rem,env(safe-area-inset-top))] backdrop-blur-lg sm:px-5">
           <div className="flex min-w-0 items-center gap-2.5">
-            <Link to="/chat" onClick={rememberEmeryHandoff} className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-live/18 bg-live/[0.035] md:hidden" aria-label="Open Emery"><img src={brainImage} alt="" className="emery-blue-brain size-8 object-cover" /></Link>
-            <div className="min-w-0"><p className="truncate text-base font-semibold">{onChat ? "Emery" : title}</p>{!onChat ? <p className="hidden truncate text-[10px] uppercase tracking-[.12em] text-muted-foreground md:block">Emery System</p> : null}</div>
+            {!onChat ? <Link to="/chat" onClick={rememberEmeryHandoff} className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-live/18 bg-live/[0.035] md:hidden" aria-label="Open Emery"><img src={brainImage} alt="" className="emery-blue-brain size-8 object-cover" /></Link> : null}
+            <div className="min-w-0"><p className="truncate text-[13px] font-semibold uppercase tracking-[0.08em] sm:text-base sm:normal-case sm:tracking-normal">{onChat ? "Emery" : title}</p>{!onChat ? <p className="hidden truncate text-[10px] uppercase tracking-[.12em] text-muted-foreground md:block">Emery System</p> : null}</div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             {!onChat && !onHpo ? <EmeryVoiceControl /> : null}
@@ -167,11 +167,11 @@ export function AppShell({ title, children, padded = true, askEmery }: { title: 
 
         <main className={`emery-route-enter relative min-h-0 flex-1 ${padded ? "emery-scrollbar overflow-y-auto overscroll-contain px-4 py-4 [touch-action:pan-y] [-webkit-overflow-scrolling:touch] sm:px-5 md:px-7 md:py-6" : "overflow-hidden"}`}>{children}</main>
 
-        <nav className="z-40 grid shrink-0 grid-cols-4 gap-1 border-t border-border/65 bg-surface/96 px-2 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-xl md:hidden" aria-label="Primary navigation">
+        <nav className="emery-mobile-nav z-40 grid shrink-0 grid-cols-4 gap-1 border-t border-border/65 px-2 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1.5 md:hidden" aria-label="Primary navigation">
           {primaryNav.map(({ to, label, icon: Icon }) => (
-            <Link key={to} to={to} onClick={() => { if (to === "/chat") rememberEmeryHandoff(); }} className="emery-press relative flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-medium text-muted-foreground transition-all" activeProps={{ className: "bg-primary/10 text-primary font-semibold shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--primary)_18%,transparent)] [&_svg]:stroke-[2.35]" }}><Icon className="size-[20px]" /><span>{label}</span></Link>
+            <Link key={to} to={to} onClick={() => { if (to === "/chat") rememberEmeryHandoff(); }} className="emery-press relative flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-md px-1 text-[11px] font-medium text-muted-foreground transition-all" activeProps={{ className: "emery-nav-active text-live font-semibold [&_svg]:stroke-[2.35]" }}><Icon className="size-[20px]" /><span>{label}</span></Link>
           ))}
-          <Button variant="ghost" type="button" onClick={() => setMoreOpen(true)} aria-label="Open more navigation" aria-expanded={moreOpen} className={`emery-press flex h-auto min-h-[52px] w-full flex-col items-center justify-center gap-1 rounded-xl p-0 text-[11px] font-medium transition-all ${moreActive ? "bg-primary/10 text-primary shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--primary)_18%,transparent)]" : "text-muted-foreground"}`}><MoreHorizontal className="size-[20px]" /><span>More</span></Button>
+          <Button variant="ghost" type="button" onClick={() => setMoreOpen(true)} aria-label="Open more navigation" aria-expanded={moreOpen} className={`emery-press flex h-auto min-h-[52px] w-full flex-col items-center justify-center gap-1 rounded-md p-0 text-[11px] font-medium transition-all ${moreActive ? "emery-nav-active text-live" : "text-muted-foreground"}`}><MoreHorizontal className="size-[20px]" /><span>More</span></Button>
         </nav>
       </div>
 
