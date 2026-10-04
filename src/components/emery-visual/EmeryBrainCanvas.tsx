@@ -65,7 +65,9 @@ export function EmeryBrainCanvas({ state, compact = false }: { state: EmeryVisua
 
       for (let i = 0; i < particles.length; i += 1) {
         const p = particles[i];
-        const angle = p.angle + time * p.speed * motion * (state === "thinking" || state === "planning" ? 1.55 : 1);
+        const angle =
+          p.angle +
+          time * p.speed * motion * (state === "thinking" || state === "planning" ? 1.55 : 1);
         const pulse = 1 + Math.sin(time * 0.0012 + p.phase) * 0.035 * motion;
         const r = p.radius * pulse;
         const x = cx + Math.cos(angle) * r;
@@ -108,7 +110,6 @@ export function EmeryBrainCanvas({ state, compact = false }: { state: EmeryVisua
     document.addEventListener("visibilitychange", onVisibility);
     resize();
     draw(performance.now());
-    if (!reducedMotion.matches) frame = window.requestAnimationFrame(draw);
 
     return () => {
       observer.disconnect();
