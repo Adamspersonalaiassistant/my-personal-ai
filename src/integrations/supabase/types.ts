@@ -522,6 +522,119 @@ export type Database = {
           },
         ]
       }
+      emery_field_sessions: {
+        Row: {
+          created_at: string
+          current_stop_id: string | null
+          ended_at: string | null
+          expected_note_account_id: string | null
+          expected_note_meeting_id: string | null
+          expected_note_prospect_id: string | null
+          expected_note_stop_id: string | null
+          id: string
+          last_completed_stop_id: string | null
+          metadata: Json
+          optional_prospecting: boolean
+          planned_meetings: Json
+          route_id: string | null
+          session_date: string
+          started_at: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          current_stop_id?: string | null
+          ended_at?: string | null
+          expected_note_account_id?: string | null
+          expected_note_meeting_id?: string | null
+          expected_note_prospect_id?: string | null
+          expected_note_stop_id?: string | null
+          id?: string
+          last_completed_stop_id?: string | null
+          metadata?: Json
+          optional_prospecting?: boolean
+          planned_meetings?: Json
+          route_id?: string | null
+          session_date: string
+          started_at?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          current_stop_id?: string | null
+          ended_at?: string | null
+          expected_note_account_id?: string | null
+          expected_note_meeting_id?: string | null
+          expected_note_prospect_id?: string | null
+          expected_note_stop_id?: string | null
+          id?: string
+          last_completed_stop_id?: string | null
+          metadata?: Json
+          optional_prospecting?: boolean
+          planned_meetings?: Json
+          route_id?: string | null
+          session_date?: string
+          started_at?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "emery_field_sessions_current_stop_id_fkey"
+            columns: ["current_stop_id"]
+            isOneToOne: false
+            referencedRelation: "hpo_route_stops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "emery_field_sessions_expected_note_account_id_fkey"
+            columns: ["expected_note_account_id"]
+            isOneToOne: false
+            referencedRelation: "hpo_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "emery_field_sessions_expected_note_meeting_id_fkey"
+            columns: ["expected_note_meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "emery_field_sessions_expected_note_prospect_id_fkey"
+            columns: ["expected_note_prospect_id"]
+            isOneToOne: false
+            referencedRelation: "hpo_prospects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "emery_field_sessions_expected_note_stop_id_fkey"
+            columns: ["expected_note_stop_id"]
+            isOneToOne: false
+            referencedRelation: "hpo_route_stops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "emery_field_sessions_last_completed_stop_id_fkey"
+            columns: ["last_completed_stop_id"]
+            isOneToOne: false
+            referencedRelation: "hpo_route_stops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "emery_field_sessions_route_id_fkey"
+            columns: ["route_id"]
+            isOneToOne: false
+            referencedRelation: "hpo_route_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       emery_improvement_backlog: {
         Row: {
           area: string
@@ -1070,11 +1183,14 @@ export type Database = {
       }
       hpo_interactions: {
         Row: {
-          account_id: string
+          account_id: string | null
+          activity_title: string | null
+          activity_type: string | null
           contact_id: string | null
           created_at: string
           id: string
           interaction_type: string
+          meeting_id: string | null
           metadata: Json
           next_action: string | null
           next_action_due_at: string | null
@@ -1087,11 +1203,14 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          account_id: string
+          account_id?: string | null
+          activity_title?: string | null
+          activity_type?: string | null
           contact_id?: string | null
           created_at?: string
           id?: string
           interaction_type?: string
+          meeting_id?: string | null
           metadata?: Json
           next_action?: string | null
           next_action_due_at?: string | null
@@ -1104,11 +1223,14 @@ export type Database = {
           user_id: string
         }
         Update: {
-          account_id?: string
+          account_id?: string | null
+          activity_title?: string | null
+          activity_type?: string | null
           contact_id?: string | null
           created_at?: string
           id?: string
           interaction_type?: string
+          meeting_id?: string | null
           metadata?: Json
           next_action?: string | null
           next_action_due_at?: string | null
@@ -1121,6 +1243,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "hpo_interactions_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "hpo_interactions_user_account_fkey"
             columns: ["user_id", "account_id"]
@@ -2265,6 +2394,40 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      emery_hpo_apply_route_order: {
+        Args: {
+          p_distance_meters?: number[]
+          p_drive_seconds?: number[]
+          p_route_id: string
+          p_stop_ids: string[]
+        }
+        Returns: Json
+      }
+      emery_hpo_consume_field_note_target: {
+        Args: { p_route_id: string; p_stop_id: string }
+        Returns: Json
+      }
+      emery_hpo_create_planner_selection: {
+        Args: {
+          p_area: string
+          p_game_plan: Json
+          p_route_date: string
+          p_session_id: string
+          p_stops: Json
+        }
+        Returns: Json
+      }
+      emery_hpo_finalize_planner_order: {
+        Args: {
+          p_distance_meters: number[]
+          p_drive_seconds: number[]
+          p_patch: Json
+          p_route_id: string
+          p_session_id: string
+          p_stop_ids: string[]
+        }
+        Returns: Json
+      }
       emery_hpo_log_touch: {
         Args: {
           p_account_id: string
@@ -2278,11 +2441,14 @@ export type Database = {
           p_user_id: string
         }
         Returns: {
-          account_id: string
+          account_id: string | null
+          activity_title: string | null
+          activity_type: string | null
           contact_id: string | null
           created_at: string
           id: string
           interaction_type: string
+          meeting_id: string | null
           metadata: Json
           next_action: string | null
           next_action_due_at: string | null
@@ -2300,6 +2466,15 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      emery_hpo_restore_remaining_route_stops: {
+        Args: {
+          p_expected_current_stop_ids: string[]
+          p_previous_field_session?: Json
+          p_previous_open_stops: Json
+          p_route_id: string
+        }
+        Returns: Json
       }
       emery_hpo_set_followup: {
         Args: {
@@ -2347,6 +2522,21 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      emery_hpo_set_remaining_route_stops: {
+        Args: {
+          p_address?: string
+          p_arm_note_target?: boolean
+          p_city?: string
+          p_latitude?: number
+          p_longitude?: number
+          p_office_name?: string
+          p_route_id: string
+          p_target_account_id?: string
+          p_target_prospect_id?: string
+          p_visit_priority?: string
+        }
+        Returns: Json
       }
       emery_kernel_task_create: {
         Args: {
