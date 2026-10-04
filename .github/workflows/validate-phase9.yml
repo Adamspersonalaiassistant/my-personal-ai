@@ -36,50 +36,39 @@ jobs:
       - name: HPO activity regression
         run: bun run validate:hpo-activity
       - name: TypeScript baseline diagnostic
-        id: typescript
         continue-on-error: true
         shell: bash
         run: |
           set +e
           bunx tsc --noEmit 2>&1 | tee phase9-typescript.txt
-          code=${PIPESTATUS[0]}
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
-          exit "$code"
+          exit ${PIPESTATUS[0]}
       - name: Focused Phase 9 lint
-        id: lint
-        continue-on-error: true
-        shell: bash
-        run: >-
-          bunx eslint --rule 'prettier/prettier: off'
-          src/components/AppShell.tsx
-          src/components/EmeryVoiceControl.tsx
-          src/components/OperatingContextCard.tsx
-          src/components/HpoFieldNav.tsx
-          src/components/HpoActivityView.tsx
-          src/components/emery-visual/EmeryBrainCanvas.tsx
-          src/components/emery-visual/EmeryBrainCore.tsx
-          src/components/emery-visual/EmeryBrainRings.tsx
-          src/components/emery-visual/EmeryPresence.tsx
-          src/components/emery-visual/EmeryStateLabel.tsx
-          src/components/emery-visual/emery-visual.types.ts
-          src/components/ui/emery/CommandPanel.tsx
-          src/components/ui/emery/ContextStrip.tsx
-          src/components/ui/emery/IntelligenceMetric.tsx
-          src/components/ui/emery/SectionHeading.tsx
-          src/components/ui/emery/StatusChip.tsx
-          src/lib/emery/visual-runtime.ts
-          src/routes/_authenticated/chat.tsx
-          2>&1 | tee phase9-lint.txt
-      - name: Production build
-        id: build
-        continue-on-error: true
         shell: bash
         run: |
-          set +e
+          bunx eslint --rule 'prettier/prettier: off' \
+            src/components/AppShell.tsx \
+            src/components/EmeryVoiceControl.tsx \
+            src/components/OperatingContextCard.tsx \
+            src/components/HpoFieldNav.tsx \
+            src/components/HpoActivityView.tsx \
+            src/components/emery-visual/EmeryBrainCanvas.tsx \
+            src/components/emery-visual/EmeryBrainCore.tsx \
+            src/components/emery-visual/EmeryBrainRings.tsx \
+            src/components/emery-visual/EmeryPresence.tsx \
+            src/components/emery-visual/EmeryStateLabel.tsx \
+            src/components/emery-visual/emery-visual.types.ts \
+            src/components/ui/emery/CommandPanel.tsx \
+            src/components/ui/emery/ContextStrip.tsx \
+            src/components/ui/emery/IntelligenceMetric.tsx \
+            src/components/ui/emery/SectionHeading.tsx \
+            src/components/ui/emery/StatusChip.tsx \
+            src/lib/emery/visual-runtime.ts \
+            src/routes/_authenticated/chat.tsx \
+            2>&1 | tee phase9-lint.txt
+      - name: Production build
+        shell: bash
+        run: |
           bun run build 2>&1 | tee phase9-build.txt
-          code=${PIPESTATUS[0]}
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
-          exit "$code"
       - name: Upload Phase 9 diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -91,16 +80,3 @@ jobs:
             phase9-build.txt
           if-no-files-found: ignore
           retention-days: 3
-      - name: Gate Phase 9 redesign
-        if: always()
-        shell: bash
-        run: |
-          echo "TypeScript exit code: ${{ steps.typescript.outputs.exit_code }} (tracked separately against emery-phase9-british-voice baseline)"
-          if [ "${{ steps.lint.outcome }}" != "success" ]; then
-            echo "Focused Phase 9 lint failed"
-            exit 1
-          fi
-          if [ "${{ steps.build.outcome }}" != "success" ]; then
-            echo "Production build failed"
-            exit 1
-          fi
