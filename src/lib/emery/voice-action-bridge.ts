@@ -4,6 +4,7 @@ import { processHpoAction } from "@/lib/hpo-action-controller";
 import { processHpoFieldReadCommand } from "@/lib/hpo-field-read-controller";
 import { processHpoRouteCommand } from "@/lib/hpo-route-command-controller";
 import { processHpoRouteStopAction } from "@/lib/hpo-route-action-controller";
+import { contextualizeVoiceCorrection } from "./voice-conversation-policy.ts";
 import { processEmeryMultiIntentDayPlan } from "./multi-intent-executor.ts";
 import { prepareVoiceRequest, type VoiceUiContext } from "./voice-request-context.ts";
 
@@ -15,9 +16,6 @@ function fieldReadMessage(request: string) {
     .replace(/\s+/g, " ")
     .trim();
 
-  // The Capability Router has already resolved these short pronoun questions to
-  // the current HPO relationship. Reuse the canonical account-context read
-  // instead of asking the field controller to independently resolve the pronoun.
   if (/\b(what did she say|what did he say|what did they say|what did them say)\b/.test(text)) {
     return "What happened here last time?";
   }
@@ -86,6 +84,7 @@ export async function executeVoiceHpoRelationshipCore(input: {
   conversationId?: string | null;
   ui?: VoiceUiContext | null;
 }) {
+  const recent = input.recent ?? [];
   const prepared = await prepareVoiceRequest({
     db: input.db,
     userId: input.userId,
@@ -98,8 +97,8 @@ export async function executeVoiceHpoRelationshipCore(input: {
     db: input.db,
     userId: input.userId,
     apiKey: input.apiKey,
-    message: input.request,
-    recent: input.recent ?? [],
+    message: contextualizeVoiceCorrection(input.request, recent),
+    recent,
     timezone: prepared.currentContext.timezone,
     sourceMessageId: input.sourceMessageId ?? null,
     selectedAccountId: input.ui?.accountId ?? prepared.resolved.accountId,
@@ -119,6 +118,11 @@ export async function executeVoiceCalendarCore(input: {
   conversationId?: string | null;
   ui?: VoiceUiContext | null;
 }) {
+  const recent = (input.recent ?? []).flatMap((item) =>
+    typeof item.role === "string" && typeof item.text === "string"
+      ? [{ role: item.role, text: item.text }]
+      : [],
+  );
   const prepared = await prepareVoiceRequest({
     db: input.db,
     userId: input.userId,
@@ -131,12 +135,8 @@ export async function executeVoiceCalendarCore(input: {
     db: input.db,
     userId: input.userId,
     apiKey: input.apiKey,
-    message: input.request,
-    recent: (input.recent ?? []).flatMap((item) =>
-      typeof item.role === "string" && typeof item.text === "string"
-        ? [{ role: item.role, text: item.text }]
-        : [],
-    ),
+    message: contextualizeVoiceCorrection(input.request, recent),
+    recent,
     timezone: prepared.currentContext.timezone,
     openTasks: input.openTasks ?? [],
     upcomingMeetings: input.upcomingMeetings ?? [],
