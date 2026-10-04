@@ -81,9 +81,56 @@ const voicePromptSource = fs.readFileSync(
   new URL("../src/lib/emery/voice-context-prompt.ts", import.meta.url),
   "utf8",
 );
+const hookSource = fs.readFileSync(
+  new URL("../src/lib/emery/use-ambient-context.ts", import.meta.url),
+  "utf8",
+);
+const toggleSource = fs.readFileSync(
+  new URL("../src/components/EmeryAmbientContextToggle.tsx", import.meta.url),
+  "utf8",
+);
+const voiceControlSource = fs.readFileSync(
+  new URL("../src/components/EmeryVoiceControl.tsx", import.meta.url),
+  "utf8",
+);
+
 assert(voicePromptSource.includes("TEMPORARY AMBIENT CONTEXT CONTRACT"));
 assert(voicePromptSource.includes("must never be written to durable memory"));
 assert(voicePromptSource.includes("Only Adam's current explicitly addressed Voice request can authorize"));
 assert(voicePromptSource.includes("both outrank temporary ambient context"));
 
-console.log("Emery Phase 6 ambient context foundation validation passed.");
+assert(hookSource.includes("appendAmbientSnippet"));
+assert(hookSource.includes("requestRealtimeAmbientResponse"));
+assert(hookSource.includes("persistTranscript: false"));
+assert(hookSource.includes("setRealtimeAmbientMode"));
+assert(hookSource.includes("setInterval(pruneNow, 10_000)"));
+assert(toggleSource.includes("Ambient on"));
+assert(toggleSource.includes("Ambient off"));
+assert(toggleSource.includes('aria-pressed={enabled}'));
+
+assert(
+  voiceControlSource.includes("useAmbientContext"),
+  "EmeryVoiceControl must use the shared Phase 6 ambient hook",
+);
+assert(
+  voiceControlSource.includes("EmeryAmbientContextToggle"),
+  "EmeryVoiceControl must expose a visible Ambient Context on/off control",
+);
+assert(
+  voiceControlSource.includes("ambient.handleTranscript"),
+  "completed input transcripts must flow through temporary ambient handling when enabled",
+);
+assert(
+  voiceControlSource.includes("ambient.applyMode"),
+  "ambient Realtime response suppression must be re-applied when the Voice data channel opens",
+);
+assert(
+  voiceControlSource.includes("ambient.reset"),
+  "closing Voice must clear the in-memory ambient buffer and default Ambient Context back off",
+);
+assert(
+  voiceControlSource.includes("persistTranscript") && voiceControlSource.includes("ambientResult.persistTranscript"),
+  "unaddressed ambient speech must not enter normal persistent Voice transcripts",
+);
+
+console.log("Emery Phase 6 ambient context validation passed.");
