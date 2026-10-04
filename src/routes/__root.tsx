@@ -76,6 +76,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content: "width=device-width, initial-scale=1, viewport-fit=cover",
       },
       { title: "Emery — Adam's Personal AI" },
+      { name: "application-name", content: "Emery" },
       {
         name: "description",
         content: "Emery is Adam's private persistent personal AI companion.",
@@ -83,9 +84,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "robots", content: "noindex, nofollow" },
       { name: "theme-color", content: "#071a3d" },
       { name: "emery-build", content: "2026-09-30-hpo-map-routeonly-v4" },
+      { name: "mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
       { name: "apple-mobile-web-app-title", content: "Emery" },
+      { name: "format-detection", content: "telephone=no" },
       { property: "og:title", content: "Emery" },
       {
         property: "og:description",
