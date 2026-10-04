@@ -16,6 +16,14 @@ import {
   searchWebForVoice,
   updateVoiceDeliveryFromLive,
 } from "@/lib/emery/voice-runtime";
+import {
+  VOICE_FOLLOW_UP_WINDOW_MS,
+  classifyVoiceTurn,
+} from "@/lib/emery/voice-conversation-policy";
+import {
+  stopCurrentRealtimeSpeech,
+  voiceEventBelongsToAttempt,
+} from "@/lib/emery/voice-client-safety";
 
 type VoiceStatus = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "error";
 
@@ -101,6 +109,10 @@ export function EmeryVoiceControl({
   const startingRef = useRef(false);
   const attemptRef = useRef(0);
   const sessionIdRef = useRef<string | null>(null);
+  const responseActiveRef = useRef(false);
+  const lastAssistantTranscriptRef = useRef("");
+  const lastAssistantAtRef = useRef(0);
+  const followUpUntilRef = useRef(0);
 
   const refreshReadiness = useCallback(async () => {
     try {
@@ -130,6 +142,10 @@ export function EmeryVoiceControl({
     attemptRef.current += 1;
     startingRef.current = false;
     activeRef.current = false;
+    responseActiveRef.current = false;
+    lastAssistantTranscriptRef.current = "";
+    lastAssistantAtRef.current = 0;
+    followUpUntilRef.current = 0;
 
     const channel = channelRef.current;
     channelRef.current = null;
@@ -422,21 +438,64 @@ export function EmeryVoiceControl({
           setStatus("thinking");
           break;
         case "response.created":
+          responseActiveRef.current = true;
           setStatus("thinking");
           break;
         case "response.output_audio.delta":
+          responseActiveRef.current = true;
           setStatus("speaking");
           break;
+        case "response.cancelled":
+          responseActiveRef.current = false;
+          if (activeRef.current) setStatus("listening");
+          break;
         case "response.done":
+          responseActiveRef.current = false;
+          followUpUntilRef.current = Date.now() + VOICE_FOLLOW_UP_WINDOW_MS;
           if (activeRef.current) setStatus("listening");
           break;
         case "conversation.item.input_audio_transcription.completed":
           if (event.transcript && event.item_id) {
+            const disposition = classifyVoiceTurn({
+              transcript: event.transcript,
+              lastAssistantTranscript: lastAssistantTranscriptRef.current,
+              lastAssistantAt: lastAssistantAtRef.current,
+              followUpUntil: followUpUntilRef.current,
+            });
+
+            if (disposition === "likely_echo") {
+              if (responseActiveRef.current) stopCurrentRealtimeSpeech(channelRef.current);
+              responseActiveRef.current = false;
+              setStatus("listening");
+              return;
+            }
+
+            if (disposition === "stop_speaking") {
+              if (responseActiveRef.current) stopCurrentRealtimeSpeech(channelRef.current);
+              responseActiveRef.current = false;
+              followUpUntilRef.current = Date.now() + VOICE_FOLLOW_UP_WINDOW_MS;
+              setStatus("listening");
+              return;
+            }
+
+            if (disposition === "end_session") {
+              if (responseActiveRef.current) stopCurrentRealtimeSpeech(channelRef.current);
+              closeVoice();
+              return;
+            }
+
+            if (disposition === "correction" || disposition === "short_follow_up") {
+              followUpUntilRef.current = Date.now() + VOICE_FOLLOW_UP_WINDOW_MS;
+            }
+
             void saveTranscript("user", event.transcript, `voice:user:${event.item_id}`);
           }
           break;
         case "response.output_audio_transcript.done":
           if (event.transcript && event.item_id) {
+            lastAssistantTranscriptRef.current = event.transcript.trim();
+            lastAssistantAtRef.current = Date.now();
+            followUpUntilRef.current = Date.now() + VOICE_FOLLOW_UP_WINDOW_MS;
             void saveTranscript("assistant", event.transcript, `voice:assistant:${event.item_id}`);
           }
           break;
@@ -446,13 +505,20 @@ export function EmeryVoiceControl({
         case "response.output_item.done":
           if (event.item?.type === "function_call") void handleToolCall(event);
           break;
-        case "error":
-          setError(event.error?.message || "Emery Voice hit a recoverable session error.");
+        case "error": {
+          const message = event.error?.message || "Emery Voice hit a recoverable session error.";
+          const expectedCancellation = /cancel|no active response|output audio buffer/i.test(message);
+          if (expectedCancellation && activeRef.current) {
+            setStatus("listening");
+            break;
+          }
+          setError(message);
           if (!activeRef.current) setStatus("error");
           break;
+        }
       }
     },
-    [handleToolCall, saveTranscript],
+    [closeVoice, handleToolCall, saveTranscript],
   );
 
   const startVoice = useCallback(async () => {
@@ -460,6 +526,10 @@ export function EmeryVoiceControl({
 
     startingRef.current = true;
     const attemptId = ++attemptRef.current;
+    responseActiveRef.current = false;
+    lastAssistantTranscriptRef.current = "";
+    lastAssistantAtRef.current = 0;
+    followUpUntilRef.current = 0;
     setError(null);
     setStatus("connecting");
 
@@ -548,6 +618,7 @@ export function EmeryVoiceControl({
       audioRef.current = audio;
 
       peer.ontrack = (event) => {
+        if (!isCurrentAttempt()) return;
         const remote = event.streams[0];
         if (remote) {
           audio.srcObject = remote;
@@ -556,6 +627,7 @@ export function EmeryVoiceControl({
       };
 
       peer.onconnectionstatechange = () => {
+        if (!isCurrentAttempt()) return;
         if (peer.connectionState === "connected") {
           activeRef.current = true;
           setStatus("listening");
@@ -568,10 +640,12 @@ export function EmeryVoiceControl({
       const channel = peer.createDataChannel("oai-events");
       channelRef.current = channel;
       channel.onopen = () => {
+        if (!isCurrentAttempt()) return;
         activeRef.current = true;
         setStatus("listening");
       };
       channel.onmessage = (message) => {
+        if (!voiceEventBelongsToAttempt(attemptRef.current, attemptId)) return;
         try {
           handleRealtimeEvent(JSON.parse(message.data) as RealtimeEvent);
         } catch {
@@ -579,6 +653,7 @@ export function EmeryVoiceControl({
         }
       };
       channel.onerror = () => {
+        if (!isCurrentAttempt()) return;
         closeVoice();
         setError("The live voice data channel encountered an error.");
         setStatus("error");
