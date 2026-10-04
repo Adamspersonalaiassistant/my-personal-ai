@@ -84,19 +84,30 @@ export function deviceSourceMetadata(context: EmeryDeviceContext = currentEmeryD
 }
 
 export function normalizeDeviceSourceMetadata(raw: Record<string, unknown> | null | undefined) {
-  const deviceClass = ["phone", "tablet", "desktop"].includes(String(raw?.deviceClass))
-    ? (raw?.deviceClass as EmeryDeviceClass)
+  const rawDeviceClass = raw?.["deviceClass"];
+  const rawDevicePlatform = raw?.["devicePlatform"];
+  const rawDisplayMode = raw?.["displayMode"];
+  const rawTouchCapable = raw?.["touchCapable"];
+
+  const deviceClass = ["phone", "tablet", "desktop"].includes(String(rawDeviceClass))
+    ? (rawDeviceClass as EmeryDeviceClass)
     : undefined;
   const devicePlatform = ["ios", "android", "macos", "windows", "linux", "other"].includes(
-    String(raw?.devicePlatform),
+    String(rawDevicePlatform),
   )
-    ? (raw?.devicePlatform as EmeryDevicePlatform)
+    ? (rawDevicePlatform as EmeryDevicePlatform)
     : undefined;
-  const displayMode = ["standalone", "browser"].includes(String(raw?.displayMode))
-    ? (raw?.displayMode as EmeryDisplayMode)
+  const displayMode = ["standalone", "browser"].includes(String(rawDisplayMode))
+    ? (rawDisplayMode as EmeryDisplayMode)
     : undefined;
-  const touchCapable = typeof raw?.touchCapable === "boolean" ? raw.touchCapable : undefined;
-  return { deviceClass, devicePlatform, displayMode, touchCapable };
+  const touchCapable = typeof rawTouchCapable === "boolean" ? rawTouchCapable : undefined;
+
+  return {
+    ...(deviceClass ? { deviceClass } : {}),
+    ...(devicePlatform ? { devicePlatform } : {}),
+    ...(displayMode ? { displayMode } : {}),
+    ...(typeof touchCapable === "boolean" ? { touchCapable } : {}),
+  };
 }
 
 export function deviceContinuityPrompt(input: {
