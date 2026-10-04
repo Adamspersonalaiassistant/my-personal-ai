@@ -29,6 +29,27 @@ export type RuntimeEvaluationEvent = {
   created_at?: string | null;
 };
 
+type RuntimeEvaluationMetadata = Record<string, unknown> & {
+  evaluation?: RuntimeEvaluationMetadata;
+  category?: unknown;
+  passed?: unknown;
+  score?: unknown;
+  severity?: unknown;
+  source?: unknown;
+  request?: unknown;
+  expected?: unknown;
+  observed?: unknown;
+  duplicateWrite?: unknown;
+  duplicate_write?: unknown;
+  duplicateSuppressed?: unknown;
+  idempotentReplay?: unknown;
+  userCorrection?: unknown;
+  voiceCorrection?: unknown;
+  correctionApplied?: unknown;
+  memoryExpected?: unknown;
+  selectedMemoryCount?: unknown;
+};
+
 export type EmeryImprovementProposal = {
   status: "proposal_only";
   targetCategory: EmeryEvaluationCategory;
@@ -56,12 +77,14 @@ export type EmerySelfImprovementReport = {
 };
 
 function metadata(event: RuntimeEvaluationEvent) {
-  return event.metadata && typeof event.metadata === "object" ? event.metadata : {};
+  return (
+    event.metadata && typeof event.metadata === "object" ? event.metadata : {}
+  ) as RuntimeEvaluationMetadata;
 }
 
 function explicitEvaluationSignal(event: RuntimeEvaluationEvent): EmeryEvaluationSignal | null {
   if (event.event_type !== "evaluation_signal") return null;
-  const raw = (metadata(event) as any).evaluation ?? metadata(event);
+  const raw = metadata(event).evaluation ?? metadata(event);
   const category = String(raw.category ?? "") as EmeryEvaluationCategory;
   const allowed: EmeryEvaluationCategory[] = [
     "intent_accuracy",
@@ -77,13 +100,14 @@ function explicitEvaluationSignal(event: RuntimeEvaluationEvent): EmeryEvaluatio
   ];
   if (!allowed.includes(category)) return null;
   const passed = Boolean(raw.passed);
+  const severity = String(raw.severity ?? "");
   return createEvaluationSignal({
     id: event.id ?? null,
     category,
     passed,
     score: Number.isFinite(Number(raw.score)) ? Number(raw.score) : passed ? 1 : 0,
-    severity: ["info", "low", "medium", "high", "critical"].includes(String(raw.severity))
-      ? raw.severity
+    severity: ["info", "low", "medium", "high", "critical"].includes(severity)
+      ? (severity as EmeryEvaluationSignal["severity"])
       : passed
         ? "info"
         : "medium",
@@ -108,7 +132,7 @@ export function deriveRuntimeEvaluationSignals(
       continue;
     }
 
-    const meta = metadata(event) as any;
+    const meta = metadata(event);
     if (typeof event.duration_ms === "number" && event.duration_ms >= 0) {
       const passed = event.duration_ms <= 8_000;
       signals.push(

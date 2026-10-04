@@ -103,7 +103,8 @@ function summarizeCategory(
     failed,
     score,
     failureRate: failed / rows.length,
-    criticalFailures: rows.filter((signal) => !signal.passed && signal.severity === "critical").length,
+    criticalFailures: rows.filter((signal) => !signal.passed && signal.severity === "critical")
+      .length,
   };
 }
 
@@ -124,9 +125,8 @@ export function summarizeEvaluationSignals(
     passed,
     failed,
     score,
-    criticalFailures: signals.filter(
-      (signal) => !signal.passed && signal.severity === "critical",
-    ).length,
+    criticalFailures: signals.filter((signal) => !signal.passed && signal.severity === "critical")
+      .length,
     categories,
   };
 }

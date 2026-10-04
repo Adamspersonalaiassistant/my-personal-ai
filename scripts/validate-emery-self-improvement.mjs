@@ -16,7 +16,10 @@ import { resolveEntity } from "../src/lib/emery/entity-resolver.ts";
 
 const canonical = runCanonicalEmeryEvaluations();
 assert.equal(canonical.cases, EMERY_CANONICAL_EVAL_CORPUS.length + 1);
-assert(canonical.cases >= 15, "Phase 7 canonical corpus should cover the real Emery/Jarvis workflows");
+assert(
+  canonical.cases >= 15,
+  "Phase 7 canonical corpus should cover the real Emery/Jarvis workflows",
+);
 assert.equal(
   canonical.summary.failed,
   0,
@@ -77,7 +80,11 @@ assert(runtimeReport.weaknesses.some((item) => item.category === "duplicate_writ
 assert.equal(runtimeReport.weaknesses[0]?.category, "duplicate_write");
 assert.equal(runtimeReport.proposal?.status, "proposal_only");
 assert.equal(runtimeReport.proposal?.nextStep, "create_isolated_branch_after_approval");
-assert(runtimeReport.proposal?.protectedConstraints.some((rule) => rule.includes("No autonomous production")));
+assert(
+  runtimeReport.proposal?.protectedConstraints.some((rule) =>
+    rule.includes("No autonomous production"),
+  ),
+);
 
 const workPackage = buildImprovementWorkPackage(runtimeReport.proposal);
 assert.equal(workPackage.status, "awaiting_user_approval");
@@ -146,7 +153,9 @@ assert.equal(unsafeCandidate.eligibleForProposal, false);
 
 assert(EMERY_SELF_IMPROVEMENT_POLICY.includes("must not modify production"));
 assert(EMERY_SELF_IMPROVEMENT_POLICY.includes("Adam's approval"));
-assert(EMERY_SELF_IMPROVEMENT_POLICY.includes("Ambient speech is not self-improvement training data"));
+assert(
+  EMERY_SELF_IMPROVEMENT_POLICY.includes("Ambient speech is not self-improvement training data"),
+);
 
 const telemetrySource = fs.readFileSync(
   new URL("../src/lib/runtime-telemetry.ts", import.meta.url),

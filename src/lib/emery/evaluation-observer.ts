@@ -1,13 +1,7 @@
 import type { CapabilityRoute } from "./capability-router.ts";
-import {
-  EMERY_CANONICAL_EVAL_CORPUS,
-  type EmeryCanonicalEvalCase,
-} from "./evaluation-corpus.ts";
+import { EMERY_CANONICAL_EVAL_CORPUS, type EmeryCanonicalEvalCase } from "./evaluation-corpus.ts";
 import { runCanonicalEvalCase } from "./evaluation-runner.ts";
-import {
-  createEvaluationSignal,
-  type EmeryEvaluationSignal,
-} from "./evaluation.ts";
+import { createEvaluationSignal, type EmeryEvaluationSignal } from "./evaluation.ts";
 import type { ExecutionReceipt, RequestContext } from "./orchestration.types.ts";
 
 function normalized(value: string) {
@@ -22,9 +16,7 @@ function normalized(value: string) {
 export function findCanonicalEvalCase(message: string): EmeryCanonicalEvalCase | null {
   const target = normalized(message);
   if (!target) return null;
-  return (
-    EMERY_CANONICAL_EVAL_CORPUS.find((test) => normalized(test.prompt) === target) ?? null
-  );
+  return EMERY_CANONICAL_EVAL_CORPUS.find((test) => normalized(test.prompt) === target) ?? null;
 }
 
 export function buildRuntimeTurnEvaluationSignals(input: {
@@ -85,7 +77,8 @@ export function buildRuntimeTurnEvaluationSignals(input: {
         source: "user_correction",
         request: input.message,
         expected: "correction supersedes the prior intended action without duplication",
-        observed: input.correctionApplied === true ? "correction applied" : "correction not confirmed",
+        observed:
+          input.correctionApplied === true ? "correction applied" : "correction not confirmed",
       }),
     );
   }

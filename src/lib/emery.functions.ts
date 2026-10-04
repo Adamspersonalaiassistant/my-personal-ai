@@ -27,6 +27,7 @@ import { buildEmeryContext } from "@/lib/emery/context-engine";
 import { prepareEmeryRequestRouting } from "@/lib/emery/request-routing";
 import { emptyActionContext } from "@/lib/emery/context-load-policy";
 import { buildChatSmartMemoryContext } from "@/lib/emery/chat-smart-memory";
+import { recordTurnEvaluation } from "@/lib/emery/turn-evaluation";
 
 const STABLE_RUNTIME_POLICY = `EXECUTION POLICY:
 - There is one Emery across chat, capture, Shortcut, Voice, Calendar, HPO, memory, and future integrations.
@@ -886,6 +887,17 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
           performed: multiIntent.performed,
           deterministic: true,
         },
+      });
+      await recordTurnEvaluation({
+        db,
+        userId,
+        channel: data.source.entryPoint as any,
+        domain: "mixed",
+        message: data.message,
+        capabilityRoute,
+        context: emeryContext?.request ?? null,
+        receipts: multiIntent.receipts,
+        durationMs: Date.now() - startedAt,
       });
       return {
         reply: multiIntent.reply,
@@ -1851,6 +1863,17 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
         webUsed,
         ...signals,
       },
+    });
+    await recordTurnEvaluation({
+      db,
+      userId,
+      channel: data.source.entryPoint as any,
+      domain: route.domain,
+      message: data.message,
+      capabilityRoute,
+      context: emeryContext?.request ?? null,
+      selectedMemoryCount: selected.length,
+      durationMs: Date.now() - startedAt,
     });
     return {
       reply,

@@ -10,7 +10,8 @@ export type EmeryCanonicalEvalCase = {
     needsPersonalMemory?: boolean;
     needsCalendar?: boolean;
     needsLocation?: boolean;
-    voiceDisposition?: "normal" | "correction" | "short_follow_up" | "stop_speaking" | "end_session" | "likely_echo";
+    voiceDisposition?:
+      "normal" | "correction" | "short_follow_up" | "stop_speaking" | "end_session" | "likely_echo";
     ambientAddressed?: boolean;
     durableMemoryQuery?: boolean;
     writeIntent?: boolean;

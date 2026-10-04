@@ -1,16 +1,18 @@
 import { isAmbientAddressedTurn } from "./ambient-context.ts";
 import { routeEmeryCapabilities } from "./capability-router.ts";
+import type { RegisteredCapabilityAction } from "./capability-registry.ts";
 import { resolveEntity } from "./entity-resolver.ts";
-import {
-  EMERY_CANONICAL_EVAL_CORPUS,
-  type EmeryCanonicalEvalCase,
-} from "./evaluation-corpus.ts";
+import { EMERY_CANONICAL_EVAL_CORPUS, type EmeryCanonicalEvalCase } from "./evaluation-corpus.ts";
 import {
   createEvaluationSignal,
   summarizeEvaluationSignals,
   type EmeryEvaluationSignal,
 } from "./evaluation.ts";
-import { createEmptyRequestContext, type EmerySurface } from "./orchestration.types.ts";
+import {
+  createEmptyRequestContext,
+  type EmerySurface,
+  type RequestContext,
+} from "./orchestration.types.ts";
 import { classifyVoiceTurn } from "./voice-conversation-policy.ts";
 
 function contextForCase(test: EmeryCanonicalEvalCase) {
@@ -22,7 +24,7 @@ function contextForCase(test: EmeryCanonicalEvalCase) {
     inputMode: test.channel === "voice" ? "voice" : "typed",
     surface: (test.surface ?? "chat") as EmerySurface,
     hpoTab: test.surface?.startsWith("hpo_")
-      ? ((test.surface.replace("hpo_", "") || "planner") as any)
+      ? ((test.surface.replace("hpo_", "") || "planner") as RequestContext["hpoTab"])
       : null,
     currentRouteId: hpo ? "eval-route" : null,
     currentStopId: hpo ? "eval-stop" : null,
@@ -82,7 +84,9 @@ export function runCanonicalEvalCase(test: EmeryCanonicalEvalCase): EmeryEvaluat
       signal({
         test,
         category: "capability_selection",
-        passed: route.candidateCapabilities.includes(test.expected.capability as any),
+        passed: route.candidateCapabilities.includes(
+          test.expected.capability as RegisteredCapabilityAction,
+        ),
         expected: test.expected.capability,
         observed: route.candidateCapabilities,
       }),
@@ -90,12 +94,14 @@ export function runCanonicalEvalCase(test: EmeryCanonicalEvalCase): EmeryEvaluat
   }
 
   const contextExpectations: Array<
-    [keyof Pick<
-      typeof test.expected,
-      "needsCurrentContext" | "needsPersonalMemory" | "needsCalendar" | "needsLocation"
-    >,
-    boolean | undefined,
-    boolean]
+    [
+      keyof Pick<
+        typeof test.expected,
+        "needsCurrentContext" | "needsPersonalMemory" | "needsCalendar" | "needsLocation"
+      >,
+      boolean | undefined,
+      boolean,
+    ]
   > = [
     ["needsCurrentContext", test.expected.needsCurrentContext, route.needsCurrentContext],
     ["needsPersonalMemory", test.expected.needsPersonalMemory, route.needsPersonalMemory],
@@ -127,9 +133,7 @@ export function runCanonicalEvalCase(test: EmeryCanonicalEvalCase): EmeryEvaluat
       signal({
         test,
         category:
-          test.expected.voiceDisposition === "correction"
-            ? "voice_correction"
-            : "intent_accuracy",
+          test.expected.voiceDisposition === "correction" ? "voice_correction" : "intent_accuracy",
         passed: observed === test.expected.voiceDisposition,
         expected: test.expected.voiceDisposition,
         observed,

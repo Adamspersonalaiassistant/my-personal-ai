@@ -33,15 +33,23 @@ export async function recordTurnEvaluation(input: {
 }) {
   const signals = buildRuntimeTurnEvaluationSignals({
     message: input.message,
-    capabilityRoute: input.capabilityRoute,
-    context: input.context,
-    selectedMemoryCount: input.selectedMemoryCount,
-    receipts: input.receipts,
-    durationMs: input.durationMs,
-    correctionDetected: input.correctionDetected,
-    correctionApplied: input.correctionApplied,
-    entityResolution: input.entityResolution,
-    duplicateWriteDetected: input.duplicateWriteDetected,
+    ...(input.capabilityRoute !== undefined ? { capabilityRoute: input.capabilityRoute } : {}),
+    ...(input.context !== undefined ? { context: input.context } : {}),
+    ...(input.selectedMemoryCount !== undefined
+      ? { selectedMemoryCount: input.selectedMemoryCount }
+      : {}),
+    ...(input.receipts !== undefined ? { receipts: input.receipts } : {}),
+    ...(input.durationMs !== undefined ? { durationMs: input.durationMs } : {}),
+    ...(input.correctionDetected !== undefined
+      ? { correctionDetected: input.correctionDetected }
+      : {}),
+    ...(input.correctionApplied !== undefined
+      ? { correctionApplied: input.correctionApplied }
+      : {}),
+    ...(input.entityResolution !== undefined ? { entityResolution: input.entityResolution } : {}),
+    ...(input.duplicateWriteDetected !== undefined
+      ? { duplicateWriteDetected: input.duplicateWriteDetected }
+      : {}),
     retrievalExpected: isExplicitMemoryRecallRequest(input.message),
   });
 

@@ -12,11 +12,7 @@ export type RuntimeEvent = {
   metadata?: Record<string, unknown>;
 };
 
-export async function recordRuntimeEvent(
-  db: any,
-  userId: string,
-  event: RuntimeEvent,
-) {
+export async function recordRuntimeEvent(db: any, userId: string, event: RuntimeEvent) {
   try {
     const { error } = await db.from("emery_runtime_events").insert({
       user_id: userId,
@@ -50,7 +46,7 @@ export async function recordEvaluationSignal(
   },
 ) {
   const signal = input.signal;
-  const safeRequest = signal.source === "canonical_eval" ? signal.request ?? null : null;
+  const safeRequest = signal.source === "canonical_eval" ? (signal.request ?? null) : null;
   return recordRuntimeEvent(db, userId, {
     channel: input.channel,
     eventType: "evaluation_signal",
