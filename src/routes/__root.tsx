@@ -11,6 +11,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import blueThemeCss from "../blue-theme.css?url";
+import { EmeryDeviceContinuityBootstrap } from "../components/EmeryDeviceContinuityBootstrap";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 
 function NotFoundComponent() {
@@ -130,6 +131,7 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <EmeryDeviceContinuityBootstrap />
       <Outlet />
     </QueryClientProvider>
   );
