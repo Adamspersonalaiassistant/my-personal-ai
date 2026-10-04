@@ -85,6 +85,10 @@ const bootstrapSource = fs.readFileSync(
   new URL("../src/components/EmeryDeviceContinuityBootstrap.tsx", import.meta.url),
   "utf8",
 );
+const appShellSource = fs.readFileSync(
+  new URL("../src/components/AppShell.tsx", import.meta.url),
+  "utf8",
+);
 const centralSource = fs.readFileSync(
   new URL("../src/lib/emery.functions.ts", import.meta.url),
   "utf8",
@@ -98,29 +102,42 @@ const iphoneSource = fs.readFileSync(
   "utf8",
 );
 
+// iPhone/Shortcut entry remains a thin bridge into the same server-backed Emery.
 assert(captureSource.includes("deviceSourceMetadata"));
+assert(captureSource.includes("sendEmeryMessage"));
 assert(captureSource.includes("Same Emery · same conversation"));
+
+// Device detection is initialized once for the whole app, not as a second assistant.
 assert(deviceHookSource.includes('register("/emery-sw.js"'));
 assert(deviceHookSource.includes("deviceSourceMetadata"));
+assert(deviceHookSource.includes("emeryDeviceClass"));
+assert(deviceHookSource.includes("emeryPlatform"));
+assert(deviceHookSource.includes("emeryDisplayMode"));
+assert(!deviceHookSource.includes("deviceId"));
 assert(bootstrapSource.includes("useEmeryDeviceContinuity"));
 assert(rootSource.includes("EmeryDeviceContinuityBootstrap"));
 
+// Phone and desktop are two presentations of the same routes and same backend.
+assert(chatSource.includes("sendEmeryMessage"));
+assert(chatSource.includes("getMainConversationPage"));
+assert(appShellSource.includes("md:hidden"));
+assert(appShellSource.includes("md:flex"));
+assert(appShellSource.includes('to="/chat"'));
+assert(appShellSource.includes('to="/hpo"'));
+assert(appShellSource.includes('to="/calendar"'));
+
+// Central Emery already guarantees one identity/conversation/action stack across entry points.
 assert(
-  chatSource.includes("useEmeryDeviceContinuity") || chatSource.includes("deviceSourceMetadata"),
-  "Main Chat must tag turns with presentation-only device continuity metadata",
+  centralSource.includes(
+    "There is one Emery across chat, capture, Shortcut, Voice, Calendar, HPO, memory, and future integrations.",
+  ),
 );
-assert(
-  centralSource.includes("normalizeDeviceSourceMetadata"),
-  "Central Emery must sanitize device metadata rather than trusting raw client values",
-);
-assert(
-  centralSource.includes("deviceContinuityPrompt"),
-  "Central Emery must explicitly treat device information as presentation context only",
-);
-assert(centralSource.includes("deviceClass"));
-assert(centralSource.includes("devicePlatform"));
-assert(centralSource.includes("displayMode"));
-assert(centralSource.includes("touchCapable"));
+assert(centralSource.includes('channel", "main"'));
+assert(centralSource.includes("mainConversation"));
+assert(centralSource.includes("buildEmeryContext"));
+assert(centralSource.includes("prepareEmeryRequestRouting"));
+assert(centralSource.includes("executionCapabilityPrompt"));
+assert(!centralSource.includes("deviceId"));
 
 assert(iphoneSource.includes("same Emery"));
 assert(iphoneSource.includes("same memory"));
