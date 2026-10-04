@@ -111,7 +111,7 @@ export function HpoActivityView({ data, onOpenAccount, onAskEmery, onMore, loadi
 
   return (
     <section className="space-y-4">
-      <CommandPanel variant="glass" className="overflow-hidden">
+      <CommandPanel variant="glass" className="overflow-hidden border-live/15">
         <SectionHeading
           eyebrow="Relationship Intelligence"
           title="Activity"
@@ -216,7 +216,7 @@ export function HpoActivityView({ data, onOpenAccount, onAskEmery, onMore, loadi
               type="button"
               onClick={() => row.account_id && onOpenAccount(row.account_id)}
               disabled={!row.account_id}
-              className="emery-press emery-panel-matte min-h-[84px] w-full rounded-2xl border px-3.5 py-3 text-left enabled:hover:border-primary/25 enabled:hover:bg-elevated disabled:cursor-default"
+               className="emery-press emery-panel-matte min-h-[84px] w-full rounded-lg border border-l-2 border-l-live/40 px-3.5 py-3 text-left enabled:hover:border-primary/25 enabled:hover:bg-elevated disabled:cursor-default"
             >
               <span className="flex items-start gap-3">
                 <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl bg-success/10 text-success">

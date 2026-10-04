@@ -13,7 +13,7 @@ const areas = [
 export function HpoFieldNav({ view, onChange }: { view: HpoFieldView; onChange: (view: HpoFieldView) => void }) {
   return (
     <nav aria-label="HPO field areas" className="hpo-field-nav shrink-0 border-b border-border px-3 py-2 sm:px-4">
-      <div className="mx-auto flex max-w-5xl items-center gap-1 rounded-2xl border border-border/60 bg-surface/75 p-1 shadow-[0_10px_28px_rgba(0,0,0,.16)]">
+      <div className="mx-auto flex max-w-5xl items-center gap-1 rounded-lg border border-border/60 bg-surface/75 p-1 shadow-sm">
         {areas.map(({ key, label, icon: Icon }) => {
           const active = view === key;
           return (
@@ -23,9 +23,9 @@ export function HpoFieldNav({ view, onChange }: { view: HpoFieldView; onChange: 
               variant="ghost"
               onClick={() => onChange(key)}
               aria-current={active ? "page" : undefined}
-              className={`emery-press relative h-12 min-w-0 flex-1 flex-col gap-0.5 rounded-xl border px-0.5 text-[11px] font-semibold shadow-none sm:flex-row sm:gap-2 sm:text-sm ${
+              className={`emery-press relative h-12 min-w-0 flex-1 flex-col gap-0.5 rounded-md border px-0.5 text-[11px] font-semibold shadow-none sm:flex-row sm:gap-2 sm:text-sm ${
                 active
-                  ? "border-primary/25 bg-primary/12 text-primary shadow-[inset_0_0_0_1px_rgba(59,130,246,.05)]"
+                  ? "border-live/25 bg-live/10 text-live emery-nav-active"
                   : "border-transparent text-muted-foreground hover:border-border/60 hover:bg-elevated hover:text-foreground"
               }`}
             >
