@@ -221,14 +221,38 @@ function relationshipScore(memory: SmartMemory, query: string) {
   const queryTokens = expandedTokens(query);
   const text = normalizeMemoryText(`${memory.title ?? ""} ${memory.content}`);
   const relational = queryTokens.filter((token) =>
-    ["wife", "husband", "spouse", "partner", "son", "daughter", "child", "kid", "family"].includes(token),
+    ["wife", "husband", "spouse", "partner", "son", "daughter", "child", "kid", "family"].includes(
+      token,
+    ),
   );
   return relational.some((token) => text.includes(token)) ? 2.2 : 0;
 }
 
-export function scoreSmartMemory(memory: SmartMemory, query: string, recent: SmartRecentTurn[] = []) {
-  if (!memory.content || isExpired(memory) || isUnsafeForGeneralMemory(memory)) return Number.NEGATIVE_INFINITY;
-  const combinedQuery = [query, ...recent.slice(-4).map((turn) => String(turn.text ?? ""))].join(" ");
+function hasRetrievalRelevance(memory: SmartMemory, query: string, recent: SmartRecentTurn[]) {
+  const combinedQuery = [query, ...recent.slice(-4).map((turn) => String(turn.text ?? ""))].join(
+    " ",
+  );
+  const haystack = normalizeMemoryText(
+    `${memory.title ?? ""} ${memory.content} ${memory.memory_type}`,
+  );
+  return (
+    expandedTokens(combinedQuery).some((token) => haystack.includes(token)) ||
+    phraseScore(memory, query) > 0 ||
+    typeIntentScore(memory, combinedQuery) > 0 ||
+    relationshipScore(memory, combinedQuery) > 0
+  );
+}
+
+export function scoreSmartMemory(
+  memory: SmartMemory,
+  query: string,
+  recent: SmartRecentTurn[] = [],
+) {
+  if (!memory.content || isExpired(memory) || isUnsafeForGeneralMemory(memory))
+    return Number.NEGATIVE_INFINITY;
+  const combinedQuery = [query, ...recent.slice(-4).map((turn) => String(turn.text ?? ""))].join(
+    " ",
+  );
   const queryTokens = expandedTokens(combinedQuery);
   const haystack = normalizeMemoryText(
     `${memory.title ?? ""} ${memory.content} ${memory.memory_type} ${memory.source_type ?? ""}`,
@@ -272,7 +296,10 @@ function nearDuplicate(left: SmartMemory, right: SmartMemory) {
 }
 
 function memorySize(memory: SmartMemory) {
-  return `${memory.title ?? ""}${memory.content}${memory.memory_type}${memory.source_type ?? ""}`.length + 32;
+  return (
+    `${memory.title ?? ""}${memory.content}${memory.memory_type}${memory.source_type ?? ""}`
+      .length + 32
+  );
 }
 
 function deterministicRank(
@@ -282,8 +309,12 @@ function deterministicRank(
   maxCandidates = 24,
 ) {
   return memories
-    .map((memory) => ({ memory, score: scoreSmartMemory(memory, query, recent) }))
-    .filter(({ score }) => Number.isFinite(score) && score >= 3.4)
+    .map((memory) => ({
+      memory,
+      score: scoreSmartMemory(memory, query, recent),
+      relevant: hasRetrievalRelevance(memory, query, recent),
+    }))
+    .filter(({ score, relevant }) => relevant && Number.isFinite(score) && score >= 3.4)
     .sort((a, b) => b.score - a.score || timestamp(b.memory) - timestamp(a.memory))
     .slice(0, maxCandidates);
 }
@@ -302,7 +333,11 @@ function semanticWorthIt(query: string, ranked: Array<{ memory: SmartMemory; sco
   if (ranked.length < 4) return false;
   const normalized = normalizeMemoryText(query);
   if (normalized.length < 10) return false;
-  if (/\b(remember|remind me|what did i tell|what did i say|which one|the one|that person|that thing)\b/.test(normalized)) {
+  if (
+    /\b(remember|remind me|what did i tell|what did i say|which one|the one|that person|that thing)\b/.test(
+      normalized,
+    )
+  ) {
     return true;
   }
   const top = ranked[0]?.score ?? 0;
@@ -405,7 +440,9 @@ function finalizeSelection(input: {
   const ordered = input.preferredIds?.length
     ? [
         ...input.preferredIds.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : [])),
-        ...input.ranked.filter(({ memory }) => !memory.id || !input.preferredIds!.includes(String(memory.id))),
+        ...input.ranked.filter(
+          ({ memory }) => !memory.id || !input.preferredIds!.includes(String(memory.id)),
+        ),
       ]
     : input.ranked;
   const selected: Array<SmartMemory & { retrieval_score: number }> = [];
@@ -452,11 +489,7 @@ export async function retrieveSmartMemories(input: {
   }
 
   let semantic: Awaited<ReturnType<typeof semanticRerank>> = null;
-  if (
-    input.allowSemantic !== false &&
-    input.apiKey &&
-    semanticWorthIt(input.query, ranked)
-  ) {
+  if (input.allowSemantic !== false && input.apiKey && semanticWorthIt(input.query, ranked)) {
     semantic = await semanticRerank({
       apiKey: input.apiKey,
       query: input.query,
@@ -471,10 +504,7 @@ export async function retrieveSmartMemories(input: {
     maxItems,
     maxCharacters,
   });
-  const digest =
-    semantic?.digest && finalized.characters >= 2800
-      ? semantic.digest
-      : null;
+  const digest = semantic?.digest && finalized.characters >= 2800 ? semantic.digest : null;
 
   return {
     selected: finalized.selected,
@@ -497,7 +527,9 @@ export function buildSmartMemoryPrompt(result: SmartMemoryResult) {
           memory.id ? `id=${memory.id}` : null,
           `type=${memory.memory_type}`,
           memory.source_type ? `source=${memory.source_type}` : null,
-          memory.updated_at || memory.created_at ? `date=${memory.updated_at ?? memory.created_at}` : null,
+          memory.updated_at || memory.created_at
+            ? `date=${memory.updated_at ?? memory.created_at}`
+            : null,
         ]
           .filter(Boolean)
           .join(" | "),
@@ -511,7 +543,9 @@ export function buildSmartMemoryPrompt(result: SmartMemoryResult) {
         memory.id ? `id=${memory.id}` : null,
         `type=${memory.memory_type}`,
         memory.source_type ? `source=${memory.source_type}` : null,
-        memory.updated_at || memory.created_at ? `date=${memory.updated_at ?? memory.created_at}` : null,
+        memory.updated_at || memory.created_at
+          ? `date=${memory.updated_at ?? memory.created_at}`
+          : null,
       ]
         .filter(Boolean)
         .join(" | ");

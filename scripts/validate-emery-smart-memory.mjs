@@ -142,7 +142,8 @@ const hpoInteractions = [
     id: "macri-touch",
     account_id: "macri",
     occurred_at: isoDaysAgo(18),
-    summary: "Receptionist Erica gave the paralegal's contact information and said to email the paralegal and attorney to schedule a meeting.",
+    summary:
+      "Receptionist Erica gave the paralegal's contact information and said to email the paralegal and attorney to schedule a meeting.",
     outcome: "Strong meeting opportunity",
     relationship_signal: "positive",
     next_action: "Email paralegal and attorney",

@@ -5,11 +5,7 @@ import { ASSISTANT_IDENTITY } from "@/lib/assistant-identity";
 import { persistDurableMemoryFromMessage } from "@/lib/chat.functions";
 import { loadHpoAgentContext } from "@/lib/hpo-agent-context";
 import { inferEmeryDomain, domainPrompt, domainMetadata } from "@/lib/emery-domain";
-import {
-  selectRelevantMemories,
-  buildExecutiveFocus,
-  refreshRollingConversationState,
-} from "@/lib/emery-intelligence";
+import { buildExecutiveFocus, refreshRollingConversationState } from "@/lib/emery-intelligence";
 import { MODEL_POLICY } from "@/lib/model-policy";
 import { recordRuntimeEvent } from "@/lib/runtime-telemetry";
 import { VOICE_PROFILE_CONTRACT } from "@/lib/voice-profile";
@@ -30,6 +26,7 @@ import { processEmeryMultiIntentDayPlan } from "@/lib/emery/multi-intent-executo
 import { buildEmeryContext } from "@/lib/emery/context-engine";
 import { prepareEmeryRequestRouting } from "@/lib/emery/request-routing";
 import { emptyActionContext } from "@/lib/emery/context-load-policy";
+import { buildChatSmartMemoryContext } from "@/lib/emery/chat-smart-memory";
 
 const STABLE_RUNTIME_POLICY = `EXECUTION POLICY:
 - There is one Emery across chat, capture, Shortcut, Voice, Calendar, HPO, memory, and future integrations.
@@ -790,7 +787,9 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
       loadPolicy.loadPersonalMemory
         ? db
             .from("memories")
-            .select("id,title,content,memory_type,importance,confidence,created_at,updated_at")
+            .select(
+              "id,title,content,memory_type,importance,confidence,source_type,source_ref,person_id,project_id,metadata,expires_at,created_at,updated_at",
+            )
             .eq("user_id", userId)
             .order("importance", { ascending: false })
             .limit(100)
@@ -1175,21 +1174,18 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
             nextAction: null,
             dueAt: null,
           };
-    const memoryMaxItems = Math.min(30, Math.max(6, Number(config?.memory_max_items ?? 16)));
-    const memoryMaxCharacters = Math.min(
-      12000,
-      Math.max(2000, Number(config?.memory_max_characters ?? 6500)),
-    );
-    const selected = selectRelevantMemories(memories ?? [], data.message, turnRecent, {
-      maxItems: memoryMaxItems,
-      maxCharacters: memoryMaxCharacters,
-    });
+    const { memoryMaxItems, memoryMaxCharacters, selected, memoryContext, memoryBlock } =
+      await buildChatSmartMemoryContext({
+        apiKey,
+        memories: memories ?? [],
+        message: data.message,
+        recent: turnRecent,
+        config,
+        enabled: loadPolicy.loadPersonalMemory,
+      });
     const signals = behaviorSignals(data.message);
     const focus = buildExecutiveFocus(actions);
     const workingStateBlock = workingState.summary ? workingState.summary.slice(0, 5000) : "";
-    const memoryBlock = selected
-      .map((m: any) => `- [${m.memory_type}] ${m.title ? `${m.title}: ` : ""}${m.content}`)
-      .join("\n");
     const profileBlock = profile
       ? `Name: ${profile.display_name ?? ""}\nTimezone: ${profile.timezone ?? ""}\nAbout: ${profile.profile_summary ?? ""}`
       : "";
@@ -1735,7 +1731,7 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
           },
           ...(profileBlock ? [{ role: "system", content: `CORE PROFILE:\n${profileBlock}` }] : []),
           ...(memoryBlock
-            ? [{ role: "system", content: `SELECTED LONG-TERM MEMORY:\n${memoryBlock}` }]
+            ? [{ role: "system", content: `SMART DURABLE MEMORY CONTEXT:\n${memoryBlock}` }]
             : []),
           ...(workingStateBlock
             ? [

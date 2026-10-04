@@ -133,7 +133,9 @@ export function rankHpoRelationshipAccounts(input: {
           Math.max(
             best,
             textScore(
-              [contact.name, contact.role_title, contact.relationship_notes].filter(Boolean).join(" "),
+              [contact.name, contact.role_title, contact.relationship_notes]
+                .filter(Boolean)
+                .join(" "),
               queryTokens,
             ),
           ),

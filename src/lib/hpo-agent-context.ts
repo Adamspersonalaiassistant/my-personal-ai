@@ -18,7 +18,11 @@ function hpoTagged(value: unknown) {
 
 function tokens(text: string) {
   return new Set(
-    text.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(/\s+/).filter((token) => token.length > 2),
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .split(/\s+/)
+      .filter((token) => token.length > 2),
   );
 }
 
@@ -48,48 +52,97 @@ export async function loadHpoAgentContext(db: any, userId: string, assignment: s
     meetingsResult,
     documentsResult,
   ] = await Promise.all([
-    db.from("hpo_accounts")
-      .select("id, name, account_type, specialty, territory, city, address, priority, owner_name, relationship_stage, relationship_health, status, notes, last_touch_at, next_action, next_action_due_at, opportunity, blockers, tags, metadata")
-      .eq("user_id", userId).eq("status", "active")
-      .order("priority", { ascending: false }).limit(100),
-    db.from("hpo_contacts")
+    db
+      .from("hpo_accounts")
+      .select(
+        "id, name, account_type, specialty, territory, city, address, priority, owner_name, relationship_stage, relationship_health, status, notes, last_touch_at, next_action, next_action_due_at, opportunity, blockers, tags, metadata",
+      )
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .order("priority", { ascending: false })
+      .limit(100),
+    db
+      .from("hpo_contacts")
       .select("id, account_id, name, role_title, preferred_contact_method, relationship_notes")
-      .eq("user_id", userId).limit(160),
-    db.from("hpo_prospects")
-      .select("id, name, prospect_type, specialty, territory, city, address, phone, website, fit_status, verification_status, source_type, source_ref, promoted_account_id, notes, metadata")
+      .eq("user_id", userId)
+      .limit(160),
+    db
+      .from("hpo_prospects")
+      .select(
+        "id, name, prospect_type, specialty, territory, city, address, phone, website, fit_status, verification_status, source_type, source_ref, promoted_account_id, notes, metadata",
+      )
       .eq("user_id", userId)
       .in("fit_status", ["qualified", "undecided", "promoted"])
       .order("updated_at", { ascending: false })
       .limit(120),
-    db.from("hpo_interactions")
-      .select("id, account_id, contact_id, interaction_type, occurred_at, summary, outcome, relationship_signal, next_action, next_action_due_at, source_type, source_ref")
-      .eq("user_id", userId).order("occurred_at", { ascending: false }).limit(120),
-    db.from("hpo_sales_metrics")
-      .select("account_id, period_start, period_end, referral_count, entered_care_count, progressing_count, blocked_exception_count, relationship_impact_count, notes")
-      .eq("user_id", userId).order("period_end", { ascending: false }).limit(80),
-    db.from("hpo_route_plans")
-      .select("id, route_date, area, status, start_window, end_window, notes, source_type, source_ref, metadata")
-      .eq("user_id", userId).gte("route_date", nowIso.slice(0, 10))
-      .order("route_date", { ascending: true }).limit(12),
-    db.from("hpo_route_stops")
-      .select("id, route_id, account_id, prospect_id, stop_order, visit_priority, status, visited_at, office_name, visit_summary, visit_outcome, next_action, next_action_due_at, metadata")
+    db
+      .from("hpo_interactions")
+      .select(
+        "id, account_id, contact_id, interaction_type, occurred_at, summary, outcome, relationship_signal, next_action, next_action_due_at, source_type, source_ref",
+      )
+      .eq("user_id", userId)
+      .order("occurred_at", { ascending: false })
+      .limit(120),
+    db
+      .from("hpo_sales_metrics")
+      .select(
+        "account_id, period_start, period_end, referral_count, entered_care_count, progressing_count, blocked_exception_count, relationship_impact_count, notes",
+      )
+      .eq("user_id", userId)
+      .order("period_end", { ascending: false })
+      .limit(80),
+    db
+      .from("hpo_route_plans")
+      .select(
+        "id, route_date, area, status, start_window, end_window, notes, source_type, source_ref, metadata",
+      )
+      .eq("user_id", userId)
+      .gte("route_date", nowIso.slice(0, 10))
+      .order("route_date", { ascending: true })
+      .limit(12),
+    db
+      .from("hpo_route_stops")
+      .select(
+        "id, route_id, account_id, prospect_id, stop_order, visit_priority, status, visited_at, office_name, visit_summary, visit_outcome, next_action, next_action_due_at, metadata",
+      )
       .eq("user_id", userId)
       .order("visited_at", { ascending: false, nullsFirst: false })
       .limit(120),
     db.rpc("get_hpo_route_candidates", { p_user_id: userId, p_territory: null, p_limit: 30 }),
-    db.from("tasks").select("id, title, details, status, priority, due_at, metadata")
-      .eq("user_id", userId).neq("status", "completed")
-      .order("priority", { ascending: false }).limit(80),
-    db.from("meetings").select("id, title, meeting_at, end_at, participants, metadata")
-      .eq("user_id", userId).gte("meeting_at", nowIso)
-      .order("meeting_at", { ascending: true }).limit(50),
-    db.from("documents").select("id, title, document_type, extracted_text, summary, source, metadata, updated_at")
-      .eq("user_id", userId).order("updated_at", { ascending: false }).limit(60),
+    db
+      .from("tasks")
+      .select("id, title, details, status, priority, due_at, metadata")
+      .eq("user_id", userId)
+      .neq("status", "completed")
+      .order("priority", { ascending: false })
+      .limit(80),
+    db
+      .from("meetings")
+      .select("id, title, meeting_at, end_at, participants, metadata")
+      .eq("user_id", userId)
+      .gte("meeting_at", nowIso)
+      .order("meeting_at", { ascending: true })
+      .limit(50),
+    db
+      .from("documents")
+      .select("id, title, document_type, extracted_text, summary, source, metadata, updated_at")
+      .eq("user_id", userId)
+      .order("updated_at", { ascending: false })
+      .limit(60),
   ]);
 
   for (const result of [
-    accountsResult, contactsResult, prospectsResult, interactionsResult, metricsResult, routesResult,
-    routeStopsResult, routeCandidatesResult, tasksResult, meetingsResult, documentsResult,
+    accountsResult,
+    contactsResult,
+    prospectsResult,
+    interactionsResult,
+    metricsResult,
+    routesResult,
+    routeStopsResult,
+    routeCandidatesResult,
+    tasksResult,
+    meetingsResult,
+    documentsResult,
   ]) {
     if (result.error) throw result.error;
   }
@@ -100,8 +153,12 @@ export async function loadHpoAgentContext(db: any, userId: string, assignment: s
   const accountMap = new Map<string, any>(accounts.map((account: any) => [account.id, account]));
   const contactMap = new Map<string, any>(contacts.map((contact: any) => [contact.id, contact]));
   const activeRouteAccountIds = (routeStopsResult.data ?? [])
-    .filter((stop: any) =>
-      stop.account_id && !["completed", "visited", "skipped", "closed", "bad_address"].includes(String(stop.status ?? "")),
+    .filter(
+      (stop: any) =>
+        stop.account_id &&
+        !["completed", "visited", "skipped", "closed", "bad_address"].includes(
+          String(stop.status ?? ""),
+        ),
     )
     .map((stop: any) => String(stop.account_id));
   const smartAccountRanks = rankHpoRelationshipAccounts({
@@ -113,7 +170,10 @@ export async function loadHpoAgentContext(db: any, userId: string, assignment: s
     limit: 40,
   });
   const smartAccountScore = new Map(
-    smartAccountRanks.map((rank, index) => [rank.accountId, rank.score + Math.max(0, 4 - index * 0.08)]),
+    smartAccountRanks.map((rank, index) => [
+      rank.accountId,
+      rank.score + Math.max(0, 4 - index * 0.08),
+    ]),
   );
 
   const rankedAccounts = accounts
@@ -123,13 +183,25 @@ export async function loadHpoAgentContext(db: any, userId: string, assignment: s
         (smartAccountScore.get(String(account.id)) ??
           scoreText(
             [
-              account.name, account.account_type, account.specialty, account.territory, account.city,
-              account.owner_name, account.relationship_stage, account.relationship_health,
-              account.next_action, account.opportunity, account.blockers, account.notes,
+              account.name,
+              account.account_type,
+              account.specialty,
+              account.territory,
+              account.city,
+              account.owner_name,
+              account.relationship_stage,
+              account.relationship_health,
+              account.next_action,
+              account.opportunity,
+              account.blockers,
+              account.notes,
               ...(Array.isArray(account.tags) ? account.tags : []),
-            ].filter(Boolean).join(" "),
+            ]
+              .filter(Boolean)
+              .join(" "),
             requestTokens,
-          ) + Number(account.priority ?? 3) / 10) +
+          ) +
+            Number(account.priority ?? 3) / 10) +
         Math.min(Number(account.metadata?.historical_referral_count ?? 0), 150) / 500,
     }))
     .sort((a: any, b: any) => b.relevance - a.relevance)
@@ -142,7 +214,16 @@ export async function loadHpoAgentContext(db: any, userId: string, assignment: s
       prospect,
       relevance:
         scoreText(
-          [prospect.name, prospect.prospect_type, prospect.specialty, prospect.territory, prospect.city, prospect.notes].filter(Boolean).join(" "),
+          [
+            prospect.name,
+            prospect.prospect_type,
+            prospect.specialty,
+            prospect.territory,
+            prospect.city,
+            prospect.notes,
+          ]
+            .filter(Boolean)
+            .join(" "),
           requestTokens,
         ) +
         Number(prospect.metadata?.internal_priority ?? 3) / 10 +
@@ -159,7 +240,9 @@ export async function loadHpoAgentContext(db: any, userId: string, assignment: s
     .map((interaction: any) => ({
       ...interaction,
       account_name: accountMap.get(interaction.account_id)?.name ?? "Unknown account",
-      contact_name: interaction.contact_id ? contactMap.get(interaction.contact_id)?.name ?? null : null,
+      contact_name: interaction.contact_id
+        ? (contactMap.get(interaction.contact_id)?.name ?? null)
+        : null,
     }));
 
   const metrics = (metricsResult.data ?? [])
@@ -167,13 +250,20 @@ export async function loadHpoAgentContext(db: any, userId: string, assignment: s
     .slice(0, 30)
     .map((metric: any) => ({
       ...metric,
-      account_name: metric.account_id ? accountMap.get(metric.account_id)?.name ?? null : null,
+      account_name: metric.account_id ? (accountMap.get(metric.account_id)?.name ?? null) : null,
     }));
 
-  const hpoTasks = (tasksResult.data ?? []).filter((task: any) => hpoTagged(task.metadata)).slice(0, 16);
-  const hpoMeetings = (meetingsResult.data ?? []).filter((meeting: any) => hpoTagged(meeting.metadata)).slice(0, 12);
+  const hpoTasks = (tasksResult.data ?? [])
+    .filter((task: any) => hpoTagged(task.metadata))
+    .slice(0, 16);
+  const hpoMeetings = (meetingsResult.data ?? [])
+    .filter((meeting: any) => hpoTagged(meeting.metadata))
+    .slice(0, 12);
   const overdue = rankedAccounts
-    .filter((account: any) => account.next_action_due_at && Date.parse(account.next_action_due_at) < now.getTime())
+    .filter(
+      (account: any) =>
+        account.next_action_due_at && Date.parse(account.next_action_due_at) < now.getTime(),
+    )
     .slice(0, 10)
     .map((account: any) => ({
       id: account.id,
@@ -241,7 +331,9 @@ export async function loadHpoAgentContext(db: any, userId: string, assignment: s
     },
     hpo_knowledge_base: hpoKnowledge,
     accounts: rankedAccounts,
-    contacts: contacts.filter((contact: any) => selectedAccountIds.has(contact.account_id)).slice(0, 40),
+    contacts: contacts
+      .filter((contact: any) => selectedAccountIds.has(contact.account_id))
+      .slice(0, 40),
     prospects: rankedProspects,
     route_candidates: routeCandidatesResult.data ?? [],
     recent_route_history: (routeStopsResult.data ?? []).slice(0, 30),

@@ -1,5 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { buildSmartMemoryPrompt, retrieveSmartMemories, type SmartRecentTurn } from "./smart-memory.ts";
+import {
+  buildSmartMemoryPrompt,
+  retrieveSmartMemories,
+  type SmartRecentTurn,
+} from "./smart-memory.ts";
 
 export async function buildChatSmartMemoryContext(input: {
   apiKey?: string | null;
@@ -12,10 +16,7 @@ export async function buildChatSmartMemoryContext(input: {
   } | null;
   enabled: boolean;
 }) {
-  const memoryMaxItems = Math.min(
-    20,
-    Math.max(4, Number(input.config?.memory_max_items ?? 12)),
-  );
+  const memoryMaxItems = Math.min(20, Math.max(4, Number(input.config?.memory_max_items ?? 12)));
   const memoryMaxCharacters = Math.min(
     10000,
     Math.max(1600, Number(input.config?.memory_max_characters ?? 5200)),
