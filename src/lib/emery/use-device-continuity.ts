@@ -32,15 +32,15 @@ export function useEmeryDeviceContinuity() {
   useEffect(() => {
     if (typeof document === "undefined") return;
     const root = document.documentElement;
-    root.dataset.emeryDeviceClass = device.deviceClass;
-    root.dataset.emeryPlatform = device.platform;
-    root.dataset.emeryDisplayMode = device.displayMode;
-    root.dataset.emeryTouch = device.touchCapable ? "true" : "false";
+    root.dataset["emeryDeviceClass"] = device.deviceClass;
+    root.dataset["emeryPlatform"] = device.platform;
+    root.dataset["emeryDisplayMode"] = device.displayMode;
+    root.dataset["emeryTouch"] = device.touchCapable ? "true" : "false";
     return () => {
-      delete root.dataset.emeryDeviceClass;
-      delete root.dataset.emeryPlatform;
-      delete root.dataset.emeryDisplayMode;
-      delete root.dataset.emeryTouch;
+      delete root.dataset["emeryDeviceClass"];
+      delete root.dataset["emeryPlatform"];
+      delete root.dataset["emeryDisplayMode"];
+      delete root.dataset["emeryTouch"];
     };
   }, [device]);
 
