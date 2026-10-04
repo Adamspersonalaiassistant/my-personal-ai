@@ -1,0 +1,32 @@
+name: Compare Phase 9 TypeScript Baseline
+
+on:
+  push:
+    branches: [emery-phase9-professional-redesign]
+    paths:
+      - '.github/workflows/compare-phase9-typescript.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  typescript:
+    name: TypeScript — ${{ matrix.ref }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        ref:
+          - emery-phase9-british-voice
+          - emery-phase9-professional-redesign
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - run: bunx tsc --noEmit
