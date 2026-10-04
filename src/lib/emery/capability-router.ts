@@ -89,7 +89,7 @@ export function routeEmeryCapabilities(input: CapabilityRouterInput): Capability
   }
 
   const nextStopSignal =
-    /\b(whats next|what is next|who is next|next stop|next office|where am i going next|where should i go next)\b/.test(
+    /\b(whats next|what is next|whos next|who is next|next stop|next office|where am i going next|where should i go next)\b/.test(
       text,
     );
   const arrivalSignal =
