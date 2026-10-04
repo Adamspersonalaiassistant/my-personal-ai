@@ -95,6 +95,7 @@ assert(hpoActivity.includes("Tell Emery what happened"), "HPO Activity recap wor
 assert(shell.includes('to="/chat"'), "App shell must keep Emery as the primary destination");
 assert(shell.includes('to="/hpo"'), "App shell must keep HPO");
 assert(shell.includes('to="/calendar"'), "App shell must keep Calendar");
+assert(shell.includes("max-w-[1680px]"), "desktop command center must use available large-screen space");
 assert(shell.includes("md:hidden"), "mobile navigation must remain distinct from desktop layout");
 assert(shell.includes("md:flex"), "desktop navigation must remain responsive");
 
