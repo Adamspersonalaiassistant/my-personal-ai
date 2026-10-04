@@ -11,7 +11,14 @@ export type EmerySurface =
   | "more";
 
 export type EntityKind =
-  "person" | "contact" | "account" | "prospect" | "office" | "route" | "route_stop" | "meeting";
+  | "person"
+  | "contact"
+  | "account"
+  | "prospect"
+  | "office"
+  | "route"
+  | "route_stop"
+  | "meeting";
 
 export type RequestContext = {
   userId: string;
@@ -86,6 +93,20 @@ export type EntityResolution<T = unknown> =
   | { status: "ambiguous"; candidates: T[]; question: string; evidence: string[] }
   | { status: "not_found"; question: string | null; evidence: string[] };
 
+export type EmeryFailureCode =
+  | "MISSING_CONTEXT"
+  | "AMBIGUOUS_ENTITY"
+  | "CAPABILITY_UNAVAILABLE"
+  | "DEPENDENCY_FAILED"
+  | "NETWORK_FAILURE"
+  | "ROUTING_FAILURE"
+  | "WRITE_CONFLICT"
+  | "PERMISSION_DENIED"
+  | "VALIDATION_FAILED"
+  | "STALE_STATE"
+  | "TIMEOUT"
+  | "UNKNOWN_FAILURE";
+
 export type SerializedError = {
   name: string;
   message: string;
@@ -94,6 +115,12 @@ export type SerializedError = {
   details: Record<string, unknown>;
   capability: string | null;
   operation: string | null;
+  /** Stable Emery-level failure category used for routing, recovery and user-facing explanations. */
+  failureCode?: EmeryFailureCode;
+  /** Whether retrying the same operation without new user input may reasonably succeed. */
+  retryable?: boolean;
+  /** Short, truthful explanation suitable for the UI or Voice. */
+  userMessage?: string;
 };
 
 export type ExecutionReceipt = {
