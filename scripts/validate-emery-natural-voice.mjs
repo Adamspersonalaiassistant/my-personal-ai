@@ -42,14 +42,8 @@ assert(
   }),
 );
 
-assert.equal(
-  classifyVoiceTurn({ transcript: "Stop", now: 10_000 }),
-  "stop_speaking",
-);
-assert.equal(
-  classifyVoiceTurn({ transcript: "End voice", now: 10_000 }),
-  "end_session",
-);
+assert.equal(classifyVoiceTurn({ transcript: "Stop", now: 10_000 }), "stop_speaking");
+assert.equal(classifyVoiceTurn({ transcript: "End voice", now: 10_000 }), "end_session");
 assert.equal(
   classifyVoiceTurn({
     transcript: "Take me there",
@@ -69,6 +63,18 @@ const corrected = contextualizeVoiceCorrection("Actually Thursday", [
 ]);
 assert(corrected.includes("Follow up Tuesday"));
 assert(corrected.includes("Replace/supersede"));
+
+const correctedWhenCurrentTranscriptAlreadyPersisted = contextualizeVoiceCorrection(
+  "Actually Thursday",
+  [
+    { role: "user", text: "Follow up Tuesday" },
+    { role: "assistant", text: "Got it. I set the follow-up for Tuesday." },
+    { role: "user", text: "Actually Thursday" },
+  ],
+);
+assert(correctedWhenCurrentTranscriptAlreadyPersisted.includes("Follow up Tuesday"));
+assert(!correctedWhenCurrentTranscriptAlreadyPersisted.includes("action: “Actually Thursday”"));
+
 assert.equal(
   contextualizeVoiceCorrection("Follow up Thursday", [
     { role: "user", text: "Follow up Tuesday" },
@@ -96,14 +102,18 @@ const voiceControlSource = fs.readFileSync(
   new URL("../src/components/EmeryVoiceControl.tsx", import.meta.url),
   "utf8",
 );
+const realtimeSource = fs.readFileSync(
+  new URL("../src/lib/emery/unified-realtime.functions.ts", import.meta.url),
+  "utf8",
+);
 
 assert(contextPromptSource.includes("NATURAL_VOICE_CONTRACT"));
 assert(bridgeSource.includes("contextualizeVoiceCorrection"));
 assert(clientSafetySource.includes('type: "response.cancel"'));
 assert(clientSafetySource.includes('type: "output_audio_buffer.clear"'));
+assert(realtimeSource.includes('type: "semantic_vad"'));
+assert(realtimeSource.includes("interrupt_response: true"));
 
-// Final Phase 4 client integration. These assertions intentionally make the
-// remaining Work task tiny and explicit.
 assert(
   voiceControlSource.includes("classifyVoiceTurn"),
   "EmeryVoiceControl must classify completed user transcripts for stop/end/echo/correction/follow-up behavior",
@@ -121,5 +131,8 @@ assert(
     voiceControlSource.includes("followUpUntilRef"),
   "EmeryVoiceControl must track recent assistant speech and a short follow-up window",
 );
+assert(voiceControlSource.includes('disposition === "likely_echo"'));
+assert(voiceControlSource.includes('disposition === "stop_speaking"'));
+assert(voiceControlSource.includes('disposition === "end_session"'));
 
 console.log("Emery Phase 4 natural Voice validation passed.");
