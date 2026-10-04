@@ -400,13 +400,13 @@ function routeDisplayTags(
 
   if (veinTarget) {
     result.add("vein_prospect");
-    if (metadata.vein_lunch_target === true || rawTags.includes("lunch_target")) {
+    if (metadata["vein_lunch_target"] === true || rawTags.includes("lunch_target")) {
       result.add("lunch_target");
     }
   }
   if (normalize(clean(visitStatus)) === "need to visit") result.add("need_to_visit");
   if (normalize(clean(relationshipStage)) === "warm") result.add("warm_relationship");
-  if (metadata.lunch_date || rawTags.includes("lunch_set")) result.add("lunch_set");
+  if (metadata["lunch_date"] || rawTags.includes("lunch_set")) result.add("lunch_set");
 
   return [...result];
 }
@@ -590,7 +590,7 @@ async function recommendRouteCandidates(
         addReason(reasons, priorityBoost, "vein tracker marks this as a strong target");
       }
       if (
-        normalize(veinVisitStatus) === "need to visit" &&
+        normalize(veinVisitStatus ?? "") === "need to visit" &&
         !row.last_touch_at
       ) {
         score += 12;
@@ -775,7 +775,7 @@ async function recommendRouteCandidates(
         score += veinPlanningMode ? 18 : 8;
         addReason(reasons, veinPlanningMode ? 18 : 8, "vein tracker marks this as a visit-first target");
       }
-      if (normalize(prospectVeinVisitStatus) === "need to visit") {
+      if (normalize(prospectVeinVisitStatus ?? "") === "need to visit") {
         score += 12;
         addReason(reasons, 12, "vein tracker shows this office still needs a first visit");
       }
