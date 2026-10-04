@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { inferEmeryDomain, type EmeryDomain } from "../emery-domain.ts";
 import { CAPABILITY_REGISTRY, type CapabilityHealthKey } from "./capability-registry.ts";
 import {
@@ -9,7 +10,13 @@ import {
   type RequestContext,
 } from "./orchestration.types.ts";
 
-const TERMINAL_STOP_STATUSES = new Set(["completed", "visited", "skipped", "closed", "bad_address"]);
+const TERMINAL_STOP_STATUSES = new Set([
+  "completed",
+  "visited",
+  "skipped",
+  "closed",
+  "bad_address",
+]);
 
 type DbClient = any;
 
@@ -127,9 +134,10 @@ function hpoTabForSurface(surface: EmerySurface): RequestContext["hpoTab"] {
   return null;
 }
 
-export function pickContextValue<T>(
-  candidates: Array<ContextCandidate<T>>,
-): { value: T | null; authority: ContextAuthority } {
+export function pickContextValue<T>(candidates: Array<ContextCandidate<T>>): {
+  value: T | null;
+  authority: ContextAuthority;
+} {
   for (const candidate of candidates) {
     if (candidate.value !== null && candidate.value !== undefined) {
       return { value: candidate.value, authority: candidate.authority };
@@ -150,10 +158,13 @@ function healthKeyForExecution(run: Record<string, unknown>): CapabilityHealthKe
   const action = String(run["action"] ?? "");
   const registered = CAPABILITY_REGISTRY[action as keyof typeof CAPABILITY_REGISTRY];
   if (registered) return registered.healthKey;
-  if (action.startsWith("calendar.")) return action.includes("read") ? "calendar.read" : "calendar.write";
+  if (action.startsWith("calendar."))
+    return action.includes("read") ? "calendar.read" : "calendar.write";
   if (action.startsWith("hpo.field_session.")) return "hpo.field_session";
-  if (action.startsWith("hpo.interaction.") || action.startsWith("hpo.follow_up.")) return "hpo.crm.write";
-  if (action.startsWith("hpo.route.")) return action.includes("read") ? "hpo.route.read" : "hpo.route.write";
+  if (action.startsWith("hpo.interaction.") || action.startsWith("hpo.follow_up."))
+    return "hpo.crm.write";
+  if (action.startsWith("hpo.route."))
+    return action.includes("read") ? "hpo.route.read" : "hpo.route.write";
   if (action.startsWith("hpo.route_stop.")) return "hpo.route.write";
   if (action.startsWith("memory.")) return "memory.retrieve";
   if (action.startsWith("voice.")) return "voice.session";
@@ -182,11 +193,7 @@ export function deriveCapabilityHealth(
 async function readTimezone(db: DbClient, userId: string, explicit?: string | null) {
   const direct = text(explicit);
   if (direct) return direct;
-  const { data } = await db
-    .from("profiles")
-    .select("timezone")
-    .eq("user_id", userId)
-    .maybeSingle();
+  const { data } = await db.from("profiles").select("timezone").eq("user_id", userId).maybeSingle();
   return text(data?.timezone) ?? "America/New_York";
 }
 
@@ -352,9 +359,8 @@ export async function buildEmeryContext(
   const sessionRoute = explicitRoute
     ? null
     : await readRouteById(input.db, input.userId, fieldSession?.routeId ?? null);
-  const activeRoute = explicitRoute || sessionRoute
-    ? null
-    : await readCurrentRoute(input.db, input.userId, today);
+  const activeRoute =
+    explicitRoute || sessionRoute ? null : await readCurrentRoute(input.db, input.userId, today);
   const routeChoice = pickContextValue<Record<string, unknown>>([
     { value: explicitRoute, authority: "explicit_ui" },
     { value: sessionRoute, authority: "field_session" },
@@ -366,21 +372,20 @@ export async function buildEmeryContext(
 
   const explicitStopId = text(input.hpoStopId);
   const explicitStop = explicitStopId
-    ? stops.find((stop) => text(stop["id"]) === explicitStopId) ?? null
+    ? (stops.find((stop) => text(stop["id"]) === explicitStopId) ?? null)
     : null;
   const sessionStop = fieldSession?.currentStopId
-    ? stops.find((stop) => text(stop["id"]) === fieldSession.currentStopId) ?? null
+    ? (stops.find((stop) => text(stop["id"]) === fieldSession.currentStopId) ?? null)
     : null;
-  const arrivedStop =
-    stops.find((stop) => String(stop["status"] ?? "") === "arrived") ?? null;
+  const arrivedStop = stops.find((stop) => String(stop["status"] ?? "") === "arrived") ?? null;
   const openStop =
     stops.find((stop) => !TERMINAL_STOP_STATUSES.has(String(stop["status"] ?? ""))) ?? null;
   const expectedStop = fieldSession?.expectedNoteStopId
-    ? stops.find((stop) => text(stop["id"]) === fieldSession.expectedNoteStopId) ?? null
+    ? (stops.find((stop) => text(stop["id"]) === fieldSession.expectedNoteStopId) ?? null)
     : null;
   const receiptStopId = recentTarget(receipts, ["hpo_route_stop"]);
   const receiptStop = receiptStopId
-    ? stops.find((stop) => text(stop["id"]) === receiptStopId) ?? null
+    ? (stops.find((stop) => text(stop["id"]) === receiptStopId) ?? null)
     : null;
   const stopChoice = pickContextValue<Record<string, unknown>>([
     { value: explicitStop, authority: "explicit_ui" },
@@ -394,15 +399,18 @@ export async function buildEmeryContext(
 
   const accountIdChoice = pickContextValue<string>([
     { value: text(input.selectedAccountId), authority: "explicit_ui" },
-    { value: fieldSession?.expectedNoteAccountId ?? null, authority: "field_session" },
-    { value: text(stop?.["account_id"]), authority: "active_route" },
+    { value: text(stop?.["account_id"]), authority: stopChoice.authority },
+    {
+      value: fieldSession?.expectedNoteAccountId ?? null,
+      authority: "expected_note_target",
+    },
     {
       value: recentTarget(receipts, ["hpo_account", "account"]),
       authority: "recent_receipt",
     },
   ]);
   let account = await readAccount(input.db, input.userId, accountIdChoice.value);
-  let accountAuthority = account ? accountIdChoice.authority : "none" as ContextAuthority;
+  let accountAuthority = account ? accountIdChoice.authority : ("none" as ContextAuthority);
   if (!account && text(stop?.["account_id"])) {
     account = await readAccount(input.db, input.userId, text(stop?.["account_id"]));
     if (account) accountAuthority = "active_route";
@@ -410,15 +418,18 @@ export async function buildEmeryContext(
 
   const prospectIdChoice = pickContextValue<string>([
     { value: text(input.selectedProspectId), authority: "explicit_ui" },
-    { value: fieldSession?.expectedNoteProspectId ?? null, authority: "field_session" },
-    { value: text(stop?.["prospect_id"]), authority: "active_route" },
+    { value: text(stop?.["prospect_id"]), authority: stopChoice.authority },
+    {
+      value: fieldSession?.expectedNoteProspectId ?? null,
+      authority: "expected_note_target",
+    },
     {
       value: recentTarget(receipts, ["hpo_prospect", "prospect"]),
       authority: "recent_receipt",
     },
   ]);
   let prospect = await readProspect(input.db, input.userId, prospectIdChoice.value);
-  let prospectAuthority = prospect ? prospectIdChoice.authority : "none" as ContextAuthority;
+  let prospectAuthority = prospect ? prospectIdChoice.authority : ("none" as ContextAuthority);
   if (!prospect && text(stop?.["prospect_id"])) {
     prospect = await readProspect(input.db, input.userId, text(stop?.["prospect_id"]));
     if (prospect) prospectAuthority = "active_route";

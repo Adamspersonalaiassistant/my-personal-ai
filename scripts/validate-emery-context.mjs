@@ -28,6 +28,18 @@ const sessionFallback = pickContextValue([
 ]);
 assert.deepEqual(sessionFallback, { value: "session-stop", authority: "field_session" });
 
+const routeBeforeExpectedNote = pickContextValue([
+  { value: null, authority: "explicit_ui" },
+  { value: null, authority: "field_session" },
+  { value: "route-account", authority: "active_route" },
+  { value: "expected-note-account", authority: "expected_note_target" },
+  { value: "receipt-account", authority: "recent_receipt" },
+]);
+assert.deepEqual(routeBeforeExpectedNote, {
+  value: "route-account",
+  authority: "active_route",
+});
+
 const health = deriveCapabilityHealth([
   {
     action: "hpo.route.set_stops",
@@ -69,6 +81,44 @@ assert(!contextSource.includes(".update("), "Phase 1 context engine must remain 
 assert(!contextSource.includes(".upsert("), "Phase 1 context engine must remain read-only");
 assert(typeSource.includes('"hpo_planner"'), "Planner must be a first-class Emery surface");
 assert(typeSource.includes('"planner" | "today"'), "Planner must be a first-class HPO tab");
+const accountSelectionSource = contextSource.slice(
+  contextSource.indexOf("const accountIdChoice"),
+  contextSource.indexOf("let account ="),
+);
+assert(
+  accountSelectionSource.indexOf("authority: stopChoice.authority") <
+    accountSelectionSource.indexOf('authority: "expected_note_target"'),
+  "current route/stop context must outrank the expected note target",
+);
+
+const chatSource = fs.readFileSync(
+  new URL("../src/lib/emery.functions.ts", import.meta.url),
+  "utf8",
+);
+const fieldReadSource = fs.readFileSync(
+  new URL("../src/lib/hpo-field-read-controller.ts", import.meta.url),
+  "utf8",
+);
+assert(chatSource.includes("buildEmeryContext"), "central Emery Chat must build current context");
+assert(
+  chatSource.includes("routeId: resolvedRouteId"),
+  "controllers must receive the resolved route",
+);
+assert(chatSource.includes("stopId: resolvedStopId"), "arrival must receive the resolved stop");
+assert(
+  chatSource.includes("context: emeryContext"),
+  "field reads must consume authoritative context",
+);
+assert(
+  fieldReadSource.includes("what account am i at") &&
+    fieldReadSource.includes('"hpo.account.get_current"'),
+  "current-account lookup must be deterministic",
+);
+assert(
+  chatSource.includes("if (!result?.performed)") &&
+    chatSource.includes('result.action === "hpo.route_stop.arrive"'),
+  "arrival confirmation must require canonical controller success",
+);
 
 console.log(
   "Emery current-context validation passed (surface normalization, authority order, capability health, read-only context sources).",

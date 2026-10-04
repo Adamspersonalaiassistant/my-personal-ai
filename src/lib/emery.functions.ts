@@ -28,6 +28,7 @@ import { executionCapabilityPrompt } from "@/lib/execution-capabilities";
 import { executeCanonicalTaskCreate } from "@/lib/execution-kernel";
 import { planEmeryRequest } from "@/lib/emery/planner";
 import { processEmeryMultiIntentDayPlan } from "@/lib/emery/multi-intent-executor";
+import { buildEmeryContext } from "@/lib/emery/context-engine";
 
 const STABLE_RUNTIME_POLICY = `EXECUTION POLICY:
 - There is one Emery across chat, capture, Shortcut, Voice, Calendar, HPO, memory, and future integrations.
@@ -83,16 +84,36 @@ function hpoActivityConfirmation(result: any) {
   if (result?.needsClarification && result?.question) return String(result.question);
   if (!result?.recognized) return null;
   if (!result?.performed) {
-    if (result?.error) return "I understood the HPO Activity update, but I couldn’t save it. I’m not going to claim it was logged.";
+    if (result?.error)
+      return "I understood the HPO Activity update, but I couldn’t save it. I’m not going to claim it was logged.";
     return null;
   }
-  const labels: Record<string, string> = { office_visit: "Office visit", lunch: "Lunch", dinner: "Dinner", event: "Event" };
+  const labels: Record<string, string> = {
+    office_visit: "Office visit",
+    lunch: "Lunch",
+    dinner: "Dinner",
+    event: "Event",
+  };
   const activityLabel = labels[String(result.activityType)] || "Activity";
   const title = result.activityTitle || activityLabel;
-  if (result.action === "schedule_activity") return "Added " + title + " to HPO Activity → " + activityLabel + ". I’ll ask you for a recap the next morning.";
-  if (result.alreadySaved) return "That " + activityLabel.toLowerCase() + " recap is already saved in HPO Activity.";
+  if (result.action === "schedule_activity")
+    return (
+      "Added " +
+      title +
+      " to HPO Activity → " +
+      activityLabel +
+      ". I’ll ask you for a recap the next morning."
+    );
+  if (result.alreadySaved)
+    return "That " + activityLabel.toLowerCase() + " recap is already saved in HPO Activity.";
   return result.nextAction
-    ? "Saved " + title + " under HPO Activity → " + activityLabel + ". Next: " + result.nextAction + "."
+    ? "Saved " +
+        title +
+        " under HPO Activity → " +
+        activityLabel +
+        ". Next: " +
+        result.nextAction +
+        "."
     : "Saved " + title + " under HPO Activity → " + activityLabel + ".";
 }
 function hpoRouteStopConfirmation(result: any) {
@@ -195,29 +216,30 @@ async function history(db: any, userId: string, conversationId: string) {
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
     .limit(24);
-  return (data ?? [])
-    .reverse()
-    .map((x: any) => ({
-      id: x.id,
-      role: x.role,
-      text: x.content,
-      createdAt: x.created_at,
-      sourceMetadata: x.source_metadata ?? null,
-    }));
+  return (data ?? []).reverse().map((x: any) => ({
+    id: x.id,
+    role: x.role,
+    text: x.content,
+    createdAt: x.created_at,
+    sourceMetadata: x.source_metadata ?? null,
+  }));
 }
-async function loadHpoPlanningSessionContext(
-  db: any,
-  userId: string,
-  source: SourceMetadata,
-) {
+async function loadHpoPlanningSessionContext(db: any, userId: string, source: SourceMetadata) {
   const clip = (value: unknown, max = 320) => {
-    const text = String(value ?? "").replace(/\s+/g, " ").trim();
+    const text = String(value ?? "")
+      .replace(/\s+/g, " ")
+      .trim();
     return text.length > max ? `${text.slice(0, max - 1).trim()}…` : text || null;
   };
   const canonicalRouteTags = (row: any) => {
     const tags = new Set<string>(
       (Array.isArray(row?.tags) ? row.tags : [])
-        .map((tag: unknown) => String(tag ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_"))
+        .map((tag: unknown) =>
+          String(tag ?? "")
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "_"),
+        )
         .filter(Boolean),
     );
     const metadata =
@@ -225,7 +247,9 @@ async function loadHpoPlanningSessionContext(
         ? row.metadata
         : {};
     const noteText = `${row?.notes ?? ""} ${row?.next_action ?? ""}`.toLowerCase();
-    const trackerSource = String(metadata.source_workbook ?? "").toLowerCase().includes("vein");
+    const trackerSource = String(metadata.source_workbook ?? "")
+      .toLowerCase()
+      .includes("vein");
     const explicitlyNotVein =
       noteText.includes("not a vein target") || noteText.includes("rather than vein target");
     if (
@@ -580,19 +604,58 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
     const db = context.supabase as any,
       userId = context.userId;
     const conversation = await mainConversation(db, userId);
-    const hpoSurface = String(data.source.surface ?? "").startsWith("hpo");
+    const emeryContext = await buildEmeryContext({
+      db,
+      userId,
+      message: data.message,
+      conversationId: conversation.id,
+      entryPoint: data.source.entryPoint ?? "chat",
+      inputMode: data.source.inputMode ?? "typed",
+      surface: data.source.surface ?? null,
+      hpoRouteId: data.source.hpoRouteId,
+      hpoStopId: data.source.hpoStopId,
+      selectedAccountId: data.source.selectedAccountId,
+      selectedProspectId: data.source.selectedProspectId,
+    }).catch((error: any) => {
+      console.error("Authoritative Emery context failed", error);
+      return null;
+    });
+    const resolvedRouteId = emeryContext?.request.currentRouteId ?? data.source.hpoRouteId ?? null;
+    const resolvedStopId = emeryContext?.request.currentStopId ?? data.source.hpoStopId ?? null;
+    const resolvedAccountId =
+      emeryContext?.request.selectedAccountId ?? data.source.selectedAccountId ?? null;
+    const resolvedProspectId =
+      emeryContext?.request.selectedProspectId ?? data.source.selectedProspectId ?? null;
+    const hpoSurface = emeryContext?.request.surface.startsWith("hpo_") ?? false;
     const inferredRoute = inferEmeryDomain(data.message);
     const route =
-      hpoSurface && inferredRoute.domain === "general"
-        ? { ...inferredRoute, domain: "hpo" as const, reason: "Active HPO workspace context" }
+      emeryContext?.domain === "hpo" && inferredRoute.domain === "general"
+        ? { ...inferredRoute, domain: "hpo" as const, reason: "Authoritative current HPO context" }
         : inferredRoute;
     const actionPlan = planEmeryRequest(data.message);
     const hpoPlanned = actionPlan.intents.some(
       (intent) => intent.capability.startsWith("hpo.") || intent.capability === "entities",
     );
     let hpoEligible =
-      route.domain === "hpo" || route.domain === "mixed" || hpoPlanned || hpoSurface;
-    const sourceMetadata = { ...data.source, domain: route.domain, emery_identity: "central-v1" };
+      route.domain === "hpo" ||
+      route.domain === "mixed" ||
+      hpoPlanned ||
+      hpoSurface ||
+      emeryContext?.mode === "hpo";
+    const sourceMetadata = {
+      ...data.source,
+      domain: route.domain,
+      emery_identity: "central-v1",
+      current_context: emeryContext
+        ? {
+            version: emeryContext.version,
+            observedAt: emeryContext.observedAt,
+            mode: emeryContext.mode,
+            request: emeryContext.request,
+            authority: emeryContext.authority,
+          }
+        : null,
+    };
     const { data: userMessage, error: saveError } = await db
       .from("conversation_messages")
       .insert({
@@ -696,10 +759,12 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
         })
       : null;
     const hpoPlanningContext = hpoEligible
-      ? await loadHpoPlanningSessionContext(db, userId, data.source).catch((error: any) => {
-          console.error("HPO planning-session context failed", error);
-          return null;
-        })
+      ? await loadHpoPlanningSessionContext(db, userId, data.source as SourceMetadata).catch(
+          (error: any) => {
+            console.error("HPO planning-session context failed", error);
+            return null;
+          },
+        )
       : null;
     const [
       { data: profile },
@@ -742,10 +807,10 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
       timezone: profile?.timezone ?? "America/New_York",
       sourceMessageId: userMessage.id,
       sourceChannel: String(data.source.entryPoint ?? "chat"),
-      routeId: data.source.hpoRouteId ?? null,
-      stopId: data.source.hpoStopId ?? null,
-      selectedAccountId: data.source.selectedAccountId ?? null,
-      selectedProspectId: data.source.selectedProspectId ?? null,
+      routeId: resolvedRouteId,
+      stopId: resolvedStopId,
+      selectedAccountId: resolvedAccountId,
+      selectedProspectId: resolvedProspectId,
     }).catch((error: any) => {
       console.error("Emery multi-intent executor failed", error);
       return { handled: false as const, plan: actionPlan, receipts: [] };
@@ -867,25 +932,29 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
       };
     });
     const hpoFieldRead = hpoEligible
-      ? await processHpoFieldReadCommand({ db, userId, message: data.message }).catch(
-          (error: any) => {
-            console.error("HPO field-read controller failed", error);
-            return {
-              recognized: false,
-              action: "none",
-              routeId: null,
-              routeDate: null,
-              routeArea: null,
-              completed: 0,
-              total: 0,
-              remaining: 0,
-              nextStop: null,
-              lastCompletedStop: null,
-              accountContext: null,
-              reply: null,
-            };
-          },
-        )
+      ? await processHpoFieldReadCommand({
+          db,
+          userId,
+          message: data.message,
+          context: emeryContext,
+        }).catch((error: any) => {
+          console.error("HPO field-read controller failed", error);
+          return {
+            recognized: false,
+            action: "none",
+            routeId: null,
+            routeDate: null,
+            routeArea: null,
+            completed: 0,
+            total: 0,
+            remaining: 0,
+            nextStop: null,
+            lastCompletedStop: null,
+            currentStop: null,
+            accountContext: null,
+            reply: null,
+          };
+        })
       : {
           recognized: false,
           action: "none",
@@ -897,6 +966,7 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
           remaining: 0,
           nextStop: null,
           lastCompletedStop: null,
+          currentStop: null,
           accountContext: null,
           reply: null,
         };
@@ -910,7 +980,7 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
             timezone: profile?.timezone ?? "America/New_York",
             sourceMessageId: userMessage.id,
             sourceChannel: String(data.source.entryPoint ?? "text"),
-            routeId: data.source.hpoRouteId ?? null,
+            routeId: resolvedRouteId,
             routeDateHint: data.source.hpoRouteDate ?? null,
             history: hpoSessionHistory,
           }).catch((error: any) => {
@@ -947,8 +1017,8 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
             timezone: profile?.timezone ?? "America/New_York",
             sourceMessageId: userMessage.id,
             sourceChannel: String(data.source.entryPoint ?? "text"),
-            routeId: data.source.hpoRouteId ?? null,
-            stopId: data.source.hpoStopId ?? null,
+            routeId: resolvedRouteId,
+            stopId: resolvedStopId,
           }).catch((error: any) => {
             console.error("HPO route-stop action controller failed", error);
             return {
@@ -994,13 +1064,42 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
             recent: turnRecent.filter((x: any) => x.id !== userMessage.id),
             timezone: profile?.timezone ?? "America/New_York",
             sourceMessageId: userMessage.id,
-            selectedAccountId: data.source.selectedAccountId ?? null,
+            selectedAccountId: resolvedAccountId,
             calendarAction,
           }).catch((error: any) => {
             console.error("HPO Activity controller failed", error);
-            return { recognized: false, performed: false, needsClarification: false, question: null, action: "none", activityType: null, activityTitle: null, meetingId: null, accountId: null, accountName: null, recordId: null, nextAction: null, dueAt: null, error: "hpo_activity_failed" };
+            return {
+              recognized: false,
+              performed: false,
+              needsClarification: false,
+              question: null,
+              action: "none",
+              activityType: null,
+              activityTitle: null,
+              meetingId: null,
+              accountId: null,
+              accountName: null,
+              recordId: null,
+              nextAction: null,
+              dueAt: null,
+              error: "hpo_activity_failed",
+            };
           })
-        : { recognized: false, performed: false, needsClarification: false, question: null, action: "none", activityType: null, activityTitle: null, meetingId: null, accountId: null, accountName: null, recordId: null, nextAction: null, dueAt: null };
+        : {
+            recognized: false,
+            performed: false,
+            needsClarification: false,
+            question: null,
+            action: "none",
+            activityType: null,
+            activityTitle: null,
+            meetingId: null,
+            accountId: null,
+            accountName: null,
+            recordId: null,
+            nextAction: null,
+            dueAt: null,
+          };
     const hpoAction =
       hpoEligible &&
       !hpoFieldRead.recognized &&
@@ -1015,7 +1114,7 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
             recent: turnRecent.filter((x: any) => x.id !== userMessage.id),
             timezone: profile?.timezone ?? "America/New_York",
             sourceMessageId: userMessage.id,
-            selectedAccountId: data.source.selectedAccountId ?? null,
+            selectedAccountId: resolvedAccountId,
           }).catch((error: any) => {
             console.error("HPO action controller failed", error);
             return {
@@ -1063,6 +1162,7 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
       ? `Name: ${profile.display_name ?? ""}\nTimezone: ${profile.timezone ?? ""}\nAbout: ${profile.profile_summary ?? ""}`
       : "";
     const actionBlock = JSON.stringify(actions).slice(0, 14000);
+    const currentContextBlock = emeryContext ? JSON.stringify(emeryContext).slice(0, 20000) : "";
     const hpoBlock = hpoContext ? JSON.stringify(hpoContext).slice(0, 10000) : "";
     const attachmentRows = data.attachments.length
       ? await db
@@ -1093,7 +1193,8 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
       calendarAction,
       profile?.timezone ?? "America/New_York",
     );
-    const primaryHpoReply = hpoRouteCommandReply ?? routeStopReply ?? hpoActivityReply ?? hpoReply ?? hpoFieldReadReply;
+    const primaryHpoReply =
+      hpoRouteCommandReply ?? routeStopReply ?? hpoActivityReply ?? hpoReply ?? hpoFieldReadReply;
     if (primaryHpoReply) {
       const combinedReply =
         calendarAction.performed && calendarReply
@@ -1148,8 +1249,8 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
               : hpoActivity.action !== "none"
                 ? hpoActivity.action
                 : hpoAction.action !== "none"
-                ? hpoAction.action
-                : hpoFieldRead.action,
+                  ? hpoAction.action
+                  : hpoFieldRead.action,
         status:
           hpoRouteCommand.needsClarification ||
           routeStopAction.needsClarification ||
@@ -1616,6 +1717,14 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
             role: "system",
             content: `CURRENT ACTIVE OS CONTEXT (bounded):\n${actionBlock}\n\nQUIET FOCUS:\n${focus}\nUse only when relevant. Favor one highest-value next action; never dump a dashboard.`,
           },
+          ...(currentContextBlock
+            ? [
+                {
+                  role: "system",
+                  content: `AUTHORITATIVE CURRENT CONTEXT (server-resolved):\n${currentContextBlock}\nUse this before raw UI hints or natural-language inference. Never claim a write succeeded unless its canonical controller returned a successful result.`,
+                },
+              ]
+            : []),
           ...(hpoBlock
             ? [
                 {
@@ -1630,7 +1739,10 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
                   role: "system",
                   content: `CURRENT HPO ROUTE GAME-PLAN CONTEXT (server-verified, non-PHI):\n${JSON.stringify(
                     hpoPlanningContext,
-                  ).slice(0, 30000)}\nWork directly with these offices when Adam asks route-planning questions. Explain recommendations from the recorded relationship facts; distinguish saved facts from your judgment.`,
+                  ).slice(
+                    0,
+                    30000,
+                  )}\nWork directly with these offices when Adam asks route-planning questions. Explain recommendations from the recorded relationship facts; distinguish saved facts from your judgment.`,
                 },
               ]
             : []),
