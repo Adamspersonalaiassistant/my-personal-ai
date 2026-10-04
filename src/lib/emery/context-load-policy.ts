@@ -23,7 +23,9 @@ export function contextLoadPolicy(route: CapabilityRoute): EmeryContextLoadPolic
   return {
     loadHpoOperatingContext: route.needsHpoContext,
     loadPersonalMemory: route.needsPersonalMemory,
-    loadCalendarContext: route.needsCalendar,
+    // Preserve Emery's existing broad Calendar/task context for general or personal
+    // turns. The optimization intentionally narrows only clearly focused HPO field work.
+    loadCalendarContext: route.needsCalendar || !isFocusedOperationalHpo,
     loadLocation: route.needsLocation,
     isFocusedOperationalHpo,
   };
