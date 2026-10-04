@@ -2,6 +2,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { runCanonicalEmeryEvaluations } from "./evaluation-runner.ts";
+import { buildImprovementWorkPackage } from "./improvement-work-package.ts";
 import { buildSelfImprovementReport } from "./self-improvement.ts";
 
 export const getEmerySelfImprovementReport = createServerFn({ method: "GET" })
@@ -27,9 +28,11 @@ export const getEmerySelfImprovementReport = createServerFn({ method: "GET" })
       runtimeEvents: runtimeEvents ?? [],
       canonicalSignals: canonical.signals,
     });
+    const workPackage = report.proposal ? buildImprovementWorkPackage(report.proposal) : null;
 
     return {
       report,
+      workPackage,
       canonical: {
         corpusVersion: canonical.corpusVersion,
         cases: canonical.cases,
@@ -37,5 +40,6 @@ export const getEmerySelfImprovementReport = createServerFn({ method: "GET" })
       },
       readOnly: true,
       autonomousProductionChangesAllowed: false,
+      requiresExplicitApprovalBeforeBranchOrPr: true,
     } as const;
   });
