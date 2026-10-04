@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { buildEmeryContext, type EmeryContextSnapshot } from "./context-engine.ts";
 import { prepareEmeryRequestRouting, type PreparedEmeryRequestRouting } from "./request-routing.ts";
+import type { RegisteredCapabilityAction } from "./capability-registry.ts";
 import type { RequestContext } from "./orchestration.types.ts";
 
 export type VoiceUiContext = {
@@ -76,7 +77,7 @@ export async function prepareVoiceRequest(input: {
 
 export function voiceCapabilityAllows(
   prepared: PreparedVoiceRequest,
-  action: string,
+  action: RegisteredCapabilityAction,
 ): boolean {
-  return prepared.routing.capabilityRoute.candidateCapabilities.includes(action as never);
+  return prepared.routing.capabilityRoute.candidateCapabilities.includes(action);
 }
