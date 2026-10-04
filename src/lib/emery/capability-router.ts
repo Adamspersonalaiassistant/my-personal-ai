@@ -42,10 +42,10 @@ function hasHpoCurrentContext(context?: RequestContext | null) {
     context.surface.startsWith("hpo_") ||
     Boolean(
       context.currentRouteId ||
-      context.currentStopId ||
-      context.selectedAccountId ||
-      context.selectedProspectId ||
-      context.fieldSessionId,
+        context.currentStopId ||
+        context.selectedAccountId ||
+        context.selectedProspectId ||
+        context.fieldSessionId,
     )
   );
 }
@@ -70,10 +70,10 @@ export function routeEmeryCapabilities(input: CapabilityRouterInput): Capability
     add(candidates, "execution.undo");
     return {
       version: 1,
-      domain: input.domainHint ?? (currentHpo ? "hpo" : inferred.domain),
+      domain: inferred.domain,
       candidateCapabilities: [...candidates],
       needsCurrentContext: true,
-      needsHpoContext: currentHpo,
+      needsHpoContext: false,
       needsPersonalMemory: false,
       needsCalendar: false,
       needsLocation: false,
@@ -93,7 +93,7 @@ export function routeEmeryCapabilities(input: CapabilityRouterInput): Capability
       text,
     );
   const accountContextSignal =
-    /\b(what happened here last time|what happened last time|last visit|who did i talk to|who did i speak to|brief me|account brief|what do i need to know here|what do i need to know about this office)\b/.test(
+    /\b(what happened here last time|what happened last time|last visit|who did i talk to|who did i speak to|what did she say|what did he say|brief me|account brief|what do i need to know here|what do i need to know about this office)\b/.test(
       text,
     );
   const visitSignal =
@@ -126,7 +126,7 @@ export function routeEmeryCapabilities(input: CapabilityRouterInput): Capability
     );
   const deicticHpoSignal =
     currentHpo &&
-    /\b(here|there|this office|this account|she|he|they|them|that office)\b/.test(text);
+    /\b(here|there|this office|this account|that office|that account)\b/.test(text);
 
   if (arrivalSignal) {
     add(candidates, "hpo.route_stop.arrive");
@@ -177,12 +177,18 @@ export function routeEmeryCapabilities(input: CapabilityRouterInput): Capability
   }
 
   const hpoSignal =
-    currentHpo ||
     operationalHpoSignal(text) ||
+    deicticHpoSignal ||
     [...candidates].some((action) => action.startsWith("hpo."));
-  let domain: EmeryDomain = input.domainHint ?? inferred.domain;
-  if (hpoSignal && domain === "general") domain = "hpo";
-  if (hpoSignal && domain === "personal") domain = "mixed";
+
+  let domain: EmeryDomain = inferred.domain;
+  if (hpoSignal) {
+    if (input.domainHint === "mixed") domain = "mixed";
+    else if (domain === "general") domain = "hpo";
+    else if (domain === "personal") domain = "mixed";
+  } else if (input.domainHint && input.domainHint !== "hpo") {
+    domain = input.domainHint;
+  }
 
   if (hpoSignal && candidates.size === 0) {
     if (input.context?.selectedAccountId || input.context?.currentStopId) {
