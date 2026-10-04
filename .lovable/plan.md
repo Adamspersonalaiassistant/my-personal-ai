@@ -30,7 +30,7 @@ One Emery product, one dark navy command-center language. Keep the blue neural-b
 - HPO presentation: `src/routes/_authenticated/hpo.tsx`, `src/components/HpoFieldNav.tsx`, `src/components/HpoWeeklyPlanner.tsx`, `src/components/HpoRoutePlanner.tsx` (presentation JSX only), `src/components/HpoAccountFieldDetail.tsx`, `src/components/HpoActivityView.tsx`, and `src/components/HpoEmerySheet.tsx` only where its visible sheet needs to match. Keep Leaflet implementation untouched.
 
 ## 6. Protected boundaries
--No Supabase schema, migrations, production record writes, new CRM/memory/chat system, or MapLibre. Leave canonical HPO reads/writes, route optimization/persistence, completed history, Field Session, receipts/idempotency/undo, offline behavior, and action controllers unchanged.
+- No Supabase schema, migrations, production record writes, new CRM/memory/chat system, or MapLibre. Leave canonical HPO reads/writes, route optimization/persistence, completed history, Field Session, receipts/idempotency/undo, offline behavior, and action controllers unchanged.
 - Preserve Voice connection/transcription/action behavior, Chat send/history and Smart Memory/Ambient Context, account notes and contacts, existing auth, navigation destinations, and non-HPO workflows. Do not replace `src/components/hpo-map/HpoLeafletMap.tsx` or change Leaflet behavior. Keep the HPO map height/tray contract intact.
 
 ## 7. Safe implementation order
