@@ -506,6 +506,7 @@ function Chat() {
   return (
     <AppShell title="Emery" padded={false}>
       <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-background">
+        <EmeryPresence state={visualState} compact />
         <div
           ref={scrollRef}
           onScroll={handleScroll}
@@ -513,7 +514,6 @@ function Chat() {
           aria-label="Emery conversation"
         >
           <div className="mx-auto w-full max-w-[1120px]">
-            <EmeryPresence state={visualState} compact />
             <EmeryPresence
               state={visualState}
               subtitle="One conversation. One memory. One intelligence across your work and life."

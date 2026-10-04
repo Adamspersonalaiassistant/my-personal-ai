@@ -16,15 +16,18 @@ export function EmeryPresence({
 }) {
   if (compact) {
     return (
-      <section className="emery-mobile-deck relative isolate h-[210px] w-full overflow-hidden rounded-lg border border-live/15 sm:hidden" aria-label="Emery Core">
-        <div className="emery-grid pointer-events-none absolute inset-0 opacity-70" aria-hidden="true" />
-        <div className="emery-deck-arc pointer-events-none absolute left-1/2 top-[12px] size-[174px] -translate-x-1/2 rounded-full" aria-hidden="true" />
-        <div className="absolute inset-x-4 top-3 z-10 flex items-center justify-between gap-2 text-[9px] font-semibold uppercase tracking-[0.12em]">
+      <section className="emery-mobile-deck relative isolate h-[220px] w-full shrink-0 overflow-hidden border-b border-live/20 sm:hidden" aria-label="Emery Core">
+        <div className="emery-grid pointer-events-none absolute inset-0 opacity-90" aria-hidden="true" />
+        <div className="emery-deck-arc pointer-events-none absolute left-1/2 top-[19px] size-[174px] -translate-x-1/2 rounded-full" aria-hidden="true" />
+        <div className="pointer-events-none absolute inset-x-4 top-3 z-10 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.12em]">
           <span className="text-live">Emery Core</span>
           <span className="text-secondary-foreground">Personal Intelligence</span>
         </div>
-        <div className="absolute inset-x-0 top-[20px] flex justify-center"><EmeryBrainCore state={state} compact /></div>
-        <div className="absolute inset-x-0 bottom-3 z-10 flex justify-center"><EmeryStateLabel state={state} /></div>
+        <div className="absolute inset-x-0 top-[22px] flex justify-center"><EmeryBrainCore state={state} compact /></div>
+        <div className="absolute inset-x-0 bottom-[26px] z-10 flex justify-center"><EmeryStateLabel state={state} /></div>
+        <div className="absolute inset-x-0 bottom-2 z-10 flex items-center justify-center gap-2 text-[9px] font-medium uppercase tracking-[0.08em] text-secondary-foreground" aria-label="Private conversation with Current Context">
+          <span>Private</span><span aria-hidden="true" className="size-0.5 rounded-full bg-live/60" /><span>Current Context</span>
+        </div>
       </section>
     );
   }
