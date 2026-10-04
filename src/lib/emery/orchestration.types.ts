@@ -1,7 +1,14 @@
 export type EmeryEntryPoint = "chat" | "capture" | "shortcut" | "voice";
 export type EmeryInputMode = "typed" | "dictated" | "voice";
 export type EmerySurface =
-  "chat" | "hpo_today" | "hpo_map" | "hpo_accounts" | "hpo_activity" | "calendar" | "more";
+  | "chat"
+  | "hpo_planner"
+  | "hpo_today"
+  | "hpo_map"
+  | "hpo_accounts"
+  | "hpo_activity"
+  | "calendar"
+  | "more";
 
 export type EntityKind =
   "person" | "contact" | "account" | "prospect" | "office" | "route" | "route_stop" | "meeting";
@@ -14,7 +21,7 @@ export type RequestContext = {
   inputMode: EmeryInputMode;
   timezone: string;
   surface: EmerySurface;
-  hpoTab: "today" | "map" | "accounts" | "activity" | null;
+  hpoTab: "planner" | "today" | "map" | "accounts" | "activity" | null;
   currentRouteId: string | null;
   currentStopId: string | null;
   selectedAccountId: string | null;
