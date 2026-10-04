@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { NATURAL_VOICE_CONTRACT } from "./voice-conversation-policy.ts";
 
 export function buildUnifiedVoiceContextPrompt(context: {
   currentContext?: any;
@@ -57,6 +58,7 @@ export function buildUnifiedVoiceContextPrompt(context: {
     : null;
 
   return [
+    NATURAL_VOICE_CONTRACT,
     "AUTHORITATIVE CURRENT EMERY CONTEXT:",
     JSON.stringify(compact),
     route ? `CURRENT CAPABILITY ROUTE:\n${JSON.stringify(route)}` : "",
