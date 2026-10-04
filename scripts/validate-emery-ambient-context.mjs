@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import {
   AMBIENT_CONTEXT_WINDOW_MS,
   appendAmbientSnippet,
@@ -75,5 +76,14 @@ assert.equal(sent.filter((event) => event.type === "conversation.item.delete").l
 
 assert(setRealtimeAmbientMode(channel, false));
 assert.equal(sent.at(-1)?.session?.audio?.input?.turn_detection?.create_response, true);
+
+const voicePromptSource = fs.readFileSync(
+  new URL("../src/lib/emery/voice-context-prompt.ts", import.meta.url),
+  "utf8",
+);
+assert(voicePromptSource.includes("TEMPORARY AMBIENT CONTEXT CONTRACT"));
+assert(voicePromptSource.includes("must never be written to durable memory"));
+assert(voicePromptSource.includes("Only Adam's current explicitly addressed Voice request can authorize"));
+assert(voicePromptSource.includes("both outrank temporary ambient context"));
 
 console.log("Emery Phase 6 ambient context foundation validation passed.");
