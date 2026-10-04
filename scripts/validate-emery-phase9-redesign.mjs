@@ -70,7 +70,7 @@ for (const state of [
   "success",
   "error",
 ]) {
-  assert(visualTypes.includes(`\"${state}\"`), `visual state missing: ${state}`);
+  assert(visualTypes.includes(`"${state}"`), `visual state missing: ${state}`);
 }
 assert(brainCore.includes("EmeryBrainCanvas"), "Emery Core must keep the Canvas neural layer");
 assert(brainCore.includes("EmeryBrainRings"), "Emery Core must keep the SVG ring layer");
@@ -81,7 +81,7 @@ assert(visualRuntime.includes('"emery:visual-state"'), "shared visual runtime ev
 assert(!visualRuntime.toLowerCase().includes("supabase"), "visual runtime must not become a second persistence system");
 
 for (const label of ["Planner", "Maps", "Accounts", "Activity"]) {
-  assert(hpoNav.includes(`label: \"${label}\"`), `HPO nav must preserve ${label}`);
+  assert(hpoNav.includes(`label: "${label}"`), `HPO nav must preserve ${label}`);
 }
 assert(!hpoNav.includes("Today"), "HPO nav must not reintroduce the removed Today tab");
 assert(hpo.includes("HpoWeeklyPlanner"), "Planner must remain the primary HPO workflow");
