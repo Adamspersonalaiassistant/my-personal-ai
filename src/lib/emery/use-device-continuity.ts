@@ -26,6 +26,24 @@ export function useEmeryDeviceContinuity() {
     };
   }, [refresh]);
 
+  // Device continuity is presentation-only. Expose only coarse, non-identifying
+  // attributes on the root element so responsive UI can adapt without forking
+  // Emery's identity, memory, conversation, routing, or execution state.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const root = document.documentElement;
+    root.dataset.emeryDeviceClass = device.deviceClass;
+    root.dataset.emeryPlatform = device.platform;
+    root.dataset.emeryDisplayMode = device.displayMode;
+    root.dataset.emeryTouch = device.touchCapable ? "true" : "false";
+    return () => {
+      delete root.dataset.emeryDeviceClass;
+      delete root.dataset.emeryPlatform;
+      delete root.dataset.emeryDisplayMode;
+      delete root.dataset.emeryTouch;
+    };
+  }, [device]);
+
   useEffect(() => {
     if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
     let cancelled = false;
