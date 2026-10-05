@@ -172,6 +172,7 @@ export async function processHpoRouteStopAction(input: {
     .select("id,route_date,status,updated_at")
     .eq("user_id", input.userId)
     .in("status", ["draft", "planned", "active", "in_progress"])
+    .gte("route_date", today)
     .order("route_date", { ascending: true })
     .order("updated_at", { ascending: false })
     .limit(8);

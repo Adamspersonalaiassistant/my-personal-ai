@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { getHpoFieldTodayCore } from "@/lib/hpo-field.functions";
+import { formatHpoFollowupReply, listHpoFollowupsCore } from "@/lib/hpo-followups.functions";
 import type { EmeryContextSnapshot } from "@/lib/emery/context-engine";
 
 const TERMINAL = new Set(["completed", "visited", "skipped", "closed", "bad_address"]);
@@ -10,7 +11,8 @@ export type HpoFieldReadAction =
   | "hpo.route.resume_context"
   | "hpo.route.day_summary"
   | "hpo.account.get_context"
-  | "hpo.account.get_current";
+  | "hpo.account.get_current"
+  | "hpo.followups.list";
 
 export type HpoFieldReadResult = {
   recognized: boolean;
@@ -25,6 +27,7 @@ export type HpoFieldReadResult = {
   lastCompletedStop: any | null;
   currentStop: any | null;
   accountContext: any | null;
+  followups?: any | null;
   reply: string | null;
 };
 
@@ -37,8 +40,20 @@ function normalize(value: string) {
     .trim();
 }
 
+export function hpoFollowupScope(message: string): "all" | "week" | "overdue" | null {
+  const text = normalize(message);
+  if (/\b(whats overdue|what is overdue|anything overdue|overdue follow ?ups?|which follow ?ups? are overdue|what follow ?ups? are overdue)\b/.test(text))
+    return "overdue";
+  if (/\bfollow ?ups?\b[\s\S]{0,40}\b(this week|week)\b|\b(this week)\b[\s\S]{0,40}\bfollow ?ups?\b/.test(text))
+    return "week";
+  if (/\b(who should i follow up with|who do i need to follow up with|who do i follow up with|what follow ?ups? do i have|my follow ?ups?|open follow ?ups?|list (?:my )?follow ?ups?)\b/.test(text))
+    return "all";
+  return null;
+}
+
 function requestedReadAction(message: string): HpoFieldReadAction {
   const text = normalize(message);
+  if (hpoFollowupScope(message)) return "hpo.followups.list";
 
   if (
     /\b(what account am i at|which account am i at|what office am i at|which office am i at)\b/.test(
@@ -334,6 +349,26 @@ export async function processHpoFieldReadCommand(input: {
       currentStop: null,
       accountContext: null,
       reply: null,
+    };
+  }
+
+  if (action === "hpo.followups.list") {
+    const list = await listHpoFollowupsCore({ db: input.db, userId: input.userId });
+    return {
+      recognized: true,
+      action,
+      routeId: null,
+      routeDate: null,
+      routeArea: null,
+      completed: 0,
+      total: 0,
+      remaining: 0,
+      nextStop: null,
+      lastCompletedStop: null,
+      currentStop: null,
+      accountContext: null,
+      followups: list,
+      reply: formatHpoFollowupReply(list, hpoFollowupScope(input.message) ?? "all"),
     };
   }
 
