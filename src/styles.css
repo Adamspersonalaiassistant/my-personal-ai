@@ -148,6 +148,11 @@
   .emery-composer:focus-within { box-shadow: inset 0 1px 0 color-mix(in srgb, var(--live) 22%, transparent), 0 0 0 2px color-mix(in srgb, var(--live) 13%, transparent), 0 12px 32px color-mix(in srgb, var(--background) 60%, transparent); }
   .emery-mobile-nav { background: color-mix(in srgb, var(--surface) 94%, transparent); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--live) 9%, transparent), 0 -10px 30px color-mix(in srgb, var(--background) 70%, transparent); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
   .emery-nav-active { background: color-mix(in srgb, var(--live) 8%, transparent); box-shadow: inset 0 2px color-mix(in srgb, var(--live) 55%, transparent), 0 0 15px color-mix(in srgb, var(--live) 7%, transparent); }
+  .emery-dashboard { background: radial-gradient(ellipse 70% 42% at 50% 4%, color-mix(in srgb, var(--primary) 11%, transparent), transparent 72%); }
+  .emery-core-trigger { background: radial-gradient(circle at 50% 48%, color-mix(in srgb, var(--live) 12%, transparent), transparent 27%), radial-gradient(ellipse 66% 90% at 50% 45%, color-mix(in srgb, var(--primary) 16%, transparent), transparent 70%), linear-gradient(180deg, color-mix(in srgb, var(--elevated) 90%, transparent), color-mix(in srgb, var(--surface) 96%, transparent)); box-shadow: inset 0 1px color-mix(in srgb, var(--live) 24%, transparent), inset 0 -42px 80px color-mix(in srgb, var(--background) 64%, transparent), 0 18px 48px color-mix(in srgb, var(--background) 48%, transparent); }
+  .emery-core-trigger:hover { border-color: color-mix(in srgb, var(--live) 38%, transparent); }
+  .emery-dashboard-link { background: color-mix(in srgb, var(--surface) 72%, transparent); }
+  .emery-dashboard-link:hover { background: color-mix(in srgb, var(--elevated) 90%, transparent); }
   .emery-panel-matte { background: var(--surface); border-color: var(--border); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--foreground) 3%, transparent); }
   .emery-panel-glass { background: color-mix(in srgb, var(--surface) 88%, transparent); border-color: color-mix(in srgb, var(--foreground) 12%, transparent); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--foreground) 4%, transparent); backdrop-filter: blur(14px) saturate(112%); -webkit-backdrop-filter: blur(14px) saturate(112%); }
   .emery-panel-elevated { background: var(--elevated); border-color: color-mix(in srgb, var(--foreground) 13%, transparent); box-shadow: 0 14px 34px rgba(0,0,0,.24); }
@@ -183,5 +188,6 @@
 .emery-dot:nth-child(3) { animation: emery-pulse 1.15s ease-in-out .32s infinite; }
 
 @media (min-width: 768px) { body { padding: 0; } }
+@media (max-width: 639px) { .emery-core-trigger { min-height: 310px; } }
 @media (prefers-reduced-motion: reduce) { *,*::before,*::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
 @media (prefers-reduced-transparency: reduce) { .emery-glass,.emery-glass-strong,.emery-panel-glass,.emery-composer,.emery-mobile-nav { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--surface); } }

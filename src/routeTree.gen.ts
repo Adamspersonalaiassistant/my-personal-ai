@@ -15,6 +15,7 @@ import { Route as AuthenticatedAgentsRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedCalendarRouteImport } from './routes/_authenticated/calendar'
 import { Route as AuthenticatedCaptureRouteImport } from './routes/_authenticated/capture'
 import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/chat'
+import { Route as AuthenticatedConversationRouteImport } from './routes/_authenticated/conversation'
 import { Route as AuthenticatedHpoRouteImport } from './routes/_authenticated/hpo'
 import { Route as AuthenticatedIphoneRouteImport } from './routes/_authenticated/iphone'
 import { Route as AuthenticatedMeetingsRouteImport } from './routes/_authenticated/meetings'
@@ -54,6 +55,12 @@ const AuthenticatedChatRoute = AuthenticatedChatRouteImport.update({
   path: '/chat',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedConversationRoute =
+  AuthenticatedConversationRouteImport.update({
+    id: '/conversation',
+    path: '/conversation',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedHpoRoute = AuthenticatedHpoRouteImport.update({
   id: '/hpo',
   path: '/hpo',
@@ -107,6 +114,7 @@ export interface FileRoutesByFullPath {
   '/calendar': typeof AuthenticatedCalendarRoute
   '/capture': typeof AuthenticatedCaptureRoute
   '/chat': typeof AuthenticatedChatRoute
+  '/conversation': typeof AuthenticatedConversationRoute
   '/hpo': typeof AuthenticatedHpoRoute
   '/iphone': typeof AuthenticatedIphoneRoute
   '/meetings': typeof AuthenticatedMeetingsRoute
@@ -123,6 +131,7 @@ export interface FileRoutesByTo {
   '/calendar': typeof AuthenticatedCalendarRoute
   '/capture': typeof AuthenticatedCaptureRoute
   '/chat': typeof AuthenticatedChatRoute
+  '/conversation': typeof AuthenticatedConversationRoute
   '/hpo': typeof AuthenticatedHpoRoute
   '/iphone': typeof AuthenticatedIphoneRoute
   '/meetings': typeof AuthenticatedMeetingsRoute
@@ -141,6 +150,7 @@ export interface FileRoutesById {
   '/_authenticated/calendar': typeof AuthenticatedCalendarRoute
   '/_authenticated/capture': typeof AuthenticatedCaptureRoute
   '/_authenticated/chat': typeof AuthenticatedChatRoute
+  '/_authenticated/conversation': typeof AuthenticatedConversationRoute
   '/_authenticated/hpo': typeof AuthenticatedHpoRoute
   '/_authenticated/iphone': typeof AuthenticatedIphoneRoute
   '/_authenticated/meetings': typeof AuthenticatedMeetingsRoute
@@ -159,6 +169,7 @@ export interface FileRouteTypes {
     | '/calendar'
     | '/capture'
     | '/chat'
+    | '/conversation'
     | '/hpo'
     | '/iphone'
     | '/meetings'
@@ -175,6 +186,7 @@ export interface FileRouteTypes {
     | '/calendar'
     | '/capture'
     | '/chat'
+    | '/conversation'
     | '/hpo'
     | '/iphone'
     | '/meetings'
@@ -192,6 +204,7 @@ export interface FileRouteTypes {
     | '/_authenticated/calendar'
     | '/_authenticated/capture'
     | '/_authenticated/chat'
+    | '/_authenticated/conversation'
     | '/_authenticated/hpo'
     | '/_authenticated/iphone'
     | '/_authenticated/meetings'
@@ -250,6 +263,13 @@ declare module '@tanstack/react-router' {
       path: '/chat'
       fullPath: '/chat'
       preLoaderRoute: typeof AuthenticatedChatRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/conversation': {
+      id: '/_authenticated/conversation'
+      path: '/conversation'
+      fullPath: '/conversation'
+      preLoaderRoute: typeof AuthenticatedConversationRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/hpo': {
@@ -323,6 +343,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCalendarRoute: typeof AuthenticatedCalendarRoute
   AuthenticatedCaptureRoute: typeof AuthenticatedCaptureRoute
   AuthenticatedChatRoute: typeof AuthenticatedChatRoute
+  AuthenticatedConversationRoute: typeof AuthenticatedConversationRoute
   AuthenticatedHpoRoute: typeof AuthenticatedHpoRoute
   AuthenticatedIphoneRoute: typeof AuthenticatedIphoneRoute
   AuthenticatedMeetingsRoute: typeof AuthenticatedMeetingsRoute
@@ -339,6 +360,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCalendarRoute: AuthenticatedCalendarRoute,
   AuthenticatedCaptureRoute: AuthenticatedCaptureRoute,
   AuthenticatedChatRoute: AuthenticatedChatRoute,
+  AuthenticatedConversationRoute: AuthenticatedConversationRoute,
   AuthenticatedHpoRoute: AuthenticatedHpoRoute,
   AuthenticatedIphoneRoute: AuthenticatedIphoneRoute,
   AuthenticatedMeetingsRoute: AuthenticatedMeetingsRoute,
