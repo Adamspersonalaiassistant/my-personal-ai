@@ -415,3 +415,267 @@ await check("acceptance 10/11: Emery self-awareness questions are detected", () 
 });
 
 console.log(`\nJARVIS Run 1 validation: ${passed} checks passed.`);
+
+// ------------------------------------------------------------------------
+// End-to-end room turn with stubbed Supabase / OpenAI / GitHub transports.
+// Proves: Adam ↔ JARVIS only (no Emery speaker), knowledge + live status are
+// read, the model's tool call is executed through the gateway, receipts are
+// written, and the paid-credit fixture stops before any model call.
+// ------------------------------------------------------------------------
+
+function fakeDb(fixtures) {
+  const log = { inserts: [], updates: [] };
+  const db = {
+    log,
+    rpc: async () => ({ data: fixtures.rpc ?? {}, error: null }),
+    from(table) {
+      let mode = "select";
+      let payload = null;
+      const builder = {
+        select: () => builder,
+        eq: () => builder,
+        gte: () => builder,
+        in: () => builder,
+        or: () => builder,
+        order: () => builder,
+        limit: () => builder,
+        insert(row) {
+          mode = "insert";
+          payload = row;
+          log.inserts.push({ table, row });
+          return builder;
+        },
+        update(row) {
+          mode = "update";
+          payload = row;
+          log.updates.push({ table, row });
+          return builder;
+        },
+        maybeSingle: () => Promise.resolve(single()),
+        single: () => Promise.resolve(single()),
+        then(resolve, reject) {
+          return Promise.resolve(many()).then(resolve, reject);
+        },
+      };
+      function row() {
+        return {
+          id: `${table}-${log.inserts.length}`,
+          created_at: new Date().toISOString(),
+          ...payload,
+        };
+      }
+      function single() {
+        if (mode === "insert") return { data: row(), error: null };
+        const list = fixtures[table] ?? [];
+        return { data: list[0] ?? null, error: null };
+      }
+      function many() {
+        if (mode !== "select") return { data: null, error: null };
+        return { data: fixtures[table] ?? [], error: null };
+      }
+      return builder;
+    },
+  };
+  return db;
+}
+
+const { handleJarvisTurn } = await import("../src/lib/jarvis/room.ts");
+
+await check(
+  "acceptance 1/3/5/6/13: room turn = Adam ↔ JARVIS, live state read, GitHub tool executed",
+  async () => {
+    const db = fakeDb({
+      agent_threads: [{ id: "thread-1" }],
+      agent_messages: [],
+      jarvis_knowledge_items: KNOWLEDGE,
+      jarvis_engineering_sessions: [
+        {
+          id: "s1",
+          status: "completed",
+          session_date: "2026-10-05",
+          intake_limit: 50,
+          accepted_count: 7,
+          summary: "Foundation bootstrap",
+          approval_required: false,
+          updated_at: "2026-10-05T03:00:00Z",
+        },
+      ],
+      jarvis_engineering_tasks: [
+        {
+          id: "00000000-0000-0000-0000-000000000001",
+          title: "Create JARVIS research ledger",
+          status: "completed",
+          created_at: "2026-10-05T03:00:00Z",
+          updated_at: "2026-10-05T03:00:00Z",
+        },
+      ],
+      jarvis_research_findings: [
+        {
+          id: "f1",
+          topic: "Durable queue for JARVIS",
+          classification: "test",
+          created_at: "2026-10-05T03:00:00Z",
+        },
+      ],
+    });
+    const modelBodies = [];
+    const githubCalls = [];
+    const realFetch = globalThis.fetch;
+    process.env.OPENAI_API_KEY = "test-openai";
+    process.env.JARVIS_GITHUB_TOKEN = "test-github";
+    globalThis.fetch = async (url, init = {}) => {
+      const u = String(url);
+      if (u.startsWith("https://api.openai.com")) {
+        const body = JSON.parse(init.body);
+        modelBodies.push(body);
+        if (modelBodies.length === 1)
+          return new Response(
+            JSON.stringify({
+              id: "r1",
+              output: [
+                {
+                  type: "function_call",
+                  name: "github__search_code",
+                  call_id: "c1",
+                  arguments: '{"query":"routeEmeryCapabilities"}',
+                },
+              ],
+            }),
+          );
+        return new Response(
+          JSON.stringify({
+            id: "r2",
+            output_text:
+              "routeEmeryCapabilities lives in src/lib/emery/capability-router.ts. No paid credits needed — I'll branch from main.",
+          }),
+        );
+      }
+      if (u.startsWith("https://api.github.com/search/code")) {
+        githubCalls.push(u);
+        return new Response(
+          JSON.stringify({
+            total_count: 1,
+            items: [
+              { path: "src/lib/emery/capability-router.ts", html_url: "https://github.com/x" },
+            ],
+          }),
+        );
+      }
+      return new Response("{}", { status: 404 });
+    };
+    try {
+      const turn = await handleJarvisTurn(
+        db,
+        "u1",
+        { id: "jarvis-agent", slug: "jarvis-engineer" },
+        "Jarvis, where does routeEmeryCapabilities live in the code? Then plan the fix.",
+      );
+      assert.equal(turn.error, null);
+      const messageInserts = db.log.inserts.filter((i) => i.table === "agent_messages");
+      assert.deepEqual(
+        messageInserts.map((i) => i.row.speaker),
+        ["user", "agent"],
+        "only Adam and JARVIS speak",
+      );
+      assert.ok(!messageInserts.some((i) => i.row.speaker === "emery"));
+      assert.equal(githubCalls.length, 1, "GitHub search executed");
+      const system = modelBodies[0].input[0].content;
+      assert.match(system, /LIVE JARVIS ENGINEERING STATE/);
+      assert.match(system, /Foundation bootstrap/);
+      assert.ok(modelBodies[0].tools.some((t) => t.name === "github__search_code"));
+      assert.ok(
+        !modelBodies[0].tools.some((t) => t.name === "lovable__ai_generate"),
+        "paid tool never exposed",
+      );
+      assert.equal(modelBodies[1].previous_response_id, "r1");
+      assert.equal(modelBodies[1].input[0].type, "function_call_output");
+      const trace = messageInserts[1].row.metadata.tool_trace;
+      assert.ok(trace.some((t) => t.tool === "github.search_code" && t.ok));
+      const receipts = db.log.inserts.filter(
+        (i) => i.table === "emery_runtime_events" && i.row.event_type === "jarvis_tool",
+      );
+      assert.ok(
+        receipts.some((r) => r.row.action === "github.search_code" && r.row.status === "ok"),
+      );
+      assert.ok(
+        !JSON.stringify(modelBodies).includes("test-github"),
+        "GitHub token never reaches the model",
+      );
+
+      // Paid-credit fixture: stops with an approval request and makes no model call.
+      modelBodies.length = 0;
+      const paid = await handleJarvisTurn(
+        db,
+        "u1",
+        { id: "jarvis-agent", slug: "jarvis-engineer" },
+        "Have Lovable AI generate the new settings page using credits.",
+      );
+      assert.equal(modelBodies.length, 0);
+      assert.equal(paid.agentMessage.metadata.gate, "paid_credit");
+      assert.match(paid.agentMessage.content, /approval/i);
+
+      // Error-intent prefetch pulls real telemetry/receipts/evaluations.
+      await handleJarvisTurn(
+        db,
+        "u1",
+        { id: "jarvis-agent", slug: "jarvis-engineer" },
+        "Jarvis, what errors has Emery had recently?",
+      );
+      const prefetchSystem = modelBodies[0].input[0].content;
+      assert.match(prefetchSystem, /supabase\.runtime_telemetry →/);
+      assert.match(prefetchSystem, /supabase\.execution_receipts →/);
+      assert.match(prefetchSystem, /supabase\.evaluations →/);
+    } finally {
+      globalThis.fetch = realFetch;
+      delete process.env.JARVIS_GITHUB_TOKEN;
+    }
+  },
+);
+
+const { buildEmerySelfAwarenessBlock } = await import("../src/lib/jarvis/runtime.ts");
+
+await check(
+  "acceptance 10/11: Emery version/upgrade answers come from emery_releases + live deployment",
+  async () => {
+    const baseline = {
+      release_name: "Pre-JARVIS production baseline",
+      production_commit_sha: "c00ddc55ff075fdcb9fed27e13819962bc65bb38",
+      deployed_at: "2026-10-05T02:42:25Z",
+      summary: "Authoritative production baseline",
+      deployment_verified: true,
+      known_limitations: [],
+    };
+    const db = fakeDb({
+      emery_releases: [baseline],
+      emery_runtime_events: [],
+      emery_execution_runs: [],
+      emery_improvement_backlog: [],
+    });
+    const fetcher = async (url) => {
+      const u = String(url);
+      if (u.includes("emery-build.json"))
+        return new Response(JSON.stringify({ buildId: "2026-10-05-phase9" }));
+      if (u.startsWith("https://emery-personal-ai.lovable.app"))
+        return new Response('<html><head><meta name="emery-build" content="x"/></head></html>', {
+          status: 200,
+        });
+      return new Response("{}", { status: 404 });
+    };
+    const block = await buildEmerySelfAwarenessBlock({
+      db,
+      userId: "u1",
+      agentId: null,
+      approvals: noApproval,
+      openAiKey: null,
+      researchModel: "m",
+      fetcher,
+      env: {},
+    });
+    assert.match(block, /c00ddc55ff/);
+    assert.match(block, /Pre-JARVIS production baseline/);
+    assert.match(block, /release_ledger/, "production commit source is reported");
+    assert.match(block, /do not|rather than inventing/i);
+  },
+);
+
+console.log(`JARVIS Run 1 end-to-end harness: complete (${passed} checks).`);
