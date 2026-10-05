@@ -30,7 +30,10 @@ export const Route = createFileRoute("/_authenticated/conversation")({
   head: () => ({
     meta: [
       { title: "Conversation — Emery" },
-      { name: "description", content: "Continue your private, persistent typed conversation with Emery." },
+      {
+        name: "description",
+        content: "Continue your private, persistent typed conversation with Emery.",
+      },
       { property: "og:title", content: "Conversation — Emery" },
       { property: "og:description", content: "A private ongoing conversation with Emery." },
       { property: "og:type", content: "website" },
@@ -186,7 +189,9 @@ function Conversation() {
   const [chatVisualState, setChatVisualState] = useState<EmeryVisualState>("idle");
   const [voiceVisualState, setVoiceVisualState] = useState<EmeryVisualState>("idle");
   const [voiceStudioState, setVoiceStudioState] = useState<VoiceStudioState | null>(null);
-  const [lastHpoRoute, setLastHpoRoute] = useState<{ routeId: string; action: string } | null>(null);
+  const [lastHpoRoute, setLastHpoRoute] = useState<{ routeId: string; action: string } | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -441,7 +446,8 @@ function Conversation() {
 
       const hpoRouteCommand =
         "hpoRouteCommand" in result
-          ? ((result as { hpoRouteCommand?: HpoRouteCommandSummary | null }).hpoRouteCommand ?? null)
+          ? ((result as { hpoRouteCommand?: HpoRouteCommandSummary | null }).hpoRouteCommand ??
+            null)
           : null;
       if (
         hpoRouteCommand?.performed &&
@@ -532,7 +538,7 @@ function Conversation() {
 
             <div className="mt-3 grid min-w-0 gap-3 2xl:grid-cols-[minmax(0,760px)_300px] 2xl:justify-center">
               <div className="min-w-0">
-                 <div className="mb-4 2xl:hidden">
+                <div className="mb-4 2xl:hidden">
                   <OperatingContextCard />
                 </div>
 
@@ -565,7 +571,9 @@ function Conversation() {
                   </div>
                 ) : messages.length === 0 ? (
                   <div className="flex min-h-[32vh] flex-col items-center justify-center py-8 text-center">
-                    <h2 className="text-2xl font-semibold tracking-[-0.03em]">Good to see you, Adam.</h2>
+                    <h2 className="text-2xl font-semibold tracking-[-0.03em]">
+                      Good to see you, Adam.
+                    </h2>
                     <p className="mt-2 max-w-sm text-sm leading-6 text-secondary-foreground">
                       What are we working through?
                     </p>
@@ -588,7 +596,7 @@ function Conversation() {
                     {messages.map((message) =>
                       message.role === "user" ? (
                         <div key={message.id} className="flex justify-end pl-8 sm:pl-20">
-                           <div className="emery-user-message max-w-[92%] rounded-lg border px-4 py-3 text-[15px] leading-6 text-foreground sm:max-w-[82%]">
+                          <div className="emery-user-message max-w-[92%] rounded-lg border px-4 py-3 text-[15px] leading-6 text-foreground sm:max-w-[82%]">
                             {message.attachments.length ? (
                               <div
                                 className={`grid gap-2 ${message.attachments.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}
@@ -612,7 +620,10 @@ function Conversation() {
                           </div>
                         </div>
                       ) : (
-                        <div key={message.id} className="group flex min-w-0 items-start gap-2.5 pr-1 sm:gap-3 sm:pr-10">
+                        <div
+                          key={message.id}
+                          className="group flex min-w-0 items-start gap-2.5 pr-1 sm:gap-3 sm:pr-10"
+                        >
                           <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md border border-live/20 bg-live/[0.045] sm:size-9 sm:rounded-xl">
                             <img
                               src={brainImage}
@@ -632,7 +643,11 @@ function Conversation() {
                 {pending ? (
                   <div className="mt-6 flex items-center gap-3" role="status" aria-live="polite">
                     <div className="flex size-9 items-center justify-center overflow-hidden rounded-xl border border-live/15 bg-live/[0.035]">
-                      <img src={brainImage} alt="" className="emery-blue-brain size-8 object-cover" />
+                      <img
+                        src={brainImage}
+                        alt=""
+                        className="emery-blue-brain size-8 object-cover"
+                      />
                     </div>
                     <div className="flex min-h-9 items-center gap-2 text-sm text-secondary-foreground">
                       <span>{chatVisualState === "syncing" ? "Syncing" : "Thinking"}</span>
@@ -689,7 +704,7 @@ function Conversation() {
           </Button>
         ) : null}
 
-         <div className="z-20 shrink-0 border-t border-border/55 bg-surface/90 px-3 pb-[max(.65rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl sm:px-5 md:px-7">
+        <div className="z-20 shrink-0 border-t border-border/55 bg-surface/90 px-3 pb-[max(.65rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl sm:px-5 md:px-7">
           {voiceStudioState ? (
             <CommandPanel variant="elevated" className="mx-auto mb-2 max-w-2xl p-3">
               {voiceStudioState.stage === "previewed" ? (
@@ -800,7 +815,7 @@ function Conversation() {
 
           <form
             onSubmit={send}
-             className="emery-composer mx-auto flex max-w-2xl items-end gap-1 rounded-lg border border-input/80 p-1.5 focus-within:border-live/45 sm:gap-1.5"
+            className="emery-composer mx-auto flex max-w-2xl items-end gap-1 rounded-lg border border-input/80 p-1.5 focus-within:border-live/45 sm:gap-1.5"
           >
             <input
               ref={fileInputRef}
@@ -851,7 +866,7 @@ function Conversation() {
             <Button
               type="submit"
               aria-label="Send"
-               className="emery-press size-11 shrink-0 rounded-md bg-primary shadow-[0_0_20px_color-mix(in_srgb,var(--primary)_16%,transparent)] disabled:opacity-30"
+              className="emery-press size-11 shrink-0 rounded-md bg-primary shadow-[0_0_20px_color-mix(in_srgb,var(--primary)_16%,transparent)] disabled:opacity-30"
               disabled={(!draft.trim() && selectedFiles.length === 0) || pending}
             >
               <ArrowUp className="size-[18px]" strokeWidth={2.2} />

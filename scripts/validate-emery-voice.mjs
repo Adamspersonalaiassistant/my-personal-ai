@@ -49,12 +49,12 @@ const checks = [
   ],
   [
     "Voice Studio creates actual provider audio previews",
-    files.studio.includes('https://api.openai.com/v1/audio/speech') &&
+    files.studio.includes("https://api.openai.com/v1/audio/speech") &&
       files.studio.includes('"gpt-4o-mini-tts"'),
   ],
   [
     "Candidates are validated against Realtime before use",
-    files.studio.includes('https://api.openai.com/v1/realtime/client_secrets') &&
+    files.studio.includes("https://api.openai.com/v1/realtime/client_secrets") &&
       files.studio.includes("verifyRealtimeCandidate"),
   ],
   [
@@ -71,8 +71,7 @@ const checks = [
   ],
   [
     "Voice design feedback persists across turns",
-    files.studio.includes("recordDesignNote") &&
-      files.studio.includes('"design_notes"'),
+    files.studio.includes("recordDesignNote") && files.studio.includes('"design_notes"'),
   ],
   [
     "Chat discloses AI-generated preview and requires explicit approval",

@@ -116,7 +116,11 @@ function QuickCapture() {
             aria-label="Send to Emery"
             className="emery-press mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-40"
           >
-            {sending ? <Loader2 className="size-4 animate-spin" /> : <ArrowRight className="size-4" />}
+            {sending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <ArrowRight className="size-4" />
+            )}
             {sending ? "Sending to Emery…" : "Send to Emery"}
           </button>
         </section>
