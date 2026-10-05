@@ -17,7 +17,8 @@
     "validate:orchestration": "node --experimental-strip-types scripts/validate-emery-orchestration.mjs",
     "validate:hpo-account": "node scripts/validate-hpo-account-experience.mjs",
     "validate:hpo-activity": "node scripts/validate-hpo-activity-workflow.mjs",
-    "validate:phase9": "node scripts/validate-emery-phase9-redesign.mjs"
+    "validate:phase9": "node scripts/validate-emery-phase9-redesign.mjs",
+    "check:env-safety": "node scripts/check-env-safety.mjs"
   },
   "overrides": {
     "rolldown": "1.2.1"
