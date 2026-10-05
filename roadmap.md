@@ -17,4 +17,4 @@
 - [x] Make `/chat` the Core-first dashboard and preserve the typed conversation at `/conversation`.
 - [x] Add an ephemeral dashboard Voice mode with one verified opening brief.
 - [x] Redirect contextual handoffs to the typed conversation while preserving Emery navigation and PWA launch.
-- [ ] Validate routes, Voice, responsive layouts, and protected HPO/Calendar navigation without publishing.
+- [x] Validate routes, Voice, responsive layouts, and protected HPO/Calendar navigation without publishing. Authenticated screen and live microphone checks remain unavailable for the external unmanaged sign-in.
