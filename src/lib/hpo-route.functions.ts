@@ -2595,6 +2595,12 @@ async function applySavedHpoNoteIntelligence(input: {
     officeName: input.saved.officeName || "HPO office",
     timezone,
   });
+  if (analysis.nextAction && !analysis.nextActionDueAt) {
+    analysis.nextActionDueAt = followupDueFromNote(
+      String(input.saved.note ?? ""),
+      timezone,
+    );
+  }
 
   const savedStopMetadata =
     input.saved.stop?.metadata &&
@@ -3357,10 +3363,40 @@ export const addHpoRouteStopNote = createServerFn({ method: "POST" })
       sourceChannel: data.sourceChannel,
     });
 
+    let routeStatus: string | null = null;
+    try {
+      const { data: currentStop, error: currentStopError } = await db
+        .from("hpo_route_stops")
+        .select("id,status,visited_at")
+        .eq("id", saved.stopId)
+        .eq("user_id", context.userId)
+        .maybeSingle();
+      if (currentStopError) throw currentStopError;
+      if (currentStop && ["planned", "arrived"].includes(String(currentStop.status))) {
+        const nowIso = new Date().toISOString();
+        const { error: visitError } = await db
+          .from("hpo_route_stops")
+          .update({
+            status: "visited",
+            visited_at: currentStop.visited_at ?? saved.savedAt ?? nowIso,
+            updated_at: nowIso,
+          })
+          .eq("id", saved.stopId)
+          .eq("user_id", context.userId);
+        if (visitError) throw visitError;
+      }
+      if (saved.routeId) {
+        routeStatus = await syncRouteStatus(db, context.userId, saved.routeId);
+      }
+    } catch (error) {
+      console.error("Saved HPO note visit status update failed", error);
+    }
+
     const apiKey = process.env["OPENAI_API_KEY"];
     if (!apiKey) {
       return {
         ...saved,
+        routeStatus,
         intelligence: {
           analyzed: false,
           nextAction: null,
@@ -3380,11 +3416,12 @@ export const addHpoRouteStopNote = createServerFn({ method: "POST" })
         idempotencyKey,
         saved,
       });
-      return { ...saved, intelligence };
+      return { ...saved, routeStatus, intelligence };
     } catch (error) {
       console.error("Saved HPO note intelligence failed", error);
       return {
         ...saved,
+        routeStatus,
         intelligence: {
           analyzed: false,
           nextAction: null,
