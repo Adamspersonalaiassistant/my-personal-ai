@@ -117,8 +117,8 @@ function HpoWorkspace() {
   const [moreLoading, setMoreLoading] = useState(false);
   const [revision, setRevision] = useState(0);
   const [plannerContext, setPlannerContext] = useState<{ routeId: string | null; stopId: string | null }>({ routeId: null, stopId: null });
-  const [mapRouteId, setMapRouteId] = useState<string | null>(requestedRouteId);
-  const [mapContextRouteId, setMapContextRouteId] = useState<string | null>(requestedRouteId);
+  const [mapRouteId, setMapRouteId] = useState<string | null>(null);
+  const [mapContextRouteId, setMapContextRouteId] = useState<string | null>(null);
   const [mapRouteDate, setMapRouteDate] = useState<string | null>(null);
   const [mapOpenBuilder, setMapOpenBuilder] = useState(false);
   const [plannerFocusDate, setPlannerFocusDate] = useState<string | null>(null);
@@ -235,7 +235,9 @@ function HpoWorkspace() {
                 focusRouteId={plannerFocusRouteId}
                 onRouteContextChange={handlePlannerRouteContextChange}
                 onOpenMap={({ routeDate, routeId, build }) => {
-                  setMapRouteId(routeId ?? null);
+                  void routeId;
+                  setMapRouteId(null);
+                  setMapContextRouteId(null);
                   setMapRouteDate(routeDate);
                   setMapOpenBuilder(Boolean(build));
                   setView("map");
@@ -245,10 +247,10 @@ function HpoWorkspace() {
             {view === "map" ? (
               <HpoRoutePlanner
                 key={`map-${revision}-${mapRouteId ?? "none"}-${mapRouteDate ?? "none"}-${mapOpenBuilder ? "build" : "browse"}`}
-                initialRouteId={mapRouteId}
+                initialRouteId={null}
                 initialRouteDate={mapRouteDate}
                 openBuilderOnMount={mapOpenBuilder}
-                onRouteContextChange={setMapContextRouteId}
+                onRouteContextChange={() => setMapContextRouteId(null)}
                 onRoutePlanned={({ routeId, routeDate }) => {
                   setMapRouteId(null);
                   setMapRouteDate(null);
