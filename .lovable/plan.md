@@ -67,3 +67,23 @@ Calendar and existing Personal/Projects/Meetings/Agents/Memories surfaces should
 
 ## Release gate
 Finished means: one recognizable Emery Core across Chat/Voice; same conversation/actions/memory; HPO Planner/Maps/Accounts/Activity unchanged functionally; Leaflet retained; CRM/history/notes/follow-ups intact; Calendar intact; one responsive iPhone/computer experience; no design-introduced regressions.
+
+## Voice-first Emery home workflow
+
+### Build
+- Keep `/chat` as the Emery navigation and PWA destination, but replace its transcript with a responsive voice-first command dashboard.
+- Move the existing typed conversation UI intact to `/conversation`; reuse its current server calls, history, attachments, composer, state handling, and storage.
+- Point contextual Emery handoffs and prefills to `/conversation`, while ordinary Emery navigation continues to `/chat`.
+- Extend `EmeryVoiceControl` with a presentation-only Core variant and bounded dashboard options: ephemeral transcript persistence and one verified opening briefing after connection. Preserve existing icon behavior by default.
+- Compose the dashboard around the existing animated Core, truthful live state, Current Context, and restrained links to Chat, HPO, Calendar, Memories, Projects, Meetings, and Settings.
+- Update the matching app build markers; keep the installed-app start URL at `/chat`.
+
+### Technical boundaries
+- Do not create a new conversation, memory, voice runtime, or data path.
+- Dashboard voice may skip transcript writes, but all tools continue through existing canonical actions.
+- The opening brief is an ephemeral Realtime instruction sent once after the existing connection succeeds; it must require verified context and avoid invented status.
+- Do not alter HPO workflows, Leaflet, server intelligence, schema, or production data.
+
+### Verification
+- Check route metadata, typed-conversation continuity, handoff routing, accessible Core controls, mobile safe areas and overflow at 390×844 and 430×932, and desktop at 1440×900.
+- Run typecheck, Phase 9, orchestration, voice and natural-voice validators, focused lint, production/preview diagnostics, and browser navigation checks.
