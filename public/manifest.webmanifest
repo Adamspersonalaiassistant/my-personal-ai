@@ -29,7 +29,7 @@
       "name": "Talk to Emery",
       "short_name": "Emery",
       "description": "Continue the same Emery conversation.",
-      "url": "/chat?source=pwa-shortcut",
+      "url": "/conversation?source=pwa-shortcut",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {

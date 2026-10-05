@@ -26,7 +26,7 @@ import { getMainConversationPage } from "@/lib/chat-history.functions";
 import { deviceSourceMetadata } from "@/lib/emery/device-continuity";
 import { sendEmeryMessage } from "@/lib/emery.functions";
 
-export const Route = createFileRoute("/_authenticated/chat")({
+export const Route = createFileRoute("/_authenticated/conversation")({
   head: () => ({
     meta: [
       { title: "Emery — Personal Intelligence" },

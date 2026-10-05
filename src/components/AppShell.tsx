@@ -50,7 +50,7 @@ const moreItems = [
 
 const RETURN_KEY = "emery:return";
 const PREFILL_KEY = "emery:prefill";
-const EMERY_BUILD_ID = "2026-10-04-phase9-mobile-jarvis-v1";
+const EMERY_BUILD_ID = "2026-10-05-phase9-voice-first-home-v1";
 
 export function AppShell({ title, children, padded = true, askEmery }: { title: string; children: ReactNode; padded?: boolean; askEmery?: string }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
