@@ -238,8 +238,10 @@ export type KnowledgeCandidate = {
   signal: string;
 };
 
+// In Emery's main conversation only explicit product/engineering statements
+// qualify (e.g. "Emery should…", "the Planner tab…"), not everyday life plans.
 const ENGINEERING_SUBJECT =
-  /\b(emery|jarvis|app|feature|build|ui|screen|voice|chat|memory|planner|maps?|accounts?|activity|hpo|crm|route|calendar|notifications?|agent|engineer|code|deploy|release|lovable|github|supabase|test|workflow)\b/i;
+  /\b(emery|jarvis|(the|this) app|feature|ui|screen|tab|button|interface|engineer\w*|code|deploy\w*|release|lovable|github|supabase|(planner|maps|accounts|activity|calendar|voice|chat|memory) (tab|screen|view|mode|feature|system))\b/i;
 
 const RULES: Array<{
   category: KnowledgeCategory;

@@ -291,6 +291,18 @@ await check(
     assert.ok(!found.some((c) => /hunter22/.test(c.content)));
     assert.ok(sensitiveReason("patient John DOB 01/02/1960"));
     assert.equal(
+      extractKnowledgeCandidates("I prefer the route through Main Street on Mondays.", {
+        requireEngineeringSubject: true,
+      }).length,
+      0,
+    );
+    assert.equal(
+      extractKnowledgeCandidates("Emery should never hide the Activity tab from me.", {
+        requireEngineeringSubject: true,
+      }).length,
+      1,
+    );
+    assert.equal(
       extractKnowledgeCandidates("Pick up milk from the store today please.", {
         requireEngineeringSubject: true,
       }).length,
