@@ -1,3 +1,4 @@
+import { HpoFollowupsCard } from "@/components/HpoFollowupsCard";
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useServerFn } from "@tanstack/react-start";
@@ -228,6 +229,15 @@ function HpoWorkspace() {
                 </Button>
               </div>
             )}
+            {view === "planner" ? (
+              <HpoFollowupsCard
+                refreshKey={revision}
+                onOpenAccount={(id) => {
+                  setNoteSavedAccount(null);
+                  setSelected(id);
+                }}
+              />
+            ) : null}
             {view === "planner" ? (
               <HpoWeeklyPlanner
                 key={`planner-${revision}-${plannerFocusDate ?? "none"}-${plannerFocusRouteId ?? "none"}`}

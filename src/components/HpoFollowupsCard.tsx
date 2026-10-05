@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { useNavigate } from "@tanstack/react-router";
 import { BellRing, CalendarDays, Check, ChevronDown, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,11 +28,16 @@ function dueLabel(key: string | null) {
   });
 }
 
-export function HpoFollowupsCard({ refreshKey = 0 }: { refreshKey?: number }) {
+export function HpoFollowupsCard({
+  refreshKey = 0,
+  onOpenAccount,
+}: {
+  refreshKey?: number;
+  onOpenAccount: (accountId: string) => void;
+}) {
   const load = useServerFn(listHpoFollowups);
   const complete = useServerFn(completeHpoFollowup);
   const setDate = useServerFn(setHpoFollowupDate);
-  const navigate = useNavigate();
   const [data, setData] = useState<HpoFollowupList | null>(null);
   const [open, setOpen] = useState<boolean | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -165,12 +169,7 @@ export function HpoFollowupsCard({ refreshKey = 0 }: { refreshKey?: number }) {
                               type="button"
                               variant="outline"
                               className="min-h-11 gap-1 px-1 text-xs"
-                              onClick={() =>
-                                void navigate({
-                                  to: "/hpo",
-                                  search: { view: "accounts", accountId: item.accountId } as never,
-                                })
-                              }
+                              onClick={() => onOpenAccount(item.accountId)}
                             >
                               <ExternalLink className="size-4" /> Open
                             </Button>
