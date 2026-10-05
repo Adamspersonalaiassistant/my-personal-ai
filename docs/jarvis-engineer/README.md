@@ -17,6 +17,11 @@ Its job is to reduce Adam's ongoing engineering burden by turning Emery usage, f
 9. `08-ADAM-REQUEST-PATTERNS.md`
 10. `09-ACCEPTANCE-TESTS.md`
 11. `10-SOURCE-INDEX.md`
+12. `12-BOOTSTRAP-STATUS.md`
+13. `13-KNOWLEDGE-INGESTION.md`
+14. `15-FREE-FIRST-TOOL-AND-CREDIT-POLICY.md`
+
+`11-DATABASE-FOUNDATION.sql` and `14-KNOWLEDGE-STORE-SCHEMA.sql` are schema records from the bootstrap and must be reconciled with the repository's canonical Supabase migration workflow before the autonomy implementation is considered finished.
 
 ## Standing instruction to future engineering agents
 
@@ -25,3 +30,5 @@ Read this folder before performing broad architecture work on Emery.
 Do not re-audit or re-research the product history unless the active task requires evidence not contained here or in current source/runtime state.
 
 Preserve working systems, create checkpoints early, and distinguish code-complete, tested, deployed and verified-live states.
+
+Default to the free/direct engineering path. Intentionally using paid Lovable/AI implementation credits requires Adam's explicit approval after JARVIS explains why the free route is insufficient and what the expected value/cost is.
