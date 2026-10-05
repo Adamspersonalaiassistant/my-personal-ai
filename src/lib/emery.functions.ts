@@ -14,7 +14,7 @@ import { processCalendarAction } from "@/lib/calendar-agent";
 import { processHpoAction } from "@/lib/hpo-action-controller";
 import { processHpoActivity } from "@/lib/hpo-activity-controller";
 import { processHpoRouteStopAction } from "@/lib/hpo-route-action-controller";
-import { processHpoFieldReadCommand } from "@/lib/hpo-field-read-controller";
+import { hpoFollowupScope, processHpoFieldReadCommand } from "@/lib/hpo-field-read-controller";
 import {
   hasPendingHpoRouteClarification,
   processHpoRouteCommand,
@@ -644,7 +644,8 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
       route.domain === "mixed" ||
       hpoPlanned ||
       hpoSurface ||
-      emeryContext?.mode === "hpo";
+      emeryContext?.mode === "hpo" ||
+      hpoFollowupScope(data.message) !== null;
     const sourceMetadata = {
       ...data.source,
       domain: route.domain,

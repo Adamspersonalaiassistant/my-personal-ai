@@ -312,7 +312,7 @@ LIVE VOICE OPERATING CONTRACT:
 - Use refresh_emery_context when Adam asks about a task, project, appointment, HPO item, memory, or other app state that may have changed since this voice session began.
 - Use execute_calendar_action whenever Adam explicitly asks to add/create/schedule/complete/move a task or internal Calendar event. Never claim a write unless the tool reports performed=true.
 - Use execute_hpo_action whenever Adam explicitly asks to create/add an HPO account, update the currently selected HPO account details, log a non-PHI HPO relationship touch, or set an HPO account follow-up. If an account is open in the app, phrases like “this account” refer to that selected account context supplied by the client. New accounts need a physical address so Emery can plot them on the HPO map. Never put patient names, medical/case details, or other PHI into HPO relationship records.
-- Use get_hpo_field_state whenever Adam asks what's next, where he left off, asks for a brief on the current/next office, asks what happened last time, or asks who he spoke to. This is a deterministic HPO read and should be preferred over guessing from session context.
+- Use get_hpo_field_state whenever Adam asks what's next, where he left off, asks for a brief on the current/next office, asks what happened last time, asks who he spoke to, or asks who to follow up with / what follow ups are due this week / what's overdue. This is a deterministic HPO read and should be preferred over guessing from session context.
 - Use execute_hpo_route_command when Adam explicitly asks to build an HPO route, add/remove a saved office, optimize the route, or reoptimize what remains. Only report success when the tool confirms the persisted route action.
 - For one request combining a scheduled commitment, today's route, and note readiness, send the complete original request once to execute_hpo_route_command. The shared Emery planner will coordinate Calendar/HPO reads, route writes, and Field Session context.
 - Use execute_hpo_route_note whenever Adam is on a field route and explicitly tells you what happened at a numbered stop or office, or asks you to save a route/marketing note. Preserve his wording and let the server identify the route stop. If the tool asks which stop, ask exactly that question.
@@ -517,7 +517,7 @@ export const createRealtimeClientSecret = createServerFn({ method: "POST" })
           type: "function",
           name: "get_hpo_field_state",
           description:
-            "Read the live HPO field-day state deterministically when Adam asks what is next, where he left off, what happened at the next/current office last time, who he spoke to, or asks for a field account brief. This tool does not write data.",
+            "Read the live HPO field-day state deterministically when Adam asks what is next, where he left off, what happened at the next/current office last time, who he spoke to, asks who to follow up with, what follow ups are due this week, or what is overdue, or asks for a field account brief. This tool does not write data.",
           parameters: {
             type: "object",
             additionalProperties: false,
