@@ -34,12 +34,12 @@ export const Route = createFileRoute("/_authenticated/chat")({
 
 const workspaces = [
   { to: "/conversation", label: "Open Chat", detail: "Persistent conversation and history", icon: MessageCircle, primary: true },
-  { to: "/hpo", label: "HPO", detail: "Planner, Maps, Accounts, Activity", icon: BriefcaseBusiness },
-  { to: "/calendar", label: "Calendar", detail: "Tasks and schedule", icon: CalendarDays },
-  { to: "/memories", label: "Memories", detail: "What Emery carries forward", icon: Brain },
-  { to: "/projects", label: "Projects", detail: "Outcomes and next actions", icon: FolderKanban },
-  { to: "/meetings", label: "Meetings", detail: "History and conversation context", icon: UsersRound },
-  { to: "/settings", label: "Settings", detail: "Voice, iPhone, and system controls", icon: Settings },
+  { to: "/hpo", label: "HPO", detail: "Planner, Maps, Accounts, Activity", icon: BriefcaseBusiness, primary: false },
+  { to: "/calendar", label: "Calendar", detail: "Tasks and schedule", icon: CalendarDays, primary: false },
+  { to: "/memories", label: "Memories", detail: "What Emery carries forward", icon: Brain, primary: false },
+  { to: "/projects", label: "Projects", detail: "Outcomes and next actions", icon: FolderKanban, primary: false },
+  { to: "/meetings", label: "Meetings", detail: "History and conversation context", icon: UsersRound, primary: false },
+  { to: "/settings", label: "Settings", detail: "Voice, iPhone, and system controls", icon: Settings, primary: false },
 ] as const;
 
 function EmeryHome() {
