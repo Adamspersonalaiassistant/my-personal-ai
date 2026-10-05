@@ -1285,12 +1285,14 @@ export function HpoRoutePlanner({
   initialRouteId = null,
   initialRouteDate = null,
   openBuilderOnMount = false,
+  onRoutePlanned,
 }: {
   onNavigateHpo?: ((view: "planner" | "map" | "accounts" | "activity") => void) | undefined;
   onRouteContextChange?: ((routeId: string | null) => void) | undefined;
   initialRouteId?: string | null;
   initialRouteDate?: string | null;
   openBuilderOnMount?: boolean;
+  onRoutePlanned?: ((result: { routeId: string; routeDate: string }) => void) | undefined;
 }) {
   const load = useServerFn(getHpoRoutePlanner);
   const createRoute = useServerFn(createHpoRoute);
@@ -1326,6 +1328,10 @@ export function HpoRoutePlanner({
   const [mapPreparedOnce, setMapPreparedOnce] = useState(false);
   const [mapAccountDetailId, setMapAccountDetailId] = useState<string | null>(null);
   const [offlineMapOffices, setOfflineMapOffices] = useState<MapOffice[]>([]);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [showDateStep, setShowDateStep] = useState(false);
+  const [planDate, setPlanDate] = useState(initialRouteDate ?? "");
+  const [dateError, setDateError] = useState<string | null>(null);
 
   async function refresh(preferredRouteId?: string | null) {
     const result = (await load({})) as PlannerData;
@@ -1470,6 +1476,51 @@ export function HpoRoutePlanner({
     if (!mapOffices.length) return;
     void saveHpoOfficeSnapshots(mapOffices).catch(() => undefined);
   }, [mapOffices]);
+
+  function cancelSelection() {
+    setSelectionMode(false);
+    setMapSelectedKeys([]);
+    setShowDateStep(false);
+    setDateError(null);
+  }
+
+  async function createRouteFromSelection() {
+    if (!data) return;
+    const routeDate = planDate || data.today;
+    const offices = mapSelectedKeys
+      .map((key) => mapOffices.find((office) => office.key === key))
+      .filter(Boolean) as MapOffice[];
+    if (!offices.length) return;
+    setWorking(true);
+    setDateError(null);
+    try {
+      const result = await createRoute({
+        data: {
+          routeDate,
+          stops: offices.map((office) => ({
+            accountId: office.accountId,
+            prospectId: office.prospectId,
+            officeName: office.officeName,
+            address: office.address,
+            city: office.city,
+            latitude: office.latitude,
+            longitude: office.longitude,
+          })) as any,
+        },
+      });
+      try {
+        await optimize({ data: { routeId: result.routeId } });
+      } catch {
+        // Route is saved; Planner shows its optimization state.
+      }
+      cancelSelection();
+      onRoutePlanned?.({ routeId: result.routeId, routeDate });
+    } catch (cause) {
+      setDateError(cause instanceof Error ? cause.message : "Couldn't create route.");
+    } finally {
+      setWorking(false);
+    }
+  }
 
   function toggleMapRouteStop(office: MapOffice) {
     setSelectedMapOfficeKey(office.key);
@@ -1737,31 +1788,122 @@ export function HpoRoutePlanner({
     <div id="hpo-route-planner" className="relative h-full min-h-0 w-full overflow-hidden">
       {data || mapOffices.length ? (
         <HpoLeafletMap
-          routeOnly={Boolean(activeRoute)}
+          routeOnly={false}
           offices={mapOffices}
-          selectedKeys={mapSelectedKeys}
+          selectedKeys={selectionMode ? mapSelectedKeys : []}
           selectedOfficeKey={selectedMapOfficeKey}
-          route={activeRoute}
-          onSelectOffice={setSelectedMapOfficeKey}
+          route={null}
+          onSelectOffice={(key) => {
+            if (selectionMode) {
+              const office = mapOffices.find((item) => item.key === key);
+              if (office) toggleMapRouteStop(office);
+              return;
+            }
+            setSelectedMapOfficeKey(key);
+          }}
           onOpenAccount={setMapAccountDetailId}
-          onToggleRouteStop={toggleMapRouteStop}
-          onBuildRoute={startRouteFromMap}
-          onOptimizeRoute={
-            activeRoute
-              ? () => {
-                  const hasCompleted = activeRoute.stops.some((stop) =>
-                    terminalStatuses.has(String(stop.status)),
-                  );
-                  if (hasCompleted) void reoptimizeActiveRemaining(activeRoute.id);
-                  else void optimizeActive(activeRoute.id);
-                }
-              : undefined
-          }
+          onToggleRouteStop={(office) => {
+            if (!selectionMode) setSelectionMode(true);
+            toggleMapRouteStop(office);
+          }}
+          onBuildRoute={() => setShowDateStep(true)}
           optimizing={optimizing}
           preparing={mapPreparing}
           onRefreshPins={() => void refreshOfficePins()}
           onNavigateHpo={onNavigateHpo}
         />
+      ) : null}
+
+      {data ? (
+        <div className="pointer-events-none absolute inset-x-3 top-[4.25rem] z-[40] flex justify-center">
+          {selectionMode ? (
+            <div className="pointer-events-auto flex items-center gap-2 rounded-2xl border border-primary/40 bg-background/95 p-1.5 shadow-xl backdrop-blur-xl">
+              <button
+                type="button"
+                onClick={cancelSelection}
+                className="min-h-11 rounded-xl px-3 text-xs font-semibold text-muted-foreground hover:bg-muted"
+              >
+                Cancel
+              </button>
+              <span className="px-1 text-xs font-semibold text-foreground" aria-live="polite">
+                {mapSelectedKeys.length} selected
+              </span>
+              <button
+                type="button"
+                disabled={!mapSelectedKeys.length}
+                onClick={() => setShowDateStep(true)}
+                className="min-h-11 rounded-xl bg-primary px-4 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+              >
+                Done
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setMapSelectedKeys([]);
+                setSelectionMode(true);
+              }}
+              className="pointer-events-auto min-h-11 rounded-2xl border border-primary/40 bg-background/95 px-4 text-xs font-semibold text-foreground shadow-xl backdrop-blur-xl"
+            >
+              Select Offices
+            </button>
+          )}
+        </div>
+      ) : null}
+
+      {showDateStep && data ? (
+        <div
+          className="fixed inset-0 z-[2500] flex items-end justify-center bg-slate-950/55 backdrop-blur-[3px]"
+          onClick={() => !working && setShowDateStep(false)}
+          role="presentation"
+        >
+          <div
+            className="emery-sheet-in w-full max-w-md rounded-t-[1.7rem] border-t border-border/55 bg-background px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Choose route day"
+          >
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-border/80" />
+            <h2 className="text-base font-semibold text-foreground">
+              Which day do you want to plan this route for?
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {mapSelectedKeys.length} offices selected. The route is saved and optimized in Planner.
+            </p>
+            <input
+              type="date"
+              value={planDate || data.today}
+              onChange={(event) => setPlanDate(event.target.value)}
+              className="mt-3 min-h-12 w-full rounded-xl border border-border bg-background px-3 text-base text-foreground"
+              aria-label="Route date"
+            />
+            {dateError ? (
+              <p className="mt-2 text-xs text-destructive" role="alert">
+                {dateError}
+              </p>
+            ) : null}
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={working}
+                onClick={() => setShowDateStep(false)}
+                className="min-h-12 rounded-xl border border-border text-sm font-semibold text-foreground"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                disabled={working || !mapSelectedKeys.length}
+                onClick={() => void createRouteFromSelection()}
+                className="min-h-12 rounded-xl bg-primary text-sm font-semibold text-primary-foreground disabled:opacity-50"
+              >
+                {working ? "Building…" : "Create Route"}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {showBuilder && data ? (
