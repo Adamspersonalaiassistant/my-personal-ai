@@ -249,6 +249,14 @@ function HpoWorkspace() {
                 initialRouteDate={mapRouteDate}
                 openBuilderOnMount={mapOpenBuilder}
                 onRouteContextChange={setMapContextRouteId}
+                onRoutePlanned={({ routeId, routeDate }) => {
+                  setMapRouteId(null);
+                  setMapRouteDate(null);
+                  setMapOpenBuilder(false);
+                  setPlannerFocusDate(routeDate);
+                  setPlannerFocusRouteId(routeId);
+                  setView("planner");
+                }}
                 onNavigateHpo={(next) => {
                   setMapOpenBuilder(false);
                   setView(next);
