@@ -6,7 +6,7 @@ const files = {
   realtime: readFileSync("src/lib/voice.functions.ts", "utf8"),
   control: readFileSync("src/components/EmeryVoiceControl.tsx", "utf8"),
   guard: readFileSync("src/lib/voice-session-guard.ts", "utf8"),
-  chat: readFileSync("src/routes/_authenticated/chat.tsx", "utf8"),
+  chat: readFileSync("src/routes/_authenticated/conversation.tsx", "utf8"),
   dominicanReference: readFileSync("src/lib/dominican-voice-reference.ts", "utf8"),
 };
 

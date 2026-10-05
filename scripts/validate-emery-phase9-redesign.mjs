@@ -8,6 +8,7 @@ function read(path) {
 const styles = read("src/styles.css");
 const blueTheme = read("src/blue-theme.css");
 const chat = read("src/routes/_authenticated/chat.tsx");
+const conversation = read("src/routes/_authenticated/conversation.tsx");
 const shell = read("src/components/AppShell.tsx");
 const voice = read("src/components/EmeryVoiceControl.tsx");
 const hpo = read("src/routes/_authenticated/hpo.tsx");
@@ -39,13 +40,15 @@ assert(styles.includes("prefers-reduced-transparency: reduce"), "Phase 9 must pr
 assert(styles.includes("emery-panel-glass"), "shared Emery panel treatment must exist");
 assert(styles.includes("emery-live-glow"), "live intelligence glow utility must exist");
 
-assert(chat.includes("<EmeryPresence"), "Chat must render the Emery Core presence");
-assert(chat.includes("onVisualStateChange={setVoiceVisualState}"), "Chat must consume real Voice visual state");
-assert(chat.includes('setChatVisualState("syncing")') || chat.includes('selectedFiles.length ? "syncing" : "thinking"'), "Chat attachment sync must drive truthful Core state");
-assert(chat.includes('setChatVisualState("success")'), "Chat completion must expose a bounded success state");
-assert(chat.includes("deviceSourceMetadata()"), "Phase 8 device continuity must remain in Chat");
-assert(chat.includes("sendEmeryMessage"), "Chat must preserve the canonical Emery send path");
-assert(chat.includes("getMainConversationPage"), "Chat must preserve the one main conversation history");
+assert(chat.includes('variant="core"'), "Emery home must render the Voice-connected Core presence");
+assert(chat.includes("onVisualStateChange={setVoiceState}"), "Emery home must consume real Voice visual state");
+assert(conversation.includes("<EmeryPresence"), "Conversation must retain the Emery Core presence");
+assert(conversation.includes("onVisualStateChange={setVoiceVisualState}"), "Conversation must consume real Voice visual state");
+assert(conversation.includes('setChatVisualState("syncing")') || conversation.includes('selectedFiles.length ? "syncing" : "thinking"'), "Conversation attachment sync must drive truthful Core state");
+assert(conversation.includes('setChatVisualState("success")'), "Conversation completion must expose a bounded success state");
+assert(conversation.includes("deviceSourceMetadata()"), "Phase 8 device continuity must remain in Conversation");
+assert(conversation.includes("sendEmeryMessage"), "Conversation must preserve the canonical Emery send path");
+assert(conversation.includes("getMainConversationPage"), "Conversation must preserve the one main conversation history");
 
 assert(voice.includes("visualStateForVoiceStatus"), "Voice must map real Realtime state into the Emery Core");
 assert(voice.includes("visualStateForTool"), "Voice tool activity must drive truthful visual states");
