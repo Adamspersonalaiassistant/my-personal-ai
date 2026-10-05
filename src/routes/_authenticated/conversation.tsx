@@ -29,15 +29,15 @@ import { sendEmeryMessage } from "@/lib/emery.functions";
 export const Route = createFileRoute("/_authenticated/conversation")({
   head: () => ({
     meta: [
-      { title: "Emery — Personal Intelligence" },
-      { name: "description", content: "Continue your private, ongoing conversation with Emery." },
-      { property: "og:title", content: "Emery — Personal Intelligence" },
+      { title: "Conversation — Emery" },
+      { name: "description", content: "Continue your private, persistent typed conversation with Emery." },
+      { property: "og:title", content: "Conversation — Emery" },
       { property: "og:description", content: "A private ongoing conversation with Emery." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  component: Chat,
+  component: Conversation,
 });
 
 type Attachment = {
@@ -177,7 +177,7 @@ function SelectedFileCard({ file, onRemove }: { file: File; onRemove: () => void
   );
 }
 
-function Chat() {
+function Conversation() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -504,7 +504,7 @@ function Chat() {
         : chatVisualState;
 
   return (
-    <AppShell title="Emery" padded={false}>
+    <AppShell title="Conversation" padded={false}>
       <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-background">
         <div
           ref={scrollRef}

@@ -24,7 +24,7 @@ function Personal() {
         <div className="flex items-center gap-2 text-primary"><Heart className="size-4"/><p className="emery-kicker">Personal workspace</p></div>
         <h1 className="mt-2 text-xl font-semibold tracking-tight">Life outside HPO, with the same Emery.</h1>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">Family, plans, personal projects, routines, goals and appointments live here. You never need to choose this tab before talking; Emery routes natural conversation behind the scenes.</p>
-        <Link to="/chat" className="emery-press mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground"><MessageCircle className="size-4"/>Talk to Emery</Link>
+        <Link to="/conversation" className="emery-press mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground"><MessageCircle className="size-4"/>Talk to Emery</Link>
       </section>
       <section className="grid gap-3 sm:grid-cols-3">
         <Card icon={CheckSquare} label="Personal tasks" value={personalTasks.length} to="/tasks" />

@@ -49,7 +49,7 @@ function QuickCapture() {
       if (!("reply" in result) || !result.reply) {
         throw new Error(("error" in result && result.error) || "Emery couldn't process that.");
       }
-      await navigate({ to: "/chat" });
+      await navigate({ to: "/conversation" });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Couldn't reach Emery.");
       setSending(false);

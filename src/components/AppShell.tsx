@@ -56,7 +56,9 @@ export function AppShell({ title, children, padded = true, askEmery }: { title: 
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const returnTo = resolveEmeryReturn(pathname);
   const prefill = normalizePrefill(askEmery);
-  const onChat = pathname.startsWith("/chat");
+  const onDashboard = pathname === "/chat";
+  const onConversation = pathname.startsWith("/conversation");
+  const onEmerySurface = onDashboard || onConversation;
   const onHpo = pathname.startsWith("/hpo");
   const [lastReturn, setLastReturn] = useState<EmeryReturnPath | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -64,10 +66,10 @@ export function AppShell({ title, children, padded = true, askEmery }: { title: 
   const moreActive = moreItems.some((item) => pathname.startsWith(item.to));
 
   useEffect(() => {
-    if (!onChat || typeof window === "undefined") return;
+    if (!onConversation || typeof window === "undefined") return;
     const stored = window.sessionStorage.getItem(RETURN_KEY);
     setLastReturn(isEmeryReturnPath(stored) ? stored : null);
-  }, [onChat]);
+  }, [onConversation]);
 
   useEffect(() => setMoreOpen(false), [pathname]);
 
@@ -132,7 +134,7 @@ export function AppShell({ title, children, padded = true, askEmery }: { title: 
       <div className="emery-grid pointer-events-none absolute inset-0 z-0 opacity-70" aria-hidden="true" />
       <aside className="relative z-20 hidden min-h-0 overflow-hidden border-r border-sidebar-border bg-sidebar/95 md:flex md:flex-col">
         <div className="flex shrink-0 items-center gap-3 px-4 pb-5 pt-5">
-          <Link to="/chat" onClick={rememberEmeryHandoff} className="relative flex size-10 items-center justify-center overflow-hidden rounded-xl border border-live/20 bg-live/[0.04] shadow-[0_0_24px_rgba(34,211,238,.06)] focus-visible:ring-2 focus-visible:ring-ring" aria-label="Open Emery">
+          <Link to="/chat" className="relative flex size-10 items-center justify-center overflow-hidden rounded-xl border border-live/20 bg-live/[0.04] shadow-[0_0_24px_rgba(34,211,238,.06)] focus-visible:ring-2 focus-visible:ring-ring" aria-label="Open Emery">
             <img src={brainImage} alt="" className="emery-blue-brain size-9 object-cover" />
           </Link>
           <div><p className="text-sm font-semibold tracking-[-0.01em]">Emery</p><p className="text-[11px] uppercase tracking-[.12em] text-muted-foreground">Personal Intelligence</p></div>
@@ -152,14 +154,14 @@ export function AppShell({ title, children, padded = true, askEmery }: { title: 
       </aside>
 
       <div className="relative z-10 flex min-h-0 min-w-0 flex-col overflow-hidden">
-        <header className={`z-40 flex shrink-0 items-center justify-between border-b border-border/55 bg-surface/90 px-3 pt-[max(0.35rem,env(safe-area-inset-top))] backdrop-blur-lg sm:px-5 ${onChat ? "min-h-[44px] pb-1 md:min-h-[54px]" : "min-h-[54px] pb-1.5"}`}>
+        <header className={`z-40 flex shrink-0 items-center justify-between border-b border-border/55 bg-surface/90 px-3 pt-[max(0.35rem,env(safe-area-inset-top))] backdrop-blur-lg sm:px-5 ${onEmerySurface ? "min-h-[44px] pb-1 md:min-h-[54px]" : "min-h-[54px] pb-1.5"}`}>
           <div className="flex min-w-0 items-center gap-2.5">
-            {!onChat ? <Link to="/chat" onClick={rememberEmeryHandoff} className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-live/18 bg-live/[0.035] md:hidden" aria-label="Open Emery"><img src={brainImage} alt="" className="emery-blue-brain size-8 object-cover" /></Link> : null}
-             <div className="min-w-0"><p className="truncate text-[13px] font-semibold uppercase tracking-[0.08em] sm:text-base sm:normal-case sm:tracking-normal">{onChat ? "Emery" : title}</p>{!onChat ? <p className="hidden truncate text-[10px] uppercase tracking-[.12em] text-muted-foreground md:block">Emery System</p> : null}</div>
+            {!onEmerySurface ? <Link to="/conversation" onClick={rememberEmeryHandoff} className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-live/18 bg-live/[0.035] md:hidden" aria-label="Open Emery conversation"><img src={brainImage} alt="" className="emery-blue-brain size-8 object-cover" /></Link> : null}
+             <div className="min-w-0"><p className="truncate text-[13px] font-semibold uppercase tracking-[0.08em] sm:text-base sm:normal-case sm:tracking-normal">{onDashboard ? "Emery" : title}</p>{!onEmerySurface ? <p className="hidden truncate text-[10px] uppercase tracking-[.12em] text-muted-foreground md:block">Emery System</p> : null}</div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            {!onChat && !onHpo ? <EmeryVoiceControl /> : null}
-            {onChat && lastReturn ? <Link to={lastReturn} onClick={clearReturnContext} className="flex min-h-11 items-center gap-2 rounded-xl px-2.5 text-xs text-muted-foreground hover:bg-white/[0.03] hover:text-foreground"><ArrowLeft className="size-4" /><span className="max-w-24 truncate">{emeryReturnLabel(lastReturn)}</span></Link> : null}
+             {!onEmerySurface && !onHpo ? <EmeryVoiceControl /> : null}
+             {onConversation && lastReturn ? <Link to={lastReturn} onClick={clearReturnContext} className="flex min-h-11 items-center gap-2 rounded-xl px-2.5 text-xs text-muted-foreground hover:bg-white/[0.03] hover:text-foreground"><ArrowLeft className="size-4" /><span className="max-w-24 truncate">{emeryReturnLabel(lastReturn)}</span></Link> : null}
           </div>
         </header>
 
