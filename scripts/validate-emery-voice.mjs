@@ -7,7 +7,7 @@ const files = {
   control: readFileSync("src/components/EmeryVoiceControl.tsx", "utf8"),
   guard: readFileSync("src/lib/voice-session-guard.ts", "utf8"),
   chat: readFileSync("src/routes/_authenticated/conversation.tsx", "utf8"),
-  dominicanReference: readFileSync("src/lib/dominican-voice-reference.ts", "utf8"),
+  britishReference: readFileSync("src/lib/british-voice-reference.ts", "utf8"),
 };
 
 const expectedVoices = [
@@ -30,16 +30,16 @@ const checks = [
       files.realtime.includes("same Emery and the same lifelong conversation"),
   ],
   [
-    "Dominican voice direction is explicit because Adam chose it",
-    files.dominicanReference.includes("Dominican Spanish first") &&
-      files.dominicanReference.includes("Santo Domingo") &&
-      files.studio.includes("EMERY_DOMINICAN_ENGLISH_REFERENCE"),
+    "British Emery voice direction is explicit because Adam chose it",
+    files.britishReference.includes("feminine British English voice") &&
+      files.britishReference.includes("Southern British / modern RP") &&
+      files.studio.includes("EMERY_BRITISH_ENGLISH_REFERENCE"),
   ],
   [
-    "Emery auditions stay on the female-only user-selected path",
-    files.dominicanReference.includes('preferredVoiceIds: ["coral", "shimmer"]') &&
-      files.dominicanReference.includes('rejectedVoiceIds: ["marin", "cedar"]') &&
-      files.studio.includes("feminineAuditionCandidate") &&
+    "Emery auditions stay on the British user-selected allowlist",
+    files.britishReference.includes("EMERY_BRITISH_AUDITION_VOICE_IDS") &&
+      files.studio.includes("EMERY_BRITISH_AUDITION_VOICE_IDS") &&
+      files.studio.includes("approvedAuditionCandidate") &&
       files.studio.includes("auditionCandidates"),
   ],
   [
