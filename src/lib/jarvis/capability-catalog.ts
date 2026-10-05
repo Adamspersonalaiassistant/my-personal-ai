@@ -81,7 +81,10 @@ function buildCatalog(): CatalogEntry[] {
 
 export const CAPABILITY_CATALOG: CatalogEntry[] = buildCatalog();
 
-export function searchCapabilities(query: string, opts: { limit?: number; owner?: "emery" | "jarvis" } = {}) {
+export function searchCapabilities(
+  query: string,
+  opts: { limit?: number; owner?: "emery" | "jarvis" } = {},
+) {
   const queryTokens = tokenize(query);
   const raw = String(query ?? "").toLowerCase();
   const limit = Math.min(Math.max(opts.limit ?? 8, 1), 25);
@@ -122,40 +125,69 @@ export function describeCapability(name: string, env: Record<string, string | un
     ...entry,
     configured: missingEnv.length === 0,
     missing_configuration: missingEnv,
-    autonomy:
-      entry.paidCredit
-        ? "paid credits — Adam approval required"
-        : entry.risk === "PROTECTED"
-          ? "protected — never autonomous"
-          : entry.risk === "HIGH_RISK_WRITE"
-            ? "Adam approval required"
-            : "autonomous",
+    autonomy: entry.paidCredit
+      ? "paid credits — Adam approval required"
+      : entry.risk === "PROTECTED"
+        ? "protected — never autonomous"
+        : entry.risk === "HIGH_RISK_WRITE"
+          ? "Adam approval required"
+          : "autonomous",
   };
 }
 
-export type CapabilityHealth = "healthy" | "degraded" | "failing" | "not_configured" | "unavailable" | "configured_untested";
+export type CapabilityHealth =
+  "healthy" | "degraded" | "failing" | "not_configured" | "unavailable" | "configured_untested";
 
 export type HealthEvidence = {
-  receipts: Array<{ action: string; status: string; created_at: string; error_message?: string | null }>;
+  receipts: Array<{
+    action: string;
+    status: string;
+    created_at: string;
+    error_message?: string | null;
+  }>;
   toolEvents: Array<{ action: string; status: string; created_at: string }>;
   env: Record<string, string | undefined>;
 };
 
 export function healthFromEvidence(entry: CatalogEntry, evidence: HealthEvidence) {
-  if (!entry.executable) return { name: entry.name, health: "unavailable" as CapabilityHealth, detail: entry.description };
+  if (!entry.executable)
+    return {
+      name: entry.name,
+      health: "unavailable" as CapabilityHealth,
+      detail: entry.description,
+    };
   const missing = entry.requiresEnv.filter((key) => !evidence.env[key]);
-  if (missing.length) return { name: entry.name, health: "not_configured" as CapabilityHealth, detail: `Missing server secret(s): ${missing.join(", ")}` };
+  if (missing.length)
+    return {
+      name: entry.name,
+      health: "not_configured" as CapabilityHealth,
+      detail: `Missing server secret(s): ${missing.join(", ")}`,
+    };
   const wanted = new Set(entry.evidenceActions.map((a) => a.toLowerCase()));
   const matches = [
-    ...evidence.receipts.filter((r) => wanted.has(String(r.action).toLowerCase())).map((r) => ({ ok: r.status === "completed", at: r.created_at, error: r.error_message ?? null })),
-    ...evidence.toolEvents.filter((e) => wanted.has(String(e.action).toLowerCase())).map((e) => ({ ok: e.status === "ok", at: e.created_at, error: null })),
+    ...evidence.receipts
+      .filter((r) => wanted.has(String(r.action).toLowerCase()))
+      .map((r) => ({
+        ok: r.status === "completed",
+        at: r.created_at,
+        error: r.error_message ?? null,
+      })),
+    ...evidence.toolEvents
+      .filter((e) => wanted.has(String(e.action).toLowerCase()))
+      .map((e) => ({ ok: e.status === "ok", at: e.created_at, error: null })),
   ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
-  if (!matches.length) return { name: entry.name, health: "configured_untested" as CapabilityHealth, detail: "Configured; no recent execution evidence." };
+  if (!matches.length)
+    return {
+      name: entry.name,
+      health: "configured_untested" as CapabilityHealth,
+      detail: "Configured; no recent execution evidence.",
+    };
   const recent = matches.slice(0, 20);
   const successRate = recent.filter((m) => m.ok).length / recent.length;
   const lastSuccess = recent.find((m) => m.ok)?.at ?? null;
   const lastFailure = recent.find((m) => !m.ok);
-  const health: CapabilityHealth = successRate >= 0.9 ? "healthy" : successRate >= 0.5 ? "degraded" : "failing";
+  const health: CapabilityHealth =
+    successRate >= 0.9 ? "healthy" : successRate >= 0.5 ? "degraded" : "failing";
   return {
     name: entry.name,
     health,

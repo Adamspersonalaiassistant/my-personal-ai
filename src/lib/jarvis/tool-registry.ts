@@ -63,7 +63,17 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     risk: "READ",
     description:
       "Search Emery source for a string/identifier. Uses GitHub code search with a token, or a tree+raw-file scan without one.",
-    keywords: ["search", "code", "grep", "find", "where", "source", "function", "file", "implementation"],
+    keywords: [
+      "search",
+      "code",
+      "grep",
+      "find",
+      "where",
+      "source",
+      "function",
+      "file",
+      "implementation",
+    ],
     parameters: {
       type: "object",
       properties: {
@@ -78,7 +88,8 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     name: "github.read_file",
     family: "github",
     risk: "READ",
-    description: "Read a file from the repository at a ref (default main). Large files are truncated.",
+    description:
+      "Read a file from the repository at a ref (default main). Large files are truncated.",
     keywords: ["read", "file", "source", "open", "contents", "code"],
     parameters: {
       type: "object",
@@ -259,7 +270,18 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     risk: "READ",
     description:
       "Database structure diagnostics: tables, RLS/policy coverage, mutable search_path functions, anon-executable SECURITY DEFINER functions, extensions in public, unindexed FKs.",
-    keywords: ["schema", "database", "tables", "rls", "policy", "security", "advisor", "performance", "index", "supabase"],
+    keywords: [
+      "schema",
+      "database",
+      "tables",
+      "rls",
+      "policy",
+      "security",
+      "advisor",
+      "performance",
+      "index",
+      "supabase",
+    ],
     parameters: noArgs,
   }),
   tool({
@@ -267,7 +289,18 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     family: "supabase",
     risk: "READ",
     description: "Recent Emery runtime events: status breakdown and recent errors/clarifications.",
-    keywords: ["errors", "telemetry", "runtime", "failing", "problems", "issues", "events", "recently", "struggling", "logs"],
+    keywords: [
+      "errors",
+      "telemetry",
+      "runtime",
+      "failing",
+      "problems",
+      "issues",
+      "events",
+      "recently",
+      "struggling",
+      "logs",
+    ],
     parameters: { type: "object", properties: { days: num("Lookback days (default 7, max 30)") } },
   }),
   tool({
@@ -283,22 +316,42 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     family: "supabase",
     risk: "READ",
     description: "Latest Emery self-evaluations and their findings.",
-    keywords: ["evaluation", "evals", "self", "scores", "quality", "findings", "errors", "problems"],
+    keywords: [
+      "evaluation",
+      "evals",
+      "self",
+      "scores",
+      "quality",
+      "findings",
+      "errors",
+      "problems",
+    ],
     parameters: noArgs,
   }),
   tool({
     name: "supabase.improvement_backlog",
     family: "supabase",
     risk: "READ",
-    description: "Emery improvement backlog: observed/proposed problems with severity and evidence.",
-    keywords: ["backlog", "improve", "improvement", "next", "problems", "gaps", "struggling", "issues"],
+    description:
+      "Emery improvement backlog: observed/proposed problems with severity and evidence.",
+    keywords: [
+      "backlog",
+      "improve",
+      "improvement",
+      "next",
+      "problems",
+      "gaps",
+      "struggling",
+      "issues",
+    ],
     parameters: noArgs,
   }),
   tool({
     name: "supabase.capability_gaps",
     family: "supabase",
     risk: "READ",
-    description: "Recorded capability gaps (runtime events and backlog entries flagged as missing capability).",
+    description:
+      "Recorded capability gaps (runtime events and backlog entries flagged as missing capability).",
     keywords: ["capability", "gap", "missing", "can't", "unsupported", "unable"],
     parameters: noArgs,
   }),
@@ -306,7 +359,8 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     name: "supabase.advisors",
     family: "supabase",
     risk: "READ",
-    description: "Supabase security/performance advisors via the management API (needs JARVIS_SUPABASE_ACCESS_TOKEN).",
+    description:
+      "Supabase security/performance advisors via the management API (needs JARVIS_SUPABASE_ACCESS_TOKEN).",
     keywords: ["advisor", "security", "performance", "lint", "supabase"],
     parameters: {
       type: "object",
@@ -318,11 +372,14 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     name: "supabase.logs",
     family: "supabase",
     risk: "READ",
-    description: "Supabase platform logs via the management API (needs JARVIS_SUPABASE_ACCESS_TOKEN).",
+    description:
+      "Supabase platform logs via the management API (needs JARVIS_SUPABASE_ACCESS_TOKEN).",
     keywords: ["logs", "postgres", "api", "auth", "errors", "supabase"],
     parameters: {
       type: "object",
-      properties: { service: { type: "string", enum: ["postgres", "api", "auth", "edge-function"] } },
+      properties: {
+        service: { type: "string", enum: ["postgres", "api", "auth", "edge-function"] },
+      },
     },
     requiresEnv: ["JARVIS_SUPABASE_ACCESS_TOKEN"],
   }),
@@ -330,7 +387,8 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     name: "supabase.apply_migration",
     family: "supabase",
     risk: "PROTECTED",
-    description: "Applying DDL to production is approval-gated. Candidate migrations go into a jarvis/ branch instead.",
+    description:
+      "Applying DDL to production is approval-gated. Candidate migrations go into a jarvis/ branch instead.",
     keywords: ["migration", "ddl", "schema change", "production"],
     parameters: { type: "object", properties: { sql: str("SQL") }, required: ["sql"] },
   }),
@@ -340,16 +398,39 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     name: "jarvis.get_status",
     family: "jarvis",
     risk: "READ",
-    description: "Live JARVIS engineering state: active session, today's accepted tasks vs capacity, status counts, blockers, approvals.",
-    keywords: ["working", "status", "tasks", "session", "queue", "doing", "progress", "blocked", "approval"],
+    description:
+      "Live JARVIS engineering state: active session, today's accepted tasks vs capacity, status counts, blockers, approvals.",
+    keywords: [
+      "working",
+      "status",
+      "tasks",
+      "session",
+      "queue",
+      "doing",
+      "progress",
+      "blocked",
+      "approval",
+    ],
     parameters: noArgs,
   }),
   tool({
     name: "jarvis.search_knowledge",
     family: "jarvis",
     risk: "READ",
-    description: "Retrieve the most relevant JARVIS knowledge items (Adam decisions, preferences, constraints, lessons).",
-    keywords: ["know", "knowledge", "prefer", "like", "decision", "built", "rules", "constraints", "history", "lessons"],
+    description:
+      "Retrieve the most relevant JARVIS knowledge items (Adam decisions, preferences, constraints, lessons).",
+    keywords: [
+      "know",
+      "knowledge",
+      "prefer",
+      "like",
+      "decision",
+      "built",
+      "rules",
+      "constraints",
+      "history",
+      "lessons",
+    ],
     parameters: {
       type: "object",
       properties: { query: str("What to retrieve"), limit: num("Max items (default 8)") },
@@ -360,7 +441,8 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     name: "jarvis.create_task",
     family: "jarvis",
     risk: "REVERSIBLE_WRITE",
-    description: "Queue an engineering task in today's session (respects the 50/day intake limit and de-duplicates).",
+    description:
+      "Queue an engineering task in today's session (respects the 50/day intake limit and de-duplicates).",
     keywords: ["task", "queue", "add", "todo", "work", "engineering", "fix", "build"],
     parameters: {
       type: "object",
@@ -379,7 +461,8 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     name: "jarvis.update_task",
     family: "jarvis",
     risk: "REVERSIBLE_WRITE",
-    description: "Update an engineering task's status/result with evidence (branch, commit, PR, test results, blocker).",
+    description:
+      "Update an engineering task's status/result with evidence (branch, commit, PR, test results, blocker).",
     keywords: ["task", "status", "update", "progress", "blocked", "completed"],
     parameters: {
       type: "object",
@@ -387,7 +470,21 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
         id: str("Task id"),
         status: {
           type: "string",
-          enum: ["queued", "validating", "researching", "planning", "building", "testing", "repairing", "ready_for_release", "completed", "blocked", "deferred", "failed", "cancelled"],
+          enum: [
+            "queued",
+            "validating",
+            "researching",
+            "planning",
+            "building",
+            "testing",
+            "repairing",
+            "ready_for_release",
+            "completed",
+            "blocked",
+            "deferred",
+            "failed",
+            "cancelled",
+          ],
         },
         result_summary: str("Evidence-based result"),
         blocker: str("Blocker, if any"),
@@ -402,14 +499,26 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     name: "jarvis.record_knowledge",
     family: "jarvis",
     risk: "REVERSIBLE_WRITE",
-    description: "Record a structured knowledge item from Adam (decision, preference, constraint, lesson…). Sensitive data is rejected.",
+    description:
+      "Record a structured knowledge item from Adam (decision, preference, constraint, lesson…). Sensitive data is rejected.",
     keywords: ["remember", "decision", "preference", "record", "knowledge", "note"],
     parameters: {
       type: "object",
       properties: {
         category: {
           type: "string",
-          enum: ["product_decision", "user_preference", "constraint", "failure_signal", "workflow_requirement", "acceptance_test", "architecture", "history", "lesson", "research_reference"],
+          enum: [
+            "product_decision",
+            "user_preference",
+            "constraint",
+            "failure_signal",
+            "workflow_requirement",
+            "acceptance_test",
+            "architecture",
+            "history",
+            "lesson",
+            "research_reference",
+          ],
         },
         title: str("Short title"),
         content: str("The knowledge itself"),
@@ -425,7 +534,8 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     name: "lovable.get_project_state",
     family: "lovable",
     risk: "READ",
-    description: "Published app reachability, served build id and served commit stamp, plus the last recorded Lovable observation.",
+    description:
+      "Published app reachability, served build id and served commit stamp, plus the last recorded Lovable observation.",
     keywords: ["lovable", "project", "published", "deployment", "production", "live", "state"],
     parameters: noArgs,
   }),
@@ -441,7 +551,8 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     name: "lovable.get_production_commit",
     family: "lovable",
     risk: "READ",
-    description: "The commit the live production bundle reports (emery-commit stamp), with fallback to the recorded release ledger.",
+    description:
+      "The commit the live production bundle reports (emery-commit stamp), with fallback to the recorded release ledger.",
     keywords: ["production", "commit", "version", "deployed", "running", "live", "sha"],
     parameters: noArgs,
   }),
@@ -449,7 +560,8 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     name: "lovable.verify_build",
     family: "lovable",
     risk: "READ",
-    description: "Verify a commit's build evidence: GitHub CI/status checks and preview reachability.",
+    description:
+      "Verify a commit's build evidence: GitHub CI/status checks and preview reachability.",
     keywords: ["verify", "build", "ci", "preview"],
     parameters: { type: "object", properties: { ref: str("Commit or branch (default main)") } },
   }),
@@ -457,8 +569,17 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     name: "lovable.verify_deployment",
     family: "lovable",
     risk: "READ",
-    description: "Reconcile GitHub main, live production commit, emery_releases and runtime health; report discrepancies.",
-    keywords: ["verify", "deployment", "reconcile", "discrepancy", "version", "release", "production"],
+    description:
+      "Reconcile GitHub main, live production commit, emery_releases and runtime health; report discrepancies.",
+    keywords: [
+      "verify",
+      "deployment",
+      "reconcile",
+      "discrepancy",
+      "version",
+      "release",
+      "production",
+    ],
     parameters: noArgs,
   }),
   tool({
@@ -466,7 +587,8 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     family: "lovable",
     risk: "PROTECTED",
     paidCredit: true,
-    description: "Send an AI-generation request to Lovable. Consumes paid Lovable credits — requires Adam's explicit approval.",
+    description:
+      "Send an AI-generation request to Lovable. Consumes paid Lovable credits — requires Adam's explicit approval.",
     keywords: ["lovable", "ai", "generate", "credits", "prompt lovable"],
     parameters: { type: "object", properties: { prompt: str("Prompt") }, required: ["prompt"] },
   }),
@@ -476,8 +598,19 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     name: "research.web_search",
     family: "research",
     risk: "READ",
-    description: "Bounded web research on one specific engineering question (official docs, APIs, frameworks). Returns sourced findings.",
-    keywords: ["research", "web", "docs", "documentation", "search", "api", "how", "best practice", "latest"],
+    description:
+      "Bounded web research on one specific engineering question (official docs, APIs, frameworks). Returns sourced findings.",
+    keywords: [
+      "research",
+      "web",
+      "docs",
+      "documentation",
+      "search",
+      "api",
+      "how",
+      "best practice",
+      "latest",
+    ],
     parameters: {
       type: "object",
       properties: { question: str("The specific engineering question") },
@@ -488,7 +621,8 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     name: "research.github_search",
     family: "research",
     risk: "READ",
-    description: "Search public GitHub repositories for implementations of a pattern. Returns repo, stars, license.",
+    description:
+      "Search public GitHub repositories for implementations of a pattern. Returns repo, stars, license.",
     keywords: ["github", "open source", "library", "repo", "example", "implementation", "reuse"],
     parameters: {
       type: "object",
@@ -500,7 +634,8 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     name: "research.license_check",
     family: "research",
     risk: "READ",
-    description: "Check a GitHub repository's license and whether copying code into Emery is compatible.",
+    description:
+      "Check a GitHub repository's license and whether copying code into Emery is compatible.",
     keywords: ["license", "copy", "reuse", "mit", "apache", "gpl", "agpl"],
     parameters: {
       type: "object",
@@ -512,7 +647,8 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     name: "research.record_finding",
     family: "research",
     risk: "REVERSIBLE_WRITE",
-    description: "Record a research outcome (ignore/watch/test/adopt/engineering_task) with source and license note.",
+    description:
+      "Record a research outcome (ignore/watch/test/adopt/engineering_task) with source and license note.",
     keywords: ["record", "finding", "research", "classify"],
     parameters: {
       type: "object",
@@ -522,7 +658,10 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
         source_url: str("Source URL"),
         license_note: str("License note"),
         recommendation: str("Recommendation"),
-        classification: { type: "string", enum: ["ignore", "watch", "test", "adopt", "engineering_task"] },
+        classification: {
+          type: "string",
+          enum: ["ignore", "watch", "test", "adopt", "engineering_task"],
+        },
       },
       required: ["topic", "finding", "classification"],
     },
@@ -533,7 +672,8 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     name: "emery.run_evaluations",
     family: "evaluation",
     risk: "READ",
-    description: "Run Emery's canonical deterministic evaluation corpus in-process and summarise pass/fail signals.",
+    description:
+      "Run Emery's canonical deterministic evaluation corpus in-process and summarise pass/fail signals.",
     keywords: ["test", "tests", "evaluate", "evaluation", "regression", "verify", "quality"],
     parameters: noArgs,
   }),
@@ -543,7 +683,8 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     name: "capability.search",
     family: "capability",
     risk: "READ",
-    description: "Search the full capability catalogue (Emery runtime capabilities + JARVIS tools + system self-awareness).",
+    description:
+      "Search the full capability catalogue (Emery runtime capabilities + JARVIS tools + system self-awareness).",
     keywords: ["capability", "tool", "can", "able", "search", "find"],
     parameters: {
       type: "object",
@@ -557,13 +698,18 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     risk: "READ",
     description: "Describe one capability: risk, inputs, requirements and configuration.",
     keywords: ["capability", "describe", "details"],
-    parameters: { type: "object", properties: { name: str("Capability name") }, required: ["name"] },
+    parameters: {
+      type: "object",
+      properties: { name: str("Capability name") },
+      required: ["name"],
+    },
   }),
   tool({
     name: "capability.health",
     family: "capability",
     risk: "READ",
-    description: "Health of capabilities from real evidence (receipts, runtime events, configuration).",
+    description:
+      "Health of capabilities from real evidence (receipts, runtime events, configuration).",
     keywords: ["health", "healthy", "working", "degraded", "capability"],
     parameters: { type: "object", properties: { name: str("Optional capability name") } },
   }),
@@ -581,7 +727,8 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     name: "system.get_deployment",
     family: "system",
     risk: "READ",
-    description: "Deployment truth: running commit vs GitHub main vs release ledger, with discrepancies.",
+    description:
+      "Deployment truth: running commit vs GitHub main vs release ledger, with discrepancies.",
     keywords: ["deployment", "deployed", "production", "live", "discrepancy"],
     parameters: noArgs,
   }),
@@ -613,7 +760,8 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     name: "system.get_known_issues",
     family: "system",
     risk: "READ",
-    description: "Known issues: open improvement backlog, recent runtime errors, failed receipts, release known limitations.",
+    description:
+      "Known issues: open improvement backlog, recent runtime errors, failed receipts, release known limitations.",
     keywords: ["issues", "problems", "errors", "known", "struggling", "bugs", "broken"],
     parameters: noArgs,
   }),
@@ -621,7 +769,8 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     name: "system.get_improvement_status",
     family: "system",
     risk: "READ",
-    description: "Improvement pipeline status: JARVIS tasks by status and improvement backlog by status.",
+    description:
+      "Improvement pipeline status: JARVIS tasks by status and improvement backlog by status.",
     keywords: ["improvement", "improve", "next", "status", "pipeline", "working"],
     parameters: noArgs,
   }),

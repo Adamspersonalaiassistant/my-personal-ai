@@ -21,5 +21,6 @@ export const EMERY_BUILD = {
 } as const;
 
 export const EMERY_PUBLISHED_URL = "https://emery-personal-ai.lovable.app";
-export const EMERY_PREVIEW_URL = "https://id-preview--9d966392-55bb-436a-bf8b-bf2dee556f11.lovable.app";
+export const EMERY_PREVIEW_URL =
+  "https://id-preview--9d966392-55bb-436a-bf8b-bf2dee556f11.lovable.app";
 export const LOVABLE_PROJECT_ID = "9d966392-55bb-436a-bf8b-bf2dee556f11";

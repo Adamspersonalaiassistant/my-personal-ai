@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // JARVIS GitHub workshop. Server-side only: the token is read from the server
 // environment at call time and never returned, logged or shown to the model.
 //
@@ -8,7 +9,13 @@
 // - content containing credentials or RLS/grant weakening is refused
 // - PRs can be opened/updated but never merged or closed
 
-import { assertCandidateBranch, assertSafeContent, assertSafeRepoPath, PolicyError, redactSecrets } from "./policy.ts";
+import {
+  assertCandidateBranch,
+  assertSafeContent,
+  assertSafeRepoPath,
+  PolicyError,
+  redactSecrets,
+} from "./policy.ts";
 
 const API = "https://api.github.com";
 const DEFAULT_REPO = "Adamspersonalaiassistant/my-personal-ai";
@@ -76,7 +83,12 @@ export class GithubClient {
       } catch {
         /* keep text */
       }
-      throw new GithubError(redactSecrets(`GitHub ${method} ${path} → ${response.status}: ${String(message).slice(0, 240)}`), response.status);
+      throw new GithubError(
+        redactSecrets(
+          `GitHub ${method} ${path} → ${response.status}: ${String(message).slice(0, 240)}`,
+        ),
+        response.status,
+      );
     }
     if (response.status === 204) return undefined as T;
     return (await response.json()) as T;
@@ -125,9 +137,17 @@ export class GithubClient {
 
   async readFile(path: string, ref = "main", startLine?: number, endLine?: number) {
     const clean = String(path).replace(/^\/+/, "");
-    const data = await this.request("GET", this.r(`/contents/${encodePath(clean)}?ref=${encodeURIComponent(ref)}`));
+    const data = await this.request(
+      "GET",
+      this.r(`/contents/${encodePath(clean)}?ref=${encodeURIComponent(ref)}`),
+    );
     if (Array.isArray(data)) {
-      return { path: clean, ref, type: "dir", entries: data.map((e: any) => `${e.type === "dir" ? "📁 " : ""}${e.path}`).slice(0, 200) };
+      return {
+        path: clean,
+        ref,
+        type: "dir",
+        entries: data.map((e: any) => `${e.type === "dir" ? "📁 " : ""}${e.path}`).slice(0, 200),
+      };
     }
     const content = decodeBase64(String(data.content ?? ""));
     let lines = content.split("\n");
@@ -137,7 +157,16 @@ export class GithubClient {
     let text = lines.join("\n");
     const truncated = text.length > MAX_FILE_CHARS;
     if (truncated) text = text.slice(0, MAX_FILE_CHARS);
-    return { path: clean, ref, sha: data.sha, total_lines: content.split("\n").length, from_line: from, to_line: Math.min(to, from + lines.length - 1), truncated, content: redactSecrets(text) };
+    return {
+      path: clean,
+      ref,
+      sha: data.sha,
+      total_lines: content.split("\n").length,
+      from_line: from,
+      to_line: Math.min(to, from + lines.length - 1),
+      truncated,
+      content: redactSecrets(text),
+    };
   }
 
   async searchCode(query: string, opts: { pathPrefix?: string; ref?: string } = {}) {
@@ -153,7 +182,10 @@ export class GithubClient {
           method: "github_code_search",
           query: q,
           total: search.total_count,
-          results: (search.items ?? []).map((item: any) => ({ path: item.path, url: item.html_url })),
+          results: (search.items ?? []).map((item: any) => ({
+            path: item.path,
+            url: item.html_url,
+          })),
         };
       } catch (error) {
         if (!(error instanceof GithubError)) throw error;
@@ -166,26 +198,38 @@ export class GithubClient {
   /** Token-free fallback: list the tree once, then grep raw files (raw.githubusercontent is not API rate-limited). */
   private async scanTree(query: string, opts: { pathPrefix?: string; ref?: string }) {
     const ref = opts.ref || "main";
-    const tree = await this.request("GET", this.r(`/git/trees/${encodeURIComponent(ref)}?recursive=1`));
+    const tree = await this.request(
+      "GET",
+      this.r(`/git/trees/${encodeURIComponent(ref)}?recursive=1`),
+    );
     const prefix = (opts.pathPrefix ?? "").replace(/^\/+/, "");
     const candidates = (tree.tree as any[])
       .filter((entry) => entry.type === "blob" && entry.size < 400_000)
       .map((entry) => entry.path as string)
-      .filter((path) => (!prefix || path.startsWith(prefix)) && /\.(ts|tsx|js|mjs|sql|md|json|css)$/.test(path))
+      .filter(
+        (path) =>
+          (!prefix || path.startsWith(prefix)) && /\.(ts|tsx|js|mjs|sql|md|json|css)$/.test(path),
+      )
       .filter((path) => !/(^|\/)(routeTree\.gen\.ts|bun\.lock|package-lock\.json)$/.test(path));
     const needle = query.toLowerCase();
     const pathHits = candidates.filter((path) => path.toLowerCase().includes(needle));
-    const ordered = [...pathHits, ...candidates.filter((path) => !pathHits.includes(path))].slice(0, 160);
+    const ordered = [...pathHits, ...candidates.filter((path) => !pathHits.includes(path))].slice(
+      0,
+      160,
+    );
     const results: Array<{ path: string; line: number; text: string }> = [];
     let filesRead = 0;
     const batches = chunk(ordered, 16);
     for (const batch of batches) {
       const texts = await Promise.all(
         batch.map(async (path) => {
-          const response = await this.fetcher(`https://raw.githubusercontent.com/${this.env.repo}/${encodeURIComponent(ref)}/${encodePath(path)}`, {
-            headers: this.env.token ? { Authorization: `Bearer ${this.env.token}` } : {},
-          }).catch(() => null);
-          return response && response.ok ? [path, await response.text()] as const : null;
+          const response = await this.fetcher(
+            `https://raw.githubusercontent.com/${this.env.repo}/${encodeURIComponent(ref)}/${encodePath(path)}`,
+            {
+              headers: this.env.token ? { Authorization: `Bearer ${this.env.token}` } : {},
+            },
+          ).catch(() => null);
+          return response && response.ok ? ([path, await response.text()] as const) : null;
         }),
       );
       for (const entry of texts) {
@@ -206,7 +250,10 @@ export class GithubClient {
       files_scanned: Math.min(ordered.length, batches.length * 16),
       files_read: filesRead,
       ...(filesRead === 0 && ordered.length
-        ? { warning: "No file contents were readable (private repository without JARVIS_GITHUB_TOKEN?). Results are incomplete." }
+        ? {
+            warning:
+              "No file contents were readable (private repository without JARVIS_GITHUB_TOKEN?). Results are incomplete.",
+          }
         : {}),
       files_in_scope: candidates.length,
       path_matches: pathHits.slice(0, 20),
@@ -218,7 +265,9 @@ export class GithubClient {
     const perPage = Math.min(Math.max(Number(limit) || 10, 1), 30);
     const commits = await this.request(
       "GET",
-      this.r(`/commits?sha=${encodeURIComponent(ref)}&per_page=${perPage}${path ? `&path=${encodeURIComponent(path)}` : ""}`),
+      this.r(
+        `/commits?sha=${encodeURIComponent(ref)}&per_page=${perPage}${path ? `&path=${encodeURIComponent(path)}` : ""}`,
+      ),
     );
     return {
       ref,
@@ -234,35 +283,66 @@ export class GithubClient {
   }
 
   async compare(base: string, head: string) {
-    const data = await this.request("GET", this.r(`/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`));
+    const data = await this.request(
+      "GET",
+      this.r(`/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`),
+    );
     return {
       base,
       head,
       status: data.status,
       ahead_by: data.ahead_by,
       behind_by: data.behind_by,
-      commits: (data.commits ?? []).slice(-20).map((c: any) => ({ short: String(c.sha).slice(0, 7), message: String(c.commit?.message ?? "").split("\n")[0] })),
-      files: (data.files ?? []).slice(0, 60).map((f: any) => ({ path: f.filename, status: f.status, additions: f.additions, deletions: f.deletions })),
+      commits: (data.commits ?? []).slice(-20).map((c: any) => ({
+        short: String(c.sha).slice(0, 7),
+        message: String(c.commit?.message ?? "").split("\n")[0],
+      })),
+      files: (data.files ?? []).slice(0, 60).map((f: any) => ({
+        path: f.filename,
+        status: f.status,
+        additions: f.additions,
+        deletions: f.deletions,
+      })),
     };
   }
 
   async inspectCi(ref = "main") {
     const [runs, status] = await Promise.all([
-      this.request("GET", this.r(`/commits/${encodeURIComponent(ref)}/check-runs?per_page=30`)).catch((error) => ({ error: String(error.message) })),
-      this.request("GET", this.r(`/commits/${encodeURIComponent(ref)}/status`)).catch((error) => ({ error: String(error.message) })),
+      this.request(
+        "GET",
+        this.r(`/commits/${encodeURIComponent(ref)}/check-runs?per_page=30`),
+      ).catch((error) => ({ error: String(error.message) })),
+      this.request("GET", this.r(`/commits/${encodeURIComponent(ref)}/status`)).catch((error) => ({
+        error: String(error.message),
+      })),
     ]);
     const checkRuns = Array.isArray((runs as any).check_runs) ? (runs as any).check_runs : [];
     const statuses = Array.isArray((status as any).statuses) ? (status as any).statuses : [];
     const failing = [
-      ...checkRuns.filter((r: any) => r.conclusion && !["success", "neutral", "skipped"].includes(r.conclusion)).map((r: any) => r.name),
-      ...statuses.filter((s: any) => ["failure", "error"].includes(s.state)).map((s: any) => s.context),
+      ...checkRuns
+        .filter(
+          (r: any) => r.conclusion && !["success", "neutral", "skipped"].includes(r.conclusion),
+        )
+        .map((r: any) => r.name),
+      ...statuses
+        .filter((s: any) => ["failure", "error"].includes(s.state))
+        .map((s: any) => s.context),
     ];
     return {
       ref,
       sha: (status as any).sha ?? null,
       combined_state: (status as any).state ?? null,
-      check_runs: checkRuns.map((r: any) => ({ name: r.name, status: r.status, conclusion: r.conclusion, url: r.html_url })),
-      statuses: statuses.map((s: any) => ({ context: s.context, state: s.state, description: s.description })),
+      check_runs: checkRuns.map((r: any) => ({
+        name: r.name,
+        status: r.status,
+        conclusion: r.conclusion,
+        url: r.html_url,
+      })),
+      statuses: statuses.map((s: any) => ({
+        context: s.context,
+        state: s.state,
+        description: s.description,
+      })),
       failing,
       has_ci: checkRuns.length > 0 || statuses.length > 0,
     };
@@ -275,7 +355,10 @@ export class GithubClient {
     const branch = assertCandidateBranch(name);
     const source = await this.request("GET", this.r(`/commits/${encodeURIComponent(fromRef)}`));
     try {
-      await this.request("POST", this.r(`/git/refs`), { ref: `refs/heads/${branch}`, sha: source.sha });
+      await this.request("POST", this.r(`/git/refs`), {
+        ref: `refs/heads/${branch}`,
+        sha: source.sha,
+      });
       return { branch, created: true, from_ref: fromRef, sha: source.sha };
     } catch (error) {
       if (error instanceof GithubError && error.status === 422) {
@@ -286,10 +369,15 @@ export class GithubClient {
     }
   }
 
-  async commitFiles(branchName: string, message: string, files: Array<{ path: string; content: string }>) {
+  async commitFiles(
+    branchName: string,
+    message: string,
+    files: Array<{ path: string; content: string }>,
+  ) {
     this.requireWrite();
     const branch = assertCandidateBranch(branchName);
-    if (!Array.isArray(files) || !files.length || files.length > 25) throw new PolicyError("Commit 1–25 files per checkpoint.");
+    if (!Array.isArray(files) || !files.length || files.length > 25)
+      throw new PolicyError("Commit 1–25 files per checkpoint.");
     const prepared = files.map((file) => {
       const path = assertSafeRepoPath(file.path);
       assertSafeContent(path, file.content);
@@ -301,7 +389,12 @@ export class GithubClient {
     const parent = await this.request("GET", this.r(`/git/commits/${parentSha}`));
     const tree = await this.request("POST", this.r(`/git/trees`), {
       base_tree: parent.tree.sha,
-      tree: prepared.map((file) => ({ path: file.path, mode: "100644", type: "blob", content: file.content })),
+      tree: prepared.map((file) => ({
+        path: file.path,
+        mode: "100644",
+        type: "blob",
+        content: file.content,
+      })),
     });
     const commit = await this.request("POST", this.r(`/git/commits`), {
       message: `${commitMessage}\n\nCandidate checkpoint by JARVIS Engineer.`,
@@ -309,17 +402,34 @@ export class GithubClient {
       parents: [parentSha],
     });
     // Fast-forward only: force=false means GitHub rejects anything that isn't a descendant.
-    await this.request("PATCH", this.r(`/git/refs/heads/${encodePath(branch)}`), { sha: commit.sha, force: false });
-    return { branch, commit_sha: commit.sha, parent_sha: parentSha, files: prepared.map((f) => f.path), url: commit.html_url ?? null };
+    await this.request("PATCH", this.r(`/git/refs/heads/${encodePath(branch)}`), {
+      sha: commit.sha,
+      force: false,
+    });
+    return {
+      branch,
+      commit_sha: commit.sha,
+      parent_sha: parentSha,
+      files: prepared.map((f) => f.path),
+      url: commit.html_url ?? null,
+    };
   }
 
-  async editCandidate(branchName: string, path: string, find: string, replace: string, message: string) {
+  async editCandidate(
+    branchName: string,
+    path: string,
+    find: string,
+    replace: string,
+    message: string,
+  ) {
     const branch = assertCandidateBranch(branchName);
     const clean = assertSafeRepoPath(path);
     const current = await this.readRaw(clean, branch);
     const occurrences = find ? current.split(find).length - 1 : 0;
     if (occurrences !== 1)
-      throw new PolicyError(`Expected exactly one occurrence of the find text in ${clean}; found ${occurrences}. Read the file and use a more specific anchor.`);
+      throw new PolicyError(
+        `Expected exactly one occurrence of the find text in ${clean}; found ${occurrences}. Read the file and use a more specific anchor.`,
+      );
     const next = current.replace(find, replace);
     return this.commitFiles(branch, message, [{ path: clean, content: next }]);
   }
@@ -327,16 +437,24 @@ export class GithubClient {
   async createFile(branchName: string, path: string, content: string, message: string) {
     const branch = assertCandidateBranch(branchName);
     const clean = assertSafeRepoPath(path);
-    const exists = await this.request("GET", this.r(`/contents/${encodePath(clean)}?ref=${encodeURIComponent(branch)}`)).then(
+    const exists = await this.request(
+      "GET",
+      this.r(`/contents/${encodePath(clean)}?ref=${encodeURIComponent(branch)}`),
+    ).then(
       () => true,
-      (error) => (error instanceof GithubError && error.status === 404 ? false : Promise.reject(error)),
+      (error) =>
+        error instanceof GithubError && error.status === 404 ? false : Promise.reject(error),
     );
-    if (exists) throw new PolicyError(`${clean} already exists on ${branch}; use github.edit_candidate.`);
+    if (exists)
+      throw new PolicyError(`${clean} already exists on ${branch}; use github.edit_candidate.`);
     return this.commitFiles(branch, message, [{ path: clean, content }]);
   }
 
   private async readRaw(path: string, ref: string) {
-    const data = await this.request("GET", this.r(`/contents/${encodePath(path)}?ref=${encodeURIComponent(ref)}`));
+    const data = await this.request(
+      "GET",
+      this.r(`/contents/${encodePath(path)}?ref=${encodeURIComponent(ref)}`),
+    );
     if (Array.isArray(data)) throw new PolicyError(`${path} is a directory.`);
     return decodeBase64(String(data.content ?? ""));
   }
@@ -370,7 +488,10 @@ export class GithubClient {
 
   async searchRepositories(query: string, language?: string) {
     const q = `${query}${language ? ` language:${language}` : ""}`;
-    const data = await this.request("GET", `/search/repositories?per_page=8&sort=stars&q=${encodeURIComponent(q)}`);
+    const data = await this.request(
+      "GET",
+      `/search/repositories?per_page=8&sort=stars&q=${encodeURIComponent(q)}`,
+    );
     return (data.items ?? []).map((repo: any) => ({
       repo: repo.full_name,
       url: repo.html_url,
@@ -386,9 +507,14 @@ export class GithubClient {
     if (!/^[\w.-]+\/[\w.-]+$/.test(fullName)) throw new GithubError("Use owner/name.", 400);
     try {
       const data = await this.request("GET", `/repos/${fullName}/license`);
-      return { spdx: (data.license?.spdx_id as string) ?? null, name: data.license?.name ?? null, url: data.html_url ?? null };
+      return {
+        spdx: (data.license?.spdx_id as string) ?? null,
+        name: data.license?.name ?? null,
+        url: data.html_url ?? null,
+      };
     } catch (error) {
-      if (error instanceof GithubError && error.status === 404) return { spdx: null, name: null, url: null };
+      if (error instanceof GithubError && error.status === 404)
+        return { spdx: null, name: null, url: null };
       throw error;
     }
   }
@@ -396,19 +522,68 @@ export class GithubClient {
 
 export type LicenseVerdict = "compatible" | "caution" | "incompatible" | "unknown";
 
-const PERMISSIVE = new Set(["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "0BSD", "Unlicense", "CC0-1.0", "Zlib", "MIT-0", "BSL-1.0"]);
-const COPYLEFT = new Set(["GPL-2.0", "GPL-3.0", "LGPL-2.1", "LGPL-3.0", "MPL-2.0", "EPL-2.0", "GPL-2.0-only", "GPL-3.0-only", "GPL-2.0-or-later", "GPL-3.0-or-later"]);
-const INCOMPATIBLE = new Set(["AGPL-3.0", "AGPL-3.0-only", "AGPL-3.0-or-later", "SSPL-1.0", "BUSL-1.1", "CC-BY-NC-4.0", "CC-BY-NC-SA-4.0", "Elastic-2.0", "PolyForm-Noncommercial-1.0.0"]);
+const PERMISSIVE = new Set([
+  "MIT",
+  "Apache-2.0",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "0BSD",
+  "Unlicense",
+  "CC0-1.0",
+  "Zlib",
+  "MIT-0",
+  "BSL-1.0",
+]);
+const COPYLEFT = new Set([
+  "GPL-2.0",
+  "GPL-3.0",
+  "LGPL-2.1",
+  "LGPL-3.0",
+  "MPL-2.0",
+  "EPL-2.0",
+  "GPL-2.0-only",
+  "GPL-3.0-only",
+  "GPL-2.0-or-later",
+  "GPL-3.0-or-later",
+]);
+const INCOMPATIBLE = new Set([
+  "AGPL-3.0",
+  "AGPL-3.0-only",
+  "AGPL-3.0-or-later",
+  "SSPL-1.0",
+  "BUSL-1.1",
+  "CC-BY-NC-4.0",
+  "CC-BY-NC-SA-4.0",
+  "Elastic-2.0",
+  "PolyForm-Noncommercial-1.0.0",
+]);
 
-export function classifyLicense(spdx: string | null): { verdict: LicenseVerdict; guidance: string } {
+export function classifyLicense(spdx: string | null): {
+  verdict: LicenseVerdict;
+  guidance: string;
+} {
   if (!spdx || spdx === "NOASSERTION")
-    return { verdict: "unknown", guidance: "No detectable license: do not copy code. Learn the pattern and implement independently." };
+    return {
+      verdict: "unknown",
+      guidance:
+        "No detectable license: do not copy code. Learn the pattern and implement independently.",
+    };
   if (PERMISSIVE.has(spdx))
-    return { verdict: "compatible", guidance: `${spdx} permits commercial use. Preserve the copyright/license notice, record the source URL, security-review and adapt to Emery architecture.` };
+    return {
+      verdict: "compatible",
+      guidance: `${spdx} permits commercial use. Preserve the copyright/license notice, record the source URL, security-review and adapt to Emery architecture.`,
+    };
   if (INCOMPATIBLE.has(spdx))
-    return { verdict: "incompatible", guidance: `${spdx} is network-copyleft, noncommercial or source-available. Do not copy; independently implement the idea.` };
+    return {
+      verdict: "incompatible",
+      guidance: `${spdx} is network-copyleft, noncommercial or source-available. Do not copy; independently implement the idea.`,
+    };
   if (COPYLEFT.has(spdx))
-    return { verdict: "caution", guidance: `${spdx} is copyleft. Do not copy into Emery without Adam's explicit review; prefer an independent implementation.` };
+    return {
+      verdict: "caution",
+      guidance: `${spdx} is copyleft. Do not copy into Emery without Adam's explicit review; prefer an independent implementation.`,
+    };
   return { verdict: "caution", guidance: `${spdx} needs manual review before any copying.` };
 }
 

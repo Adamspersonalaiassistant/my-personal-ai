@@ -31,7 +31,8 @@ for (const file of tracked) {
     continue;
   }
   for (const pattern of SECRET_PATTERNS) {
-    if (pattern.test(text)) problems.push(`${file}: matches secret pattern ${pattern.source.slice(0, 24)}…`);
+    if (pattern.test(text))
+      problems.push(`${file}: matches secret pattern ${pattern.source.slice(0, 24)}…`);
   }
 }
 if (problems.length) {

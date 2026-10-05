@@ -8,8 +8,15 @@
 import { classifyLicense, type GithubClient } from "./github.ts";
 import { redactSecrets } from "./policy.ts";
 
-export async function webResearch(apiKey: string, model: string, question: string, fetcher: typeof fetch = fetch) {
-  const q = String(question ?? "").trim().slice(0, 600);
+export async function webResearch(
+  apiKey: string,
+  model: string,
+  question: string,
+  fetcher: typeof fetch = fetch,
+) {
+  const q = String(question ?? "")
+    .trim()
+    .slice(0, 600);
   if (q.length < 8) throw new Error("Ask one specific engineering question.");
   const response = await fetcher("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -37,7 +44,8 @@ export async function webResearch(apiKey: string, model: string, question: strin
       if (!text && content?.type === "output_text") text += content.text ?? "";
       for (const annotation of Array.isArray(content?.annotations) ? content.annotations : []) {
         const url = annotation?.url ?? annotation?.url_citation?.url;
-        if (typeof url === "string" && url.startsWith("http")) sources.set(url, String(annotation?.title ?? url));
+        if (typeof url === "string" && url.startsWith("http"))
+          sources.set(url, String(annotation?.title ?? url));
       }
     }
   }
@@ -54,7 +62,10 @@ export async function githubResearch(github: GithubClient, query: string, langua
   const repos = await github.searchRepositories(query, language);
   return {
     query,
-    repositories: repos.map((repo: any) => ({ ...repo, license_verdict: classifyLicense(repo.license).verdict })),
+    repositories: repos.map((repo: any) => ({
+      ...repo,
+      license_verdict: classifyLicense(repo.license).verdict,
+    })),
     reuse_rule:
       "Before copying: verify license, record source URL + license, preserve notices, security-review, adapt to Emery architecture, run regressions. Incompatible/unknown license → learn the pattern and implement independently.",
   };

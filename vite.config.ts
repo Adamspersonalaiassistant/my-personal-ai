@@ -17,7 +17,9 @@ function buildCommit() {
     process.env["CF_PAGES_COMMIT_SHA"];
   if (fromEnv) return fromEnv;
   try {
-    return execSync("git rev-parse HEAD", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+    return execSync("git rev-parse HEAD", { stdio: ["ignore", "pipe", "ignore"] })
+      .toString()
+      .trim();
   } catch {
     return "";
   }

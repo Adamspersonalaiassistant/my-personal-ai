@@ -1,7 +1,17 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { BrainCircuit, ChevronRight, Compass, Crown, Plus, Search, Users, X } from "lucide-react";
+import {
+  BrainCircuit,
+  ChevronRight,
+  Compass,
+  Cpu,
+  Crown,
+  Plus,
+  Search,
+  Users,
+  X,
+} from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { createAgent, listAgents } from "@/lib/agent.functions";
 
@@ -22,6 +32,7 @@ function agentIcon(slug: string) {
   if (slug === "hpo-agent") return Users;
   if (slug === "research-agent") return Search;
   if (slug === "strategy-agent") return Compass;
+  if (slug === "jarvis-engineer") return Cpu;
   return BrainCircuit;
 }
 
@@ -29,6 +40,7 @@ function agentRole(agent: Agent) {
   if (agent.slug === "hpo-agent") return "Hudson Pro operations";
   if (agent.slug === "research-agent") return "Research & synthesis";
   if (agent.slug === "strategy-agent") return "Strategy & challenge";
+  if (agent.slug === "jarvis-engineer") return "Engineering control plane";
   return agent.is_custom ? "Custom specialist" : "Core specialist";
 }
 
@@ -45,6 +57,9 @@ function Agents() {
   const [mission, setMission] = useState("");
   const [description, setDescription] = useState("");
   const [persona, setPersona] = useState("");
+
+  const jarvis = agents.find((agent) => agent.slug === "jarvis-engineer") ?? null;
+  const specialists = agents.filter((agent) => agent.slug !== "jarvis-engineer");
 
   async function refresh() {
     const result = await loadAgents({});
@@ -110,6 +125,32 @@ function Agents() {
           </button>
         </div>
 
+        {jarvis ? (
+          <button
+            type="button"
+            onClick={() => navigate({ to: "/agents/$agentId", params: { agentId: jarvis.id } })}
+            className="emery-press group mb-3 flex w-full items-center gap-3 rounded-2xl border border-primary/25 bg-primary/[0.05] px-3.5 py-3.5 text-left hover:bg-primary/[0.08]"
+            aria-label="Open JARVIS Engineer"
+          >
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/[0.1] text-primary">
+              <Cpu className="size-5" strokeWidth={1.8} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <p className="text-[15px] font-semibold">JARVIS Engineer</p>
+                <span className="rounded-md bg-primary/[0.12] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-primary">
+                  Pinned
+                </span>
+              </div>
+              <p className="mt-0.5 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                Your engineer behind Emery. Talks with you directly about building, fixing and
+                releasing Emery.
+              </p>
+            </div>
+            <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+          </button>
+        ) : null}
+
         <section className="mb-4 flex items-center gap-3 rounded-xl border border-border/35 bg-card/24 px-3.5 py-3">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/[0.065] text-primary">
             <Crown className="size-4" strokeWidth={1.8} />
@@ -123,7 +164,10 @@ function Agents() {
         </section>
 
         {error ? (
-          <p className="mb-4 rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2.5 text-sm text-destructive" role="alert">
+          <p
+            className="mb-4 rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
+            role="alert"
+          >
             {error}
           </p>
         ) : null}
@@ -131,21 +175,29 @@ function Agents() {
         {loading ? (
           <div className="overflow-hidden rounded-2xl border border-border/40 bg-card/28">
             {[0, 1, 2].map((item) => (
-              <div key={item} className="h-[86px] animate-pulse border-b border-border/30 last:border-b-0">
+              <div
+                key={item}
+                className="h-[86px] animate-pulse border-b border-border/30 last:border-b-0"
+              >
                 <div className="mx-4 mt-6 h-3 w-2/3 rounded bg-white/5" />
               </div>
             ))}
           </div>
-        ) : agents.length ? (
-          <section className="overflow-hidden rounded-2xl border border-border/40 bg-card/28" aria-label="Emery specialist team">
-            {agents.map((agent, index) => {
+        ) : specialists.length ? (
+          <section
+            className="overflow-hidden rounded-2xl border border-border/40 bg-card/28"
+            aria-label="Emery specialist team"
+          >
+            {specialists.map((agent, index) => {
               const Icon = agentIcon(agent.slug);
               return (
                 <button
                   key={agent.id}
                   type="button"
-                  onClick={() => navigate({ to: "/agents/$agentId", params: { agentId: agent.id } })}
-                  className={`emery-press group flex min-h-[86px] w-full items-start gap-3 px-3.5 py-3.5 text-left hover:bg-white/[0.025] ${index < agents.length - 1 ? "border-b border-border/30" : ""}`}
+                  onClick={() =>
+                    navigate({ to: "/agents/$agentId", params: { agentId: agent.id } })
+                  }
+                  className={`emery-press group flex min-h-[86px] w-full items-start gap-3 px-3.5 py-3.5 text-left hover:bg-white/[0.025] ${index < specialists.length - 1 ? "border-b border-border/30" : ""}`}
                 >
                   <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/[0.055] text-primary">
                     <Icon className="size-[18px]" strokeWidth={1.8} />
@@ -169,7 +221,10 @@ function Agents() {
                     {agent.children?.length ? (
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {agent.children.map((child) => (
-                          <span key={child.id} className="rounded-md bg-white/[0.035] px-2 py-1 text-[9px] font-medium text-muted-foreground">
+                          <span
+                            key={child.id}
+                            className="rounded-md bg-white/[0.035] px-2 py-1 text-[9px] font-medium text-muted-foreground"
+                          >
                             {child.name.replace(" Agent", "")}
                           </span>
                         ))}
@@ -185,7 +240,8 @@ function Agents() {
             <BrainCircuit className="mx-auto size-7 text-primary/75" strokeWidth={1.7} />
             <p className="mt-3 text-sm font-medium">No specialists yet.</p>
             <p className="mx-auto mt-1 max-w-xs text-xs leading-5 text-muted-foreground">
-              Create one for a recurring area where Emery benefits from a dedicated second set of eyes.
+              Create one for a recurring area where Emery benefits from a dedicated second set of
+              eyes.
             </p>
           </div>
         )}

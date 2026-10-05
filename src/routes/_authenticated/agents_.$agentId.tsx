@@ -12,6 +12,7 @@ import {
   Users,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { JarvisRoom } from "@/components/JarvisRoom";
 import { getAgentThread, sendAgentMessage } from "@/lib/agent.functions";
 
 export const Route = createFileRoute("/_authenticated/agents_/$agentId")({ component: AgentChat });
@@ -118,6 +119,9 @@ function AgentChat() {
       setPending(false);
     }
   }
+
+  // JARVIS Engineer has a dedicated Adam ↔ JARVIS room (no Emery commander).
+  if (agent?.slug === "jarvis-engineer") return <JarvisRoom />;
 
   return (
     <AppShell title={agent?.name ?? "Agent"} padded={false}>

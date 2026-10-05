@@ -8,7 +8,11 @@ import type { JarvisToolDefinition } from "./tool-registry.ts";
 
 export type PolicyDecision =
   | { allowed: true }
-  | { allowed: false; reason: "approval_required" | "protected" | "paid_credit_approval_required"; message: string };
+  | {
+      allowed: false;
+      reason: "approval_required" | "protected" | "paid_credit_approval_required";
+      message: string;
+    };
 
 export type TurnApprovals = {
   /** Adam explicitly approved paid-credit use in this very message. */
@@ -17,7 +21,10 @@ export type TurnApprovals = {
   highRiskApproved: boolean;
 };
 
-export function evaluateToolPolicy(tool: JarvisToolDefinition, approvals: TurnApprovals): PolicyDecision {
+export function evaluateToolPolicy(
+  tool: JarvisToolDefinition,
+  approvals: TurnApprovals,
+): PolicyDecision {
   if (tool.paidCredit && !approvals.paidCreditApproved) {
     return {
       allowed: false,
@@ -57,14 +64,16 @@ const PAID_SERVICE_PATTERNS: Array<{ service: string; pattern: RegExp }> = [
   },
   {
     service: "Paid research/implementation credits",
-    pattern: /\b(paid|premium)\b[^.?!]{0,40}\b(credits?|model|research|agent|implementation|api)\b/i,
+    pattern:
+      /\b(paid|premium)\b[^.?!]{0,40}\b(credits?|model|research|agent|implementation|api)\b/i,
   },
 ];
 
 const APPROVAL_PATTERN =
   /\b(i (approve|authori[sz]e)|approved|go ahead and (use|spend)|you (have|can have) (my )?approval|yes,? (use|spend))\b[^.?!]{0,60}\b(credits?|lovable|paid|premium|codex|devin|cursor)\b/i;
 
-const NEGATION_PATTERN = /\b(don'?t|do not|never|without|no)\b[^.?!]{0,25}\b(use|spend|burn|using|spending)?\b[^.?!]{0,15}\b(credits?|lovable ai|paid)\b/i;
+const NEGATION_PATTERN =
+  /\b(don'?t|do not|never|without|no)\b[^.?!]{0,25}\b(use|spend|burn|using|spending)?\b[^.?!]{0,15}\b(credits?|lovable ai|paid)\b/i;
 
 export type PaidCreditAssessment = {
   requestsPaidPath: boolean;
@@ -74,8 +83,11 @@ export type PaidCreditAssessment = {
 
 export function assessPaidCreditRequest(message: string): PaidCreditAssessment {
   const text = message.trim();
-  if (!text || NEGATION_PATTERN.test(text)) return { requestsPaidPath: false, approved: false, services: [] };
-  const services = PAID_SERVICE_PATTERNS.filter((entry) => entry.pattern.test(text)).map((e) => e.service);
+  if (!text || NEGATION_PATTERN.test(text))
+    return { requestsPaidPath: false, approved: false, services: [] };
+  const services = PAID_SERVICE_PATTERNS.filter((entry) => entry.pattern.test(text)).map(
+    (e) => e.service,
+  );
   return {
     requestsPaidPath: services.length > 0,
     approved: services.length > 0 && APPROVAL_PATTERN.test(text),
@@ -100,14 +112,26 @@ export function paidCreditApprovalMessage(assessment: PaidCreditAssessment, requ
 
 // ------------------------------------------------------------------- GitHub
 
-const PROTECTED_BRANCHES = new Set(["main", "master", "production", "prod", "release", "gh-pages", "HEAD"]);
+const PROTECTED_BRANCHES = new Set([
+  "main",
+  "master",
+  "production",
+  "prod",
+  "release",
+  "gh-pages",
+  "HEAD",
+]);
 // The PR #10 working branch belongs to the engineering session that created it.
 const FOREIGN_BRANCH_PREFIXES = ["jarvis-engineer-foundation"];
 
 export function assertCandidateBranch(name: string): string {
-  const branch = String(name ?? "").trim().replace(/^refs\/heads\//, "");
+  const branch = String(name ?? "")
+    .trim()
+    .replace(/^refs\/heads\//, "");
   if (!branch.startsWith("jarvis/"))
-    throw new PolicyError("Candidate branches must be named jarvis/<slug>. main and other branches are protected.");
+    throw new PolicyError(
+      "Candidate branches must be named jarvis/<slug>. main and other branches are protected.",
+    );
   if (!/^jarvis\/[a-z0-9][a-z0-9._\-/]{1,80}$/i.test(branch) || branch.includes(".."))
     throw new PolicyError("Invalid candidate branch name.");
   const bare = branch.slice("jarvis/".length);
@@ -117,16 +141,25 @@ export function assertCandidateBranch(name: string): string {
 }
 
 const BLOCKED_PATHS: Array<{ pattern: RegExp; reason: string }> = [
-  { pattern: /(^|\/)\.env($|\.(?!example$))/, reason: "environment files hold configuration/secrets" },
+  {
+    pattern: /(^|\/)\.env($|\.(?!example$))/,
+    reason: "environment files hold configuration/secrets",
+  },
   { pattern: /^\.github\/workflows\//, reason: "CI workflow changes can disable security checks" },
-  { pattern: /^src\/integrations\/supabase\/(client|client\.server|auth-middleware|cron-auth)\.ts$/, reason: "generated auth/client integration" },
+  {
+    pattern: /^src\/integrations\/supabase\/(client|client\.server|auth-middleware|cron-auth)\.ts$/,
+    reason: "generated auth/client integration",
+  },
   { pattern: /(^|\/)(\.git|node_modules)\//, reason: "repository internals" },
   { pattern: /\.(pem|key|p12|pfx)$/i, reason: "key material" },
 ];
 
 export function assertSafeRepoPath(path: string): string {
-  const clean = String(path ?? "").trim().replace(/^\/+/, "");
-  if (!clean || clean.includes("..") || clean.length > 300) throw new PolicyError("Invalid repository path.");
+  const clean = String(path ?? "")
+    .trim()
+    .replace(/^\/+/, "");
+  if (!clean || clean.includes("..") || clean.length > 300)
+    throw new PolicyError("Invalid repository path.");
   const blocked = BLOCKED_PATHS.find((entry) => entry.pattern.test(clean));
   if (blocked) throw new PolicyError(`Writing ${clean} is protected (${blocked.reason}).`);
   return clean;
@@ -154,7 +187,9 @@ export function assertSafeContent(path: string, content: string) {
   if (SECRET_CONTENT_PATTERNS.some((p) => p.test(text)))
     throw new PolicyError(`Refusing to commit ${path}: it appears to contain a credential.`);
   if (SECURITY_WEAKENING_PATTERNS.some((p) => p.test(text)))
-    throw new PolicyError(`Refusing to commit ${path}: it weakens database security (RLS/grants). Needs Adam's review.`);
+    throw new PolicyError(
+      `Refusing to commit ${path}: it weakens database security (RLS/grants). Needs Adam's review.`,
+    );
 }
 
 export class PolicyError extends Error {
@@ -164,6 +199,7 @@ export class PolicyError extends Error {
 /** Remove anything that looks like a credential before text reaches a model or a log. */
 export function redactSecrets(text: string): string {
   let out = String(text ?? "");
-  for (const pattern of SECRET_CONTENT_PATTERNS) out = out.replace(new RegExp(pattern.source, "g"), "[redacted]");
+  for (const pattern of SECRET_CONTENT_PATTERNS)
+    out = out.replace(new RegExp(pattern.source, "g"), "[redacted]");
   return out.replace(/(authorization:\s*bearer\s+)\S+/gi, "$1[redacted]");
 }
