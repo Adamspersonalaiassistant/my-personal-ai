@@ -20,8 +20,9 @@ Its job is to reduce Adam's ongoing engineering burden by turning Emery usage, f
 12. `12-BOOTSTRAP-STATUS.md`
 13. `13-KNOWLEDGE-INGESTION.md`
 14. `15-FREE-FIRST-TOOL-AND-CREDIT-POLICY.md`
+15. `16-RUN1-STATUS.md`
 
-`11-DATABASE-FOUNDATION.sql` and `14-KNOWLEDGE-STORE-SCHEMA.sql` are schema records from the bootstrap and must be reconciled with the repository's canonical Supabase migration workflow before the autonomy implementation is considered finished.
+`11-DATABASE-FOUNDATION.sql` and `14-KNOWLEDGE-STORE-SCHEMA.sql` are schema records from the bootstrap and were reconciled into canonical migrations in Run 1 (`supabase/migrations/20261005210000_jarvis_engineer_foundation_reconcile.sql`).
 
 ## Standing instruction to future engineering agents
 
