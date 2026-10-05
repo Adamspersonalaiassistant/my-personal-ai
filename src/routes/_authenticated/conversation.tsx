@@ -76,6 +76,7 @@ const MAX_COMBINED_BYTES = 40 * 1024 * 1024;
 const MAX_FILES = 5;
 const CHAT_PAGE_SIZE = 80;
 const BOTTOM_THRESHOLD = 140;
+const PREFILL_KEY = "emery:prefill";
 
 function cleanAssistantText(text: string) {
   return text
@@ -215,6 +216,14 @@ function Conversation() {
     return () => {
       if (successTimerRef.current) window.clearTimeout(successTimerRef.current);
     };
+  }, []);
+
+  useEffect(() => {
+    const prefill = window.sessionStorage.getItem(PREFILL_KEY)?.trim();
+    if (!prefill) return;
+    setDraft(prefill);
+    window.sessionStorage.removeItem(PREFILL_KEY);
+    requestAnimationFrame(() => textareaRef.current?.focus());
   }, []);
 
   useEffect(() => {

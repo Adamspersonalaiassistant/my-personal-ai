@@ -14,7 +14,7 @@
 
 # Voice-first Emery home
 
-- [ ] Make `/chat` the Core-first dashboard and preserve the typed conversation at `/conversation`.
-- [ ] Add an ephemeral dashboard Voice mode with one verified opening brief.
-- [ ] Redirect contextual handoffs to the typed conversation while preserving Emery navigation and PWA launch.
+- [x] Make `/chat` the Core-first dashboard and preserve the typed conversation at `/conversation`.
+- [x] Add an ephemeral dashboard Voice mode with one verified opening brief.
+- [x] Redirect contextual handoffs to the typed conversation while preserving Emery navigation and PWA launch.
 - [ ] Validate routes, Voice, responsive layouts, and protected HPO/Calendar navigation without publishing.

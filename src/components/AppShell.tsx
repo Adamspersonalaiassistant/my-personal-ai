@@ -142,7 +142,7 @@ export function AppShell({ title, children, padded = true, askEmery }: { title: 
 
         <nav className="emery-scrollbar min-h-0 flex-1 space-y-1 overflow-y-auto px-2 pb-2">
           {desktopNav.map(({ to, label, icon: Icon }) => (
-            <Link key={to} to={to} onClick={() => { if (to === "/chat") rememberEmeryHandoff(); }} className="emery-press flex min-h-11 items-center gap-3 rounded-xl border border-transparent px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground" activeProps={{ className: "border-primary/20 bg-primary/10 text-primary [&_svg]:stroke-[2.2]" }}>
+            <Link key={to} to={to === "/chat" && returnTo ? "/conversation" : to} onClick={() => { if (to === "/chat" && returnTo) rememberEmeryHandoff(); }} className="emery-press flex min-h-11 items-center gap-3 rounded-xl border border-transparent px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground" activeProps={{ className: "border-primary/20 bg-primary/10 text-primary [&_svg]:stroke-[2.2]" }}>
               <Icon className="size-[17px]" /><span>{label}</span>
             </Link>
           ))}
@@ -171,7 +171,7 @@ export function AppShell({ title, children, padded = true, askEmery }: { title: 
 
         <nav className="emery-mobile-nav z-40 grid shrink-0 grid-cols-4 gap-1 border-t border-border/65 px-2 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1.5 md:hidden" aria-label="Primary navigation">
           {primaryNav.map(({ to, label, icon: Icon }) => (
-            <Link key={to} to={to} onClick={() => { if (to === "/chat") rememberEmeryHandoff(); }} className="emery-press relative flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-md px-1 text-[11px] font-medium text-muted-foreground transition-all" activeProps={{ className: "emery-nav-active text-live font-semibold [&_svg]:stroke-[2.35]" }}><Icon className="size-[20px]" /><span>{label}</span></Link>
+            <Link key={to} to={to} className="emery-press relative flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-md px-1 text-[11px] font-medium text-muted-foreground transition-all" activeProps={{ className: "emery-nav-active text-live font-semibold [&_svg]:stroke-[2.35]" }}><Icon className="size-[20px]" /><span>{label}</span></Link>
           ))}
           <Button variant="ghost" type="button" onClick={() => setMoreOpen(true)} aria-label="Open more navigation" aria-expanded={moreOpen} className={`emery-press flex h-auto min-h-[52px] w-full flex-col items-center justify-center gap-1 rounded-md p-0 text-[11px] font-medium transition-all ${moreActive ? "emery-nav-active text-live" : "text-muted-foreground"}`}><MoreHorizontal className="size-[20px]" /><span>More</span></Button>
         </nav>
