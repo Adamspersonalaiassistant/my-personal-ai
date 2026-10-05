@@ -57,7 +57,9 @@ function EmeryHome() {
               onVisualStateChange={setVoiceState}
             />
 
-            <ContextStrip className="mt-3" items={["Connected", "Private", "Current Context"]} />
+            <ContextStrip className="mt-3" label="Continuity">
+              <span className="flex flex-wrap items-center gap-2 text-[11px] font-medium uppercase tracking-[0.08em]"><span>Connected</span><span className="size-1 rounded-full bg-live/60" /><span>Private</span><span className="size-1 rounded-full bg-live/60" /><span>Current Context</span></span>
+            </ContextStrip>
 
             <div className="mt-5">
               <SectionHeading eyebrow="Command center" title="Your workspaces" description="Speak first, or move directly to the surface you need." />
