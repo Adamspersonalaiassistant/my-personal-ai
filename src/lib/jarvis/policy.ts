@@ -31,14 +31,23 @@ export type TurnApprovals = {
 // worker may run; this is decided here in code, never by the model.
 
 const NEGATED_APPROVAL =
-  /\b(don'?t|do not|not yet|never|hold off|wait (for|until)|before i approve|until i approve|without approv\w*|need(s)? (my )?approval)\b[^.?!]{0,40}\b(execute|run|start|schedule|proceed|queue|approve)/i;
+  /\b(don'?t|do not|not yet|never|hold off|wait (for|until)|before i approve|until i approve|without approv\w*|need(s)? (my )?approval)\b[^.?!]{0,40}\b(execute|run|start|schedule|proceed|queue|approve|fix|repair|implement|build|patch|change)/i;
+// "How would you fix it?" asks for analysis, not execution.
+const ANALYSIS_ONLY =
+  /\b(how (would|could|should|do|can|might) (you|we|i)|what would it take to|should we|would it be possible to|ideas? (for|on|to))\b[^.?!]{0,40}\b(fix|implement|build|change)/i;
+
+// A direct engineering instruction ("fix it", "implement that", "make the change")
+// is approval to engineer a CANDIDATE. Releases stay separately approval-gated.
+const DIRECT_ENGINEERING =
+  /\b(fix|repair|implement|build|ship|patch|correct) (it|this|that|them|these|those|the (bug|issue|problem|error|regression|failure))\b|\b(please|go|can you|could you|jarvis,?) (fix|repair|implement|patch)\b|\bmake (the|that|this) (change|fix)\b/i;
+
 const TASK_APPROVAL =
   /\b(i approve|approved|i['’]?m approving|approve (these|those|them|it|the|this|all)|execute (these|those|them|it|the|this|all)|go ahead|proceed( with)?|schedule (these|those|them|it|the|this|all)|run (these|those|them|it|the|this|all)|start (on )?(these|those|them|working)|queue (these|those|them|it|up)|make it so|do (these|those|them) (now|all)|you have my (approval|go[- ]ahead))\b/i;
 
 export function assessTaskApproval(message: string): { approved: boolean } {
   const text = String(message ?? "");
-  if (NEGATED_APPROVAL.test(text)) return { approved: false };
-  return { approved: TASK_APPROVAL.test(text) };
+  if (NEGATED_APPROVAL.test(text) || ANALYSIS_ONLY.test(text)) return { approved: false };
+  return { approved: TASK_APPROVAL.test(text) || DIRECT_ENGINEERING.test(text) };
 }
 
 const BATCH_REPLACEMENT =

@@ -29,6 +29,11 @@ import { prepareEmeryRequestRouting } from "@/lib/emery/request-routing";
 import { emptyActionContext } from "@/lib/emery/context-load-policy";
 import { buildChatSmartMemoryContext } from "@/lib/emery/chat-smart-memory";
 import { recordTurnEvaluation } from "@/lib/emery/turn-evaluation";
+import {
+  capabilityGapEvent,
+  EMERY_CAPABILITY_GAP_POLICY,
+  extractCapabilityGap,
+} from "@/lib/emery/capability-discovery";
 import { buildEmerySelfAwarenessBlock, isJarvisSelfAwarenessQuestion } from "@/lib/jarvis/runtime";
 import { currentBearerToken } from "@/lib/jarvis/request-auth";
 import { ingestKnowledgeFromMessage } from "@/lib/jarvis/tool-gateway";
@@ -1760,6 +1765,8 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
               "\n\nEXECUTION CAPABILITY REGISTRY:\n" +
               executionCapabilityPrompt() +
               "\n\nCAPABILITY RULE: If Adam asks you to execute something outside the registry's executable actions, say what is not connected instead of implying you performed it. If a recent execution receipt says failed or needs_clarification, do not describe that action as completed." +
+              "\n\n" +
+              EMERY_CAPABILITY_GAP_POLICY +
               // Written replies only: spoken turns keep the Voice contract untouched.
               (data.source.inputMode === "voice" ? "" : "\n\n" + EMERY_TYPED_FORMAT_POLICY),
           },
@@ -1829,8 +1836,14 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
     });
     if (!resp.ok) return { error: "Emery couldn't answer right now. Please try again." } as const;
     const responsePayload = await resp.json();
-    const reply = responseText(responsePayload);
+    // A genuine missing capability becomes a structured gap for JARVIS; Adam never sees the marker.
+    const { reply, gap: capabilityGap } = extractCapabilityGap(responseText(responsePayload));
     if (!reply) return { error: "Emery returned an empty response." } as const;
+    if (capabilityGap && !data.source.hpoEphemeral)
+      await recordRuntimeEvent(db, userId, {
+        channel: data.source.entryPoint as any,
+        ...capabilityGapEvent(capabilityGap, route.domain),
+      });
     const usage = safe(responsePayload?.usage);
     const inputDetails = safe(usage["input_tokens_details"]);
     const inputTokens = Number(usage["input_tokens"] ?? 0) || 0;

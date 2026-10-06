@@ -361,7 +361,7 @@ export class Engine {
           event_type: "jarvis_worker",
           action: `${current.status}:error`,
           status: "error",
-          metadata: { task_id: current.id, error: message },
+          metadata: { task_id: current.id, error: message, fixture: current.is_fixture },
         });
         if (errors >= MAX_STEP_ERRORS) {
           await this.d.store.release(current.id, token, {
@@ -1044,9 +1044,17 @@ export class Engine {
         skipped.push(opp.dedupe_key);
         continue;
       }
+      // Radar discoveries are PROPOSALS unless they are fixtures (validation) or
+      // high-confidence read-only Emery diagnostics that safe-autonomy policy
+      // already allows to run. JARVIS self-weaknesses always wait for Adam.
+      const autoApproved =
+        opp.fixture ||
+        (opp.signal !== "self_weakness" &&
+          opp.kind !== "code_change" &&
+          opp.confidence >= RADAR_AUTO_CONFIDENCE);
       const inserted = await this.d.store.insertTask({
         user_id: owner,
-        source_type: "opportunity_radar",
+        source_type: opp.signal === "self_weakness" ? "jarvis_self_research" : "opportunity_radar",
         source_ref: opp.dedupe_key,
         title: opp.title,
         objective: opp.objective,
@@ -1075,17 +1083,8 @@ export class Engine {
           },
         },
         is_fixture: opp.fixture,
-        // Radar discoveries are PROPOSALS unless they are fixtures (validation) or
-        // high-confidence read-only diagnostics that safe-autonomy policy already
-        // allows to run. Low-confidence findings never consume production slots.
-        approval_state:
-          opp.fixture || (opp.kind !== "code_change" && opp.confidence >= RADAR_AUTO_CONFIDENCE)
-            ? "approved"
-            : "proposed",
-        approved_at:
-          opp.fixture || (opp.kind !== "code_change" && opp.confidence >= RADAR_AUTO_CONFIDENCE)
-            ? this.now().toISOString()
-            : null,
+        approval_state: autoApproved ? "approved" : "proposed",
+        approved_at: autoApproved ? this.now().toISOString() : null,
       } as Partial<TaskRow>);
       if ("id" in inserted) created.push(inserted.id);
       else skipped.push(opp.dedupe_key);
