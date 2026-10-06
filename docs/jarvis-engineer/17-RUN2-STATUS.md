@@ -18,7 +18,7 @@ State vocabulary: **code-complete** → **tested** → **deployed** → **verifi
 | Room task intake (`jarvis.create_task`, batch `jarvis.create_tasks`)                                                                                                  | `src/lib/jarvis/tool-gateway.ts`, `tool-registry.ts`                                                                             |
 | JARVIS Voice (separate identity, same thread via `jarvis_turn`)                                                                                                       | `src/lib/jarvis/voice.ts`, `src/lib/jarvis.functions.ts` (`createJarvisRealtimeSecret`), `src/components/JarvisVoiceControl.tsx` |
 | Self-awareness (deployed vs candidate, session self-improvement, readiness)                                                                                           | `src/lib/jarvis/state.ts`, `runtime.ts`                                                                                          |
-| Validation                                                                                                                                                            | `validate:jarvis-worker` (18 checks), `validate:jarvis` (23 checks)                                                              |
+| Validation                                                                                                                                                            | `validate:jarvis-worker` (18 checks), `validate:jarvis` (24 checks)                                                              |
 
 ## Live (Supabase, verified 2026-10-06)
 
@@ -47,6 +47,7 @@ Live evidence:
 5. Room `jarvis.create_task` produced tasks the worker could not execute → executable specs + batch intake.
 6. Capacity eligibility counted fixtures → real tasks only.
 7. A literal fake key in a test tripped `check:env-safety` → built at runtime.
+8. Readiness counted every task created today (including ledger notes) and could report "ready" with no capacity left → counts accepted tasks only, and a full day reports not ready.
 
 ## Not yet live (needs the Run 2 app release)
 

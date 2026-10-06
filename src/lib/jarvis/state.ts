@@ -95,9 +95,12 @@ export async function getJarvisStatus(db: any, userId: string) {
 
   const activeSession = sessions.find((s: any) => ["queued", "running"].includes(s.status)) ?? null;
   const todaysSession = sessions.find((s: any) => s.session_date === today) ?? null;
-  const todaysTasks = tasks.filter(
-    (t: any) => easternDate(new Date(t.created_at)) === today && t.status !== "cancelled",
+  // Intake is what the worker accepted into today's sessions (jarvis_accept_task),
+  // not every row created today: ledger notes and over-capacity tasks never count.
+  const todaysSessionIds = new Set(
+    sessions.filter((s: any) => s.session_date === today).map((s: any) => s.id),
   );
+  const todaysTasks = tasks.filter((t: any) => t.session_id && todaysSessionIds.has(t.session_id));
   const counts = Object.fromEntries(TASK_STATUSES.map((status) => [status, 0])) as Record<
     (typeof TASK_STATUSES)[number],
     number
@@ -138,18 +141,10 @@ export async function getJarvisStatus(db: any, userId: string) {
           }
         : null;
     })(),
-    ready_for_more_tasks: {
-      ready:
-        !openTasks.some((t: any) =>
-          ["validating", "researching", "planning", "building", "testing", "repairing"].includes(
-            t.status,
-          ),
-        ) || (todaysSession?.intake_limit ?? DAILY_TASK_CAPACITY) - todaysTasks.length > 0,
-      remaining_capacity_today: Math.max(
-        0,
-        (todaysSession?.intake_limit ?? DAILY_TASK_CAPACITY) - todaysTasks.length,
-      ),
-      in_flight: openTasks.filter((t: any) =>
+    ready_for_more_tasks: (() => {
+      const capacity = todaysSession?.intake_limit ?? DAILY_TASK_CAPACITY;
+      const remaining = Math.max(0, capacity - todaysTasks.length);
+      const inFlight = openTasks.filter((t: any) =>
         [
           "queued",
           "validating",
@@ -159,8 +154,17 @@ export async function getJarvisStatus(db: any, userId: string) {
           "testing",
           "repairing",
         ].includes(t.status),
-      ).length,
-    },
+      ).length;
+      return {
+        ready: remaining > 0,
+        remaining_capacity_today: remaining,
+        in_flight: inFlight,
+        note:
+          remaining > 0
+            ? `Ready: ${remaining} of ${capacity} intake slots left today; ${inFlight} task(s) in flight.`
+            : `Today's ${capacity}-task intake is full. New tasks are queued and accepted after midnight Eastern.`,
+      };
+    })(),
   };
 }
 

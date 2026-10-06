@@ -1016,4 +1016,55 @@ await check(
   },
 );
 
+await check(
+  "Run 2 readiness: intake counts only tasks accepted into today's sessions; a full day is reported as not ready",
+  async () => {
+    const state = await import("../src/lib/jarvis/state.ts");
+    const today = state.easternDate();
+    const at = new Date().toISOString();
+    const session = (id, n) => ({
+      id,
+      status: "completed",
+      session_date: today,
+      intake_limit: 50,
+      self_research_summary: id === "s2" ? "Self-research (watch): test selection." : null,
+      self_research_classification: "watch",
+      metadata: { metrics: { completion_rate: 1 } },
+      updated_at: at,
+      accepted_count: n,
+    });
+    const task = (id, sessionId, status = "completed") => ({
+      id,
+      session_id: sessionId,
+      title: id,
+      status,
+      created_at: at,
+      updated_at: at,
+    });
+    const accepted = (n, sid) => Array.from({ length: n }, (_, i) => task(`${sid}-${i}`, sid));
+    const status = async (tasks) =>
+      state.getJarvisStatus(
+        fakeDb({
+          jarvis_engineering_sessions: [session("s2", 10), session("s1", 5)],
+          jarvis_engineering_tasks: tasks,
+          jarvis_research_findings: [],
+        }),
+        "u",
+      );
+    const partial = await status([
+      ...accepted(5, "s1"),
+      ...accepted(10, "s2"),
+      task("ledger-note", null, "deferred"),
+      task("tomorrow", null, "queued"),
+    ]);
+    assert.equal(partial.accepted_today, 15, "ledger notes and unaccepted tasks do not count");
+    assert.equal(partial.ready_for_more_tasks.ready, true);
+    assert.equal(partial.ready_for_more_tasks.remaining_capacity_today, 35);
+    assert.equal(partial.latest_session_self_improvement.session_id, "s2");
+    const full = await status([...accepted(25, "s1"), ...accepted(25, "s2")]);
+    assert.equal(full.ready_for_more_tasks.ready, false);
+    assert.match(full.ready_for_more_tasks.note, /intake is full/);
+  },
+);
+
 console.log(`JARVIS Run 1 end-to-end harness: complete (${passed} checks).`);
