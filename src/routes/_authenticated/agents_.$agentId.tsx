@@ -1,4 +1,3 @@
-import { AssistantText } from "@/components/AssistantText";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
@@ -13,6 +12,7 @@ import {
   Users,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { AssistantText } from "@/components/AssistantText";
 import { JarvisRoom } from "@/components/JarvisRoom";
 import { getAgentThread, sendAgentMessage } from "@/lib/agent.functions";
 

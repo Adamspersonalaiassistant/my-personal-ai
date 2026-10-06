@@ -1,4 +1,3 @@
-import { AssistantText } from "@/components/AssistantText";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
@@ -16,6 +15,8 @@ import {
   XCircle,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { AssistantText } from "@/components/AssistantText";
+import { JarvisVoiceAudition } from "@/components/JarvisVoiceAudition";
 import { JarvisVoiceControl } from "@/components/JarvisVoiceControl";
 import { getJarvisRoom, getJarvisStatusPanel, sendJarvisMessage } from "@/lib/jarvis.functions";
 
@@ -267,6 +268,7 @@ export function JarvisRoom() {
                     )}
                 />
               ) : null}
+              <JarvisVoiceAudition />
               {approvals.length ? (
                 <PanelList
                   title="Approval required"

@@ -1,4 +1,3 @@
-import { AssistantText } from "@/components/AssistantText";
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
@@ -15,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { AssistantText } from "@/components/AssistantText";
 import { EmeryVoiceControl } from "@/components/EmeryVoiceControl";
 import { OperatingContextCard } from "@/components/OperatingContextCard";
 import { EmeryPresence } from "@/components/emery-visual/EmeryPresence";

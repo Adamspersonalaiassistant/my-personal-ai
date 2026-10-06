@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Loader2, Mic, MicOff } from "lucide-react";
 import { createJarvisRealtimeSecret, sendJarvisMessage } from "@/lib/jarvis.functions";
+import { toSpeakable } from "@/lib/assistant-format";
 import { claimExclusiveEmeryVoice, releaseExclusiveEmeryVoice } from "@/lib/voice-session-guard";
 
 type Status = "idle" | "connecting" | "listening" | "thinking" | "error";
@@ -66,7 +67,9 @@ export function JarvisVoiceControl({ onTurn }: { onTurn: (result: TurnResult) =>
           data: { message: request || "(inaudible request)", channel: "voice" },
         });
         onTurn(result);
-        output = result.agentMessage?.content ?? result.error ?? output;
+        // The full written answer stays in the shared thread; Voice gets it
+        // without markdown symbols so nothing like "hash hash" is ever spoken.
+        output = toSpeakable(result.agentMessage?.content ?? result.error ?? output) || output;
       } catch (caught) {
         console.error(caught);
       }

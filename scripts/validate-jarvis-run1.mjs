@@ -994,25 +994,72 @@ await check(
   },
 );
 
-const { jarvisVoiceProfile, jarvisRealtimeInstructions, DEFAULT_JARVIS_VOICE } =
-  await import("../src/lib/jarvis/voice.ts");
+const {
+  jarvisVoiceProfile,
+  jarvisRealtimeInstructions,
+  jarvisPreviewInstructions,
+  DEFAULT_JARVIS_VOICE,
+  JARVIS_VOICE_CANDIDATES,
+  JARVIS_TEST_PHRASES,
+} = await import("../src/lib/jarvis/voice.ts");
+const { JARVIS_CHARACTER } = await import("../src/lib/jarvis/character.ts");
+const { JARVIS_PERSONA } = await import("../src/lib/jarvis/runtime.ts");
 
 await check(
-  "Run 2 voice: JARVIS has its own persistent voice, never Emery's, and routes speech into the shared JARVIS thread",
+  "Voice polish: JARVIS keeps a separate, current voice identity; stale auto-profiles never override it; only Adam's audition choice is stored",
   () => {
     assert.equal(jarvisVoiceProfile(null, "shimmer").voice, DEFAULT_JARVIS_VOICE.voice);
     assert.notEqual(jarvisVoiceProfile(null, "shimmer").voice, "shimmer");
     // Even if Emery's voice later becomes JARVIS's default, they stay distinct.
     assert.notEqual(jarvisVoiceProfile(null, "cedar").voice, "cedar");
-    const stored = jarvisVoiceProfile({ voice_profile: { voice: "ash", speed: 1.05 } }, "shimmer");
-    assert.equal(stored.voice, "ash");
-    assert.equal(stored.speed, 1.05);
-    assert.equal(jarvisVoiceProfile({ voice_profile: { voice: "bogus", speed: 9 } }).speed, 1);
-    const text = jarvisRealtimeInstructions(DEFAULT_JARVIS_VOICE, "STATE");
-    assert.match(text, /British-English/);
-    assert.match(text, /never imitate any actor/i);
-    assert.match(text, /jarvis_turn/);
-    assert.match(text, /You are NOT Emery/);
+    // Run 2 auto-saved a v1 profile on first use: it must not freeze old delivery/voice.
+    const stale = jarvisVoiceProfile(
+      { voice_profile: { voice: "ash", speed: 1.0, delivery: "old text", version: 1 } },
+      "shimmer",
+    );
+    assert.equal(stale.voice, DEFAULT_JARVIS_VOICE.voice);
+    assert.equal(stale.selected_by, "default");
+    assert.notEqual(stale.delivery, "old text");
+    const chosen = jarvisVoiceProfile(
+      { voice_profile: { voice: "ballad", speed: 0.97, selected_by: "adam" } },
+      "shimmer",
+    );
+    assert.equal(chosen.voice, "ballad");
+    assert.equal(chosen.speed, 0.97);
+    assert.equal(chosen.delivery, DEFAULT_JARVIS_VOICE.delivery, "delivery always from code");
+    assert.equal(
+      jarvisVoiceProfile({ voice_profile: { voice: "shimmer", selected_by: "adam" } }).voice,
+      DEFAULT_JARVIS_VOICE.voice,
+      "only masculine JARVIS candidates are accepted",
+    );
+    assert.ok(DEFAULT_JARVIS_VOICE.speed < 1, "slightly slower than normal conversation");
+    assert.deepEqual(
+      JARVIS_VOICE_CANDIDATES.map((c) => c.id),
+      ["cedar", "ballad", "ash"],
+    );
+    assert.equal(JARVIS_TEST_PHRASES.length, 5);
+  },
+);
+
+await check(
+  "Voice polish: typed and Voice JARVIS share one character (Adam = owner/inventor, JARVIS = AI CTO), British delivery, concise spoken rules, no imitation",
+  () => {
+    const voice = jarvisRealtimeInstructions(DEFAULT_JARVIS_VOICE, "STATE");
+    assert.ok(voice.includes(JARVIS_CHARACTER), "voice uses the shared character");
+    assert.ok(JARVIS_PERSONA.includes(JARVIS_CHARACTER), "typed uses the same character");
+    assert.match(JARVIS_CHARACTER, /owner, principal, inventor/);
+    assert.match(JARVIS_CHARACTER, /not ready/);
+    assert.match(JARVIS_CHARACTER, /I have an idea/);
+    assert.match(voice, /British-English/);
+    assert.match(voice, /Non-rhotic/);
+    assert.match(voice, /jarvis_turn/);
+    assert.match(voice, /You are NOT Emery/);
+    assert.match(voice, /1-4 short spoken points/);
+    assert.match(voice, /at most once in a conversation/);
+    for (const text of [voice, jarvisPreviewInstructions()])
+      assert.match(text, /Never imitate any actor/i);
+    assert.match(JARVIS_PERSONA, /Do not use markdown headings/);
+    assert.doesNotMatch(voice + JARVIS_PERSONA, /Tony|Stark|Iron Man|Marvel|Bettany/i);
   },
 );
 
