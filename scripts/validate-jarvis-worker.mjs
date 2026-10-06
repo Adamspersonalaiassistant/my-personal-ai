@@ -1,0 +1,939 @@
+// Deterministic validation of the JARVIS Run 2 worker engine.
+// Run: node --experimental-strip-types scripts/validate-jarvis-worker.mjs
+// Uses an in-memory Store, a fake GitHub API (behind the REAL proxy allowlist),
+// a fake isolated CI and a fake planner.
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import {
+  Engine,
+  applyEdits,
+  branchFor,
+  classifyRisk,
+} from "../supabase/functions/jarvis-worker/engine.ts";
+import { GithubOps } from "../supabase/functions/jarvis-worker/github-ops.ts";
+import { buildOpportunities } from "../supabase/functions/jarvis-worker/radar.ts";
+
+let passed = 0;
+async function check(name, fn) {
+  await fn();
+  passed += 1;
+  console.log(`✓ ${name}`);
+}
+
+const OWNER = "owner-1";
+const REPO = "/repos/Adamspersonalaiassistant/my-personal-ai";
+
+// ------------------------------------------------------------------ clock
+let clock = Date.parse("2026-10-06T14:00:00Z");
+const now = () => new Date(clock);
+const advance = (ms) => (clock += ms);
+let idSeq = 0;
+const uuid = () => {
+  idSeq += 1;
+  return `${idSeq.toString(16).padStart(8, "0")}-0000-4000-8000-${idSeq.toString(16).padStart(12, "0")}`;
+};
+
+// ------------------------------------------------------------- fake store
+class MemoryStore {
+  constructor() {
+    this.taskRows = [];
+    this.sessions = [];
+    this.events = [];
+    this.findings = [];
+    this.candidates = [];
+    this.radar = { events: [], receipts: [], backlog: [], evaluations: [] };
+    this.maxActiveSeen = 0;
+    this.claimCalls = 0;
+  }
+  async ownerId() {
+    return OWNER;
+  }
+  addTask(partial) {
+    const row = {
+      id: uuid(),
+      user_id: OWNER,
+      session_id: null,
+      source_type: "adam",
+      source_ref: null,
+      title: "task",
+      objective: null,
+      why_it_matters: null,
+      priority: 3,
+      risk_level: "medium",
+      status: "queued",
+      branch_name: null,
+      commit_sha: null,
+      pr_url: null,
+      test_results: {},
+      result_summary: null,
+      blocker: null,
+      attempt_count: 0,
+      task_spec: {},
+      stage_state: {},
+      metadata: {},
+      dedupe_key: null,
+      depends_on: [],
+      merged_into: null,
+      lease_token: null,
+      lease_expires_at: null,
+      leased_by: null,
+      next_attempt_at: now().toISOString(),
+      is_fixture: true,
+      created_at: new Date(clock + this.taskRows.length).toISOString(),
+      completed_at: null,
+      ...partial,
+    };
+    this.taskRows.push(row);
+    return row;
+  }
+  async claim(workerId, limit) {
+    this.claimCalls += 1;
+    const t = now();
+    const live = this.taskRows.filter(
+      (r) => r.lease_expires_at && Date.parse(r.lease_expires_at) > t.getTime(),
+    );
+    let writers = live.filter((r) => r.task_spec?.kind === "code_change").length;
+    const slots = Math.min(limit, 4 - live.length);
+    const out = [];
+    if (slots <= 0) return out;
+    const runnable = this.taskRows
+      .filter((r) =>
+        [
+          "queued",
+          "validating",
+          "researching",
+          "planning",
+          "building",
+          "testing",
+          "repairing",
+        ].includes(r.status),
+      )
+      .filter((r) => !r.lease_expires_at || Date.parse(r.lease_expires_at) < t.getTime())
+      .filter((r) => Date.parse(r.next_attempt_at) <= t.getTime())
+      .filter((r) =>
+        r.depends_on.every((d) =>
+          ["completed", "ready_for_release"].includes(
+            this.taskRows.find((x) => x.id === d)?.status,
+          ),
+        ),
+      )
+      .sort((a, b) => a.priority - b.priority || a.created_at.localeCompare(b.created_at));
+    for (const r of runnable) {
+      const writer = r.task_spec?.kind === "code_change";
+      if (writer && writers >= 1) continue;
+      r.lease_token = uuid();
+      r.leased_by = workerId;
+      r.lease_expires_at = new Date(t.getTime() + 240_000).toISOString();
+      r.attempt_count += 1;
+      out.push(structuredClone(r));
+      if (writer) writers += 1;
+      if (out.length >= slots) break;
+    }
+    const active = this.taskRows.filter(
+      (r) => r.lease_expires_at && Date.parse(r.lease_expires_at) > t.getTime(),
+    ).length;
+    this.maxActiveSeen = Math.max(this.maxActiveSeen, active);
+    return out;
+  }
+  async update(id, token, patch) {
+    const r = this.taskRows.find((x) => x.id === id);
+    if (!r || r.lease_token !== token) return false;
+    Object.assign(r, structuredClone(patch));
+    return true;
+  }
+  async release(id, token, patch) {
+    return this.update(id, token, {
+      ...patch,
+      lease_token: null,
+      lease_expires_at: null,
+      leased_by: null,
+    });
+  }
+  async tasks(f) {
+    return this.taskRows
+      .filter((r) => r.user_id === f.userId)
+      .filter((r) => !f.statuses || f.statuses.includes(r.status))
+      .filter((r) => !f.sinceIso || r.created_at >= f.sinceIso)
+      .filter((r) => !f.ids || f.ids.includes(r.id))
+      .filter((r) => !f.sessionId || r.session_id === f.sessionId)
+      .map((r) => structuredClone(r));
+  }
+  async insertTask(row) {
+    if (
+      row.dedupe_key &&
+      this.taskRows.some(
+        (r) =>
+          r.dedupe_key === row.dedupe_key &&
+          [
+            "queued",
+            "validating",
+            "researching",
+            "planning",
+            "building",
+            "testing",
+            "repairing",
+            "blocked",
+          ].includes(r.status),
+      )
+    )
+      return { duplicate: true };
+    return { id: this.addTask(row).id };
+  }
+  async openSession(userId, date) {
+    return (
+      this.sessions.find(
+        (s) =>
+          s.user_id === userId &&
+          s.session_date === date &&
+          ["queued", "running"].includes(s.status),
+      ) ?? null
+    );
+  }
+  async insertSession(row) {
+    const s = { id: uuid(), metadata: {}, ...row };
+    this.sessions.push(s);
+    return s;
+  }
+  async updateSession(id, patch, expect) {
+    const s = this.sessions.find((x) => x.id === id);
+    if (!s || (expect && s.status !== expect)) return false;
+    Object.assign(s, patch);
+    return true;
+  }
+  async runningSessions(userId) {
+    return this.sessions.filter((s) => s.user_id === userId && s.status === "running");
+  }
+  async acceptedOn(userId, date) {
+    const ids = this.sessions.filter((s) => s.session_date === date).map((s) => s.id);
+    return this.taskRows.filter((r) => ids.includes(r.session_id)).length;
+  }
+  async acceptInto(taskId, token, sessionId, date, limit) {
+    // Synchronous body == atomic in this single-threaded fake (mirrors the advisory-locked SQL).
+    const r = this.taskRows.find((x) => x.id === taskId);
+    if (!r || r.lease_token !== token || r.session_id) return false;
+    const ids = this.sessions.filter((s) => s.session_date === date).map((s) => s.id);
+    const count = this.taskRows.filter((x) => ids.includes(x.session_id)).length;
+    if (count >= limit) return false;
+    r.session_id = sessionId;
+    this.sessions.find((s) => s.id === sessionId).accepted_count = count + 1;
+    return true;
+  }
+  async count() {
+    return 7;
+  }
+  async radarInputs() {
+    return this.radar;
+  }
+  async lastEventAt(userId, type) {
+    const e = [...this.events].reverse().find((x) => x.event_type === type);
+    return e?.at ?? null;
+  }
+  async logEvent(userId, event) {
+    this.events.push({ ...event, at: now().toISOString() });
+  }
+  async insertFinding(row) {
+    this.findings.push(row);
+  }
+  async recordCandidate(row) {
+    this.candidates.push(row);
+  }
+}
+
+// ------------------------------------------------- fake GitHub + fake CI
+class FakeGithub {
+  constructor() {
+    this.files = new Map([["main", null]]);
+    this.commits = new Map();
+    this.trees = new Map();
+    this.refs = new Map();
+    this.prs = [];
+    this.calls = [];
+    this.ciPendingOnce = new Set();
+    const root = this.makeTree(null, {
+      "src/lib/execution-capabilities.ts":
+        'export const EMERY_EXECUTION_CAPABILITIES = {\n  google_calendar: { canExecute: false, note: "Google Calendar is not connected." },\n} as const;\n',
+      "src/lib/emery/capability-registry.ts": "export const CAPABILITY_REGISTRY = {};\n",
+      "src/lib/jarvis/fixtures/controlled.ts": "export const CONTROLLED_VALUE = 1;\n",
+    });
+    const c = this.makeCommit(root, [], "initial");
+    this.refs.set("main", c);
+  }
+  makeTree(base, changes) {
+    const files = { ...(base ? this.trees.get(base) : {}) };
+    for (const [p, c] of Object.entries(changes)) files[p] = c;
+    const id = `tree${this.trees.size + 1}`;
+    this.trees.set(id, files);
+    return id;
+  }
+  makeCommit(tree, parents, message) {
+    const sha = `c${(this.commits.size + 1).toString().padStart(39, "0")}`;
+    this.commits.set(sha, { sha, tree, parents, message });
+    return sha;
+  }
+  filesAt(ref) {
+    const sha = this.refs.get(ref) ?? ref;
+    const commit = this.commits.get(sha);
+    return commit ? this.trees.get(commit.tree) : null;
+  }
+  fetch = async (url, init = {}) => {
+    const u = new URL(String(url));
+    const method = init.method ?? "GET";
+    const body = init.body ? JSON.parse(init.body) : null;
+    this.calls.push({ method, path: u.pathname + u.search, body });
+    const p = u.pathname.replace(REPO, "");
+    const json = (data, status = 200) => new Response(JSON.stringify(data), { status });
+    let m;
+    if (method === "GET" && (m = p.match(/^\/git\/ref\/heads\/(.+)$/))) {
+      const sha = this.refs.get(decodeURIComponent(m[1]));
+      return sha ? json({ object: { sha } }) : json({ message: "Not Found" }, 404);
+    }
+    if (method === "POST" && p === "/git/refs") {
+      const name = body.ref.replace("refs/heads/", "");
+      if (this.refs.has(name)) return json({ message: "Reference already exists" }, 422);
+      this.refs.set(name, body.sha);
+      return json({ ref: body.ref }, 201);
+    }
+    if (method === "GET" && (m = p.match(/^\/git\/commits\/(\w+)$/))) {
+      const c = this.commits.get(m[1]);
+      return c ? json({ sha: c.sha, tree: { sha: c.tree }, message: c.message }) : json({}, 404);
+    }
+    if (method === "POST" && p === "/git/trees") {
+      const changes = Object.fromEntries(body.tree.map((e) => [e.path, e.content]));
+      return json({ sha: this.makeTree(body.base_tree, changes) }, 201);
+    }
+    if (method === "POST" && p === "/git/commits")
+      return json({ sha: this.makeCommit(body.tree, body.parents, body.message) }, 201);
+    if (method === "PATCH" && (m = p.match(/^\/git\/refs\/heads\/(.+)$/))) {
+      const name = decodeURIComponent(m[1]);
+      const next = this.commits.get(body.sha);
+      if (body.force) return json({ message: "force not expected" }, 400);
+      if (!next || next.parents[0] !== this.refs.get(name))
+        return json({ message: "Update is not a fast forward" }, 422);
+      this.refs.set(name, body.sha);
+      return json({ ref: `refs/heads/${name}`, object: { sha: body.sha } });
+    }
+    if (method === "GET" && (m = p.match(/^\/contents\/(.+)$/))) {
+      const files = this.filesAt(u.searchParams.get("ref"));
+      const content = files?.[decodeURIComponent(m[1])];
+      return content == null
+        ? json({ message: "Not Found" }, 404)
+        : new Response(content, { status: 200 });
+    }
+    if (method === "GET" && (m = p.match(/^\/git\/trees\/(.+)$/))) {
+      const files = this.filesAt(decodeURIComponent(m[1]));
+      return json({
+        tree: Object.keys(files ?? {}).map((path) => ({ path, type: "blob", size: 10 })),
+      });
+    }
+    if (method === "GET" && (m = p.match(/^\/commits\/(\w+)\/check-runs$/))) {
+      const sha = m[1];
+      if (!this.ciPendingOnce.has(sha)) {
+        this.ciPendingOnce.add(sha);
+        return json({
+          check_runs: [
+            { id: 1, name: "jarvis-candidate", status: "in_progress", conclusion: null },
+          ],
+        });
+      }
+      const broken = Object.entries(this.filesAt(sha) ?? {}).filter(([, c]) =>
+        String(c).includes("BROKEN_TYPE_ERROR"),
+      );
+      return json({
+        check_runs: [
+          {
+            id: broken.length ? 900 + this.commits.size : 1,
+            name: "jarvis-candidate",
+            status: "completed",
+            conclusion: broken.length ? "failure" : "success",
+            html_url: `https://ci/${sha}`,
+          },
+        ],
+      });
+    }
+    if (method === "GET" && (m = p.match(/^\/check-runs\/(\d+)\/annotations$/))) {
+      // Report the broken file from the most recent failing commit.
+      const latest = [...this.commits.values()]
+        .reverse()
+        .find((c) =>
+          Object.values(this.trees.get(c.tree)).some((x) =>
+            String(x).includes("BROKEN_TYPE_ERROR"),
+          ),
+        );
+      const files = latest ? this.trees.get(latest.tree) : {};
+      return json(
+        Object.entries(files)
+          .filter(([, c]) => String(c).includes("BROKEN_TYPE_ERROR"))
+          .map(([path]) => ({
+            path,
+            start_line: 1,
+            title: "TS2322",
+            message: "Type 'string' is not assignable to type 'number'.",
+          })),
+      );
+    }
+    if (method === "GET" && p.startsWith("/pulls")) {
+      const head = u.searchParams.get("head")?.split(":")[1];
+      return json(this.prs.filter((pr) => pr.head === head));
+    }
+    if (method === "POST" && p === "/pulls") {
+      const pr = {
+        number: this.prs.length + 100,
+        html_url: `https://github.com/pr/${this.prs.length + 100}`,
+        head: body.head,
+      };
+      this.prs.push(pr);
+      return json(pr, 201);
+    }
+    return json({ message: `fake: unhandled ${method} ${p}` }, 404);
+  };
+}
+
+class FakePlanner {
+  constructor() {
+    this.calls = [];
+  }
+  async planEdits(input) {
+    this.calls.push({ kind: "plan", objective: input.objective });
+    const target = input.files.find((f) => f.path.endsWith("execution-capabilities.ts"));
+    return {
+      summary: "Register Apple Reminders as not connected",
+      edits: [
+        {
+          path: target.path,
+          find: "} as const;",
+          replace:
+            '  apple_reminders: { canExecute: false, note: "Apple Reminders is not connected." },\n} as const;',
+        },
+      ],
+    };
+  }
+  async repair(input) {
+    this.calls.push({ kind: "repair", failures: input.failures.length });
+    const broken = input.files.find((f) => f.content.includes("BROKEN_TYPE_ERROR"));
+    return {
+      summary: "Fix type error",
+      edits: [
+        {
+          path: broken.path,
+          find: 'const value: number = "BROKEN_TYPE_ERROR";',
+          replace: "const value: number = 1;",
+        },
+      ],
+    };
+  }
+  async research(question) {
+    this.calls.push({ kind: "research", question });
+    return {
+      answer: "- Use leases with fencing tokens.\nRecommendation: keep SKIP LOCKED claims.",
+      sources: ["https://example.org/queues"],
+    };
+  }
+}
+
+function makeEngine(store, gh, planner, extra = {}) {
+  return new Engine({
+    store,
+    github: gh ? new GithubOps({ token: "test-token", fetcher: gh.fetch }) : null,
+    planner,
+    workerId: extra.workerId ?? "w1",
+    now,
+    budgetMs: 100_000,
+    ...extra,
+  });
+}
+
+async function drive(store, gh, planner, ticks = 12) {
+  for (let i = 0; i < ticks; i += 1) {
+    await makeEngine(store, gh, planner).tick();
+    advance(61_000);
+  }
+}
+
+const stages = (store, id) =>
+  store.events
+    .filter((e) => e.event_type === "jarvis_worker" && e.metadata?.task_id === id)
+    .map((e) => e.action);
+
+// ------------------------------------------------------------------ tests
+
+await check("shared guards/proxy copies are byte-identical across app, gateway and worker", () => {
+  const g = readFileSync("src/lib/jarvis/guards.ts", "utf8");
+  assert.equal(readFileSync("supabase/functions/jarvis-github/guards.ts", "utf8"), g);
+  assert.equal(readFileSync("supabase/functions/jarvis-worker/guards.ts", "utf8"), g);
+  assert.equal(
+    readFileSync("supabase/functions/jarvis-worker/proxy.ts", "utf8"),
+    readFileSync("supabase/functions/jarvis-github/proxy.ts", "utf8"),
+  );
+});
+
+await check(
+  "acceptance 1: harmless scheduled task runs queued → validating → researching → testing → completed",
+  async () => {
+    const store = new MemoryStore();
+    const t = store.addTask({
+      title: "Verify telemetry is flowing",
+      task_spec: {
+        kind: "diagnostic",
+        checks: [{ type: "db_count", table: "emery_runtime_events", days: 7 }, { type: "noop" }],
+      },
+    });
+    await makeEngine(store, null, null).tick();
+    const row = store.taskRows.find((r) => r.id === t.id);
+    assert.equal(row.status, "completed");
+    assert.deepEqual(stages(store, t.id), [
+      "queued->validating",
+      "validating->researching",
+      "researching->testing",
+      "testing->completed",
+    ]);
+    assert.match(row.result_summary, /db_count=7/);
+    assert.equal(row.lease_token, null);
+  },
+);
+
+await check(
+  "acceptance 2+9: controlled code change — branch EARLY, checkpoint, edit, isolated CI, PR, candidate recorded (direct GitHub only)",
+  async () => {
+    const store = new MemoryStore();
+    const gh = new FakeGithub();
+    const t = store.addTask({
+      title: "Controlled change: bump fixture value",
+      task_spec: {
+        kind: "code_change",
+        objective: "Set CONTROLLED_VALUE to 2",
+        edits: [
+          {
+            path: "src/lib/jarvis/fixtures/controlled.ts",
+            find: "CONTROLLED_VALUE = 1",
+            replace: "CONTROLLED_VALUE = 2",
+          },
+        ],
+      },
+    });
+    await drive(store, gh, null, 4);
+    const row = store.taskRows.find((r) => r.id === t.id);
+    assert.equal(row.status, "ready_for_release", JSON.stringify(row.stage_state.log, null, 1));
+    const order = stages(store, t.id);
+    assert.ok(
+      order.indexOf("planning->building") < order.indexOf("building->testing"),
+      "branch + checkpoint before edit",
+    );
+    const branch = branchFor(row);
+    assert.equal(row.branch_name, branch);
+    assert.ok(
+      gh.filesAt(branch)["src/lib/jarvis/fixtures/controlled.ts"].includes("CONTROLLED_VALUE = 2"),
+    );
+    assert.ok(
+      gh.filesAt(branch)[`docs/jarvis-engineer/candidates/${row.id.slice(0, 8)}.md`],
+      "change package doc committed",
+    );
+    assert.equal(
+      gh.filesAt("main")["src/lib/jarvis/fixtures/controlled.ts"],
+      "export const CONTROLLED_VALUE = 1;\n",
+      "main untouched",
+    );
+    assert.equal(gh.prs.length, 1);
+    assert.match(row.pr_url, /github.com\/pr/);
+    assert.equal(store.candidates.length, 1);
+    assert.equal(store.candidates[0].deployment_verified, false);
+    assert.equal(store.candidates[0].metadata.kind, "candidate");
+    assert.ok(
+      !gh.calls.some((c) => c.method === "PATCH" && /heads\/main/.test(c.path)),
+      "no main writes",
+    );
+    assert.ok(!gh.calls.some((c) => c.body?.force === true), "no force updates");
+  },
+);
+
+await check(
+  "acceptance 3: controlled test failure → detected from CI annotations → bounded repair → CI rerun passes",
+  async () => {
+    const store = new MemoryStore();
+    const gh = new FakeGithub();
+    const planner = new FakePlanner();
+    const t = store.addTask({
+      title: "Repair fixture",
+      task_spec: {
+        kind: "code_change",
+        objective: "Add a typed fixture constant",
+        edits: [
+          {
+            path: "src/lib/jarvis/fixtures/controlled.ts",
+            find: "CONTROLLED_VALUE = 1",
+            replace: "CONTROLLED_VALUE = 3",
+          },
+        ],
+        inject_failure: {
+          path: "src/lib/jarvis/fixtures/repair-fixture.ts",
+          content:
+            'export const value: number = "BROKEN_TYPE_ERROR";\n'.replace(
+              "export const value",
+              "const value",
+            ) + "export { value };\n",
+        },
+        max_repairs: 2,
+      },
+    });
+    await drive(store, gh, planner, 7);
+    const row = store.taskRows.find((r) => r.id === t.id);
+    assert.equal(row.status, "ready_for_release", JSON.stringify(row.stage_state.log, null, 1));
+    assert.equal(row.stage_state.repairs, 1);
+    assert.ok(planner.calls.some((c) => c.kind === "repair" && c.failures > 0));
+    assert.deepEqual(
+      row.test_results.ci.map((c) => c.state),
+      ["failure", "success"],
+    );
+    assert.ok(
+      !gh
+        .filesAt(row.branch_name)
+        ["src/lib/jarvis/fixtures/repair-fixture.ts"].includes("BROKEN_TYPE_ERROR"),
+    );
+  },
+);
+
+await check("repair is bounded: persistent failure ends in failed with evidence", async () => {
+  const store = new MemoryStore();
+  const gh = new FakeGithub();
+  const stubborn = {
+    ...new FakePlanner(),
+    research: async () => ({ answer: "", sources: [] }),
+    planEdits: async () => ({ summary: "", edits: [] }),
+    repair: async (input) => ({
+      summary: "no-op",
+      edits: [
+        {
+          path: input.files[0].path,
+          find: input.files[0].content.slice(0, 10),
+          replace: input.files[0].content.slice(0, 10),
+        },
+      ],
+    }),
+  };
+  const t = store.addTask({
+    title: "Unfixable fixture",
+    task_spec: {
+      kind: "code_change",
+      objective: "x",
+      edits: [
+        {
+          path: "src/lib/jarvis/fixtures/broken.ts",
+          create: true,
+          content: 'const value: number = "BROKEN_TYPE_ERROR";\nexport { value };\n',
+        },
+      ],
+      max_repairs: 1,
+    },
+  });
+  await drive(store, gh, stubborn, 8);
+  const row = store.taskRows.find((r) => r.id === t.id);
+  assert.equal(row.status, "failed");
+  assert.match(row.blocker, /still failing after 1 bounded repair/);
+});
+
+await check(
+  "acceptance 4+5+11+12: session ends with ONE finalize, self-research finding and ready-for-more state",
+  async () => {
+    const store = new MemoryStore();
+    const planner = new FakePlanner();
+    store.addTask({ title: "Diag A", task_spec: { kind: "diagnostic" } });
+    store.addTask({ title: "Diag B", task_spec: { kind: "diagnostic" } });
+    await makeEngine(store, null, planner).tick();
+    await makeEngine(store, null, planner).tick();
+    assert.equal(store.sessions.length, 1);
+    const s = store.sessions[0];
+    assert.equal(s.status, "completed");
+    assert.equal(s.completed_count, 2);
+    assert.equal(s.metadata.ready_for_more_tasks, true);
+    assert.ok(s.self_research_summary.length > 20);
+    assert.equal(store.findings.length, 1, "exactly one self-research finding per session");
+    assert.equal(store.findings[0].metadata.kind, "jarvis_self_improvement");
+    assert.equal(s.metadata.capacity_review.current, 50);
+  },
+);
+
+await check(
+  "acceptance 6+13a: Emery capability-gap evidence → Opportunity Radar → JARVIS code_change task (deduplicated)",
+  async () => {
+    const store = new MemoryStore();
+    const gap = (i) => ({
+      event_type: "capability_gap",
+      status: "error",
+      action: "emery_turn",
+      domain: "personal",
+      metadata: {
+        signal: "capability_gap",
+        capability: "apple_reminders",
+        request: "Add milk to my Apple Reminders",
+        observed: "Emery implied it was added",
+        fixture: true,
+        severity: 4,
+        confidence: 0.9,
+      },
+      created_at: new Date(clock - i * 1000).toISOString(),
+    });
+    store.radar.events = [gap(1), gap(2), gap(3)];
+    const opps = buildOpportunities(store.radar);
+    assert.equal(opps[0].signal, "capability_gap");
+    assert.equal(opps[0].kind, "code_change");
+    assert.ok(opps[0].score >= 6, String(opps[0].score));
+    const engine = makeEngine(store, null, null, { forceRadar: true });
+    await engine.runRadar(OWNER);
+    await makeEngine(store, null, null, { forceRadar: true }).runRadar(OWNER);
+    const radarTasks = store.taskRows.filter((r) => r.source_type === "opportunity_radar");
+    assert.equal(radarTasks.length, 1, "second radar run must not duplicate");
+    assert.equal(radarTasks[0].task_spec.kind, "code_change");
+    assert.deepEqual(radarTasks[0].task_spec.target_paths, [
+      "src/lib/execution-capabilities.ts",
+      "src/lib/emery/capability-registry.ts",
+    ]);
+    assert.ok(radarTasks[0].metadata.radar.evidence.length >= 3);
+  },
+);
+
+await check(
+  "acceptance 13: closed loop — Emery gap → radar task → branch → planned edit → isolated CI → PR → candidate release",
+  async () => {
+    const store = new MemoryStore();
+    const gh = new FakeGithub();
+    const planner = new FakePlanner();
+    store.radar.events = [1, 2, 3].map((i) => ({
+      event_type: "capability_gap",
+      status: "error",
+      action: "emery_turn",
+      domain: "personal",
+      metadata: {
+        signal: "capability_gap",
+        capability: "apple_reminders",
+        request: "Add milk to my Apple Reminders",
+        fixture: true,
+        severity: 4,
+        confidence: 0.9,
+      },
+      created_at: new Date(clock - i).toISOString(),
+    }));
+    await makeEngine(store, gh, planner, { forceRadar: true }).tick();
+    for (let i = 0; i < 5; i += 1) {
+      advance(61_000);
+      await makeEngine(store, gh, planner).tick();
+    }
+    const task = store.taskRows.find((r) => r.source_type === "opportunity_radar");
+    assert.equal(task.status, "ready_for_release", JSON.stringify(task.stage_state.log, null, 1));
+    assert.ok(
+      gh.filesAt(task.branch_name)["src/lib/execution-capabilities.ts"].includes("apple_reminders"),
+    );
+    assert.equal(store.candidates[0].source_pr_url, task.pr_url);
+    assert.equal(store.sessions[0].status, "completed");
+    assert.equal(
+      store.sessions[0].approval_required,
+      true,
+      "candidate awaits Adam's release review",
+    );
+  },
+);
+
+await check(
+  "acceptance 7: 50-task fixture — durable intake, duplicates merged, dependencies ordered, bounded concurrency, capacity ceiling",
+  async () => {
+    const store = new MemoryStore();
+    const base = [];
+    for (let i = 0; i < 40; i += 1)
+      base.push(
+        store.addTask({
+          title: `Fixture check ${i}`,
+          priority: 3,
+          task_spec: { kind: "diagnostic", checks: [{ type: "noop" }] },
+        }),
+      );
+    for (let i = 0; i < 5; i += 1)
+      store.addTask({ title: `Fixture check ${i}`, task_spec: { kind: "diagnostic" } }); // duplicates
+    const deps = [];
+    for (let i = 0; i < 5; i += 1)
+      deps.push(
+        store.addTask({
+          title: `Dependent ${i}`,
+          priority: 1,
+          depends_on: [base[30 + i].id],
+          task_spec: { kind: "diagnostic" },
+        }),
+      );
+    const over = store.addTask({
+      title: "Over capacity 51",
+      priority: 5,
+      task_spec: { kind: "diagnostic" },
+    });
+    await drive(store, null, null, 4);
+    const accepted = store.taskRows.filter((r) => r.session_id);
+    assert.equal(accepted.length, 50, "exactly 50 accepted today");
+    assert.equal(store.taskRows.filter((r) => r.merged_into).length, 5, "5 duplicates merged");
+    for (const d of deps) {
+      const dep = store.taskRows.find((r) => r.id === d.depends_on[0]);
+      const row = store.taskRows.find((r) => r.id === d.id);
+      assert.equal(row.status, "completed");
+      assert.ok(row.completed_at >= dep.completed_at, "dependent completed after its dependency");
+    }
+    const o = store.taskRows.find((r) => r.id === over.id);
+    assert.equal(o.status, "queued");
+    assert.equal(o.session_id, null);
+    assert.ok(Date.parse(o.next_attempt_at) > clock, "51st task held until the next day");
+    assert.ok(store.maxActiveSeen <= 4, `max concurrent leases ${store.maxActiveSeen}`);
+    assert.equal(
+      store.taskRows.filter((r) => r.session_id && !["completed", "cancelled"].includes(r.status))
+        .length,
+      0,
+    );
+  },
+);
+
+await check("dependency on a failed task blocks the dependent instead of running it", async () => {
+  const store = new MemoryStore();
+  const a = store.addTask({
+    title: "Will fail",
+    task_spec: { kind: "diagnostic", checks: [{ type: "db_count", table: "auth_users" }] },
+  });
+  const b = store.addTask({
+    title: "Needs A",
+    depends_on: [a.id],
+    task_spec: { kind: "diagnostic" },
+  });
+  await drive(store, null, null, 2);
+  assert.equal(store.taskRows.find((r) => r.id === a.id).status, "failed");
+  // b is never claimed while its dependency is not completed; validation only runs after accept.
+  assert.ok(["queued", "blocked"].includes(store.taskRows.find((r) => r.id === b.id).status));
+});
+
+await check(
+  "acceptance 8: restart/retry — crash after commit is not re-executed; stale worker is fenced; parallel ticks never double-run",
+  async () => {
+    const store = new MemoryStore();
+    const gh = new FakeGithub();
+    const t = store.addTask({
+      title: "Crash fixture",
+      task_spec: {
+        kind: "code_change",
+        objective: "x",
+        edits: [{ path: "src/lib/jarvis/fixtures/controlled.ts", find: "= 1", replace: "= 4" }],
+      },
+    });
+    await makeEngine(store, gh, null).tick(); // runs through planning + build, then waits on CI
+    const row = store.taskRows.find((r) => r.id === t.id);
+    assert.equal(row.status, "testing", JSON.stringify(row.stage_state.log, null, 1));
+    const buildMarker = `[jarvis-task ${t.id.slice(0, 8)} build]`;
+    const buildCommitsBefore = [...gh.commits.values()].filter((c) =>
+      c.message.includes(buildMarker),
+    ).length;
+    assert.equal(buildCommitsBefore, 1);
+    // Simulate: the build commit landed on GitHub but the worker crashed before recording it.
+    row.status = "building";
+    row.stage_state = { ...row.stage_state, ci_sha: undefined };
+    row.next_attempt_at = now().toISOString();
+    const restarted = makeEngine(store, gh, null, { workerId: "w2" });
+    await restarted.tick();
+    const after = store.taskRows.find((r) => r.id === t.id);
+    const buildCommitsAfter = [...gh.commits.values()].filter((c) =>
+      c.message.includes(buildMarker),
+    );
+    assert.equal(buildCommitsAfter.length, 1, "retry reused the existing build commit");
+    assert.equal(after.status, "testing");
+    assert.equal(after.stage_state.ci_sha, buildCommitsAfter[0].sha);
+
+    // Fencing: a worker whose lease expired cannot write over the new owner.
+    const s1 = new MemoryStore();
+    const f = s1.addTask({ title: "Fence fixture", task_spec: { kind: "diagnostic" } });
+    const [first] = await s1.claim("old", 1);
+    advance(300_000); // lease expires (worker "old" froze)
+    const [second] = await s1.claim("new", 1);
+    assert.equal(second.id, f.id);
+    assert.equal(
+      await s1.update(f.id, first.lease_token, { status: "completed" }),
+      false,
+      "stale token rejected",
+    );
+    assert.equal(await s1.update(f.id, second.lease_token, { status: "validating" }), true);
+
+    // Duplicate scheduler invocation: two engines tick concurrently.
+    const s2 = new MemoryStore();
+    for (let i = 0; i < 12; i += 1)
+      s2.addTask({ title: `Parallel ${i}`, task_spec: { kind: "diagnostic" } });
+    await Promise.all([
+      makeEngine(s2, null, null, { workerId: "a" }).tick(),
+      makeEngine(s2, null, null, { workerId: "b" }).tick(),
+    ]);
+    for (const r of s2.taskRows) {
+      const completions = s2.events.filter(
+        (e) => e.metadata?.task_id === r.id && e.action === "testing->completed",
+      ).length;
+      assert.equal(completions, 1, `task ${r.title} completed ${completions} times`);
+    }
+    assert.ok(s2.maxActiveSeen <= 4);
+  },
+);
+
+await check(
+  "acceptance 9b: paid-credit fixture stops for Adam's approval without any GitHub call",
+  async () => {
+    const store = new MemoryStore();
+    const gh = new FakeGithub();
+    const t = store.addTask({
+      title: "Use Lovable AI credits to generate the new settings page",
+      task_spec: {
+        kind: "code_change",
+        objective: "Have Lovable AI generate it",
+        target_paths: ["src/routes/_authenticated/settings.tsx"],
+      },
+    });
+    const before = gh.calls.length;
+    await makeEngine(store, gh, new FakePlanner()).tick();
+    const row = store.taskRows.find((r) => r.id === t.id);
+    assert.equal(row.status, "blocked");
+    assert.match(row.blocker, /Free-first policy/);
+    assert.equal(gh.calls.length, before);
+  },
+);
+
+await check("risk policy blocks protected HPO/auth/migration edits for Adam approval", () => {
+  assert.ok(
+    classifyRisk({
+      title: "x",
+      objective: "",
+      task_spec: { kind: "code_change", target_paths: ["supabase/migrations/x.sql"] },
+    }).approval,
+  );
+  assert.ok(
+    classifyRisk({
+      title: "x",
+      objective: "",
+      task_spec: { kind: "code_change", target_paths: ["src/lib/hpo-route.functions.ts"] },
+    }).approval,
+  );
+  assert.ok(
+    classifyRisk({
+      title: "x",
+      objective: "",
+      task_spec: { kind: "code_change", target_paths: ["src/integrations/supabase/client.ts"] },
+    }).approval,
+  );
+  assert.equal(
+    classifyRisk({
+      title: "x",
+      objective: "",
+      task_spec: { kind: "code_change", target_paths: ["src/lib/execution-capabilities.ts"] },
+    }).approval,
+    null,
+  );
+  assert.throws(
+    () =>
+      applyEdits(new Map([[".github/workflows/x.yml", "a"]]), [
+        { path: ".github/workflows/x.yml", find: "a", replace: "b" },
+      ]),
+    /protected|outside/,
+  );
+  assert.throws(
+    () =>
+      applyEdits(new Map([["src/a.ts", "x"]]), [
+        { path: "src/a.ts", find: "x", replace: 'k="sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaa"' },
+      ]),
+    /credential/,
+  );
+});
+
+console.log(`\nJARVIS worker validation: ${passed} checks passed.`);

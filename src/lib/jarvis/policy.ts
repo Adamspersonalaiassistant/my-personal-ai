@@ -50,50 +50,10 @@ export function evaluateToolPolicy(
 }
 
 // ------------------------------------------------------------------ credits
-
-const PAID_SERVICE_PATTERNS: Array<{ service: string; pattern: RegExp }> = [
-  {
-    service: "Lovable AI generation credits",
-    pattern:
-      /\b(lovable)\b[^.?!]{0,60}\b(ai|agent|prompt|generate|generation|credits?|build it|send (it|a message)|ask)\b|\b(use|spend|burn)\b[^.?!]{0,30}\blovable\b[^.?!]{0,20}\bcredits?\b/i,
-  },
-  {
-    service: "Premium external coding credits",
-    pattern:
-      /\b(codex|devin|cursor|copilot workspace|claude code|replit agent|bolt|v0)\b[^.?!]{0,50}\b(credits?|run|session|agent|build|implement)\b/i,
-  },
-  {
-    service: "Paid research/implementation credits",
-    pattern:
-      /\b(paid|premium)\b[^.?!]{0,40}\b(credits?|model|research|agent|implementation|api)\b/i,
-  },
-];
-
-const APPROVAL_PATTERN =
-  /\b(i (approve|authori[sz]e)|approved|go ahead and (use|spend)|you (have|can have) (my )?approval|yes,? (use|spend))\b[^.?!]{0,60}\b(credits?|lovable|paid|premium|codex|devin|cursor)\b/i;
-
-const NEGATION_PATTERN =
-  /\b(don'?t|do not|never|without|no)\b[^.?!]{0,25}\b(use|spend|burn|using|spending)?\b[^.?!]{0,15}\b(credits?|lovable ai|paid)\b/i;
-
-export type PaidCreditAssessment = {
-  requestsPaidPath: boolean;
-  approved: boolean;
-  services: string[];
-};
-
-export function assessPaidCreditRequest(message: string): PaidCreditAssessment {
-  const text = message.trim();
-  if (!text || NEGATION_PATTERN.test(text))
-    return { requestsPaidPath: false, approved: false, services: [] };
-  const services = PAID_SERVICE_PATTERNS.filter((entry) => entry.pattern.test(text)).map(
-    (e) => e.service,
-  );
-  return {
-    requestsPaidPath: services.length > 0,
-    approved: services.length > 0 && APPROVAL_PATTERN.test(text),
-    services,
-  };
-}
+// The paid-credit assessment lives in guards.ts so the app, the GitHub gateway
+// and the background worker enforce the identical free-first rule.
+import { assessPaidCreditRequest, type PaidCreditAssessment } from "./guards.ts";
+export { assessPaidCreditRequest, type PaidCreditAssessment };
 
 export function paidCreditApprovalMessage(assessment: PaidCreditAssessment, request: string) {
   const service = assessment.services.join(" + ") || "paid credits";

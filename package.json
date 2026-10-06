@@ -19,7 +19,8 @@
     "validate:hpo-activity": "node scripts/validate-hpo-activity-workflow.mjs",
     "validate:phase9": "node scripts/validate-emery-phase9-redesign.mjs",
     "check:env-safety": "node scripts/check-env-safety.mjs",
-    "validate:jarvis": "node --experimental-strip-types scripts/validate-jarvis-run1.mjs"
+    "validate:jarvis": "node --experimental-strip-types scripts/validate-jarvis-run1.mjs",
+    "validate:jarvis-worker": "node --experimental-strip-types scripts/validate-jarvis-worker.mjs"
   },
   "overrides": {
     "rolldown": "1.2.1"
