@@ -221,7 +221,7 @@ export function JarvisRoom() {
             <div className="emery-fade-up mx-auto mt-2 max-h-[46dvh] max-w-2xl space-y-2.5 overflow-y-auto pb-1">
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <Stat
-                  label="Accepted today"
+                  label="Production tasks today"
                   value={status ? `${status.accepted_today} / ${status.capacity}` : "—"}
                 />
                 <Stat
@@ -259,6 +259,16 @@ export function JarvisRoom() {
                     </div>
                   ))}
                 </div>
+              ) : null}
+              {status && (status.proposed_count > 0 || status.validation_fixtures.total > 0) ? (
+                <p className="px-0.5 text-[10px] leading-4 text-muted-foreground">
+                  {status.proposed_count > 0
+                    ? `${status.proposed_count} proposed, awaiting your approval (not counted). `
+                    : ""}
+                  {status.validation_fixtures.total > 0
+                    ? `Validation fixtures: historical only (${status.validation_fixtures.total}).`
+                    : ""}
+                </p>
               ) : null}
               {production?.discrepancies?.length ? (
                 <PanelList

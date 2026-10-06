@@ -19,7 +19,34 @@ export type TurnApprovals = {
   paidCreditApproved: boolean;
   /** Adam explicitly approved a high-risk write in this very message. */
   highRiskApproved: boolean;
+  /** Adam explicitly approved executing tasks in this very message ("execute these"). */
+  tasksApproved?: boolean;
+  /** Adam said this prompt replaces the previous task plan/batch. */
+  batchReplacement?: boolean;
 };
+
+// ------------------------------------------------------------ task approval
+// "Give me 20 ideas" PROPOSES. "Execute these 20" APPROVES + SCHEDULES. Only
+// an explicit approval in Adam's own message turns proposals into tasks the
+// worker may run; this is decided here in code, never by the model.
+
+const NEGATED_APPROVAL =
+  /\b(don'?t|do not|not yet|never|hold off|wait (for|until)|before i approve|until i approve|without approv\w*|need(s)? (my )?approval)\b[^.?!]{0,40}\b(execute|run|start|schedule|proceed|queue|approve)/i;
+const TASK_APPROVAL =
+  /\b(i approve|approved|i['’]?m approving|approve (these|those|them|it|the|this|all)|execute (these|those|them|it|the|this|all)|go ahead|proceed( with)?|schedule (these|those|them|it|the|this|all)|run (these|those|them|it|the|this|all)|start (on )?(these|those|them|working)|queue (these|those|them|it|up)|make it so|do (these|those|them) (now|all)|you have my (approval|go[- ]ahead))\b/i;
+
+export function assessTaskApproval(message: string): { approved: boolean } {
+  const text = String(message ?? "");
+  if (NEGATED_APPROVAL.test(text)) return { approved: false };
+  return { approved: TASK_APPROVAL.test(text) };
+}
+
+const BATCH_REPLACEMENT =
+  /\b(instead of|replaces?|replacing|in place of|scrap|disregard|ignore|forget|never ?mind|supersede\w*|throw out|drop)\b[^.?!]{0,60}\b(plan|batch|list|tasks?|prompt)\b|\b(new|different|updated|revised)\s+(prompt|plan|batch|task list)\b[^.?!]{0,40}\b(instead|rather|replace)/i;
+
+export function assessBatchReplacement(message: string): { replace: boolean } {
+  return { replace: BATCH_REPLACEMENT.test(String(message ?? "")) };
+}
 
 export function evaluateToolPolicy(
   tool: JarvisToolDefinition,

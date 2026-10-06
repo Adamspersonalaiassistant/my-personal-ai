@@ -471,7 +471,7 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     family: "jarvis",
     risk: "REVERSIBLE_WRITE",
     description:
-      "Queue one engineering task for the JARVIS worker (50/day intake ceiling, de-duplicated, risk-classified). For code changes give target_paths (find them with github.search_code) or explicit edits; for checks give diagnostic checks.",
+      "Create one engineering task (de-duplicated, risk-classified). It is PROPOSED unless Adam approved execution in this message; proposed tasks never run or use capacity. For code changes give target_paths (find them with github.search_code) or explicit edits; for checks give diagnostic checks.",
     keywords: ["task", "queue", "add", "todo", "work", "engineering", "fix", "build"],
     parameters: { type: "object", properties: TASK_PROPERTIES, required: ["title"] },
   }),
@@ -480,7 +480,7 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     family: "jarvis",
     risk: "REVERSIBLE_WRITE",
     description:
-      "Queue a batch of up to 50 engineering tasks (e.g. a ChatGPT- or Claude-generated batch from Adam). Duplicates merge; depends_on_index orders work.",
+      "Create a batch of up to 50 engineering tasks (e.g. a ChatGPT- or Claude-generated batch from Adam). The batch is PROPOSED unless Adam approved execution in this message; use jarvis.approve_tasks once he does. Duplicates merge; depends_on_index orders work.",
     keywords: ["batch", "tasks", "list", "chatgpt", "claude", "queue", "many", "schedule"],
     parameters: {
       type: "object",
@@ -500,6 +500,49 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
         },
       },
       required: ["tasks"],
+    },
+  }),
+  tool({
+    name: "jarvis.approve_tasks",
+    family: "jarvis",
+    risk: "REVERSIBLE_WRITE",
+    description:
+      'Approve + schedule PROPOSED tasks for autonomous execution. Only works when Adam\'s own message approves execution ("execute these", "I approve", "schedule them"). Approved tasks are accepted by the worker into the production intake (50/day).',
+    keywords: ["approve", "execute", "schedule", "proceed", "go ahead", "run these", "batch"],
+    parameters: {
+      type: "object",
+      properties: {
+        batch_id: str("batch_id returned by jarvis.create_tasks"),
+        task_ids: { type: "array", items: { type: "string" } },
+        all_proposed: { type: "boolean", description: "Approve every proposed task." },
+      },
+    },
+  }),
+  tool({
+    name: "jarvis.supersede_batch",
+    family: "jarvis",
+    risk: "REVERSIBLE_WRITE",
+    description:
+      'Adam replaced a task plan ("I have a new prompt instead of the previous plan"). Supersedes the previous proposed batch (and untouched approved tasks when include_approved is true); work already in progress is returned for Adam\'s decision, never cancelled silently. History is kept; superseded tasks never count toward capacity.',
+    keywords: [
+      "supersede",
+      "replace",
+      "instead",
+      "new plan",
+      "new prompt",
+      "scrap",
+      "cancel batch",
+    ],
+    parameters: {
+      type: "object",
+      properties: {
+        batch_id: str("Previous batch to supersede (default: all proposed tasks)"),
+        include_approved: {
+          type: "boolean",
+          description: "Also supersede approved tasks that have not started.",
+        },
+        superseded_by_batch_id: str("batch_id of the replacement batch"),
+      },
     },
   }),
   tool({

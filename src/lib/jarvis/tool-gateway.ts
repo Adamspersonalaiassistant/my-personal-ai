@@ -299,6 +299,10 @@ async function run(name: string, args: Record<string, any>, ctx: GatewayContext)
       return createTask(ctx, args);
     case "jarvis.create_tasks":
       return createTasks(ctx, args);
+    case "jarvis.approve_tasks":
+      return approveTasks(ctx, args);
+    case "jarvis.supersede_batch":
+      return supersedeBatch(ctx, args);
     case "jarvis.update_task":
       return updateTask(ctx, args);
     case "jarvis.record_knowledge":
@@ -536,7 +540,12 @@ function normalizedTitle(title: unknown) {
  * session atomically (capacity, dedupe, dependencies, risk), so no session is
  * pre-assigned here.
  */
-function buildTaskRow(ctx: GatewayContext, args: Record<string, any>, sourceType: string) {
+function buildTaskRow(
+  ctx: GatewayContext,
+  args: Record<string, any>,
+  sourceType: string,
+  batchId: string,
+) {
   const title = String(args["title"] ?? "")
     .trim()
     .slice(0, 200);
@@ -576,6 +585,10 @@ function buildTaskRow(ctx: GatewayContext, args: Record<string, any>, sourceType
       status: "queued",
       scheduled_for: state.easternDate(),
       task_spec,
+      // Proposed unless Adam approved execution in this very message (code-enforced).
+      approval_state: ctx.approvals.tasksApproved ? "approved" : "proposed",
+      approved_at: ctx.approvals.tasksApproved ? new Date().toISOString() : null,
+      batch_id: batchId,
     },
     executable: Boolean(kind),
   };
@@ -598,9 +611,13 @@ async function createTasks(ctx: GatewayContext, args: Record<string, any>) {
   if (items.length > state.DAILY_TASK_CAPACITY)
     throw new PolicyError(`A batch can hold at most ${state.DAILY_TASK_CAPACITY} tasks.`);
   const batchSource = sourceOf(args);
-  const built = items.map((item) => buildTaskRow(ctx, item, sourceOf(item, batchSource)));
+  const batchId = randomUuid();
+  const built = items.map((item) => buildTaskRow(ctx, item, sourceOf(item, batchSource), batchId));
   const status = await state.getJarvisStatus(ctx.db, ctx.userId);
-  const open = new Map(status.open_tasks.map((t: any) => [normalizedTitle(t.title), t]));
+  // Duplicates merge against open production tasks AND tasks already proposed.
+  const open = new Map(
+    [...status.open_tasks, ...status.proposed_tasks].map((t: any) => [normalizedTitle(t.title), t]),
+  );
   const ids: Array<string | null> = [];
   const results: Array<Record<string, unknown>> = [];
   for (const [index, { row, executable }] of built.entries()) {
@@ -645,16 +662,148 @@ async function createTasks(ctx: GatewayContext, args: Record<string, any>) {
   const created = results.filter((r) => r["created"]).length;
   const capacity = state.DAILY_TASK_CAPACITY;
   const room = Math.max(0, capacity - status.accepted_today);
+  const approved = Boolean(ctx.approvals.tasksApproved);
   return {
     created,
     merged: results.length - created,
     results,
+    batch_id: batchId,
+    approval_state: approved ? "approved" : "proposed",
     accepted_today: status.accepted_today,
     capacity,
-    note:
-      created > room
+    note: !approved
+      ? `Saved as a PROPOSED batch (${created} task(s)). Nothing runs and no production capacity is used until Adam approves — say "execute these" and call jarvis.approve_tasks with this batch_id.`
+      : created > room
         ? `${created - room} task(s) exceed today's remaining intake (${room}); the worker holds them for the next day.`
-        : "Queued for the JARVIS worker (runs every 2 minutes): accept → validate → dedupe → dependencies → risk → execute → test → repair → PR.",
+        : "Approved and queued for the JARVIS worker (runs every 2 minutes): accept → validate → dedupe → dependencies → risk → execute → test → repair → PR.",
+  };
+}
+
+function randomUuid() {
+  return globalThis.crypto.randomUUID();
+}
+
+const UUID_PATTERN = /^[0-9a-f-]{36}$/i;
+
+/** Adam approved: proposed tasks become approved and enter the worker's intake. */
+async function approveTasks(ctx: GatewayContext, args: Record<string, any>) {
+  if (!ctx.approvals.tasksApproved)
+    throw new PolicyError(
+      "Adam has not approved execution in this message. Proposed tasks stay proposed until he says to execute or schedule them.",
+    );
+  const batchId = args["batch_id"] ? String(args["batch_id"]) : null;
+  const ids: string[] = Array.isArray(args["task_ids"]) ? args["task_ids"].map(String) : [];
+  if (batchId && !UUID_PATTERN.test(batchId)) throw new PolicyError("batch_id must be a UUID.");
+  if (ids.some((id) => !UUID_PATTERN.test(id))) throw new PolicyError("task_ids must be UUIDs.");
+  if (!batchId && !ids.length && args["all_proposed"] !== true)
+    throw new PolicyError("Give a batch_id, task_ids, or all_proposed: true.");
+  const status = await state.getJarvisStatus(ctx.db, ctx.userId);
+  const targets = (status.proposed_tasks as any[]).filter(
+    (t) =>
+      (batchId && t.batch_id === batchId) || ids.includes(t.id) || args["all_proposed"] === true,
+  );
+  const now = new Date().toISOString();
+  for (const task of targets) {
+    const { error } = await ctx.db
+      .from("jarvis_engineering_tasks")
+      .update({ approval_state: "approved", approved_at: now })
+      .eq("id", task.id)
+      .eq("user_id", ctx.userId)
+      .eq("approval_state", "proposed");
+    if (error) throw new Error(error.message);
+  }
+  return {
+    approved: targets.length,
+    task_ids: targets.map((t) => t.id),
+    note: targets.length
+      ? `${targets.length} task(s) approved. The worker accepts them into today's production intake (${state.DAILY_TASK_CAPACITY}/day) as capacity allows.`
+      : "No matching proposed tasks.",
+  };
+}
+
+/** Safe to cancel: nothing has run, no lease, no branch/PR — so nothing is lost. */
+function safelySupersedable(task: any) {
+  return (
+    ["queued", "validating"].includes(task.status) &&
+    !task.branch_name &&
+    !task.pr_url &&
+    !task.commit_sha &&
+    !task.lease_token &&
+    !(task.attempt_count > 1)
+  );
+}
+
+/**
+ * Adam replaced a plan: the old batch is superseded (cancelled, audit kept) so
+ * both batches are never counted. Proposed tasks are always safe to supersede.
+ * Approved tasks are superseded only while untouched; anything already in
+ * progress is returned for Adam's decision instead of being cancelled.
+ */
+async function supersedeBatch(ctx: GatewayContext, args: Record<string, any>) {
+  if (!ctx.approvals.batchReplacement)
+    throw new PolicyError(
+      "Adam did not say this replaces the previous plan. Ask before superseding existing tasks.",
+    );
+  const batchId = args["batch_id"] ? String(args["batch_id"]) : null;
+  const supersededBy = args["superseded_by_batch_id"]
+    ? String(args["superseded_by_batch_id"])
+    : null;
+  if (batchId && !UUID_PATTERN.test(batchId)) throw new PolicyError("batch_id must be a UUID.");
+  if (supersededBy && !UUID_PATTERN.test(supersededBy))
+    throw new PolicyError("superseded_by_batch_id must be a UUID.");
+  const { data, error } = await ctx.db
+    .from("jarvis_engineering_tasks")
+    .select(
+      "id,title,status,approval_state,batch_id,is_fixture,session_id,branch_name,pr_url,commit_sha,lease_token,attempt_count,metadata",
+    )
+    .eq("user_id", ctx.userId)
+    .in("approval_state", ["proposed", "approved"])
+    .in("status", [
+      "queued",
+      "validating",
+      "researching",
+      "planning",
+      "building",
+      "testing",
+      "repairing",
+    ]);
+  if (error) throw new Error(error.message);
+  const scope = ((data ?? []) as any[]).filter(
+    (t) =>
+      !t.is_fixture &&
+      t.batch_id !== supersededBy &&
+      (batchId
+        ? t.batch_id === batchId
+        : args["include_approved"] === true || t.approval_state === "proposed"),
+  );
+  const superseded: string[] = [];
+  const needsDecision: Array<{ id: string; title: string; status: string }> = [];
+  const now = new Date().toISOString();
+  for (const task of scope) {
+    if (task.approval_state === "approved" && !safelySupersedable(task)) {
+      needsDecision.push({ id: task.id, title: task.title, status: task.status });
+      continue;
+    }
+    const { error: updateError } = await ctx.db
+      .from("jarvis_engineering_tasks")
+      .update({
+        status: "cancelled",
+        approval_state: "superseded",
+        blocker: "Superseded by Adam's replacement plan.",
+        metadata: { ...(task.metadata ?? {}), superseded_by: supersededBy, superseded_at: now },
+      })
+      .eq("id", task.id)
+      .eq("user_id", ctx.userId)
+      .is("lease_token", null);
+    if (updateError) throw new Error(updateError.message);
+    superseded.push(task.id);
+  }
+  return {
+    superseded: superseded.length,
+    needs_decision: needsDecision,
+    note: needsDecision.length
+      ? `${needsDecision.length} approved task(s) are already in progress; I did not cancel them. Ask Adam whether to stop them.`
+      : "Previous batch superseded; history is kept and none of it counts toward production capacity.",
   };
 }
 

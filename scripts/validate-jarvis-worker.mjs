@@ -89,6 +89,7 @@ class MemoryStore {
       leased_by: null,
       next_attempt_at: now().toISOString(),
       is_fixture: true,
+      approval_state: "approved",
       created_at: new Date(clock + this.taskRows.length).toISOString(),
       completed_at: null,
       ...partial,
@@ -118,6 +119,8 @@ class MemoryStore {
           "repairing",
         ].includes(r.status),
       )
+      // Mirrors jarvis_claim_tasks: only approved tasks are ever claimed.
+      .filter((r) => r.approval_state === "approved")
       .filter((r) => !r.lease_expires_at || Date.parse(r.lease_expires_at) < t.getTime())
       .filter((r) => Date.parse(r.next_attempt_at) <= t.getTime())
       // Mirrors jarvis_claim_tasks: wait only while a dependency is still in progress.
@@ -214,19 +217,34 @@ class MemoryStore {
   async runningSessions(userId) {
     return this.sessions.filter((s) => s.user_id === userId && s.status === "running");
   }
+  // Mirrors jarvis_accept_task: a task is only counted against its own class
+  // (production vs validation fixture); cancelled/deferred/merged never count.
+  classCount(ids, fixture) {
+    return this.taskRows.filter(
+      (x) =>
+        ids.includes(x.session_id) &&
+        Boolean(x.is_fixture) === fixture &&
+        x.approval_state === "approved" &&
+        !["cancelled", "deferred"].includes(x.status) &&
+        !x.merged_into,
+    ).length;
+  }
   async acceptedOn(userId, date) {
     const ids = this.sessions.filter((s) => s.session_date === date).map((s) => s.id);
-    return this.taskRows.filter((r) => ids.includes(r.session_id)).length;
+    return this.classCount(ids, false);
   }
   async acceptInto(taskId, token, sessionId, date, limit) {
     // Synchronous body == atomic in this single-threaded fake (mirrors the advisory-locked SQL).
     const r = this.taskRows.find((x) => x.id === taskId);
-    if (!r || r.lease_token !== token || r.session_id) return false;
+    if (!r || r.lease_token !== token || r.session_id || r.approval_state !== "approved")
+      return false;
     const ids = this.sessions.filter((s) => s.session_date === date).map((s) => s.id);
-    const count = this.taskRows.filter((x) => ids.includes(x.session_id)).length;
+    const count = this.classCount(ids, Boolean(r.is_fixture));
     if (count >= limit) return false;
     r.session_id = sessionId;
-    this.sessions.find((s) => s.id === sessionId).accepted_count = count + 1;
+    const session = this.sessions.find((s) => s.id === sessionId);
+    if (r.is_fixture) session.metadata = { ...session.metadata, fixture_accepted: count + 1 };
+    else session.accepted_count = count + 1;
     return true;
   }
   async count() {
@@ -832,13 +850,19 @@ await check(
           task_spec: { kind: "diagnostic" },
         }),
       );
-    const over = store.addTask({
-      title: "Over capacity 51",
-      priority: 5,
-      task_spec: { kind: "diagnostic" },
-    });
-    await drive(store, null, null, 4);
-    const accepted = store.taskRows.filter((r) => r.session_id);
+    // Merged duplicates free their slot, so six more distinct tasks queue behind: only five fit.
+    const overs = [];
+    for (let i = 0; i < 6; i += 1)
+      overs.push(
+        store.addTask({
+          title: `Over capacity ${51 + i}`,
+          priority: 5,
+          task_spec: { kind: "diagnostic" },
+        }),
+      );
+    await drive(store, null, null, 6);
+    // Merged duplicates are not real tasks and never consume capacity.
+    const accepted = store.taskRows.filter((r) => r.session_id && !r.merged_into);
     assert.equal(accepted.length, 50, "exactly 50 accepted today");
     assert.equal(store.taskRows.filter((r) => r.merged_into).length, 5, "5 duplicates merged");
     for (const d of deps) {
@@ -847,10 +871,12 @@ await check(
       assert.equal(row.status, "completed");
       assert.ok(row.completed_at >= dep.completed_at, "dependent completed after its dependency");
     }
-    const o = store.taskRows.find((r) => r.id === over.id);
-    assert.equal(o.status, "queued");
-    assert.equal(o.session_id, null);
-    assert.ok(Date.parse(o.next_attempt_at) > clock, "51st task held until the next day");
+    const held = overs
+      .map((t) => store.taskRows.find((r) => r.id === t.id))
+      .filter((r) => !r.session_id);
+    assert.equal(held.length, 1, "the 51st distinct task is held");
+    assert.equal(held[0].status, "queued");
+    assert.ok(Date.parse(held[0].next_attempt_at) > clock, "held until the next day");
     assert.ok(store.maxActiveSeen <= 4, `max concurrent leases ${store.maxActiveSeen}`);
     assert.equal(
       store.taskRows.filter((r) => r.session_id && !["completed", "cancelled"].includes(r.status))
@@ -1101,5 +1127,117 @@ await check("risk policy blocks protected HPO/auth/migration edits for Adam appr
     /credential/,
   );
 });
+
+// ------------------------------------------------------------------------
+// Production capacity accounting + approval semantics.
+// ------------------------------------------------------------------------
+
+const { countsTowardCapacity } = await import("../supabase/functions/jarvis-worker/engine.ts");
+
+await check(
+  "capacity accounting: a 50-task load-test fixture never consumes production capacity, and fixture evidence is preserved",
+  async () => {
+    const store = new MemoryStore();
+    for (let i = 0; i < 50; i += 1)
+      store.addTask({ title: `Load fixture ${i}`, task_spec: { kind: "diagnostic" } });
+    await drive(store, null, null, 4);
+    const fixtures = store.taskRows.filter((r) => r.is_fixture);
+    assert.equal(fixtures.filter((r) => r.session_id).length, 50, "fixtures were processed");
+    assert.equal(fixtures.filter((r) => r.status === "completed").length, 50, "evidence preserved");
+    assert.equal(store.taskRows.filter(countsTowardCapacity).length, 0, "production counter 0/50");
+    assert.equal(await store.acceptedOn(OWNER, "2026-10-06"), 0);
+    // Real approved work still gets all 50 of its own slots afterwards.
+    for (let i = 0; i < 3; i += 1)
+      store.addTask({
+        title: `Real task ${i}`,
+        is_fixture: false,
+        task_spec: { kind: "diagnostic" },
+      });
+    await drive(store, null, null, 4);
+    assert.equal(store.taskRows.filter(countsTowardCapacity).length, 3);
+    assert.equal(store.sessions.at(-1).accepted_count, 3, "session counts production tasks only");
+    assert.equal(
+      store.sessions[0].accepted_count,
+      0,
+      "the fixture session shows 0 production tasks",
+    );
+  },
+);
+
+await check(
+  "capacity accounting: proposed tasks never run, never count; approval makes them eligible; cancelled/superseded do not count; midnight rollover resets",
+  async () => {
+    const store = new MemoryStore();
+    const proposed = [];
+    for (let i = 0; i < 20; i += 1)
+      proposed.push(
+        store.addTask({
+          title: `Proposed ${i}`,
+          is_fixture: false,
+          approval_state: "proposed",
+          task_spec: { kind: "diagnostic" },
+        }),
+      );
+    await drive(store, null, null, 4);
+    assert.equal(
+      proposed.every((t) => {
+        const r = store.taskRows.find((x) => x.id === t.id);
+        return r.status === "queued" && !r.session_id && r.attempt_count === 0;
+      }),
+      true,
+      "the worker cannot execute an unapproved proposed task",
+    );
+    assert.equal(store.taskRows.filter(countsTowardCapacity).length, 0, "20 proposed = 0/50");
+    for (const t of proposed) store.taskRows.find((x) => x.id === t.id).approval_state = "approved";
+    await drive(store, null, null, 6);
+    assert.equal(store.taskRows.filter(countsTowardCapacity).length, 20, "approved = 20/50");
+    // 5 cancelled → they stop counting (documented policy: cancelled never consumes capacity).
+    for (const t of proposed.slice(0, 5))
+      store.taskRows.find((x) => x.id === t.id).status = "cancelled";
+    assert.equal(store.taskRows.filter(countsTowardCapacity).length, 15);
+    for (const t of proposed.slice(5, 7)) {
+      const r = store.taskRows.find((x) => x.id === t.id);
+      r.approval_state = "superseded";
+      r.status = "cancelled";
+    }
+    assert.equal(store.taskRows.filter(countsTowardCapacity).length, 13);
+    // Midnight Eastern: tomorrow's intake starts at 0 while history is untouched.
+    advance(24 * 3600_000);
+    assert.equal(await store.acceptedOn(OWNER, "2026-10-07"), 0);
+    assert.equal(store.taskRows.length, 20, "no history deleted");
+  },
+);
+
+await check(
+  "capacity accounting: Opportunity Radar findings are proposals and consume no capacity until approved",
+  async () => {
+    const store = new MemoryStore();
+    const gap = (i) => ({
+      event_type: "capability_gap",
+      status: "error",
+      action: "emery_turn",
+      domain: "personal",
+      metadata: {
+        signal: "capability_gap",
+        capability: "apple_notes",
+        request: "Save this to Apple Notes",
+        observed: "Emery implied it was saved",
+        severity: 4,
+        confidence: 0.9,
+      },
+      created_at: new Date(clock - i * 1000).toISOString(),
+    });
+    store.radar.events = [gap(1), gap(2), gap(3)];
+    await makeEngine(store, null, null, { forceRadar: true }).runRadar(OWNER);
+    const found = store.taskRows.filter((r) => r.source_type === "opportunity_radar");
+    assert.equal(found.length, 1);
+    assert.equal(found[0].approval_state, "proposed");
+    assert.equal(found[0].is_fixture ?? false, false);
+    await drive(store, null, null, 4);
+    const row = store.taskRows.find((r) => r.id === found[0].id);
+    assert.equal(row.session_id, null, "an unapproved radar task is never accepted");
+    assert.equal(store.taskRows.filter(countsTowardCapacity).length, 0);
+  },
+);
 
 console.log(`\nJARVIS worker validation: ${passed} checks passed.`);

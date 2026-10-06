@@ -39,6 +39,32 @@ const OPEN_TASK_STATUSES = new Set([
   "blocked",
 ]);
 
+/**
+ * Production capacity accounting. `accepted_today` means: real production
+ * engineering tasks Adam approved and the worker accepted into one of today's
+ * (Eastern) sessions. Everything else is excluded: validation/load fixtures,
+ * proposed or superseded tasks, cancelled/deferred placeholders, merged
+ * duplicates and unaccepted rows. Missing fields read as legacy defaults
+ * (not a fixture, approved).
+ */
+const NON_COUNTING_STATUSES = new Set(["cancelled", "deferred"]);
+
+export function countsTowardCapacity(task: {
+  session_id?: string | null;
+  is_fixture?: boolean | null;
+  approval_state?: string | null;
+  status?: string | null;
+  merged_into?: string | null;
+}) {
+  return Boolean(
+    task.session_id &&
+    !task.is_fixture &&
+    (task.approval_state ?? "approved") === "approved" &&
+    !NON_COUNTING_STATUSES.has(String(task.status)) &&
+    !task.merged_into,
+  );
+}
+
 export function easternDate(now = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/New_York",
@@ -77,7 +103,7 @@ export async function getJarvisStatus(db: any, userId: string) {
       db
         .from("jarvis_engineering_tasks")
         .select(
-          "id,session_id,title,status,priority,risk_level,source_type,blocker,branch_name,commit_sha,pr_url,result_summary,created_at,updated_at,completed_at",
+          "id,session_id,title,status,priority,risk_level,source_type,blocker,branch_name,commit_sha,pr_url,result_summary,created_at,updated_at,completed_at,is_fixture,approval_state,batch_id,merged_into",
         )
         .eq("user_id", userId)
         .order("updated_at", { ascending: false })
@@ -95,24 +121,37 @@ export async function getJarvisStatus(db: any, userId: string) {
 
   const activeSession = sessions.find((s: any) => ["queued", "running"].includes(s.status)) ?? null;
   const todaysSession = sessions.find((s: any) => s.session_date === today) ?? null;
-  // Intake is what the worker accepted into today's sessions (jarvis_accept_task),
-  // not every row created today: ledger notes and over-capacity tasks never count.
+  // Intake is what the worker accepted into today's sessions (jarvis_accept_task)
+  // for REAL production work: see countsTowardCapacity for what is excluded.
   const todaysSessionIds = new Set(
     sessions.filter((s: any) => s.session_date === today).map((s: any) => s.id),
   );
-  const todaysTasks = tasks.filter((t: any) => t.session_id && todaysSessionIds.has(t.session_id));
+  const isFixture = (t: any) => Boolean(t.is_fixture);
+  const approvalOf = (t: any) => t.approval_state ?? "approved";
+  const production = tasks.filter((t: any) => !isFixture(t) && approvalOf(t) === "approved");
+  const proposed = tasks.filter(
+    (t: any) => !isFixture(t) && approvalOf(t) === "proposed" && OPEN_TASK_STATUSES.has(t.status),
+  );
+  const todaysTasks = tasks.filter(
+    (t: any) => todaysSessionIds.has(t.session_id) && countsTowardCapacity(t),
+  );
+  const fixturesToday = tasks.filter(
+    (t: any) => isFixture(t) && t.session_id && todaysSessionIds.has(t.session_id),
+  );
+  const fixtureTotal = tasks.filter(isFixture).length;
   const counts = Object.fromEntries(TASK_STATUSES.map((status) => [status, 0])) as Record<
     (typeof TASK_STATUSES)[number],
     number
   >;
-  for (const task of tasks)
+  // Status counts describe the production queue only (no fixtures, no proposals).
+  for (const task of production)
     if (task.status in counts) counts[task.status as keyof typeof counts] += 1;
-  const openTasks = tasks.filter((t: any) => OPEN_TASK_STATUSES.has(t.status));
+  const openTasks = production.filter((t: any) => OPEN_TASK_STATUSES.has(t.status));
   const approvals = [
     ...sessions
       .filter((s: any) => s.approval_required && s.status !== "cancelled")
       .map((s: any) => ({ kind: "session", id: s.id, detail: s.summary })),
-    ...tasks
+    ...production
       .filter((t: any) => t.status === "blocked" && /approv/i.test(String(t.blocker ?? "")))
       .map((t: any) => ({ kind: "task", id: t.id, detail: `${t.title}: ${t.blocker}` })),
   ];
@@ -124,8 +163,16 @@ export async function getJarvisStatus(db: any, userId: string) {
     latest_session: sessions[0] ?? null,
     status_counts: counts,
     open_tasks: openTasks.slice(0, 15),
-    recently_completed: tasks.filter((t: any) => t.status === "completed").slice(0, 6),
-    blocked: tasks.filter((t: any) => t.status === "blocked").slice(0, 6),
+    recently_completed: production.filter((t: any) => t.status === "completed").slice(0, 6),
+    blocked: production.filter((t: any) => t.status === "blocked").slice(0, 6),
+    proposed_tasks: proposed.slice(0, 50),
+    proposed_count: proposed.length,
+    // Historical validation evidence: kept visible, never counted as capacity.
+    validation_fixtures: {
+      total: fixtureTotal,
+      accepted_today: fixturesToday.length,
+      counts_toward_capacity: false,
+    },
     approvals_required: approvals,
     self_improvement_research: findings,
     latest_session_self_improvement: (() => {
@@ -155,14 +202,19 @@ export async function getJarvisStatus(db: any, userId: string) {
           "repairing",
         ].includes(t.status),
       ).length;
+      const queueLine = `${todaysTasks.length} of ${capacity} production tasks accepted today`;
       return {
         ready: remaining > 0,
         remaining_capacity_today: remaining,
         in_flight: inFlight,
         note:
           remaining > 0
-            ? `Ready: ${remaining} of ${capacity} intake slots left today; ${inFlight} task(s) in flight.`
-            : `Today's ${capacity}-task intake is full. New tasks are queued and accepted after midnight Eastern.`,
+            ? `Your production queue is open: ${queueLine}; ${inFlight} in flight.${
+                proposed.length
+                  ? ` I have ${proposed.length} proposed task(s) ready for your approval.`
+                  : ""
+              }`
+            : `Today's ${capacity}-task production intake is full. New approved tasks are queued and accepted after midnight Eastern.`,
       };
     })(),
   };

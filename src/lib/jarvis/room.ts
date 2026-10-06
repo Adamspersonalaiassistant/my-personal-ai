@@ -7,7 +7,7 @@ import { MODEL_POLICY } from "../model-policy.ts";
 import { runJarvisTurn, type ToolTraceEntry } from "./runtime.ts";
 import * as state from "./state.ts";
 import { createGithubClient, resolvePresence, ingestKnowledgeFromMessage } from "./tool-gateway.ts";
-import { assessPaidCreditRequest } from "./policy.ts";
+import { assessBatchReplacement, assessPaidCreditRequest, assessTaskApproval } from "./policy.ts";
 
 export const JARVIS_AGENT_SLUG = "jarvis-engineer";
 
@@ -234,7 +234,12 @@ export async function handleJarvisTurn(
     db,
     userId,
     agentId: agent.id as string,
-    approvals: { paidCreditApproved: credit.approved, highRiskApproved: false },
+    approvals: {
+      paidCreditApproved: credit.approved,
+      highRiskApproved: false,
+      tasksApproved: assessTaskApproval(message).approved,
+      batchReplacement: assessBatchReplacement(message).replace,
+    },
     openAiKey: apiKey ?? null,
     researchModel: MODEL_POLICY.primary,
     sourceRef: userMessage.id,
