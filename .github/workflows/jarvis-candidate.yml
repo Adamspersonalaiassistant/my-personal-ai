@@ -1,9 +1,11 @@
 name: JARVIS Candidate
 
 # Isolated test environment for JARVIS candidate branches.
-# Runs generated code with NO production secrets: no Supabase, OpenAI or GitHub
-# credentials are provided. Failures become check-run annotations that the
-# JARVIS worker reads (Checks: read) to drive bounded repair.
+# The `jarvis-candidate` job runs generated code with NO production secrets and a
+# read-only token. Its JSON report is handed to the `report` job, which never
+# checks out or executes branch code and only publishes commit statuses
+# (`jarvis-candidate` overall, `jarvis-candidate/eN` per failure) that the
+# JARVIS worker reads to decide pass/fail and drive bounded repair.
 on:
   push:
     branches: ["jarvis/**"]
@@ -19,11 +21,79 @@ jobs:
   jarvis-candidate:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: node scripts/jarvis-candidate-check.mjs
+        env:
+          JARVIS_REPORT: ${{ runner.temp }}/jarvis-report.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-report
+          path: ${{ runner.temp }}/jarvis-report.json
+          if-no-files-found: ignore
+          retention-days: 3
+
+  report:
+    needs: jarvis-candidate
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      statuses: write
+    steps:
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: jarvis-report
+          path: report
+      - name: Publish commit statuses
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          JOB_RESULT: ${{ needs.jarvis-candidate.result }}
+        run: |
+          node --input-type=module <<'JS'
+          import { existsSync, readFileSync } from "node:fs";
+          const { GITHUB_TOKEN, REPO, SHA, RUN_URL, JOB_RESULT } = process.env;
+          let report = null;
+          if (existsSync("report/jarvis-report.json")) {
+            try { report = JSON.parse(readFileSync("report/jarvis-report.json", "utf8")); } catch {}
+          }
+          const passed = JOB_RESULT === "success" && report?.passed === true;
+          const clip = (text) => String(text ?? "").replace(/\s+/g, " ").trim().slice(0, 138);
+          const post = async (context, state, description) => {
+            const res = await fetch(`https://api.github.com/repos/${REPO}/statuses/${SHA}`, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${GITHUB_TOKEN}`,
+                Accept: "application/vnd.github+json",
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ state, context, description: clip(description), target_url: RUN_URL }),
+            });
+            if (!res.ok) throw new Error(`status ${context}: ${res.status}`);
+          };
+          const failures = Array.isArray(report?.failures) ? report.failures.slice(0, 6) : [];
+          for (const [i, f] of failures.entries()) {
+            const where = f.path ? `${f.path}:${f.line ?? ""} ` : "";
+            await post(`jarvis-candidate/e${i + 1}`, "failure", `${where}${f.title ?? ""}: ${f.message ?? ""}`);
+          }
+          const summary = passed
+            ? "All candidate checks passed"
+            : report
+              ? `Failed: ${report.steps.filter((s) => !s.ok).map((s) => s.name).join(", ")}`
+              : `Candidate job ${JOB_RESULT} before producing a report`;
+          await post("jarvis-candidate", passed ? "success" : "failure", summary);
+          JS
