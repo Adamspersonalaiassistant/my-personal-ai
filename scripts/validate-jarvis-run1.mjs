@@ -925,4 +925,73 @@ await check(
   },
 );
 
+await check(
+  "Run 2 intake: batch tasks reach the worker executable — no pre-assigned session, specs kept, duplicates merged, dependencies wired",
+  async () => {
+    const db = fakeDb({
+      jarvis_engineering_tasks: [
+        {
+          id: "open-1",
+          title: "Existing open task",
+          status: "queued",
+          session_id: "s1",
+          created_at: "2026-10-06T01:00:00Z",
+          updated_at: "2026-10-06T01:00:00Z",
+        },
+      ],
+      jarvis_engineering_sessions: [],
+    });
+    const ctx = {
+      db,
+      userId: "u",
+      agentId: null,
+      approvals: noApproval,
+      openAiKey: null,
+      researchModel: "m",
+      env: {},
+    };
+    const out = await executeJarvisTool(
+      "jarvis.create_tasks",
+      {
+        source_type: "chatgpt_batch",
+        tasks: [
+          { title: "Existing open task" },
+          {
+            title: "Tighten capability registry wording",
+            target_paths: ["src/lib/execution-capabilities.ts"],
+          },
+          {
+            title: "Verify registry wording in telemetry",
+            checks: [{ type: "db_count", table: "emery_runtime_events", days: 1 }],
+            depends_on_index: [1],
+          },
+          { title: "Make Emery better somehow" },
+        ],
+      },
+      ctx,
+    );
+    assert.equal(out.ok, true, out.error);
+    const r = out.result;
+    assert.equal(r.created, 3);
+    assert.equal(r.results[0].duplicate_of, "open-1");
+    const inserted = db.log.inserts.filter((i) => i.table === "jarvis_engineering_tasks");
+    assert.equal(inserted.length, 3);
+    assert.ok(
+      inserted.every((i) => !("session_id" in i.row)),
+      "worker assigns the session",
+    );
+    assert.equal(inserted[0].row.source_type, "chatgpt_batch");
+    assert.equal(inserted[0].row.task_spec.kind, "code_change");
+    assert.deepEqual(inserted[0].row.task_spec.target_paths, ["src/lib/execution-capabilities.ts"]);
+    assert.equal(inserted[1].row.task_spec.kind, "diagnostic");
+    assert.equal(inserted[1].row.depends_on.length, 1);
+    assert.equal(inserted[1].row.depends_on[0], r.results[1].task.id);
+    assert.ok(r.results[3].needs_spec, "an unexecutable task is flagged, not silently queued");
+    assert.ok(
+      !db.log.inserts.some((i) => i.table === "jarvis_engineering_sessions"),
+      "no session created outside the worker",
+    );
+  },
+);
+
 console.log(`JARVIS Run 1 end-to-end harness: complete (${passed} checks).`);

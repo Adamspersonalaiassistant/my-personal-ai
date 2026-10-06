@@ -85,6 +85,7 @@ export function selectJarvisTools(message: string, extra: string[] = []): string
       "github.inspect_ci",
       "github.create_pr",
       "jarvis.create_task",
+      "jarvis.create_tasks",
       "jarvis.update_task",
       "emery.run_evaluations",
     ].forEach((t) => selected.add(t));

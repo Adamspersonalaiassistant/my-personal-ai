@@ -297,6 +297,8 @@ async function run(name: string, args: Record<string, any>, ctx: GatewayContext)
     }
     case "jarvis.create_task":
       return createTask(ctx, args);
+    case "jarvis.create_tasks":
+      return createTasks(ctx, args);
     case "jarvis.update_task":
       return updateTask(ctx, args);
     case "jarvis.record_knowledge":
@@ -508,68 +510,151 @@ async function ensureTodaySession(ctx: GatewayContext) {
   return data;
 }
 
-async function createTask(ctx: GatewayContext, args: Record<string, any>) {
+const TASK_KINDS = ["code_change", "diagnostic"];
+const TASK_SOURCES = [
+  "adam",
+  "chatgpt_batch",
+  "claude_batch",
+  "runtime",
+  "evaluation",
+  "capability_gap",
+  "user_correction",
+  "regression",
+  "research",
+  "jarvis_self_research",
+];
+
+function normalizedTitle(title: unknown) {
+  return String(title ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/**
+ * Build a worker-executable task row. The jarvis-worker accepts it into the day's
+ * session atomically (capacity, dedupe, dependencies, risk), so no session is
+ * pre-assigned here.
+ */
+function buildTaskRow(ctx: GatewayContext, args: Record<string, any>, sourceType: string) {
   const title = String(args["title"] ?? "")
     .trim()
     .slice(0, 200);
   if (title.length < 4) throw new PolicyError("A task needs a clear title.");
-  if (sensitiveReason(`${title} ${args["objective"] ?? ""}`))
+  if (sensitiveReason(`${title} ${args["objective"] ?? ""} ${JSON.stringify(args["edits"] ?? "")}`))
     throw new PolicyError("Task text looks like it contains sensitive data; rephrase without it.");
-  const session = await ensureTodaySession(ctx);
-  const status = await state.getJarvisStatus(ctx.db, ctx.userId);
-  if (status.accepted_today >= (session.intake_limit ?? state.DAILY_TASK_CAPACITY))
-    throw new PolicyError(
-      `Today's intake capacity (${session.intake_limit}) is full. Defer to tomorrow or merge with an existing task.`,
-    );
-  const normalized = title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-  const duplicate = status.open_tasks.find(
-    (t: any) =>
-      String(t.title)
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, " ")
-        .trim() === normalized,
-  );
-  if (duplicate)
-    return {
-      created: false,
-      duplicate_of: duplicate.id,
-      status: duplicate.status,
-      note: "Merged with an existing open task.",
-    };
-  const risk = ["low", "medium", "high", "critical"].includes(args["risk_level"])
-    ? args["risk_level"]
-    : "medium";
-  const { data, error } = await ctx.db
-    .from("jarvis_engineering_tasks")
-    .insert({
+  const objective = args["objective"] ? String(args["objective"]).slice(0, 2000) : null;
+  const targetPaths = Array.isArray(args["target_paths"])
+    ? args["target_paths"].map(String).slice(0, 6)
+    : [];
+  const edits = Array.isArray(args["edits"]) ? args["edits"].slice(0, 12) : undefined;
+  const checks = Array.isArray(args["checks"]) ? args["checks"].slice(0, 10) : undefined;
+  const kind = TASK_KINDS.includes(args["kind"])
+    ? args["kind"]
+    : targetPaths.length || edits?.length
+      ? "code_change"
+      : checks?.length
+        ? "diagnostic"
+        : null;
+  const task_spec: Record<string, unknown> = { objective: objective ?? title };
+  if (kind) task_spec["kind"] = kind;
+  if (targetPaths.length) task_spec["target_paths"] = targetPaths;
+  if (edits) task_spec["edits"] = edits;
+  if (checks) task_spec["checks"] = checks;
+  return {
+    row: {
       user_id: ctx.userId,
-      session_id: session.id,
-      source_type: String(args["source_type"] ?? "adam").slice(0, 40),
+      source_type: sourceType,
       source_ref: ctx.sourceRef ?? null,
       title,
-      objective: args["objective"] ? String(args["objective"]).slice(0, 2000) : null,
+      objective,
       why_it_matters: args["why_it_matters"] ? String(args["why_it_matters"]).slice(0, 1000) : null,
       priority: Math.min(Math.max(Math.round(num(args["priority"]) ?? 3), 1), 5),
-      risk_level: risk,
+      risk_level: ["low", "medium", "high", "critical"].includes(args["risk_level"])
+        ? args["risk_level"]
+        : "medium",
       status: "queued",
       scheduled_for: state.easternDate(),
-    })
-    .select("id,title,status,priority,risk_level,session_id")
-    .single();
-  if (error) throw new Error(error.message);
-  await ctx.db
-    .from("jarvis_engineering_sessions")
-    .update({ accepted_count: status.accepted_today + 1 })
-    .eq("id", session.id)
-    .eq("user_id", ctx.userId);
+      task_spec,
+    },
+    executable: Boolean(kind),
+  };
+}
+
+function sourceOf(args: Record<string, any>, fallback = "adam") {
+  const source = String(args["source_type"] ?? fallback);
+  return TASK_SOURCES.includes(source) ? source : fallback;
+}
+
+async function createTask(ctx: GatewayContext, args: Record<string, any>) {
+  const result = await createTasks(ctx, { tasks: [args], source_type: args["source_type"] });
+  const only = result.results[0];
+  return { ...only, accepted_today: result.accepted_today, capacity: result.capacity };
+}
+
+async function createTasks(ctx: GatewayContext, args: Record<string, any>) {
+  const items: Array<Record<string, any>> = Array.isArray(args["tasks"]) ? args["tasks"] : [];
+  if (!items.length) throw new PolicyError("Provide at least one task.");
+  if (items.length > state.DAILY_TASK_CAPACITY)
+    throw new PolicyError(`A batch can hold at most ${state.DAILY_TASK_CAPACITY} tasks.`);
+  const batchSource = sourceOf(args);
+  const built = items.map((item) => buildTaskRow(ctx, item, sourceOf(item, batchSource)));
+  const status = await state.getJarvisStatus(ctx.db, ctx.userId);
+  const open = new Map(status.open_tasks.map((t: any) => [normalizedTitle(t.title), t]));
+  const ids: Array<string | null> = [];
+  const results: Array<Record<string, unknown>> = [];
+  for (const [index, { row, executable }] of built.entries()) {
+    const existing = open.get(normalizedTitle(row.title)) as any;
+    if (existing) {
+      ids.push(existing.id);
+      results.push({
+        index,
+        created: false,
+        duplicate_of: existing.id,
+        status: existing.status,
+        note: "Merged with an existing open task.",
+      });
+      continue;
+    }
+    const dependsOn = (
+      Array.isArray(items[index]!["depends_on_index"]) ? items[index]!["depends_on_index"] : []
+    )
+      .map((i: unknown) => (Number.isInteger(i) && (i as number) < index ? ids[i as number] : null))
+      .filter((id: string | null | undefined): id is string => Boolean(id));
+    const { data, error } = await ctx.db
+      .from("jarvis_engineering_tasks")
+      .insert({ ...row, depends_on: dependsOn })
+      .select("id,title,status,priority,risk_level")
+      .single();
+    if (error) throw new Error(error.message);
+    ids.push(data.id);
+    open.set(normalizedTitle(row.title), data);
+    results.push({
+      index,
+      created: true,
+      task: data,
+      depends_on: dependsOn,
+      ...(executable
+        ? {}
+        : {
+            needs_spec:
+              "No executable spec: the worker will block this task. Add target_paths (find them with github.search_code), explicit edits, or diagnostic checks.",
+          }),
+    });
+  }
+  const created = results.filter((r) => r["created"]).length;
+  const capacity = state.DAILY_TASK_CAPACITY;
+  const room = Math.max(0, capacity - status.accepted_today);
   return {
-    created: true,
-    task: data,
-    accepted_today: status.accepted_today + 1,
-    capacity: session.intake_limit,
+    created,
+    merged: results.length - created,
+    results,
+    accepted_today: status.accepted_today,
+    capacity,
+    note:
+      created > room
+        ? `${created - room} task(s) exceed today's remaining intake (${room}); the worker holds them for the next day.`
+        : "Queued for the JARVIS worker (runs every 2 minutes): accept → validate → dedupe → dependencies → risk → execute → test → repair → PR.",
   };
 }
 
