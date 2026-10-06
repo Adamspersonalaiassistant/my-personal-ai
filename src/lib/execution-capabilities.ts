@@ -69,6 +69,10 @@ export const EMERY_EXECUTION_CAPABILITIES = {
     canExecute: false,
     note: "Apple Calendar is not connected.",
   },
+  apple_reminders: {
+    canExecute: false,
+    note: "Apple Reminders is not connected.",
+  },
   google_calendar: {
     canExecute: false,
     note: "Google Calendar is not connected.",
