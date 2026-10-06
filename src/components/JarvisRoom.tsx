@@ -15,6 +15,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { JarvisVoiceControl } from "@/components/JarvisVoiceControl";
 import { getJarvisRoom, getJarvisStatusPanel, sendJarvisMessage } from "@/lib/jarvis.functions";
 
 type ToolTrace = { tool: string; ok: boolean; ms: number; summary: string; error?: string };
@@ -327,6 +328,16 @@ export function JarvisRoom() {
 
         <form onSubmit={handleSubmit} className="z-20 shrink-0 px-2.5 pb-2 pt-3 sm:px-5 sm:pb-3">
           <div className="emery-glass-strong mx-auto flex max-w-2xl items-end gap-2 rounded-[1.6rem] p-2 shadow-[0_20px_50px_rgba(0,0,0,0.3)]">
+            <JarvisVoiceControl
+              onTurn={(result) => {
+                setMessages((prev) => [
+                  ...prev,
+                  result.userMessage as RoomMessage,
+                  ...(result.agentMessage ? [result.agentMessage as RoomMessage] : []),
+                ]);
+                void refreshPanel();
+              }}
+            />
             <textarea
               ref={textareaRef}
               value={draft}

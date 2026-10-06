@@ -85,6 +85,7 @@ export function selectJarvisTools(message: string, extra: string[] = []): string
       "github.inspect_ci",
       "github.create_pr",
       "jarvis.create_task",
+      "jarvis.create_tasks",
       "jarvis.update_task",
       "emery.run_evaluations",
     ].forEach((t) => selected.add(t));
@@ -419,5 +420,5 @@ export async function buildEmerySelfAwarenessBlock(gateway: GatewayContext) {
   };
   return `EMERY SELF-AWARENESS (authoritative: emery_releases ledger + live deployment observation + GitHub main + runtime health):
 ${redactSecrets(JSON.stringify(payload)).slice(0, 9000)}
-Answer version/upgrade questions ONLY from this block. Report the production commit (short SHA) and where it came from. List only releases that are actually recorded; if only a baseline exists, say no detailed changelog has been recorded yet rather than inventing upgrades. If there are discrepancies, mention them plainly.`;
+Answer version/upgrade questions ONLY from this block. Report the production commit (short SHA) and where it came from. List only releases that are actually recorded; if only a baseline exists, say no detailed changelog has been recorded yet rather than inventing upgrades. Items under candidate_upgrades_not_deployed are JARVIS-prepared PRs awaiting Adam's release review: describe them as pending, never as live. If there are discrepancies, mention them plainly.`;
 }

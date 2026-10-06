@@ -925,4 +925,146 @@ await check(
   },
 );
 
+await check(
+  "Run 2 intake: batch tasks reach the worker executable — no pre-assigned session, specs kept, duplicates merged, dependencies wired",
+  async () => {
+    const db = fakeDb({
+      jarvis_engineering_tasks: [
+        {
+          id: "open-1",
+          title: "Existing open task",
+          status: "queued",
+          session_id: "s1",
+          created_at: "2026-10-06T01:00:00Z",
+          updated_at: "2026-10-06T01:00:00Z",
+        },
+      ],
+      jarvis_engineering_sessions: [],
+    });
+    const ctx = {
+      db,
+      userId: "u",
+      agentId: null,
+      approvals: noApproval,
+      openAiKey: null,
+      researchModel: "m",
+      env: {},
+    };
+    const out = await executeJarvisTool(
+      "jarvis.create_tasks",
+      {
+        source_type: "chatgpt_batch",
+        tasks: [
+          { title: "Existing open task" },
+          {
+            title: "Tighten capability registry wording",
+            target_paths: ["src/lib/execution-capabilities.ts"],
+          },
+          {
+            title: "Verify registry wording in telemetry",
+            checks: [{ type: "db_count", table: "emery_runtime_events", days: 1 }],
+            depends_on_index: [1],
+          },
+          { title: "Make Emery better somehow" },
+        ],
+      },
+      ctx,
+    );
+    assert.equal(out.ok, true, out.error);
+    const r = out.result;
+    assert.equal(r.created, 3);
+    assert.equal(r.results[0].duplicate_of, "open-1");
+    const inserted = db.log.inserts.filter((i) => i.table === "jarvis_engineering_tasks");
+    assert.equal(inserted.length, 3);
+    assert.ok(
+      inserted.every((i) => !("session_id" in i.row)),
+      "worker assigns the session",
+    );
+    assert.equal(inserted[0].row.source_type, "chatgpt_batch");
+    assert.equal(inserted[0].row.task_spec.kind, "code_change");
+    assert.deepEqual(inserted[0].row.task_spec.target_paths, ["src/lib/execution-capabilities.ts"]);
+    assert.equal(inserted[1].row.task_spec.kind, "diagnostic");
+    assert.equal(inserted[1].row.depends_on.length, 1);
+    assert.equal(inserted[1].row.depends_on[0], r.results[1].task.id);
+    assert.ok(r.results[3].needs_spec, "an unexecutable task is flagged, not silently queued");
+    assert.ok(
+      !db.log.inserts.some((i) => i.table === "jarvis_engineering_sessions"),
+      "no session created outside the worker",
+    );
+  },
+);
+
+const { jarvisVoiceProfile, jarvisRealtimeInstructions, DEFAULT_JARVIS_VOICE } =
+  await import("../src/lib/jarvis/voice.ts");
+
+await check(
+  "Run 2 voice: JARVIS has its own persistent voice, never Emery's, and routes speech into the shared JARVIS thread",
+  () => {
+    assert.equal(jarvisVoiceProfile(null, "shimmer").voice, DEFAULT_JARVIS_VOICE.voice);
+    assert.notEqual(jarvisVoiceProfile(null, "shimmer").voice, "shimmer");
+    // Even if Emery's voice later becomes JARVIS's default, they stay distinct.
+    assert.notEqual(jarvisVoiceProfile(null, "cedar").voice, "cedar");
+    const stored = jarvisVoiceProfile({ voice_profile: { voice: "ash", speed: 1.05 } }, "shimmer");
+    assert.equal(stored.voice, "ash");
+    assert.equal(stored.speed, 1.05);
+    assert.equal(jarvisVoiceProfile({ voice_profile: { voice: "bogus", speed: 9 } }).speed, 1);
+    const text = jarvisRealtimeInstructions(DEFAULT_JARVIS_VOICE, "STATE");
+    assert.match(text, /British-English/);
+    assert.match(text, /never imitate any actor/i);
+    assert.match(text, /jarvis_turn/);
+    assert.match(text, /You are NOT Emery/);
+  },
+);
+
+await check(
+  "Run 2 readiness: intake counts only tasks accepted into today's sessions; a full day is reported as not ready",
+  async () => {
+    const state = await import("../src/lib/jarvis/state.ts");
+    const today = state.easternDate();
+    const at = new Date().toISOString();
+    const session = (id, n) => ({
+      id,
+      status: "completed",
+      session_date: today,
+      intake_limit: 50,
+      self_research_summary: id === "s2" ? "Self-research (watch): test selection." : null,
+      self_research_classification: "watch",
+      metadata: { metrics: { completion_rate: 1 } },
+      updated_at: at,
+      accepted_count: n,
+    });
+    const task = (id, sessionId, status = "completed") => ({
+      id,
+      session_id: sessionId,
+      title: id,
+      status,
+      created_at: at,
+      updated_at: at,
+    });
+    const accepted = (n, sid) => Array.from({ length: n }, (_, i) => task(`${sid}-${i}`, sid));
+    const status = async (tasks) =>
+      state.getJarvisStatus(
+        fakeDb({
+          jarvis_engineering_sessions: [session("s2", 10), session("s1", 5)],
+          jarvis_engineering_tasks: tasks,
+          jarvis_research_findings: [],
+        }),
+        "u",
+      );
+    const partial = await status([
+      ...accepted(5, "s1"),
+      ...accepted(10, "s2"),
+      task("ledger-note", null, "deferred"),
+      task("tomorrow", null, "queued"),
+    ]);
+    assert.equal(partial.accepted_today, 15, "ledger notes and unaccepted tasks do not count");
+    assert.equal(partial.ready_for_more_tasks.ready, true);
+    assert.equal(partial.ready_for_more_tasks.remaining_capacity_today, 35);
+    assert.equal(partial.latest_session_self_improvement.session_id, "s2");
+    const full = await status([...accepted(25, "s1"), ...accepted(25, "s2")]);
+    assert.equal(full.ready_for_more_tasks.ready, false);
+    assert.match(full.ready_for_more_tasks.note, /intake is full/);
+  },
+);
+
 console.log(`JARVIS Run 1 end-to-end harness: complete (${passed} checks).`);

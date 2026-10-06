@@ -41,6 +41,35 @@ const noArgs: JsonSchema = { type: "object", properties: {}, additionalPropertie
 const str = (description: string) => ({ type: "string", description });
 const num = (description: string) => ({ type: "number", description });
 
+const TASK_PROPERTIES = {
+  title: str("Short task title"),
+  objective: str("Desired outcome (what done looks like)"),
+  why_it_matters: str("Impact on Adam/Emery"),
+  priority: num("1 (highest) – 5"),
+  risk_level: { type: "string", enum: ["low", "medium", "high", "critical"] },
+  source_type: str(
+    "adam | chatgpt_batch | claude_batch | runtime | evaluation | capability_gap | user_correction | regression | research",
+  ),
+  kind: { type: "string", enum: ["code_change", "diagnostic"] },
+  target_paths: {
+    type: "array",
+    items: { type: "string" },
+    description: "Repo files the code change should read/edit (src/, scripts/ or docs/).",
+  },
+  edits: {
+    type: "array",
+    description:
+      "Optional exact edits: {path, find, replace} or {path, create: true, content}. Validated by the worker.",
+    items: { type: "object" },
+  },
+  checks: {
+    type: "array",
+    description:
+      "Diagnostic checks: {type:'db_count', table, days, min} | {type:'github_file', path, contains} | {type:'radar_dry_run'}.",
+    items: { type: "object" },
+  },
+};
+
 function tool(def: JarvisToolDefinition): JarvisToolDefinition {
   return def;
 }
@@ -442,19 +471,35 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     family: "jarvis",
     risk: "REVERSIBLE_WRITE",
     description:
-      "Queue an engineering task in today's session (respects the 50/day intake limit and de-duplicates).",
+      "Queue one engineering task for the JARVIS worker (50/day intake ceiling, de-duplicated, risk-classified). For code changes give target_paths (find them with github.search_code) or explicit edits; for checks give diagnostic checks.",
     keywords: ["task", "queue", "add", "todo", "work", "engineering", "fix", "build"],
+    parameters: { type: "object", properties: TASK_PROPERTIES, required: ["title"] },
+  }),
+  tool({
+    name: "jarvis.create_tasks",
+    family: "jarvis",
+    risk: "REVERSIBLE_WRITE",
+    description:
+      "Queue a batch of up to 50 engineering tasks (e.g. a ChatGPT- or Claude-generated batch from Adam). Duplicates merge; depends_on_index orders work.",
+    keywords: ["batch", "tasks", "list", "chatgpt", "claude", "queue", "many", "schedule"],
     parameters: {
       type: "object",
       properties: {
-        title: str("Short task title"),
-        objective: str("Desired outcome"),
-        why_it_matters: str("Impact on Adam/Emery"),
-        priority: num("1 (highest) – 5"),
-        risk_level: { type: "string", enum: ["low", "medium", "high", "critical"] },
-        source_type: str("adam | runtime | evaluation | capability_gap | research"),
+        source_type: str("adam | chatgpt_batch | claude_batch | research"),
+        tasks: {
+          type: "array",
+          description: "Tasks in order; depends_on_index refers to earlier items in this array.",
+          items: {
+            type: "object",
+            properties: {
+              ...TASK_PROPERTIES,
+              depends_on_index: { type: "array", items: { type: "integer" } },
+            },
+            required: ["title"],
+          },
+        },
       },
-      required: ["title"],
+      required: ["tasks"],
     },
   }),
   tool({

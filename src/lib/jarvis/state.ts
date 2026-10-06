@@ -67,7 +67,7 @@ export async function getJarvisStatus(db: any, userId: string) {
       db
         .from("jarvis_engineering_sessions")
         .select(
-          "id,status,session_date,intake_limit,accepted_count,completed_count,ready_for_release_count,blocked_count,failed_count,approval_required,summary,self_research_summary,self_research_classification,started_at,completed_at,updated_at",
+          "id,status,session_date,intake_limit,accepted_count,completed_count,ready_for_release_count,blocked_count,failed_count,approval_required,summary,self_research_summary,self_research_classification,started_at,completed_at,updated_at,metadata",
         )
         .eq("user_id", userId)
         .order("updated_at", { ascending: false })
@@ -95,9 +95,12 @@ export async function getJarvisStatus(db: any, userId: string) {
 
   const activeSession = sessions.find((s: any) => ["queued", "running"].includes(s.status)) ?? null;
   const todaysSession = sessions.find((s: any) => s.session_date === today) ?? null;
-  const todaysTasks = tasks.filter(
-    (t: any) => easternDate(new Date(t.created_at)) === today && t.status !== "cancelled",
+  // Intake is what the worker accepted into today's sessions (jarvis_accept_task),
+  // not every row created today: ledger notes and over-capacity tasks never count.
+  const todaysSessionIds = new Set(
+    sessions.filter((s: any) => s.session_date === today).map((s: any) => s.id),
   );
+  const todaysTasks = tasks.filter((t: any) => t.session_id && todaysSessionIds.has(t.session_id));
   const counts = Object.fromEntries(TASK_STATUSES.map((status) => [status, 0])) as Record<
     (typeof TASK_STATUSES)[number],
     number
@@ -125,6 +128,43 @@ export async function getJarvisStatus(db: any, userId: string) {
     blocked: tasks.filter((t: any) => t.status === "blocked").slice(0, 6),
     approvals_required: approvals,
     self_improvement_research: findings,
+    latest_session_self_improvement: (() => {
+      const s = sessions.find((x: any) => x.self_research_summary);
+      return s
+        ? {
+            session_id: s.id,
+            date: s.session_date,
+            classification: s.self_research_classification,
+            summary: s.self_research_summary,
+            metrics: s.metadata?.metrics ?? null,
+            capacity_review: s.metadata?.capacity_review ?? null,
+          }
+        : null;
+    })(),
+    ready_for_more_tasks: (() => {
+      const capacity = todaysSession?.intake_limit ?? DAILY_TASK_CAPACITY;
+      const remaining = Math.max(0, capacity - todaysTasks.length);
+      const inFlight = openTasks.filter((t: any) =>
+        [
+          "queued",
+          "validating",
+          "researching",
+          "planning",
+          "building",
+          "testing",
+          "repairing",
+        ].includes(t.status),
+      ).length;
+      return {
+        ready: remaining > 0,
+        remaining_capacity_today: remaining,
+        in_flight: inFlight,
+        note:
+          remaining > 0
+            ? `Ready: ${remaining} of ${capacity} intake slots left today; ${inFlight} task(s) in flight.`
+            : `Today's ${capacity}-task intake is full. New tasks are queued and accepted after midnight Eastern.`,
+      };
+    })(),
   };
 }
 
@@ -308,18 +348,44 @@ export async function databaseDiagnostics(db: any) {
   };
 }
 
+const RELEASE_COLUMNS =
+  "release_name,production_commit_sha,previous_production_commit_sha,source_branch,source_pr_url,deployed_at,summary,capabilities_added,capabilities_changed,bugs_fixed,known_limitations,deployment_verified,produced_by,tests_run,metadata,created_at";
+
+/** Production releases only. JARVIS candidate upgrades (metadata.kind = "candidate") are excluded. */
 export async function releaseLedger(db: any, userId: string, limit = 8) {
-  return rows(
+  const all = await rows(
     db
       .from("emery_releases")
-      .select(
-        "release_name,production_commit_sha,previous_production_commit_sha,source_branch,source_pr_url,deployed_at,summary,capabilities_added,capabilities_changed,bugs_fixed,known_limitations,deployment_verified,produced_by,metadata,created_at",
-      )
+      .select(RELEASE_COLUMNS)
       .eq("user_id", userId)
       .order("deployed_at", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false })
+      .limit(limit + 20),
+  );
+  return all.filter((r: any) => r.metadata?.kind !== "candidate").slice(0, limit);
+}
+
+/** Candidate upgrades JARVIS prepared (tested on a jarvis/* branch, PR open, NOT deployed). */
+export async function candidateUpgrades(db: any, userId: string, limit = 6) {
+  const all = await rows(
+    db
+      .from("emery_releases")
+      .select(RELEASE_COLUMNS)
+      .eq("user_id", userId)
+      .eq("metadata->>kind", "candidate")
+      .order("created_at", { ascending: false })
       .limit(limit),
   );
+  return all.map((r: any) => ({
+    name: r.release_name,
+    candidate_commit: r.production_commit_sha,
+    branch: r.source_branch,
+    pr: r.source_pr_url,
+    tests: r.tests_run,
+    deployed: false,
+    fixture: r.metadata?.fixture === true,
+    created_at: r.created_at,
+  }));
 }
 
 // -------------------------------------------------- Deployment observation
@@ -508,8 +574,9 @@ export async function systemVersion(db: any, userId: string) {
 }
 
 export async function recentChanges(db: any, userId: string, github: GithubClient | null) {
-  const [releases, commits] = await Promise.all([
+  const [releases, candidates, commits] = await Promise.all([
     releaseLedger(db, userId, 8),
+    candidateUpgrades(db, userId, 6),
     github
       ? github.inspectHistory("main", undefined, 8).then(
           (h) => h.commits,
@@ -530,11 +597,9 @@ export async function recentChanges(db: any, userId: string, github: GithubClien
       known_limitations: r.known_limitations,
       produced_by: r.produced_by,
     })),
+    candidate_upgrades_not_deployed: candidates,
     main_commits: commits,
-    note:
-      releases.length <= 1
-        ? "Only the pre-JARVIS baseline release is recorded so far. No detailed changelog exists for earlier work; do not invent one."
-        : undefined,
+    note: "Releases are deployed production upgrades. Candidate upgrades are tested JARVIS PRs that are NOT live until Adam approves the release — never describe them as deployed.",
   };
 }
 

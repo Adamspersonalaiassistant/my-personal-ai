@@ -151,10 +151,11 @@ export async function handleJarvisTurn(
   agent: any,
   message: string,
   authToken: string | null = null,
+  channel: "typed" | "voice" = "typed",
 ) {
   const apiKey = process.env["OPENAI_API_KEY"];
   const thread = await ensureJarvisThread(db, userId, agent.id);
-  const userMessage = await saveMessage(db, userId, thread.id, "user", message);
+  const userMessage = await saveMessage(db, userId, thread.id, "user", message, { channel });
   const history = await loadJarvisMessages(db, userId, thread.id, 14);
   const prior = history.filter((m) => m.id !== userMessage.id);
 
@@ -202,7 +203,8 @@ export async function handleJarvisTurn(
       gate: turn.gate,
       knowledge_used: turn.knowledgeUsed,
       knowledge_ingested: ingestion.stored.length,
-      runtime: "jarvis-run1",
+      runtime: "jarvis-run2",
+      channel,
     });
     await db
       .from("agent_threads")
