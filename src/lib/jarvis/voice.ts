@@ -61,6 +61,90 @@ export const JARVIS_TEST_PHRASES = [
   "Emery is running the current production release. GitHub and production are aligned.",
 ] as const;
 
+/**
+ * JARVIS Voice Lab: every deployable candidate, auditioned with the SAME
+ * phrases. Only "openai" voices can be used live today (Realtime
+ * speech-to-speech). The others need a TTS pipeline change and are recorded as
+ * Adam's preference only. The community "JARVIS" Piper model (jgkawell/jarvis)
+ * is deliberately absent: it clones a real actor from Marvel-owned recordings
+ * and has no rights for this use (docs/jarvis-engineer/18-JARVIS-VOICE-LAB.md).
+ */
+export type VoiceLabEngine = "openai" | "azure" | "kokoro";
+
+export type VoiceLabCandidate = {
+  id: string;
+  engine: VoiceLabEngine;
+  label: string;
+  note: string;
+  /** Usable in live JARVIS Voice today. */
+  live: boolean;
+};
+
+export const KOKORO_LAB_VOICES = ["bm_daniel", "bm_fable", "bm_lewis", "bm_george"] as const;
+export const AZURE_LAB_VOICES = ["en-GB-ThomasNeural", "en-GB-RyanNeural"] as const;
+
+export const JARVIS_VOICE_LAB: VoiceLabCandidate[] = [
+  ...JARVIS_VOICE_CANDIDATES.map((c) => ({
+    id: c.id,
+    engine: "openai" as const,
+    label: `${c.label} · OpenAI`,
+    note: c.id === "cedar" ? "Live now. Lowest latency (speech-to-speech)." : "Live-capable.",
+    live: true,
+  })),
+  {
+    id: "azure:en-GB-ThomasNeural",
+    engine: "azure",
+    label: "Thomas · Microsoft",
+    note: "Official Azure neural voice, rate −6%. Needs a free Azure Speech key.",
+    live: false,
+  },
+  {
+    id: "azure:en-GB-RyanNeural",
+    engine: "azure",
+    label: "Ryan · Microsoft",
+    note: "Official Azure neural voice, rate −6%. Needs a free Azure Speech key.",
+    live: false,
+  },
+  {
+    id: "kokoro:bm_daniel",
+    engine: "kokoro",
+    label: "Daniel · Kokoro (open source)",
+    note: "Apache-2.0. Pitch and restraint measured closest to the reference.",
+    live: false,
+  },
+  {
+    id: "kokoro:bm_fable",
+    engine: "kokoro",
+    label: "Fable · Kokoro (open source)",
+    note: "Apache-2.0. Highest-graded British male voice.",
+    live: false,
+  },
+  {
+    id: "kokoro:bm_lewis",
+    engine: "kokoro",
+    label: "Lewis · Kokoro (open source)",
+    note: "Apache-2.0. Deepest of the set.",
+    live: false,
+  },
+  {
+    id: "kokoro:bm_george",
+    engine: "kokoro",
+    label: "George · Kokoro (open source)",
+    note: "Apache-2.0. Brighter, higher pitch.",
+    live: false,
+  },
+];
+
+export function voiceLabCandidate(id: unknown) {
+  return JARVIS_VOICE_LAB.find((c) => c.id === id) ?? null;
+}
+
+/** Pre-rendered Kokoro sample (static asset; same phrases, speed 0.95, en-GB). */
+export function kokoroSampleUrl(id: string, phrase: number) {
+  const voice = id.replace(/^kokoro:/, "");
+  return `/voice-lab/kokoro/${voice}_${phrase}.mp3`;
+}
+
 const CANDIDATE_IDS = new Set<string>(JARVIS_VOICE_CANDIDATES.map((c) => c.id));
 
 export function isJarvisVoiceId(value: unknown): value is JarvisVoiceId {

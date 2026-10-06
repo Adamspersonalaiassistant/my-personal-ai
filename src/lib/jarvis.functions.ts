@@ -18,6 +18,9 @@ import {
   jarvisPreviewInstructions,
   jarvisRealtimeInstructions,
   jarvisVoiceProfile,
+  JARVIS_VOICE_LAB,
+  kokoroSampleUrl,
+  voiceLabCandidate,
   type JarvisVoiceId,
 } from "@/lib/jarvis/voice";
 import * as jarvisState from "@/lib/jarvis/state";
@@ -210,8 +213,34 @@ export const getJarvisVoiceSettings = createServerFn({ method: "GET" })
         (c) => ({ ...c }),
       ),
       phrases: [...JARVIS_TEST_PHRASES],
+      lab: JARVIS_VOICE_LAB.filter((c) => c.id !== emeryVoice?.base_voice_id),
+      labPreference: (agent.metadata?.voice_lab_preference?.id as string | undefined) ?? null,
     };
   });
+
+/** Text-to-speech preview of a built-in OpenAI voice with the live JARVIS delivery. */
+async function openAiPreview(voice: JarvisVoiceId, phrase: number) {
+  const apiKey = process.env["OPENAI_API_KEY"];
+  if (!apiKey) return null;
+  const response = await fetch("https://api.openai.com/v1/audio/speech", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: MODEL_POLICY.tts,
+      voice,
+      input: JARVIS_TEST_PHRASES[phrase],
+      instructions: jarvisPreviewInstructions(),
+      response_format: "mp3",
+      speed: DEFAULT_JARVIS_VOICE.speed,
+    }),
+  });
+  if (!response.ok) {
+    console.error("JARVIS voice preview failed", response.status);
+    return null;
+  }
+  const bytes = Buffer.from(await response.arrayBuffer());
+  return `data:audio/mpeg;base64,${bytes.toString("base64")}`;
+}
 
 /**
  * Audition one JARVIS candidate voice speaking one fixed test phrase, using the
@@ -228,26 +257,98 @@ export const previewJarvisVoice = createServerFn({ method: "POST" })
     return { voice: input.voice as JarvisVoiceId, phrase };
   })
   .handler(async ({ data }) => {
-    const apiKey = process.env["OPENAI_API_KEY"];
-    if (!apiKey) return { error: "The voice service isn't configured." } as const;
-    const response = await fetch("https://api.openai.com/v1/audio/speech", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: MODEL_POLICY.tts,
-        voice: data.voice,
-        input: JARVIS_TEST_PHRASES[data.phrase],
-        instructions: jarvisPreviewInstructions(),
-        response_format: "mp3",
-        speed: DEFAULT_JARVIS_VOICE.speed,
-      }),
-    });
-    if (!response.ok) {
-      console.error("JARVIS voice preview failed", response.status);
-      return { error: "That preview couldn't be generated. Try again." } as const;
+    const audio = await openAiPreview(data.voice, data.phrase);
+    return audio
+      ? ({ audio } as const)
+      : ({ error: "That preview couldn't be generated. Try again." } as const);
+  });
+
+/**
+ * JARVIS Voice Lab preview for any candidate, with the same fixed phrase.
+ * OpenAI: live TTS of the built-in voice. Kokoro: pre-rendered static sample.
+ * Microsoft: the owner-only jarvis-voice-lab Edge Function (Azure key lives in
+ * Supabase secrets; reports needsSetup until Adam adds the free key).
+ */
+export const previewJarvisVoiceLab = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { id: string; phrase: number }) => {
+    const candidate = voiceLabCandidate(input?.id);
+    if (!candidate) throw new Error("Unknown Voice Lab candidate.");
+    const phrase = Number(input?.phrase);
+    if (!Number.isInteger(phrase) || phrase < 0 || phrase >= JARVIS_TEST_PHRASES.length)
+      throw new Error("Unknown test phrase.");
+    return { id: candidate.id, engine: candidate.engine, phrase };
+  })
+  .handler(async ({ data }) => {
+    const started = Date.now();
+    if (data.engine === "kokoro")
+      return { audio: kokoroSampleUrl(data.id, data.phrase), source: "pre-rendered" } as const;
+    if (data.engine === "openai") {
+      const audio = await openAiPreview(data.id as JarvisVoiceId, data.phrase);
+      return audio
+        ? ({ audio, source: "live", latencyMs: Date.now() - started } as const)
+        : ({ error: "That preview couldn't be generated. Try again." } as const);
     }
-    const bytes = Buffer.from(await response.arrayBuffer());
-    return { audio: `data:audio/mpeg;base64,${bytes.toString("base64")}` } as const;
+    const supabaseUrl = process.env["SUPABASE_URL"];
+    const publishableKey = process.env["SUPABASE_PUBLISHABLE_KEY"];
+    const token = await currentBearerToken();
+    if (!supabaseUrl || !publishableKey || !token)
+      return { error: "Voice Lab isn't configured on the server." } as const;
+    const response = await fetch(
+      `${supabaseUrl.replace(/\/+$/, "")}/functions/v1/jarvis-voice-lab`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          apikey: publishableKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ voice: data.id, phrase: data.phrase }),
+      },
+    ).catch(() => null);
+    const payload = (await response?.json().catch(() => null)) as {
+      audio?: string;
+      configured?: boolean;
+      error?: string;
+      latency_ms?: number;
+    } | null;
+    if (payload?.audio)
+      return {
+        audio: payload.audio,
+        source: "live",
+        latencyMs: payload.latency_ms ?? null,
+      } as const;
+    if (payload?.configured === false)
+      return {
+        error: "Microsoft voices need a free Azure Speech key (Adam's approval).",
+        needsSetup: true,
+      } as const;
+    return { error: payload?.error ?? "The Microsoft preview failed." } as const;
+  });
+
+/** Records Adam's Voice Lab preference. Does not change the live JARVIS voice. */
+export const preferJarvisVoiceLab = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { id: string }) => {
+    const candidate = voiceLabCandidate(input?.id);
+    if (!candidate) throw new Error("Unknown Voice Lab candidate.");
+    return { id: candidate.id };
+  })
+  .handler(async ({ data, context }) => {
+    const db = context.supabase as any;
+    const agent = await ensureJarvisAgent(db, context.userId);
+    const { error } = await db
+      .from("agents")
+      .update({
+        metadata: {
+          ...(agent.metadata ?? {}),
+          voice_lab_preference: { id: data.id, at: new Date().toISOString() },
+        },
+      })
+      .eq("id", agent.id)
+      .eq("user_id", context.userId);
+    if (error) return { error: "Couldn't save the preference." } as const;
+    return { id: data.id } as const;
   });
 
 /** Adam's explicit choice of JARVIS voice. Never touches Emery's voice profile. */

@@ -1064,6 +1064,43 @@ await check(
 );
 
 await check(
+  "Voice Lab: only rights-cleared candidates, identical phrases everywhere, Kokoro samples present, Azure input fixed and escaped",
+  async () => {
+    const { existsSync, statSync } = await import("node:fs");
+    const voice = await import("../src/lib/jarvis/voice.ts");
+    const lab = await import("../supabase/functions/jarvis-voice-lab/lab.ts");
+    const ids = voice.JARVIS_VOICE_LAB.map((c) => c.id);
+    // The community "JARVIS" Piper model clones a real actor from Marvel-owned audio.
+    assert.ok(!ids.some((id) => /piper|jgkawell|jarvis-(high|medium)/i.test(id)));
+    assert.deepEqual([...lab.LAB_PHRASES], [...voice.JARVIS_TEST_PHRASES]);
+    assert.deepEqual(
+      voice.JARVIS_VOICE_LAB.filter((c) => c.live).map((c) => c.id),
+      voice.JARVIS_VOICE_CANDIDATES.map((c) => c.id),
+      "only OpenAI Realtime voices are live",
+    );
+    assert.deepEqual(
+      voice.JARVIS_VOICE_LAB.filter((c) => c.engine === "azure").map((c) =>
+        c.id.replace("azure:", ""),
+      ),
+      [...lab.AZURE_VOICES],
+    );
+    for (const c of voice.JARVIS_VOICE_LAB.filter((c) => c.engine === "kokoro"))
+      for (let i = 0; i < voice.JARVIS_TEST_PHRASES.length; i += 1) {
+        const file = `public${voice.kokoroSampleUrl(c.id, i)}`;
+        assert.ok(existsSync(file) && statSync(file).size > 10_000, file);
+      }
+    assert.equal(lab.parseLabRequest({ voice: "en-GB-SoniaNeural", phrase: 0 }), null);
+    assert.equal(lab.parseLabRequest({ voice: "azure:en-GB-RyanNeural", phrase: 9 }), null);
+    assert.equal(lab.parseLabRequest({ voice: "azure:en-GB-RyanNeural", text: "anything" }), null);
+    const ssml = lab.buildSsml(
+      lab.parseLabRequest({ voice: "azure:en-GB-ThomasNeural", phrase: 1 }),
+    );
+    assert.match(ssml, /<voice name="en-GB-ThomasNeural"><prosody rate="-6%">/);
+    assert.match(ssml, /It&apos;s ready for your review\./);
+  },
+);
+
+await check(
   "Run 2 readiness: intake counts only tasks accepted into today's sessions; a full day is reported as not ready",
   async () => {
     const state = await import("../src/lib/jarvis/state.ts");
