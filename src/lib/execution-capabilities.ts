@@ -73,6 +73,10 @@ export const EMERY_EXECUTION_CAPABILITIES = {
     canExecute: false,
     note: "Google Calendar is not connected.",
   },
+  spotify_playback: {
+    canExecute: false,
+    note: "Spotify playback is not connected.",
+  },
 } as const;
 
 export function executionCapabilityPrompt() {
