@@ -2,3 +2,6 @@ project_id = "pmuanzegplyoewtombss"
 
 [functions.jarvis-github]
 verify_jwt = false
+
+[functions.jarvis-voice-lab]
+verify_jwt = false
