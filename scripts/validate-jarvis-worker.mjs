@@ -1042,7 +1042,7 @@ await check("risk policy blocks protected HPO/auth/migration edits for Adam appr
   assert.throws(
     () =>
       applyEdits(new Map([["src/a.ts", "x"]]), [
-        { path: "src/a.ts", find: "x", replace: 'k="sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaa"' },
+        { path: "src/a.ts", find: "x", replace: `k="${["sk", "proj", "a".repeat(28)].join("-")}"` },
       ]),
     /credential/,
   );
