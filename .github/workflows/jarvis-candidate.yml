@@ -1,0 +1,29 @@
+name: JARVIS Candidate
+
+# Isolated test environment for JARVIS candidate branches.
+# Runs generated code with NO production secrets: no Supabase, OpenAI or GitHub
+# credentials are provided. Failures become check-run annotations that the
+# JARVIS worker reads (Checks: read) to drive bounded repair.
+on:
+  push:
+    branches: ["jarvis/**"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jarvis-candidate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  jarvis-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: node scripts/jarvis-candidate-check.mjs
