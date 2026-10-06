@@ -23,6 +23,10 @@ export type TurnApprovals = {
   tasksApproved?: boolean;
   /** Adam said this prompt replaces the previous task plan/batch. */
   batchReplacement?: boolean;
+  /** Adam explicitly approved releasing a candidate in this very message ("Approve it", "Ship that"). */
+  releaseApproved?: boolean;
+  /** PR number Adam named ("Approve PR 24"), when he named one. */
+  releasePr?: number | null;
 };
 
 // ------------------------------------------------------------ task approval
@@ -34,7 +38,7 @@ const NEGATED_APPROVAL =
   /\b(don'?t|do not|not yet|never|hold off|wait (for|until)|before i approve|until i approve|without approv\w*|need(s)? (my )?approval)\b[^.?!]{0,40}\b(execute|run|start|schedule|proceed|queue|approve|fix|repair|implement|build|patch|change)/i;
 // "How would you fix it?" asks for analysis, not execution.
 const ANALYSIS_ONLY =
-  /\b(how (would|could|should|do|can|might) (you|we|i)|what would it take to|should we|would it be possible to|ideas? (for|on|to))\b[^.?!]{0,40}\b(fix|implement|build|change)/i;
+  /\b(how (would|could|should|do|can|might) (you|we|i)|what would it take to|should we|would it be possible to|ideas? (for|on|to))\b[^.?!]{0,40}\b(fix|implement|build|change|release|ship|merge|deploy|publish)/i;
 
 // A direct engineering instruction ("fix it", "implement that", "make the change")
 // is approval to engineer a CANDIDATE. Releases stay separately approval-gated.
@@ -115,3 +119,22 @@ export {
   PolicyError,
   redactSecrets,
 } from "./guards.ts";
+
+// ----------------------------------------------------------- release approval
+// "Approve it" / "Approve PR 24" / "Ship that" / "Release it" approves ONE candidate:
+// the tool binds the approval to that PR's exact head sha and the production
+// commit at that moment. The release itself is performed by the worker's
+// release operator, never by the model.
+
+const NEGATED_RELEASE =
+  /\b(don'?t|do not|not yet|never|hold off|wait|stop|cancel)\b[^.?!]{0,30}\b(approve|ship|release|merge|publish|deploy)/i;
+const RELEASE_APPROVAL =
+  /\b(approve (it|that|this|the (release|candidate|pr|change))|approved?(,| )(?:go ahead|ship|release)|i approve (it|that|this|the (release|candidate|pr|change)|pr\s*#?\d+)|approve (pr|pull request)\s*#?\d+|ship (it|that|this)|release (it|that|this)|go ahead and (release|ship|merge)|you can (release|ship|merge) (it|that|this))\b/i;
+
+export function assessReleaseApproval(message: string): { approved: boolean; pr: number | null } {
+  const text = String(message ?? "");
+  if (NEGATED_RELEASE.test(text) || ANALYSIS_ONLY.test(text)) return { approved: false, pr: null };
+  const approved = RELEASE_APPROVAL.test(text);
+  const pr = /\b(?:pr|pull request)\s*#?(\d{1,6})\b/i.exec(text)?.[1];
+  return { approved, pr: approved && pr ? Number(pr) : null };
+}

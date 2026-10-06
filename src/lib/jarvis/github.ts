@@ -476,6 +476,20 @@ export class GithubClient {
     return { number: pr.number, url: pr.html_url, head: branch, base, draft: pr.draft };
   }
 
+  /** Read one pull request (head sha, branches, state). Read-only. */
+  async getPr(number: number) {
+    const pr = await this.request("GET", this.r(`/pulls/${Number(number)}`));
+    return {
+      number: Number(pr.number),
+      state: String(pr.state),
+      merged: Boolean(pr.merged),
+      headRef: String(pr.head?.ref ?? ""),
+      headSha: String(pr.head?.sha ?? ""),
+      baseRef: String(pr.base?.ref ?? ""),
+      url: String(pr.html_url ?? ""),
+    };
+  }
+
   async updatePr(number: number, patch: { title?: string; body?: string }) {
     this.requireWrite();
     const pr = await this.request("GET", this.r(`/pulls/${Number(number)}`));

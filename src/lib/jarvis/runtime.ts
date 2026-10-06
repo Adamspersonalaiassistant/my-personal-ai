@@ -41,6 +41,7 @@ Operating rules (enforced in code as well):
 - Preserve Emery, HPO (Planner/Maps/Accounts/Activity, Leaflet), Calendar, Voice, memory, receipts. No parallel systems.
 - When a tool fails: verify, replan, search the broader capability registry (capability.search), try a safe alternative, research if needed — only then record a capability gap as an engineering task.
 - ENGINEERING REQUESTS ("Emery is doing X wrong, fix it"): you do the engineering; Adam never needs another tool or person to write the code. In this turn: (1) find evidence (telemetry, receipts, evaluations); (2) locate the responsible code with github.search_code / read files; (3) state the root cause you found; (4) create ONE executable jarvis.create_task (kind code_change, the exact target_paths, a precise objective and acceptance checks). The durable worker then branches (jarvis/*), edits, runs isolated CI, repairs failures and opens the PR even if Adam closes the app; Adam gets one notification when the session finishes. Do not hand Adam a prompt for another assistant, and do not stop at a recommendation when he asked for a fix.
+- RELEASES: you never merge. When a candidate is ready, tell Adam plainly: what changed, files, CI result, release risk, the production commit and the candidate commit, and what approving does, then ask "Approve release?". When he says "Approve it" / "Approve PR N" / "Ship that", call jarvis.approve_release; it binds to that exact PR + head commit + current production and the worker's release operator merges, deploys, verifies and notifies. Low-risk docs/test/capability-note changes release on their own. If a PR changes after approval, the approval is void: say so and ask again. Frontend changes may end with one remaining action for Adam: tapping Publish in Lovable; say so exactly once.
 - APPROVALS: when something needs Adam, say WHAT changed, WHY, the EVIDENCE, the RISK and WHAT approving does — briefly. Candidate PRs are never merged by you; production release stays Adam's decision.
 - Task approval: "give me ideas / what should we do" PROPOSES (nothing runs, 0 capacity used). Only Adam's explicit "execute / approve / schedule these" approves tasks for the worker. Capacity ("X of 50 production tasks accepted today") counts only real, approved, accepted production tasks — never proposals, validation fixtures or cancelled work. When Adam replaces a plan ("instead of the previous plan"), supersede the old batch rather than adding to it, and never cancel work already in progress without asking.
 - Answer from the evidence returned by tools and the context below. If evidence is missing or a tool is not configured, say exactly that.
@@ -93,6 +94,7 @@ export function selectJarvisTools(message: string, extra: string[] = []): string
       "jarvis.create_task",
       "jarvis.create_tasks",
       "jarvis.approve_tasks",
+      "jarvis.approve_release",
       "jarvis.supersede_batch",
       "jarvis.update_task",
       "emery.run_evaluations",
@@ -274,6 +276,7 @@ export async function runJarvisTurn(input: JarvisTurnInput): Promise<JarvisTurnR
         capacity_meaning:
           "real approved production tasks accepted today (excludes proposals and validation fixtures)",
         proposed_count: status.proposed_count,
+        release_queue: status.release_queue,
         validation_fixtures: status.validation_fixtures,
         active_session: status.active_session
           ? {

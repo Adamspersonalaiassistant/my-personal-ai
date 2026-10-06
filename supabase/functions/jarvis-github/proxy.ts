@@ -241,7 +241,8 @@ export async function handleGithubProxy(req: ProxyRequest, deps: ProxyDeps): Pro
     if (!["GET", "POST", "PATCH", "PUT"].includes(method)) refuse(`${method} is not allowed.`);
     if (
       !path.startsWith("/") ||
-      path.includes("..") ||
+      // Path traversal only: "main...sha" in compare URLs is a legitimate range, "/../" is not.
+      /(^|\/)\.\.(\/|$)|%2e%2e/i.test(path) ||
       path.includes("//") ||
       path.includes("@") ||
       path.length > 600

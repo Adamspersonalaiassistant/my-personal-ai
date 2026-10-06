@@ -1,0 +1,97 @@
+name: Deploy JARVIS Edge Functions
+
+# After an approved merge to main, deploy ONLY the JARVIS Edge Functions whose
+# source changed (jarvis-worker, jarvis-github, jarvis-voice-lab) with the
+# official Supabase CLI, then verify each one answers. It never runs on pull
+# requests or on candidate branches, so branch code never sees the access token.
+# The token lives only in GitHub Actions secrets (SUPABASE_ACCESS_TOKEN) and is
+# only given to the deploy step. verify_jwt comes from supabase/config.toml.
+# The JARVIS release operator reads this workflow's conclusion for the merge
+# commit before it records a release as verified.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/functions/jarvis-worker/**"
+      - "supabase/functions/jarvis-github/**"
+      - "supabase/functions/jarvis-voice-lab/**"
+      - "supabase/config.toml"
+      - ".github/workflows/deploy-jarvis-functions.yml"
+  workflow_dispatch:
+    inputs:
+      functions:
+        description: "Space-separated function names (jarvis-worker jarvis-github jarvis-voice-lab); empty = all three"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-jarvis-functions
+  cancel-in-progress: false
+
+env:
+  PROJECT_REF: pmuanzegplyoewtombss
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Select changed JARVIS functions
+        id: select
+        env:
+          REQUESTED: ${{ github.event.inputs.functions }}
+        run: |
+          ALLOWED="jarvis-worker jarvis-github jarvis-voice-lab"
+          if [ -n "$REQUESTED" ]; then
+            CANDIDATES="$REQUESTED"
+          elif git diff --name-only HEAD^ HEAD | grep -qE '^(supabase/config.toml|\.github/workflows/deploy-jarvis-functions.yml)$'; then
+            CANDIDATES="$ALLOWED"
+          else
+            CANDIDATES=""
+            for fn in $ALLOWED; do
+              if git diff --name-only HEAD^ HEAD | grep -q "^supabase/functions/$fn/"; then
+                CANDIDATES="$CANDIDATES $fn"
+              fi
+            done
+          fi
+          SELECTED=""
+          for fn in $CANDIDATES; do
+            case " $ALLOWED " in *" $fn "*) SELECTED="$SELECTED $fn" ;; esac
+          done
+          SELECTED="$(echo $SELECTED)"
+          echo "functions=$SELECTED" >> "$GITHUB_OUTPUT"
+          echo "Deploying: ${SELECTED:-nothing}"
+
+      - uses: supabase/setup-cli@v1
+        if: steps.select.outputs.functions != ''
+        with:
+          version: latest
+
+      - name: Deploy
+        if: steps.select.outputs.functions != ''
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          for fn in ${{ steps.select.outputs.functions }}; do
+            echo "::group::deploy $fn"
+            supabase functions deploy "$fn" --project-ref "$PROJECT_REF" --use-api
+            echo "::endgroup::"
+          done
+
+      - name: Verify deployment
+        if: steps.select.outputs.functions != ''
+        run: |
+          for fn in ${{ steps.select.outputs.functions }}; do
+            # Unauthenticated POST: a live JARVIS function answers 401/405 (auth/method guard); 404/5xx means not deployed or crashing.
+            code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "https://${PROJECT_REF}.supabase.co/functions/v1/$fn" -H "Content-Type: application/json" -d '{}')
+            echo "$fn -> HTTP $code"
+            case "$code" in 401|403|405|400|202|200) ;; *) echo "::error::$fn did not answer correctly (HTTP $code)"; exit 1 ;; esac
+          done

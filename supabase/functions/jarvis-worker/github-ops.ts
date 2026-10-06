@@ -324,7 +324,10 @@ export type PullRequest = {
 };
 
 export class ReleaseGithub {
-  constructor(private readonly ops: GithubOps) {}
+  private readonly ops: GithubOps;
+  constructor(ops: GithubOps) {
+    this.ops = ops;
+  }
 
   async pr(number: number): Promise<PullRequest> {
     const d = await this.ops.rawJson("GET", `${R}/pulls/${Number(number)}`);

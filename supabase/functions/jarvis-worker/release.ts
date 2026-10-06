@@ -183,7 +183,9 @@ export class ReleaseOperator {
   private readonly gh: ReleaseGithub;
   report = { evaluated: 0, merged: 0, verified: 0, failed: 0, notes: [] as string[] };
 
-  constructor(private readonly d: ReleaseDeps) {
+  private readonly d: ReleaseDeps;
+  constructor(d: ReleaseDeps) {
+    this.d = d;
     this.gh = new ReleaseGithub(d.github);
   }
 

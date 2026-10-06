@@ -1991,4 +1991,109 @@ await check(
   },
 );
 
+await check(
+  "release approval (app side): 'Approve it' is bound to one PR + exact head + production; refused for stale heads, other intents, or ambiguity",
+  async () => {
+    const { assessReleaseApproval } = await import("../src/lib/jarvis/policy.ts");
+    for (const yes of [
+      "Approve it.",
+      "Approve PR 24",
+      "Ship that",
+      "Release it",
+      "I approve PR #24",
+    ])
+      assert.equal(assessReleaseApproval(yes).approved, true, yes);
+    for (const no of [
+      "Don't release it yet",
+      "How would you release it?",
+      "Approve those 20 tasks",
+      "What is ready to release?",
+    ])
+      assert.equal(assessReleaseApproval(no).approved, false, no);
+    assert.equal(assessReleaseApproval("Approve PR 24").pr, 24);
+
+    const task = (n, over = {}) => ({
+      id: `00000000-0000-4000-8000-0000000000${n}`,
+      user_id: "u1",
+      title: `Candidate ${n}`,
+      status: "ready_for_release",
+      is_fixture: false,
+      pr_url: `https://github.com/o/r/pull/${n}`,
+      commit_sha: `tested${n}`,
+      metadata: {},
+      ...over,
+    });
+    const html = '<meta name="emery-commit" content="8dd7081b5907fac617aeefbf7699b216b8abd0bf"/>';
+    const fetcher = async () => new Response(html);
+    const prFor = (n, headSha, over = {}) => ({
+      number: n,
+      state: "open",
+      merged: false,
+      headRef: "jarvis/t-1",
+      headSha,
+      baseRef: "main",
+      url: "",
+      ...over,
+    });
+    const run = async (tasks, github, approvals, args = {}) => {
+      const db = memoryDb({ jarvis_engineering_tasks: tasks });
+      const rpcCalls = [];
+      db.rpc = async (name, payload) => (
+        rpcCalls.push({ name, payload }),
+        { data: true, error: null }
+      );
+      const ctx = { ...gwCtx(db, approvals), github, fetcher };
+      return { out: await executeJarvisTool("jarvis.approve_release", args, ctx), rpcCalls };
+    };
+    // Without Adam's approval in his own message the model cannot approve.
+    const denied = await run([task(1)], { getPr: async () => prFor(1, "tested1") }, {});
+    assert.equal(denied.out.ok, false);
+    assert.equal(denied.rpcCalls.length, 0);
+    // Approved: bound to PR, exact head, production commit, expiry.
+    const ok = await run(
+      [task(1)],
+      { getPr: async () => prFor(1, "tested1") },
+      { releaseApproved: true },
+    );
+    assert.equal(ok.out.ok, true, JSON.stringify(ok.out));
+    const bound = ok.rpcCalls[0].payload.p_approval;
+    assert.equal(bound.pr, 1);
+    assert.equal(bound.head_sha, "tested1");
+    assert.equal(bound.production_base, "8dd7081b5907fac617aeefbf7699b216b8abd0bf");
+    assert.ok(Date.parse(bound.expires_at) - Date.parse(bound.approved_at) <= 3_600_000);
+    // The PR moved since JARVIS tested it: no approval is recorded.
+    const moved = await run(
+      [task(1)],
+      { getPr: async () => prFor(1, "someone-pushed") },
+      { releaseApproved: true },
+    );
+    assert.equal(moved.out.ok, false);
+    assert.match(moved.out.error, /changed since JARVIS tested/);
+    assert.equal(moved.rpcCalls.length, 0);
+    // Wrong base / non-jarvis head.
+    for (const bad of [
+      prFor(1, "tested1", { baseRef: "release" }),
+      prFor(1, "tested1", { headRef: "feature/x" }),
+    ])
+      assert.equal(
+        (await run([task(1)], { getPr: async () => bad }, { releaseApproved: true })).out.ok,
+        false,
+      );
+    // Ambiguity: two candidates and no PR number → ask; with the number → bind that one only.
+    const two = [task(1), task(2)];
+    const github = { getPr: async (n) => prFor(n, `tested${n}`) };
+    assert.equal((await run(two, github, { releaseApproved: true })).out.ok, false);
+    const named = await run(two, github, { releaseApproved: true, releasePr: 2 });
+    assert.equal(named.out.ok, true);
+    assert.equal(named.rpcCalls[0].payload.p_approval.pr, 2);
+    // Already merged/in-flight candidates and fixtures are never approvable.
+    const inflight = task(3, { metadata: { release: { state: "merged" } } });
+    assert.equal((await run([inflight], github, { releaseApproved: true })).out.ok, false);
+    assert.equal(
+      (await run([task(4, { is_fixture: true })], github, { releaseApproved: true })).out.ok,
+      false,
+    );
+  },
+);
+
 console.log(`JARVIS Run 1 end-to-end harness: complete (${passed} checks).`);
