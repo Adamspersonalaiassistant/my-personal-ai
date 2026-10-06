@@ -10,6 +10,7 @@
 
 import { runCanonicalEmeryEvaluations } from "../emery/evaluation-runner.ts";
 import { describeCapability, searchCapabilities } from "./capability-catalog.ts";
+import { createEdgeGithubFetcher, edgeGithubStatus } from "./edge-transport.ts";
 import { GithubClient, GithubError, githubEnv } from "./github.ts";
 import {
   extractKnowledgeCandidates,
@@ -37,6 +38,8 @@ export type GatewayContext = {
   fetcher?: typeof fetch;
   env?: Record<string, string | undefined>;
   github?: GithubClient;
+  /** The signed-in owner's session JWT, forwarded to the jarvis-github edge function. */
+  authToken?: string | null;
 };
 
 export type ToolOutcome =
@@ -63,8 +66,62 @@ export function configurationPresence(env: Record<string, string | undefined> = 
   } as Record<string, string | undefined>;
 }
 
-export function createGithubClient(ctx: Pick<GatewayContext, "env" | "fetcher" | "github">) {
-  return ctx.github ?? new GithubClient(githubEnv(ctx.env ?? processEnv()), ctx.fetcher ?? fetch);
+function edgeOptions(ctx: Pick<GatewayContext, "env" | "fetcher" | "authToken">) {
+  const env = ctx.env ?? processEnv();
+  const supabaseUrl = env["SUPABASE_URL"];
+  const publishableKey = env["SUPABASE_PUBLISHABLE_KEY"];
+  if (!ctx.authToken || !supabaseUrl || !publishableKey) return null;
+  return {
+    supabaseUrl,
+    publishableKey,
+    accessToken: ctx.authToken,
+    ...(ctx.fetcher ? { fetcher: ctx.fetcher } : {}),
+  };
+}
+
+/**
+ * The one GitHub client. With an owner session it runs authenticated calls through
+ * the protected jarvis-github edge function (token stays in Supabase secrets). A
+ * directly configured server token is still honoured for local/dev use.
+ */
+export function createGithubClient(
+  ctx: Pick<GatewayContext, "env" | "fetcher" | "github" | "authToken">,
+) {
+  if (ctx.github) return ctx.github;
+  const env = ctx.env ?? processEnv();
+  const base = githubEnv(env);
+  if (base.token) return new GithubClient(base, ctx.fetcher ?? fetch);
+  const edge = edgeOptions(ctx);
+  if (edge) {
+    return new GithubClient(
+      { token: null, repo: base.repo, edge: true },
+      createEdgeGithubFetcher(edge),
+    );
+  }
+  return new GithubClient(base, ctx.fetcher ?? fetch);
+}
+
+const presenceCache = new WeakMap<object, Promise<Record<string, string | undefined>>>();
+
+/**
+ * Presence-only configuration, resolved once per gateway context. GitHub counts as
+ * configured when a direct token exists or the edge function reports its secret.
+ */
+export function resolvePresence(ctx: GatewayContext): Promise<Record<string, string | undefined>> {
+  let cached = presenceCache.get(ctx);
+  if (!cached) {
+    cached = (async () => {
+      const presence = configurationPresence(ctx.env ?? processEnv());
+      if (!presence["JARVIS_GITHUB_TOKEN"]) {
+        const edge = edgeOptions(ctx);
+        if (edge && (await edgeGithubStatus(edge)).configured)
+          presence["JARVIS_GITHUB_TOKEN"] = "configured (edge function)";
+      }
+      return presence;
+    })();
+    presenceCache.set(ctx, cached);
+  }
+  return cached;
 }
 
 export async function executeJarvisTool(
@@ -109,7 +166,7 @@ export async function executeJarvisTool(
     let message = redactSecrets(String(error?.message ?? error)).slice(0, 600);
     if (kind === "not_configured" && !message.includes("JARVIS_GITHUB_TOKEN"))
       message +=
-        " — the repository is private, so GitHub tools need the JARVIS_GITHUB_TOKEN server secret.";
+        " — the repository is private, so GitHub tools need JARVIS_GITHUB_TOKEN in Supabase Edge Function secrets and the jarvis-github function deployed.";
     await recordToolEvent(ctx, name, kind === "policy" ? "skipped" : "error", durationMs, {
       kind,
       error: message.slice(0, 240),
@@ -145,7 +202,7 @@ async function recordToolEvent(
 async function run(name: string, args: Record<string, any>, ctx: GatewayContext): Promise<unknown> {
   const { db, userId } = ctx;
   const env = ctx.env ?? processEnv();
-  const presence = configurationPresence(env);
+  const presence = await resolvePresence(ctx);
   const fetcher = ctx.fetcher ?? fetch;
   const gh = () => createGithubClient(ctx);
 

@@ -21,7 +21,8 @@ const API = "https://api.github.com";
 const DEFAULT_REPO = "Adamspersonalaiassistant/my-personal-ai";
 const MAX_FILE_CHARS = 60_000;
 
-export type GithubEnv = { token: string | null; repo: string };
+/** `edge: true` means authenticated calls are made by the jarvis-github edge function (no token in this process). */
+export type GithubEnv = { token: string | null; repo: string; edge?: boolean };
 
 export function githubEnv(env: Record<string, string | undefined> = readProcessEnv()): GithubEnv {
   const token = env["JARVIS_GITHUB_TOKEN"] || env["GITHUB_TOKEN"] || null;
@@ -51,7 +52,7 @@ export class GithubClient {
   }
 
   get configuredForWrites() {
-    return Boolean(this.env.token);
+    return Boolean(this.env.token) || this.env.edge === true;
   }
 
   get repo() {
@@ -95,9 +96,9 @@ export class GithubClient {
   }
 
   private requireWrite() {
-    if (!this.env.token)
+    if (!this.configuredForWrites)
       throw new GithubError(
-        "GitHub writes are not configured: add a JARVIS_GITHUB_TOKEN server secret (fine-grained, this repository only).",
+        "GitHub writes are not configured: add JARVIS_GITHUB_TOKEN to Supabase Edge Function secrets (fine-grained, this repository only).",
         412,
       );
   }
@@ -172,21 +173,24 @@ export class GithubClient {
   async searchCode(query: string, opts: { pathPrefix?: string; ref?: string } = {}) {
     const q = String(query ?? "").trim();
     if (q.length < 2) throw new GithubError("Search query is too short.", 400);
-    if (this.env.token && (!opts.ref || opts.ref === "main")) {
+    if (this.configuredForWrites && (!opts.ref || opts.ref === "main")) {
       try {
         const search = await this.request(
           "GET",
           `/search/code?per_page=20&q=${encodeURIComponent(`${q} repo:${this.env.repo}${opts.pathPrefix ? ` path:${opts.pathPrefix}` : ""}`)}`,
         );
-        return {
-          method: "github_code_search",
-          query: q,
-          total: search.total_count,
-          results: (search.items ?? []).map((item: any) => ({
-            path: item.path,
-            url: item.html_url,
-          })),
-        };
+        // GitHub's code index often lags or skips private repos (observed: 0 hits for a
+        // symbol that exists). Only trust a non-empty answer; otherwise scan the tree.
+        if ((search.items ?? []).length > 0)
+          return {
+            method: "github_code_search",
+            query: q,
+            total: search.total_count,
+            results: (search.items ?? []).map((item: any) => ({
+              path: item.path,
+              url: item.html_url,
+            })),
+          };
       } catch (error) {
         if (!(error instanceof GithubError)) throw error;
         // fall through to the tree scan

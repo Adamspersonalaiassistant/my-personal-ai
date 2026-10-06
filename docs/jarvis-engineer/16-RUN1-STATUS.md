@@ -11,6 +11,9 @@ State vocabulary: **code-complete** (on the branch) → **tested** (validators/h
 | Tool registry + risk classes | `src/lib/jarvis/tool-registry.ts` |
 | Policy (risk, free-first credit gate, protected GitHub ops, secret/RLS guards) | `src/lib/jarvis/policy.ts` |
 | GitHub workshop | `src/lib/jarvis/github.ts` |
+| GitHub edge transport (app → Supabase Edge Function) | `src/lib/jarvis/edge-transport.ts`, `src/lib/jarvis/request-auth.ts` |
+| Edge function `jarvis-github` (holds `JARVIS_GITHUB_TOKEN`; owner-only; allowlist proxy) | `supabase/functions/jarvis-github/{index,proxy,guards}.ts` |
+| Shared repo guards (identical in app and edge function) | `src/lib/jarvis/guards.ts` |
 | Gateway (policy → execute → `jarvis_tool` receipt in `emery_runtime_events`) | `src/lib/jarvis/tool-gateway.ts` |
 | Live state, diagnostics, deployment reconciliation, `system.*` | `src/lib/jarvis/state.ts` |
 | Knowledge retrieval + ingestion | `src/lib/jarvis/knowledge.ts` |
@@ -38,9 +41,20 @@ State vocabulary: **code-complete** (on the branch) → **tested** (validators/h
 
 ## Run 2 prerequisites
 
-1. Adam adds the `JARVIS_GITHUB_TOKEN` server secret: a fine-grained PAT for this repository only, with Contents RW, Pull requests RW, Checks R, Commit statuses R and Metadata R. Also enable branch protection on `main`. The repo is private, so every GitHub tool reports `not_configured` in production until this is done.
+1. DONE (2026-10-06): `JARVIS_GITHUB_TOKEN` saved in Supabase → Edge Function Secrets (Lovable Secrets needs Enterprise and is not used). Required scope: Adam adds the `JARVIS_GITHUB_TOKEN` server secret: a fine-grained PAT for this repository only, with Contents RW, Pull requests RW, Checks R, Commit statuses R and Metadata R. Also enable branch protection on `main`. The repo is private, so every GitHub tool reports `not_configured` in production until this is done.
 2. Adam approves merging PR #10 and publishing in Lovable. After that, verify acceptance tests 1–11 live and record a release in `emery_releases` (served `emery-commit` must match).
 3. Optional: `JARVIS_SUPABASE_ACCESS_TOKEN` for the advisors/logs management API. The in-database lint already works without it.
 4. Voice self-awareness: Realtime Voice context doesn't load the self-awareness block yet. Only typed Emery has it.
 5. Background worker for the 50-task queue (pgmq test per bootstrap research), branch → edit → test → repair → PR loop running unattended, and a sandbox/CI to execute candidate code.
 6. The existing `validate:hpo-field-os` script has 7 static checks that also fail on `main`. They need refreshing.
+
+## GitHub gateway architecture (free-first)
+
+Emery/JARVIS server → `jarvis-github` Supabase Edge Function → GitHub API.
+
+- The token exists only in Supabase Edge Function Secrets. The app never reads, receives, logs or stores it.
+- The function verifies the caller's Supabase JWT and `is_emery_owner()` before doing anything.
+- It is an allowlist proxy, fixed to `Adamspersonalaiassistant/my-personal-ai`. Writes only touch `refs/heads/jarvis/*` (fast-forward), git objects, and PRs from `jarvis/*` heads. Merge, delete, force, main/protected refs, workflows, `.env`/key files, credentials and RLS-weakening content are refused with 403 before the token is attached.
+- The same checks also run in the app client (`github.ts`), so there is one tool system with two enforcement layers.
+- GitHub's code-search index returned no hits for the private repo, so search falls back to a tree scan.
+- Retired: `jarvis-github-selftest`, a one-shot test function now inert (HTTP 410). It can be deleted from the Supabase dashboard. Its test left the harmless branch `jarvis/edge-selftest`, which is also safe to delete.

@@ -1,1 +1,4 @@
 project_id = "pmuanzegplyoewtombss"
+
+[functions.jarvis-github]
+verify_jwt = false

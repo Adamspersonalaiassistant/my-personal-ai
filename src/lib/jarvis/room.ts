@@ -6,11 +6,7 @@
 import { MODEL_POLICY } from "../model-policy.ts";
 import { runJarvisTurn, type ToolTraceEntry } from "./runtime.ts";
 import * as state from "./state.ts";
-import {
-  configurationPresence,
-  createGithubClient,
-  ingestKnowledgeFromMessage,
-} from "./tool-gateway.ts";
+import { createGithubClient, resolvePresence, ingestKnowledgeFromMessage } from "./tool-gateway.ts";
 import { assessPaidCreditRequest } from "./policy.ts";
 
 export const JARVIS_AGENT_SLUG = "jarvis-engineer";
@@ -149,7 +145,13 @@ async function saveMessage(
   return data as JarvisRoomMessage;
 }
 
-export async function handleJarvisTurn(db: any, userId: string, agent: any, message: string) {
+export async function handleJarvisTurn(
+  db: any,
+  userId: string,
+  agent: any,
+  message: string,
+  authToken: string | null = null,
+) {
   const apiKey = process.env["OPENAI_API_KEY"];
   const thread = await ensureJarvisThread(db, userId, agent.id);
   const userMessage = await saveMessage(db, userId, thread.id, "user", message);
@@ -165,6 +167,7 @@ export async function handleJarvisTurn(db: any, userId: string, agent: any, mess
     openAiKey: apiKey ?? null,
     researchModel: MODEL_POLICY.primary,
     sourceRef: userMessage.id,
+    authToken,
   };
 
   // Continuous knowledge ingestion from Adam's engineering conversation.
@@ -222,9 +225,18 @@ export async function handleJarvisTurn(db: any, userId: string, agent: any, mess
 }
 
 /** Real engineering status for the room header. No synthetic progress. */
-export async function jarvisStatusPanel(db: any, userId: string) {
-  const presence = configurationPresence();
-  const github = presence["JARVIS_GITHUB_TOKEN"] ? createGithubClient({}) : null;
+export async function jarvisStatusPanel(db: any, userId: string, authToken: string | null = null) {
+  const gateway = {
+    db,
+    userId,
+    agentId: null,
+    approvals: { paidCreditApproved: false, highRiskApproved: false },
+    openAiKey: null,
+    researchModel: MODEL_POLICY.primary,
+    authToken,
+  };
+  const presence = await resolvePresence(gateway);
+  const github = presence["JARVIS_GITHUB_TOKEN"] ? createGithubClient(gateway) : null;
   const [status, deployment, releases] = await Promise.all([
     state.getJarvisStatus(db, userId),
     state

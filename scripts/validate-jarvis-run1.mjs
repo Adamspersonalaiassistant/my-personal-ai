@@ -678,4 +678,251 @@ await check(
   },
 );
 
+const { handleGithubProxy } = await import("../supabase/functions/jarvis-github/proxy.ts");
+const { createEdgeGithubFetcher } = await import("../src/lib/jarvis/edge-transport.ts");
+const { readFileSync } = await import("node:fs");
+
+const SECRET = "ghp_" + "S".repeat(36);
+
+function stubGithub(log) {
+  return async (url, init = {}) => {
+    const u = String(url);
+    log.push({
+      url: u,
+      method: init.method ?? "GET",
+      auth: init.headers?.Authorization ?? null,
+      body: init.body ? JSON.parse(init.body) : null,
+    });
+    if (u.endsWith("/pulls/7"))
+      return new Response(JSON.stringify({ head: { ref: "jarvis/fix-x" } }));
+    if (u.endsWith("/pulls/8"))
+      return new Response(JSON.stringify({ head: { ref: "feature/other" } }));
+    // A hostile upstream echoing the credential must still be redacted.
+    return new Response(JSON.stringify({ ok: true, echoed: SECRET }), { status: 200 });
+  };
+}
+
+await check("edge function guards stay byte-identical to the app guards", () => {
+  assert.equal(
+    readFileSync("src/lib/jarvis/guards.ts", "utf8"),
+    readFileSync("supabase/functions/jarvis-github/guards.ts", "utf8"),
+  );
+});
+
+await check(
+  "edge proxy: allowlisted reads/writes pass, everything dangerous is refused before the token is used",
+  async () => {
+    const log = [];
+    const deps = { token: SECRET, fetcher: stubGithub(log) };
+    const R = "/repos/Adamspersonalaiassistant/my-personal-ai";
+    const ok = async (req) => (await handleGithubProxy(req, deps)).status;
+    assert.equal(await ok({ method: "GET", path: R }), 200);
+    assert.equal(
+      await ok({ method: "GET", path: `${R}/contents/src/lib/emery.functions.ts?ref=main` }),
+      200,
+    );
+    assert.equal(
+      await ok({
+        method: "GET",
+        path: `/search/code?q=${encodeURIComponent("foo repo:Adamspersonalaiassistant/my-personal-ai")}`,
+      }),
+      200,
+    );
+    assert.equal(
+      await ok({
+        method: "POST",
+        path: `${R}/git/refs`,
+        body: { ref: "refs/heads/jarvis/fix-x", sha: "abc" },
+      }),
+      200,
+    );
+    assert.equal(
+      await ok({
+        method: "PATCH",
+        path: `${R}/git/refs/heads/jarvis/fix-x`,
+        body: { sha: "abc", force: false },
+      }),
+      200,
+    );
+    assert.equal(
+      await ok({
+        method: "POST",
+        path: `${R}/git/trees`,
+        body: {
+          base_tree: "t",
+          tree: [{ path: "src/a.ts", mode: "100644", type: "blob", content: "export {};" }],
+        },
+      }),
+      200,
+    );
+    assert.equal(
+      await ok({
+        method: "POST",
+        path: `${R}/pulls`,
+        body: { head: "jarvis/fix-x", base: "main", title: "t" },
+      }),
+      200,
+    );
+    assert.equal(await ok({ method: "PATCH", path: `${R}/pulls/7`, body: { title: "new" } }), 200);
+    const sentBefore = log.length;
+    const refused = [
+      { method: "PUT", path: `${R}/pulls/7/merge`, body: {} },
+      { method: "POST", path: `${R}/merges`, body: { base: "main", head: "x" } },
+      { method: "DELETE", path: `${R}/git/refs/heads/jarvis/fix-x` },
+      { method: "PATCH", path: `${R}/git/refs/heads/main`, body: { sha: "abc" } },
+      {
+        method: "PATCH",
+        path: `${R}/git/refs/heads/jarvis/fix-x`,
+        body: { sha: "abc", force: true },
+      },
+      { method: "POST", path: `${R}/git/refs`, body: { ref: "refs/heads/main", sha: "abc" } },
+      { method: "POST", path: `${R}/git/refs`, body: { ref: "refs/tags/v1", sha: "abc" } },
+      { method: "POST", path: `${R}/pulls`, body: { head: "feature/x", base: "main" } },
+      { method: "POST", path: `${R}/pulls`, body: { head: "jarvis/x", base: "production" } },
+      { method: "PATCH", path: `${R}/pulls/7`, body: { state: "closed" } },
+      { method: "PATCH", path: `${R}/pulls/8`, body: { title: "x" } },
+      {
+        method: "POST",
+        path: `${R}/git/trees`,
+        body: {
+          base_tree: "t",
+          tree: [{ path: ".github/workflows/ci.yml", mode: "100644", content: "x" }],
+        },
+      },
+      {
+        method: "POST",
+        path: `${R}/git/trees`,
+        body: { base_tree: "t", tree: [{ path: ".env", mode: "100644", content: "x" }] },
+      },
+      {
+        method: "POST",
+        path: `${R}/git/trees`,
+        body: {
+          base_tree: "t",
+          tree: [{ path: "a.ts", mode: "100644", content: `k="${SECRET}"` }],
+        },
+      },
+      {
+        method: "POST",
+        path: `${R}/git/trees`,
+        body: {
+          base_tree: "t",
+          tree: [
+            { path: "m.sql", mode: "100644", content: "alter table x disable row level security;" },
+          ],
+        },
+      },
+      {
+        method: "POST",
+        path: `${R}/git/trees`,
+        body: { tree: [{ path: "a.ts", mode: "100644", content: "x" }] },
+      },
+      { method: "GET", path: "/repos/someone-else/private-repo/contents/x" },
+      { method: "GET", path: `/search/code?q=${encodeURIComponent("password")}` },
+      { method: "GET", path: `${R}/actions/secrets` },
+      { method: "POST", path: `${R}/actions/workflows/ci.yml/dispatches`, body: {} },
+      { method: "GET", path: `${R}/../../user` },
+    ];
+    for (const req of refused) {
+      const out = await handleGithubProxy(req, deps);
+      assert.equal(
+        out.status,
+        403,
+        `${req.method} ${req.path} should be refused (got ${out.status})`,
+      );
+    }
+    assert.ok(
+      log.slice(sentBefore).every((c) => c.url.endsWith("/pulls/8")),
+      "only the PR inspection lookup happened for refused calls",
+    );
+  },
+);
+
+await check(
+  "edge proxy never returns the token (even if upstream echoes it) and reports missing secret",
+  async () => {
+    const log = [];
+    const out = await handleGithubProxy(
+      { method: "GET", path: "/repos/Adamspersonalaiassistant/my-personal-ai" },
+      { token: SECRET, fetcher: stubGithub(log) },
+    );
+    assert.ok(!out.body.includes(SECRET));
+    assert.ok(
+      log[0].auth.startsWith("Bearer "),
+      "token is attached only on the outbound GitHub call",
+    );
+    const none = await handleGithubProxy(
+      { method: "GET", path: "/repos/Adamspersonalaiassistant/my-personal-ai" },
+      { token: null, fetcher: stubGithub([]) },
+    );
+    assert.equal(none.status, 412);
+  },
+);
+
+await check(
+  "app transport: GithubClient works through the edge function and never holds the token",
+  async () => {
+    const log = [];
+    const proxyFetch = stubGithub(log);
+    const sentToEdge = [];
+    const edgeFetch = async (url, init) => {
+      const body = JSON.parse(init.body);
+      sentToEdge.push({ url: String(url), headers: init.headers, body });
+      const result = await handleGithubProxy(body, { token: SECRET, fetcher: proxyFetch });
+      return new Response(JSON.stringify(result), { status: 200 });
+    };
+    const fetcher = createEdgeGithubFetcher({
+      supabaseUrl: "https://x.supabase.co",
+      publishableKey: "pub",
+      accessToken: "owner.jwt.token",
+      fetcher: edgeFetch,
+    });
+    const gh = new GithubClient(
+      { token: null, repo: "Adamspersonalaiassistant/my-personal-ai", edge: true },
+      fetcher,
+    );
+    assert.equal(gh.configuredForWrites, true);
+    const branch = await gh.createBranch("jarvis/edge-test", "main").catch((e) => e);
+    assert.ok(
+      sentToEdge.every((c) => c.url === "https://x.supabase.co/functions/v1/jarvis-github"),
+    );
+    assert.ok(sentToEdge.every((c) => c.headers.Authorization === "Bearer owner.jwt.token"));
+    assert.ok(
+      !JSON.stringify(sentToEdge).includes(SECRET),
+      "token never crosses the app/edge boundary",
+    );
+    assert.ok(
+      sentToEdge.some((c) => c.body.method === "POST" && c.body.path.endsWith("/git/refs")) ||
+        branch instanceof Error,
+    );
+    // policy still enforced client-side too
+    await assert.rejects(() => gh.createBranch("main"), /jarvis/);
+  },
+);
+
+await check(
+  "code search falls back to a tree scan when GitHub's private-repo code index returns nothing",
+  async () => {
+    const fetcher = async (url) => {
+      const u = String(url);
+      if (u.includes("/search/code"))
+        return new Response(JSON.stringify({ total_count: 0, items: [] }));
+      if (u.includes("/git/trees/"))
+        return new Response(
+          JSON.stringify({
+            tree: [{ type: "blob", size: 100, path: "src/lib/emery/capability-router.ts" }],
+          }),
+        );
+      if (u.startsWith("https://raw.githubusercontent.com/"))
+        return new Response("line one\nexport function routeEmeryCapabilities() {}\n");
+      return new Response("{}", { status: 404 });
+    };
+    const gh = new GithubClient({ token: "t", repo: "o/r" }, fetcher);
+    const out = await gh.searchCode("routeEmeryCapabilities");
+    assert.equal(out.method, "tree_scan");
+    assert.equal(out.results[0].path, "src/lib/emery/capability-router.ts");
+    assert.equal(out.results[0].line, 2);
+  },
+);
+
 console.log(`JARVIS Run 1 end-to-end harness: complete (${passed} checks).`);

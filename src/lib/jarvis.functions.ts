@@ -8,6 +8,7 @@ import {
   jarvisStatusPanel,
   loadJarvisMessages,
 } from "@/lib/jarvis/room";
+import { currentBearerToken } from "@/lib/jarvis/request-auth";
 
 export const getJarvisRoom = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -31,7 +32,9 @@ export const getJarvisRoom = createServerFn({ method: "GET" })
 
 export const getJarvisStatusPanel = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => jarvisStatusPanel(context.supabase as any, context.userId));
+  .handler(async ({ context }) =>
+    jarvisStatusPanel(context.supabase as any, context.userId, await currentBearerToken()),
+  );
 
 export const sendJarvisMessage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -44,5 +47,5 @@ export const sendJarvisMessage = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const db = context.supabase as any;
     const agent = await ensureJarvisAgent(db, context.userId);
-    return handleJarvisTurn(db, context.userId, agent, data.message);
+    return handleJarvisTurn(db, context.userId, agent, data.message, await currentBearerToken());
   });

@@ -29,6 +29,7 @@ import { emptyActionContext } from "@/lib/emery/context-load-policy";
 import { buildChatSmartMemoryContext } from "@/lib/emery/chat-smart-memory";
 import { recordTurnEvaluation } from "@/lib/emery/turn-evaluation";
 import { buildEmerySelfAwarenessBlock, isJarvisSelfAwarenessQuestion } from "@/lib/jarvis/runtime";
+import { currentBearerToken } from "@/lib/jarvis/request-auth";
 import { ingestKnowledgeFromMessage } from "@/lib/jarvis/tool-gateway";
 
 const STABLE_RUNTIME_POLICY = `EXECUTION POLICY:
@@ -1727,6 +1728,7 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
           openAiKey: null,
           researchModel: MODEL_POLICY.primary,
           sourceRef: userMessage.id,
+          authToken: await currentBearerToken(),
         }).catch((error: any) => {
           console.error("Emery self-awareness read failed", error);
           return "EMERY SELF-AWARENESS: release/deployment state could not be read this turn. Say so plainly; do not guess a version or invent upgrades.";
