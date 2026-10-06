@@ -19,6 +19,12 @@ import { AssistantText } from "@/components/AssistantText";
 import { JarvisVoiceAudition } from "@/components/JarvisVoiceAudition";
 import { JarvisVoiceControl } from "@/components/JarvisVoiceControl";
 import { getJarvisRoom, getJarvisStatusPanel, sendJarvisMessage } from "@/lib/jarvis.functions";
+import {
+  newTurnId,
+  runJarvisTurn,
+  type TurnMessage,
+  type TurnSendResult,
+} from "@/lib/jarvis/turn-reconcile";
 
 type ToolTrace = { tool: string; ok: boolean; ms: number; summary: string; error?: string };
 type RoomMessage = {
@@ -31,6 +37,7 @@ type RoomMessage = {
     tool_trace?: ToolTrace[];
     approval_required?: boolean;
     recoverable_error?: boolean;
+    turn_id?: string;
   } | null;
 };
 
@@ -57,6 +64,10 @@ export function JarvisRoom() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
+  // A rejected transport does not mean the turn failed: while we check the
+  // canonical thread, duplicate submissions stay blocked.
+  const [checking, setChecking] = useState(false);
+  const [unconfirmed, setUnconfirmed] = useState<{ turnId: string; text: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -102,13 +113,44 @@ export function JarvisRoom() {
     textarea.style.height = `${Math.min(textarea.scrollHeight, 128)}px`;
   }, [draft]);
 
+  async function submitTurn(text: string, turnId: string, optimisticId: string | null) {
+    setPending(true);
+    setError(null);
+    setUnconfirmed(null);
+    const outcome = await runJarvisTurn({
+      turnId,
+      send: () => send({ data: { message: text, turnId } }) as unknown as Promise<TurnSendResult>,
+      loadMessages: async () => (await loadRoom()).messages as unknown as TurnMessage[],
+      wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      onChecking: () => setChecking(true),
+    });
+    setChecking(false);
+    if (outcome.kind === "completed") {
+      const { userMessage, agentMessage, error: turnError } = outcome.result;
+      setMessages((prev) => [
+        ...prev.filter((m) => m.id !== optimisticId && m.id !== userMessage.id),
+        userMessage as RoomMessage,
+        ...(agentMessage ? [agentMessage as RoomMessage] : []),
+      ]);
+      if (turnError) setError(turnError);
+      void refreshPanel();
+    } else if (outcome.kind === "failed") {
+      // The canonical thread confirms nothing was saved: a genuine failure.
+      setError("That turn didn't finish. Try again.");
+      setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+      setDraft((current) => current || text);
+    } else {
+      // Completion could not be established. Keep the message, never duplicate it.
+      setUnconfirmed({ turnId, text });
+    }
+    setPending(false);
+  }
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     const text = draft.trim();
-    if (!text || pending) return;
+    if (!text || pending || unconfirmed) return;
     setDraft("");
-    setPending(true);
-    setError(null);
     const optimistic: RoomMessage = {
       id: `temp-${Date.now()}`,
       speaker: "user",
@@ -117,22 +159,7 @@ export function JarvisRoom() {
       created_at: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, optimistic]);
-    try {
-      const result = await send({ data: { message: text } });
-      setMessages((prev) => [
-        ...prev.filter((m) => m.id !== optimistic.id),
-        result.userMessage as RoomMessage,
-        ...(result.agentMessage ? [result.agentMessage as RoomMessage] : []),
-      ]);
-      if (result.error) setError(result.error);
-      void refreshPanel();
-    } catch (caught) {
-      console.error(caught);
-      setError("That turn didn't finish. Try again.");
-      setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
-    } finally {
-      setPending(false);
-    }
+    await submitTurn(text, newTurnId(), optimistic.id);
   }
 
   const status = panel?.status;
@@ -313,12 +340,30 @@ export function JarvisRoom() {
                 role="status"
                 aria-live="polite"
               >
-                <Loader2 className="size-3.5 animate-spin text-primary" /> JARVIS is working…
+                <Loader2 className="size-3.5 animate-spin text-primary" />{" "}
+                {checking ? "I'm checking whether that turn completed." : "JARVIS is working…"}
               </div>
             ) : null}
             <div ref={bottomRef} />
           </div>
         </div>
+
+        {unconfirmed ? (
+          <div
+            className="mx-3 mb-2 flex items-center justify-between gap-3 rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] px-3.5 py-3 text-sm text-amber-100/90 sm:mx-6"
+            role="status"
+          >
+            <span>I couldn't confirm whether that turn completed yet. It won't be sent twice.</span>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => void submitTurn(unconfirmed.text, unconfirmed.turnId, null)}
+              className="emery-press shrink-0 rounded-lg border border-amber-400/30 px-2.5 py-1 text-xs font-semibold disabled:opacity-50"
+            >
+              Check again
+            </button>
+          </div>
+        ) : null}
 
         {error ? (
           <div
@@ -362,7 +407,7 @@ export function JarvisRoom() {
             />
             <button
               type="submit"
-              disabled={!draft.trim() || pending}
+              disabled={!draft.trim() || pending || Boolean(unconfirmed)}
               aria-label="Send message"
               className="emery-press flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground disabled:opacity-35"
             >

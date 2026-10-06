@@ -1151,4 +1151,319 @@ await check(
   },
 );
 
+// ------------------------------------------------------------------------
+// Turn-completion reliability (hotfix): a rejected transport must not be read
+// as a failed turn. Stateful in-memory DB with the agent_messages turn-id
+// unique index, so replay/idempotency is exercised for real.
+// ------------------------------------------------------------------------
+
+function memoryDb(seed = {}) {
+  const tables = {
+    agent_threads: [{ id: "thread-1", user_id: "u1", agent_id: "jarvis-agent" }],
+    ...seed,
+  };
+  const log = { inserts: [] };
+  let seq = 0;
+  const get = (row, key) =>
+    key.includes("->>") ? row[key.split("->>")[0]]?.[key.split("->>")[1]] : row[key];
+  return {
+    log,
+    tables,
+    rpc: async () => ({ data: {}, error: null }),
+    from(table) {
+      tables[table] ??= [];
+      let mode = "select";
+      let payload = null;
+      const filters = [];
+      let limit = Infinity;
+      let desc = false;
+      const builder = {
+        select: () => builder,
+        eq: (k, v) => (filters.push((r) => get(r, k) === v), builder),
+        in: (k, v) => (filters.push((r) => v.includes(get(r, k))), builder),
+        gte: () => builder,
+        or: () => builder,
+        order: (_k, o) => ((desc = o?.ascending === false), builder),
+        limit: (n) => ((limit = n), builder),
+        insert(row) {
+          mode = "insert";
+          payload = row;
+          return builder;
+        },
+        update(row) {
+          mode = "update";
+          payload = row;
+          return builder;
+        },
+        maybeSingle: () => Promise.resolve(single()),
+        single: () => Promise.resolve(single()),
+        then: (res, rej) => Promise.resolve(many()).then(res, rej),
+      };
+      function matching() {
+        return tables[table].filter((r) => filters.every((f) => f(r)));
+      }
+      function single() {
+        if (mode === "insert") {
+          const turn = payload.metadata?.turn_id;
+          if (
+            table === "agent_messages" &&
+            turn &&
+            tables[table].some(
+              (r) =>
+                r.thread_id === payload.thread_id &&
+                r.speaker === payload.speaker &&
+                r.metadata?.turn_id === turn,
+            )
+          )
+            return { data: null, error: { code: "23505", message: "duplicate turn id" } };
+          const row = {
+            id: `${table}-${++seq}`,
+            created_at: new Date().toISOString(),
+            ...payload,
+          };
+          tables[table].push(row);
+          log.inserts.push({ table, row });
+          return { data: row, error: null };
+        }
+        return { data: matching()[0] ?? null, error: null };
+      }
+      function many() {
+        if (mode !== "select") return { data: null, error: null };
+        const rows = matching();
+        if (desc) rows.reverse();
+        return { data: rows.slice(0, limit), error: null };
+      }
+      return builder;
+    },
+  };
+}
+
+const { runJarvisTurn, turnState } = await import("../src/lib/jarvis/turn-reconcile.ts");
+const { loadJarvisMessages } = await import("../src/lib/jarvis/room.ts");
+
+async function withModel(handler, body) {
+  const realFetch = globalThis.fetch;
+  const calls = { model: 0 };
+  process.env.OPENAI_API_KEY = "test-openai";
+  globalThis.fetch = async (url, init = {}) => {
+    if (String(url).startsWith("https://api.openai.com")) {
+      calls.model += 1;
+      return handler(JSON.parse(init.body), calls);
+    }
+    return new Response("{}", { status: 404 });
+  };
+  try {
+    return await body(calls);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+
+const okModel = () =>
+  new Response(JSON.stringify({ id: "r1", output_text: "Understood. I will draft that prompt." }));
+const JARVIS = { id: "jarvis-agent", slug: "jarvis-engineer" };
+const PROMPT_TEXT =
+  "From now on, Planner should open to the active route first. I have a prompt for you instead of the 50 task plan.";
+const noWait = async () => {};
+
+await check(
+  "turn reliability: server completes + writes succeed + response lost → UI reconciles, no false failure, no duplicate turn",
+  async () => {
+    const db = memoryDb();
+    await withModel(okModel, async (calls) => {
+      const turnId = "turn-lost-response-1";
+      let sends = 0;
+      const outcome = await runJarvisTurn({
+        turnId,
+        // The server runs the whole turn and commits; the response never arrives.
+        send: async () => {
+          sends += 1;
+          await handleJarvisTurn(db, "u1", JARVIS, PROMPT_TEXT, null, "typed", turnId);
+          throw new Error("TypeError: Load failed");
+        },
+        loadMessages: () => loadJarvisMessages(db, "u1", "thread-1"),
+        wait: noWait,
+      });
+      assert.equal(outcome.kind, "completed", "no false failure banner");
+      assert.equal(outcome.reconciled, true);
+      assert.match(outcome.result.agentMessage.content, /draft that prompt/);
+      assert.equal(outcome.result.userMessage.content, PROMPT_TEXT);
+      assert.equal(outcome.result.error, null);
+      assert.equal(sends, 1, "a completed turn is never re-sent");
+      assert.equal(calls.model, 1, "the runtime ran exactly once");
+      const messages = db.tables.agent_messages;
+      assert.deepEqual(
+        messages.map((m) => m.speaker),
+        ["user", "agent"],
+        "no duplicate turn",
+      );
+      assert.ok(messages.every((m) => m.metadata.turn_id === turnId));
+    });
+  },
+);
+
+await check(
+  "turn reliability: replaying a turn id returns the stored result — no duplicate messages, knowledge, tasks or model calls",
+  async () => {
+    const db = memoryDb();
+    await withModel(okModel, async (calls) => {
+      const turnId = "turn-replay-0001";
+      const first = await handleJarvisTurn(db, "u1", JARVIS, PROMPT_TEXT, null, "typed", turnId);
+      assert.equal(first.replayed, undefined);
+      const knowledgeBefore = db.tables.jarvis_knowledge_items?.length ?? 0;
+      assert.ok(knowledgeBefore > 0, "the fixture message ingests knowledge once");
+      const writesBefore = db.log.inserts.length;
+      for (let i = 0; i < 3; i += 1) {
+        const again = await handleJarvisTurn(db, "u1", JARVIS, PROMPT_TEXT, null, "typed", turnId);
+        assert.equal(again.replayed, true);
+        assert.equal(again.userMessage.id, first.userMessage.id);
+        assert.equal(again.agentMessage.id, first.agentMessage.id);
+        assert.equal(again.error, null);
+      }
+      assert.equal(db.log.inserts.length, writesBefore, "replay performs no writes at all");
+      assert.equal(db.tables.jarvis_knowledge_items.length, knowledgeBefore);
+      assert.equal(db.tables.jarvis_engineering_tasks?.length ?? 0, 0);
+      assert.equal(db.tables.agent_messages.length, 2);
+      assert.equal(calls.model, 1, "the model ran once");
+      // A new turn id is a new turn.
+      await handleJarvisTurn(db, "u1", JARVIS, "Any update?", null, "typed", "turn-replay-0002");
+      assert.equal(db.tables.agent_messages.length, 4);
+    });
+  },
+);
+
+await check("turn reliability: the turn-id unique index rejects a racing duplicate", async () => {
+  const db = memoryDb();
+  await withModel(okModel, async (calls) => {
+    const turnId = "turn-race-000001";
+    await db
+      .from("agent_messages")
+      .insert({
+        thread_id: "thread-1",
+        user_id: "u1",
+        speaker: "user",
+        speaker_name: "Adam",
+        content: PROMPT_TEXT,
+        metadata: { channel: "typed", turn_id: turnId },
+      })
+      .select("id")
+      .single();
+    // Fresh user message, no answer yet: the first request is still running.
+    const running = await handleJarvisTurn(db, "u1", JARVIS, PROMPT_TEXT, null, "typed", turnId);
+    assert.equal(running.inProgress, true);
+    assert.equal(running.agentMessage, null);
+    assert.equal(calls.model, 0, "an in-flight turn is not started a second time");
+    assert.equal(db.tables.agent_messages.length, 1);
+    // The earlier run died before answering: a stale turn is resumed exactly once.
+    db.tables.agent_messages[0].created_at = new Date(Date.now() - 10 * 60_000).toISOString();
+    const resumed = await handleJarvisTurn(db, "u1", JARVIS, PROMPT_TEXT, null, "typed", turnId);
+    assert.equal(resumed.inProgress, undefined);
+    assert.equal(resumed.agentMessage.metadata.turn_id, turnId);
+    assert.deepEqual(
+      db.tables.agent_messages.map((m) => m.speaker),
+      ["user", "agent"],
+    );
+    assert.equal(calls.model, 1);
+  });
+});
+
+await check(
+  "turn reliability: a genuine failure (nothing persisted) still shows a retry error",
+  async () => {
+    const db = memoryDb();
+    let sends = 0;
+    const outcome = await runJarvisTurn({
+      turnId: "turn-never-arrived",
+      send: async () => {
+        sends += 1;
+        throw new Error("Failed to fetch");
+      },
+      loadMessages: () => loadJarvisMessages(db, "u1", "thread-1"),
+      wait: noWait,
+    });
+    assert.equal(outcome.kind, "failed");
+    assert.equal(sends, 2, "one idempotent re-send, then the thread confirms non-completion");
+    assert.equal(db.tables.agent_messages?.length ?? 0, 0);
+  },
+);
+
+await check(
+  "turn reliability: a runtime error is still reported as an error, never as a clean success",
+  async () => {
+    const db = memoryDb();
+    await withModel(
+      () => new Response("boom", { status: 500 }),
+      async () => {
+        const outcome = await runJarvisTurn({
+          turnId: "turn-runtime-err",
+          send: () =>
+            handleJarvisTurn(
+              db,
+              "u1",
+              JARVIS,
+              "Where is the router?",
+              null,
+              "typed",
+              "turn-runtime-err",
+            ),
+          loadMessages: () => loadJarvisMessages(db, "u1", "thread-1"),
+          wait: noWait,
+        });
+        assert.equal(outcome.kind, "completed");
+        assert.ok(outcome.result.error, "the failure banner is shown");
+        assert.equal(outcome.result.agentMessage.metadata.recoverable_error, true);
+        // And a lost response after that same failure reconciles to the same error.
+        const lost = await runJarvisTurn({
+          turnId: "turn-runtime-err",
+          send: async () => {
+            throw new Error("Load failed");
+          },
+          loadMessages: () => loadJarvisMessages(db, "u1", "thread-1"),
+          wait: noWait,
+        });
+        assert.equal(lost.kind, "completed");
+        assert.ok(lost.result.error);
+      },
+    );
+  },
+);
+
+await check(
+  "turn reliability: unknown completion is never called a failure and never re-sends blindly",
+  async () => {
+    let checking = 0;
+    let sends = 0;
+    const outcome = await runJarvisTurn({
+      turnId: "turn-unknown-001",
+      send: async () => {
+        sends += 1;
+        throw new Error("Load failed");
+      },
+      loadMessages: async () => {
+        throw new Error("offline");
+      },
+      wait: noWait,
+      onChecking: () => (checking += 1),
+      delays: [0, 0, 0],
+    });
+    assert.equal(outcome.kind, "unconfirmed");
+    assert.equal(checking, 1, "'I'm checking whether that turn completed.' is shown");
+    assert.equal(sends, 1, "no duplicate submission while completion is unknown");
+    const half = turnState(
+      [
+        {
+          id: "m1",
+          speaker: "user",
+          speaker_name: "Adam",
+          content: "x",
+          created_at: "",
+          metadata: { turn_id: "t-half-0001" },
+        },
+      ],
+      "t-half-0001",
+    );
+    assert.ok(half.user && !half.agent);
+  },
+);
+
 console.log(`JARVIS Run 1 end-to-end harness: complete (${passed} checks).`);

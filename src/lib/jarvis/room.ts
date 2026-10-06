@@ -21,8 +21,12 @@ export type JarvisRoomMessage = {
     tool_trace?: ToolTraceEntry[];
     approval_required?: boolean;
     recoverable_error?: boolean;
+    turn_id?: string;
   } | null;
 };
+
+/** A turn with a saved user message but no answer is "still running" for this long. */
+export const TURN_IN_PROGRESS_MS = 150_000;
 
 const JARVIS_AGENT_DEFAULT = {
   name: "JARVIS Engineer",
@@ -145,6 +149,41 @@ async function saveMessage(
   return data as JarvisRoomMessage;
 }
 
+/** The persisted user/agent messages of one turn, found by its client turn id. */
+async function findTurn(db: any, userId: string, threadId: string, turnId: string) {
+  const { data, error } = await db
+    .from("agent_messages")
+    .select("id,speaker,speaker_name,content,metadata,created_at")
+    .eq("user_id", userId)
+    .eq("thread_id", threadId)
+    .eq("metadata->>turn_id", turnId);
+  if (error) throw error;
+  const rows = (data ?? []) as JarvisRoomMessage[];
+  return {
+    user: rows.find((m) => m.speaker === "user") ?? null,
+    agent: rows.find((m) => m.speaker === "agent") ?? null,
+  };
+}
+
+export type JarvisTurnResult = {
+  userMessage: JarvisRoomMessage;
+  agentMessage: JarvisRoomMessage | null;
+  error: string | null;
+  /** The same turn id was already handled: the stored result is returned, nothing re-ran. */
+  replayed?: boolean;
+  /** The same turn id is still running in another request: nothing was started. */
+  inProgress?: boolean;
+};
+
+function storedResult(user: JarvisRoomMessage, agent: JarvisRoomMessage): JarvisTurnResult {
+  return {
+    userMessage: user,
+    agentMessage: agent,
+    error: agent.metadata?.recoverable_error ? "JARVIS couldn't finish that turn." : null,
+    replayed: true,
+  };
+}
+
 export async function handleJarvisTurn(
   db: any,
   userId: string,
@@ -152,10 +191,41 @@ export async function handleJarvisTurn(
   message: string,
   authToken: string | null = null,
   channel: "typed" | "voice" = "typed",
-) {
+  turnId: string | null = null,
+): Promise<JarvisTurnResult> {
   const apiKey = process.env["OPENAI_API_KEY"];
   const thread = await ensureJarvisThread(db, userId, agent.id);
-  const userMessage = await saveMessage(db, userId, thread.id, "user", message, { channel });
+  const turnMeta = turnId ? { turn_id: turnId } : {};
+
+  // Idempotency: a turn id that already ran is never run again. Its stored
+  // result is returned, so a retry after a lost response creates no duplicate
+  // message, knowledge item, task or tool write.
+  let userMessage: JarvisRoomMessage | null = null;
+  if (turnId) {
+    const existing = await findTurn(db, userId, thread.id, turnId);
+    if (existing.user && existing.agent) return storedResult(existing.user, existing.agent);
+    if (existing.user) {
+      const age = Date.now() - Date.parse(existing.user.created_at);
+      if (age < TURN_IN_PROGRESS_MS)
+        return { userMessage: existing.user, agentMessage: null, error: null, inProgress: true };
+      userMessage = existing.user; // The earlier run died before answering: resume it once.
+    }
+  }
+  if (!userMessage) {
+    try {
+      userMessage = await saveMessage(db, userId, thread.id, "user", message, {
+        channel,
+        ...turnMeta,
+      });
+    } catch (error: any) {
+      // Lost a race with a concurrent request carrying the same turn id.
+      if (!turnId || error?.code !== "23505") throw error;
+      const raced = await findTurn(db, userId, thread.id, turnId);
+      if (!raced.user) throw error;
+      if (raced.agent) return storedResult(raced.user, raced.agent);
+      return { userMessage: raced.user, agentMessage: null, error: null, inProgress: true };
+    }
+  }
   const history = await loadJarvisMessages(db, userId, thread.id, 14);
   const prior = history.filter((m) => m.id !== userMessage.id);
 
@@ -184,7 +254,7 @@ export async function handleJarvisTurn(
       thread.id,
       "agent",
       "My reasoning service isn't configured (OPENAI_API_KEY is missing on the server), so I can't think this turn through. Your message is saved.",
-      { recoverable_error: true },
+      { recoverable_error: true, ...turnMeta },
     );
     return { userMessage, agentMessage, error: null };
   }
@@ -205,6 +275,14 @@ export async function handleJarvisTurn(
       knowledge_ingested: ingestion.stored.length,
       runtime: "jarvis-run2",
       channel,
+      ...turnMeta,
+    }).catch(async (saveError: any) => {
+      // A concurrent twin of this turn already saved its answer: return that one.
+      if (turnId && saveError?.code === "23505") {
+        const twin = await findTurn(db, userId, thread.id, turnId);
+        if (twin.agent) return twin.agent;
+      }
+      throw saveError;
     });
     await db
       .from("agent_threads")
@@ -220,7 +298,11 @@ export async function handleJarvisTurn(
       thread.id,
       "agent",
       "That turn didn't complete — the engineering runtime hit an error before I could verify an answer. Your message is saved; ask again and I'll retry.",
-      { recoverable_error: true, error: String(error?.message ?? error).slice(0, 300) },
+      {
+        recoverable_error: true,
+        error: String(error?.message ?? error).slice(0, 300),
+        ...turnMeta,
+      },
     ).catch(() => null);
     return { userMessage, agentMessage, error: "JARVIS couldn't finish that turn." };
   }
