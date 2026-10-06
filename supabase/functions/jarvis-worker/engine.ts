@@ -1115,11 +1115,18 @@ export class Engine {
       const research = await this.selfResearch(owner, session, metrics);
       const approvalRequired =
         tasks.some((t) => t.status === "blocked" && /approval/i.test(t.blocker ?? "")) || ready > 0;
+      // Capacity evidence counts real work only: fixtures prove mechanics, not throughput.
+      const real = tasks.filter((t) => !t.is_fixture && !t.merged_into);
+      const realDone = real.filter((t) => ["completed", "ready_for_release"].includes(t.status));
+      const realFailed = real.filter((t) => t.status === "failed");
       const capacity = {
         current: DAILY_CAPACITY,
         recommended: DAILY_CAPACITY,
+        real_tasks: real.length,
         eligible_for_increase:
-          metrics.accepted >= 40 && metrics.completion_rate >= 0.9 && metrics.failure_rate <= 0.05,
+          real.length >= 40 &&
+          realDone.length / real.length >= 0.9 &&
+          realFailed.length / real.length <= 0.05,
         note: "Capacity changes require measured stability across sessions AND a worker throughput improvement; a number change alone is not an upgrade.",
       };
       const ok = await this.d.store.updateSession(

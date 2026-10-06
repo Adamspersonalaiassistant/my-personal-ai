@@ -880,6 +880,27 @@ await check(
   },
 );
 
+await check("capacity eligibility counts real work only, never fixtures", async () => {
+  const review = async (isFixture) => {
+    const store = new MemoryStore();
+    for (let i = 0; i < 42; i += 1)
+      store.addTask({
+        title: `Capacity probe ${i}`,
+        is_fixture: isFixture,
+        task_spec: { kind: "diagnostic" },
+      });
+    await drive(store, null, null, 6);
+    return store.sessions[0].metadata.capacity_review;
+  };
+  const fixtures = await review(true);
+  assert.equal(fixtures.real_tasks, 0);
+  assert.equal(fixtures.eligible_for_increase, false);
+  const real = await review(false);
+  assert.equal(real.real_tasks, 42);
+  assert.equal(real.eligible_for_increase, true);
+  assert.equal(real.recommended, 50, "eligibility alone never changes the number");
+});
+
 await check("a re-run of a failed task executes instead of merging into the failure", async () => {
   const store = new MemoryStore();
   const failed = store.addTask({
