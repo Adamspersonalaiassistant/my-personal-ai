@@ -34,6 +34,16 @@ const uuid = () => {
 };
 
 // ------------------------------------------------------------- fake store
+const IN_PROGRESS = [
+  "queued",
+  "validating",
+  "researching",
+  "planning",
+  "building",
+  "testing",
+  "repairing",
+];
+
 class MemoryStore {
   constructor() {
     this.taskRows = [];
@@ -110,12 +120,13 @@ class MemoryStore {
       )
       .filter((r) => !r.lease_expires_at || Date.parse(r.lease_expires_at) < t.getTime())
       .filter((r) => Date.parse(r.next_attempt_at) <= t.getTime())
-      .filter((r) =>
-        r.depends_on.every((d) =>
-          ["completed", "ready_for_release"].includes(
-            this.taskRows.find((x) => x.id === d)?.status,
+      // Mirrors jarvis_claim_tasks: wait only while a dependency is still in progress.
+      // Terminal dependencies (merged, failed, blocked) are resolved by validation.
+      .filter(
+        (r) =>
+          !r.depends_on.some((d) =>
+            IN_PROGRESS.includes(this.taskRows.find((x) => x.id === d)?.status),
           ),
-        ),
       )
       .sort((a, b) => a.priority - b.priority || a.created_at.localeCompare(b.created_at));
     for (const r of runnable) {
@@ -907,10 +918,32 @@ await check("dependency on a failed task blocks the dependent instead of running
     depends_on: [a.id],
     task_spec: { kind: "diagnostic" },
   });
-  await drive(store, null, null, 2);
+  await drive(store, null, null, 3);
   assert.equal(store.taskRows.find((r) => r.id === a.id).status, "failed");
-  // b is never claimed while its dependency is not completed; validation only runs after accept.
-  assert.ok(["queued", "blocked"].includes(store.taskRows.find((r) => r.id === b.id).status));
+  // b waits while a runs, then is surfaced as blocked — never left silently queued.
+  const row = store.taskRows.find((r) => r.id === b.id);
+  assert.equal(row.status, "blocked");
+  assert.match(row.blocker, /Dependency did not complete: Will fail/);
+});
+
+await check("a dependency merged as a duplicate is rewired to the surviving task", async () => {
+  const store = new MemoryStore();
+  const original = store.addTask({
+    title: "Shared prerequisite",
+    task_spec: { kind: "diagnostic" },
+  });
+  const twin = store.addTask({ title: "Shared prerequisite", task_spec: { kind: "diagnostic" } });
+  const dependent = store.addTask({
+    title: "Needs the prerequisite",
+    depends_on: [twin.id],
+    task_spec: { kind: "diagnostic" },
+  });
+  await drive(store, null, null, 4);
+  const row = (id) => store.taskRows.find((r) => r.id === id);
+  assert.equal(row(twin.id).merged_into, original.id);
+  assert.deepEqual(row(dependent.id).depends_on, [original.id]);
+  assert.equal(row(dependent.id).status, "completed");
+  assert.ok(row(dependent.id).completed_at >= row(original.id).completed_at);
 });
 
 await check(
