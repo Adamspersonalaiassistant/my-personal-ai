@@ -15,7 +15,8 @@ export type RadarSignal =
   | "user_correction"
   | "goal_incomplete"
   | "runtime_error"
-  | "regression";
+  | "regression"
+  | "self_weakness";
 
 export const SIGNAL_IMPACT: Record<RadarSignal, number> = {
   capability_gap: 4,
@@ -28,6 +29,8 @@ export const SIGNAL_IMPACT: Record<RadarSignal, number> = {
   goal_incomplete: 4,
   runtime_error: 4,
   regression: 5,
+  // JARVIS's own engineering failures (tool errors, worker step errors).
+  self_weakness: 4,
 };
 
 const SIGNALS = new Set(Object.keys(SIGNAL_IMPACT));
@@ -67,6 +70,20 @@ export type RadarInputs = {
     findings: any;
     created_at: string;
   }>;
+  /** JARVIS's own jarvis_tool / jarvis_worker error events (self-observation). */
+  selfEvents?: Array<{
+    event_type: string;
+    status: string;
+    action: string | null;
+    metadata: any;
+    created_at: string;
+  }>;
+};
+
+/** Where JARVIS's own engineering code lives, per failing subsystem. */
+export const SELF_TARGETS: Record<string, string[]> = {
+  tool: ["src/lib/jarvis/tool-gateway.ts", "src/lib/jarvis/tool-registry.ts"],
+  worker: ["supabase/functions/jarvis-worker/engine.ts"],
 };
 
 export type Opportunity = {
@@ -154,7 +171,8 @@ export function scoreCluster(cluster: Cluster) {
   const severity = Math.min(5, Math.max(1, cluster.severity)) / 3;
   const confidence = Math.min(1, Math.max(0.1, cluster.confidence));
   const feasibility =
-    cluster.signal === "capability_gap" && cluster.capability
+    (cluster.signal === "capability_gap" && cluster.capability) ||
+    cluster.signal === "self_weakness" // JARVIS's own code: known location, high feasibility
       ? 0.9
       : cluster.signal === "integration_missing"
         ? 0.4
@@ -274,6 +292,32 @@ export function buildOpportunities(
     }
   }
 
+  // Self-observation: recurring failures in JARVIS's own tools and worker stages.
+  // Expected refusals (policy, not_configured) are not weaknesses.
+  for (const event of inputs.selfEvents ?? []) {
+    if (event.status !== "error") continue;
+    const meta = event.metadata && typeof event.metadata === "object" ? event.metadata : {};
+    if (["policy", "not_configured"].includes(str(meta.kind))) continue;
+    const isTool = event.event_type === "jarvis_tool";
+    const subject = isTool
+      ? `jarvis_tool:${str(event.action)}`
+      : `jarvis_worker:${str(event.action).replace(/:error$/, "")}`;
+    add(
+      "self_weakness",
+      subject,
+      Number(meta.severity ?? 3),
+      Number(meta.confidence ?? 0.8),
+      {
+        source: "jarvis_self_observation",
+        at: event.created_at,
+        event_type: event.event_type,
+        action: event.action,
+        observed: str(meta.error).slice(0, 300) || null,
+      },
+      { fixture: meta.fixture === true, capability: isTool ? "tool" : "worker" },
+    );
+  }
+
   const minScore = opts.minScore ?? 6;
   const minOccurrences = opts.minOccurrences ?? 2;
   const out: Opportunity[] = [];
@@ -281,7 +325,10 @@ export function buildOpportunities(
     if (cluster.occurrences < minOccurrences && cluster.severity < 4) continue;
     const { score, feasibility, risk } = scoreCluster(cluster);
     if (score < minScore) continue;
-    const codeChange = cluster.signal === "capability_gap" && Boolean(cluster.capability);
+    const self = cluster.signal === "self_weakness";
+    const codeChange =
+      (cluster.signal === "capability_gap" && Boolean(cluster.capability)) ||
+      (self && cluster.capability === "tool");
     out.push({
       dedupe_key: `radar:${cluster.signal}:${cluster.subject}`
         .toLowerCase()
@@ -289,15 +336,19 @@ export function buildOpportunities(
         .slice(0, 120),
       signal: cluster.signal,
       subject: cluster.subject,
-      title: codeChange
-        ? `Close capability gap: ${cluster.capability}`
-        : `Investigate recurring ${cluster.signal.replace(/_/g, " ")}: ${cluster.subject}`.slice(
-            0,
-            160,
-          ),
-      objective: codeChange
-        ? `Emery repeatedly hit a capability gap for "${cluster.capability}"${cluster.request ? ` (e.g. Adam asked: "${cluster.request}")` : ""}. Make Emery's capability registry truthful about it so she states clearly what is and is not connected instead of implying success. Smallest safe change; preserve existing capability behaviour.`
-        : `Recurring ${cluster.signal} signal (${cluster.occurrences} occurrences) for "${cluster.subject}". Reproduce from telemetry and identify the root cause with evidence.`,
+      title: self
+        ? `Improve JARVIS: recurring failure in ${cluster.subject}`.slice(0, 160)
+        : codeChange
+          ? `Close capability gap: ${cluster.capability}`
+          : `Investigate recurring ${cluster.signal.replace(/_/g, " ")}: ${cluster.subject}`.slice(
+              0,
+              160,
+            ),
+      objective: self
+        ? `JARVIS self-improvement: ${cluster.subject} failed ${cluster.occurrences} times (evidence attached). Find the root cause in JARVIS's own code and make it handle this case correctly; keep all policy guards intact.`
+        : codeChange
+          ? `Emery repeatedly hit a capability gap for "${cluster.capability}"${cluster.request ? ` (e.g. Adam asked: "${cluster.request}")` : ""}. Make Emery's capability registry truthful about it so she states clearly what is and is not connected instead of implying success. Smallest safe change; preserve existing capability behaviour.`
+          : `Recurring ${cluster.signal} signal (${cluster.occurrences} occurrences) for "${cluster.subject}". Reproduce from telemetry and identify the root cause with evidence.`,
       score,
       occurrences: cluster.occurrences,
       severity: cluster.severity,
@@ -305,7 +356,11 @@ export function buildOpportunities(
       feasibility,
       risk,
       kind: codeChange ? "code_change" : "diagnostic",
-      target_paths: codeChange ? CAPABILITY_TARGETS : [],
+      target_paths: self
+        ? (SELF_TARGETS[cluster.capability ?? "tool"] ?? [])
+        : codeChange
+          ? CAPABILITY_TARGETS
+          : [],
       evidence: cluster.evidence,
       fixture: cluster.fixture,
     });

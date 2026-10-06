@@ -1,9 +1,7 @@
 import type { EmeryDomain } from "../emery-domain.ts";
 import { routeEmeryCapabilities, type CapabilityRoute } from "./capability-router.ts";
-import {
-  contextLoadPolicy,
-  type EmeryContextLoadPolicy,
-} from "./context-load-policy.ts";
+import { widenCapabilityRoute } from "./capability-discovery.ts";
+import { contextLoadPolicy, type EmeryContextLoadPolicy } from "./context-load-policy.ts";
 import { planEmeryRequest } from "./planner.ts";
 import type { ActionPlan, RequestContext } from "./orchestration.types.ts";
 
@@ -23,11 +21,15 @@ export function prepareEmeryRequestRouting(input: {
   context?: RequestContext | null;
   domainHint?: EmeryDomain | null;
 }): PreparedEmeryRequestRouting {
-  const capabilityRoute = routeEmeryCapabilities({
-    message: input.message,
-    context: input.context ?? null,
-    domainHint: input.domainHint ?? null,
-  });
+  // A capability the router did not select is not a dead end: widen from the full catalog.
+  const capabilityRoute = widenCapabilityRoute(
+    routeEmeryCapabilities({
+      message: input.message,
+      context: input.context ?? null,
+      domainHint: input.domainHint ?? null,
+    }),
+    input.message,
+  );
   const loadPolicy = contextLoadPolicy(capabilityRoute);
   const actionPlan = planEmeryRequest(input.message);
   return { capabilityRoute, loadPolicy, actionPlan };

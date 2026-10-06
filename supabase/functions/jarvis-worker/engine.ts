@@ -1046,7 +1046,7 @@ export class Engine {
       }
       const inserted = await this.d.store.insertTask({
         user_id: owner,
-        source_type: "opportunity_radar",
+        source_type: opp.signal === "self_weakness" ? "jarvis_self_research" : "opportunity_radar",
         source_ref: opp.dedupe_key,
         title: opp.title,
         objective: opp.objective,

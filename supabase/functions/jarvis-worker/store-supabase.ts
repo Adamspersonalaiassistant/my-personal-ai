@@ -196,7 +196,7 @@ export class SupabaseStore implements Store {
   }
 
   async radarInputs(userId: string, sinceIso: string): Promise<RadarInputs> {
-    const [events, receipts, backlog, evaluations] = await Promise.all([
+    const [events, receipts, backlog, evaluations, selfEvents] = await Promise.all([
       this.db
         .from("emery_runtime_events")
         .select("event_type,status,action,domain,channel,metadata,created_at")
@@ -227,12 +227,23 @@ export class SupabaseStore implements Store {
         .eq("user_id", userId)
         .gte("created_at", sinceIso)
         .limit(200),
+      // JARVIS's own failures, for self-observation (see radar.ts self_weakness).
+      this.db
+        .from("emery_runtime_events")
+        .select("event_type,status,action,metadata,created_at")
+        .eq("user_id", userId)
+        .gte("created_at", sinceIso)
+        .eq("status", "error")
+        .in("event_type", ["jarvis_tool", "jarvis_worker"])
+        .order("created_at", { ascending: false })
+        .limit(300),
     ]);
     return {
       events: must(events, "radar events") ?? [],
       receipts: must(receipts, "radar receipts") ?? [],
       backlog: must(backlog, "radar backlog") ?? [],
       evaluations: must(evaluations, "radar evaluations") ?? [],
+      selfEvents: must(selfEvents, "radar self events") ?? [],
     };
   }
 

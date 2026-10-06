@@ -283,6 +283,8 @@ class FakeGithub {
         'export const EMERY_EXECUTION_CAPABILITIES = {\n  google_calendar: { canExecute: false, note: "Google Calendar is not connected." },\n} as const;\n',
       "src/lib/emery/capability-registry.ts": "export const CAPABILITY_REGISTRY = {};\n",
       "src/lib/jarvis/fixtures/controlled.ts": "export const CONTROLLED_VALUE = 1;\n",
+      "src/lib/jarvis/tool-gateway.ts":
+        "export function parseLimit(value: unknown) {\n  return Number(value);\n}\n",
     });
     const c = this.makeCommit(root, [], "initial");
     this.refs.set("main", c);
@@ -448,6 +450,20 @@ class FakePlanner {
   }
   async planEdits(input) {
     this.calls.push({ kind: "plan", objective: input.objective });
+    if (/JARVIS self-improvement/.test(input.objective)) {
+      const gateway = input.files.find((f) => f.path.endsWith("tool-gateway.ts"));
+      return {
+        summary: "Clamp invalid limits instead of failing the tool",
+        edits: [
+          {
+            path: gateway.path,
+            find: "  return Number(value);",
+            replace:
+              "  const n = Number(value);\n  return Number.isFinite(n) && n > 0 ? Math.min(n, 50) : 8;",
+          },
+        ],
+      };
+    }
     const target = input.files.find((f) => f.path.endsWith("execution-capabilities.ts"));
     return {
       summary: "Register Apple Reminders as not connected",
@@ -1237,6 +1253,64 @@ await check(
     const row = store.taskRows.find((r) => r.id === found[0].id);
     assert.equal(row.session_id, null, "an unapproved radar task is never accepted");
     assert.equal(store.taskRows.filter(countsTowardCapacity).length, 0);
+  },
+);
+
+await check(
+  "JARVIS fixes himself: own tool failures → self_weakness radar → self-improvement task → branch → edit → isolated CI → PR",
+  async () => {
+    const store = new MemoryStore();
+    const gh = new FakeGithub();
+    const planner = new FakePlanner();
+    const toolError = (i, kind = "failed") => ({
+      event_type: "jarvis_tool",
+      status: "error",
+      action: "jarvis.search_knowledge",
+      metadata: { kind, error: "limit must be a positive number", fixture: true },
+      created_at: new Date(clock - i * 1000).toISOString(),
+    });
+    // Expected refusals are never treated as weaknesses.
+    store.radar.selfEvents = [toolError(1), toolError(2), toolError(3), toolError(4, "policy")];
+    await makeEngine(store, gh, planner, { forceRadar: true }).tick();
+    for (let i = 0; i < 5; i += 1) {
+      advance(61_000);
+      await makeEngine(store, gh, planner).tick();
+    }
+    const task = store.taskRows.find((r) => r.source_type === "jarvis_self_research");
+    assert.ok(task, "self-improvement task created from JARVIS's own evidence");
+    assert.match(
+      task.title,
+      /Improve JARVIS: recurring failure in jarvis_tool:jarvis\.search_knowledge/,
+    );
+    assert.deepEqual(task.task_spec.target_paths, [
+      "src/lib/jarvis/tool-gateway.ts",
+      "src/lib/jarvis/tool-registry.ts",
+    ]);
+    assert.equal(task.status, "ready_for_release", JSON.stringify(task.stage_state.log, null, 1));
+    assert.match(
+      gh.filesAt(task.branch_name)["src/lib/jarvis/tool-gateway.ts"],
+      /Math\.min\(n, 50\)/,
+    );
+    assert.ok(task.pr_url, "candidate PR opened");
+    assert.equal(store.candidates.at(-1).source_pr_url, task.pr_url, "candidate upgrade recorded");
+  },
+);
+
+await check(
+  "a real (non-fixture) JARVIS self-weakness is a PROPOSAL: it never runs or uses capacity until Adam approves",
+  async () => {
+    const store = new MemoryStore();
+    store.radar.selfEvents = [1, 2, 3].map((i) => ({
+      event_type: "jarvis_tool",
+      status: "error",
+      action: "github.search_code",
+      metadata: { kind: "failed", error: "422 validation failed" },
+      created_at: new Date(clock - i * 1000).toISOString(),
+    }));
+    await makeEngine(store, null, null, { forceRadar: true }).tick();
+    const task = store.taskRows.find((r) => r.source_type === "jarvis_self_research");
+    assert.equal(task.approval_state, "proposed");
+    assert.equal(task.session_id, null);
   },
 );
 

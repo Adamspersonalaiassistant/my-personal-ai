@@ -1832,4 +1832,152 @@ await check(
   },
 );
 
+// ------------------------------------------------------------------------
+// Autonomy integration: Emery capability discovery, structured capability gaps,
+// the Emery → Radar link, and direct engineering requests to JARVIS.
+// ------------------------------------------------------------------------
+
+const discovery = await import("../src/lib/emery/capability-discovery.ts");
+const { routeEmeryCapabilities } = await import("../src/lib/emery/capability-router.ts");
+const { prepareEmeryRequestRouting } = await import("../src/lib/emery/request-routing.ts");
+const radar = await import("../supabase/functions/jarvis-worker/radar.ts");
+
+await check(
+  "Emery discovery: a request the router misses is widened from the full catalog (no false refusal)",
+  () => {
+    const message = "Which offices in Morris Plains have I not seen in a while?";
+    const initial = routeEmeryCapabilities({ message });
+    assert.ok(
+      !initial.candidateCapabilities.some((a) => a.startsWith("hpo.")),
+      "router alone misses HPO",
+    );
+    const widened = prepareEmeryRequestRouting({ message }).capabilityRoute;
+    assert.ok(widened.candidateCapabilities.includes("hpo.route.read"));
+    assert.equal(widened.needsHpoContext, true, "HPO context is now loaded for the turn");
+    assert.match(widened.reason, /Capability discovery widened/);
+    // Confident deterministic routes are never altered.
+    const confident = prepareEmeryRequestRouting({
+      message: "What's my next stop?",
+    }).capabilityRoute;
+    assert.deepEqual(confident, routeEmeryCapabilities({ message: "What's my next stop?" }));
+  },
+);
+
+await check(
+  "Emery capability gap: marker is stripped from the reply and becomes a structured, PII-free event",
+  () => {
+    const raw =
+      "Apple Reminders isn't connected, so I didn't add it. I saved it as an Emery task instead.\n[[capability_gap: apple_reminders | Add an item to an Apple Reminders list]]";
+    const { reply, gap } = discovery.extractCapabilityGap(raw);
+    assert.equal(
+      reply,
+      "Apple Reminders isn't connected, so I didn't add it. I saved it as an Emery task instead.",
+    );
+    assert.deepEqual(gap, {
+      capability: "apple_reminders",
+      need: "Add an item to an Apple Reminders list",
+    });
+    assert.equal(discovery.extractCapabilityGap("Done — task created.").gap, null);
+    assert.doesNotMatch(
+      discovery.extractCapabilityGap("ok [[capability_gap: x | y]] more").reply,
+      /capability_gap/,
+      "a stray marker never reaches Adam",
+    );
+    const event = discovery.capabilityGapEvent(gap, "personal");
+    assert.equal(event.eventType, "capability_gap");
+    assert.equal(event.metadata.signal, "capability_gap");
+    assert.ok(!JSON.stringify(event).includes("didn't add"), "only the sanitized need is stored");
+    assert.match(discovery.EMERY_CAPABILITY_GAP_POLICY, /RECOVERY LADDER/);
+  },
+);
+
+await check(
+  "flywheel link: Emery's real gap events feed Opportunity Radar → a JARVIS code_change opportunity",
+  () => {
+    const gap = { capability: "apple_reminders", need: "Add an item to an Apple Reminders list" };
+    const events = [1, 2, 3].map((i) => {
+      const e = discovery.capabilityGapEvent(gap, "personal");
+      // Exactly the row recordRuntimeEvent writes.
+      return {
+        event_type: e.eventType,
+        status: e.status,
+        action: e.action,
+        domain: e.domain,
+        metadata: e.metadata,
+        created_at: new Date(Date.now() - i * 60_000).toISOString(),
+      };
+    });
+    const opps = radar.buildOpportunities({ events, receipts: [], backlog: [], evaluations: [] });
+    assert.equal(opps.length, 1);
+    assert.equal(opps[0].title, "Close capability gap: apple_reminders");
+    assert.equal(opps[0].kind, "code_change");
+    assert.ok(opps[0].target_paths.includes("src/lib/execution-capabilities.ts"));
+    assert.equal(
+      opps[0].fixture,
+      false,
+      "a real Emery gap is real evidence (the worker files it as a proposal)",
+    );
+    // One-off gaps do not create work.
+    assert.equal(
+      radar.buildOpportunities({
+        events: events.slice(0, 1),
+        receipts: [],
+        backlog: [],
+        evaluations: [],
+      }).length,
+      0,
+    );
+  },
+);
+
+await check(
+  "JARVIS self-observation: recurring own-tool failures become self_weakness opportunities; refusals do not",
+  () => {
+    const ev = (kind) => ({
+      event_type: "jarvis_tool",
+      status: "error",
+      action: "github.search_code",
+      metadata: { kind, error: "422" },
+      created_at: new Date().toISOString(),
+    });
+    const opps = radar.buildOpportunities({
+      events: [],
+      receipts: [],
+      backlog: [],
+      evaluations: [],
+      selfEvents: [ev("failed"), ev("failed"), ev("failed")],
+    });
+    assert.equal(opps[0].signal, "self_weakness");
+    assert.equal(opps[0].kind, "code_change");
+    const refusals = radar.buildOpportunities({
+      events: [],
+      receipts: [],
+      backlog: [],
+      evaluations: [],
+      selfEvents: [ev("policy"), ev("policy"), ev("not_configured")],
+    });
+    assert.equal(refusals.length, 0);
+  },
+);
+
+await check(
+  "direct engineering requests to JARVIS approve a candidate; analysis questions and 'not yet' do not",
+  () => {
+    for (const m of [
+      "Jarvis, Emery keeps doing this wrong. Fix it.",
+      "Emery shows the wrong time on reminders. Please fix.",
+      "Can you fix the bug in the planner?",
+      "Make the change.",
+    ])
+      assert.equal(assessTaskApproval(m).approved, true, m);
+    for (const m of [
+      "How would you fix it?",
+      "Don't fix it yet",
+      "Give me ideas to fix Emery",
+      "What should we improve?",
+    ])
+      assert.equal(assessTaskApproval(m).approved, false, m);
+  },
+);
+
 console.log(`JARVIS Run 1 end-to-end harness: complete (${passed} checks).`);
