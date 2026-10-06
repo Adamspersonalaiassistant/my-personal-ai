@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.jarvis-voice-lab]
 verify_jwt = false
+
+[functions.jarvis-worker]
+verify_jwt = false

@@ -103,7 +103,7 @@ export async function getJarvisStatus(db: any, userId: string) {
       db
         .from("jarvis_engineering_tasks")
         .select(
-          "id,session_id,title,status,priority,risk_level,source_type,blocker,branch_name,commit_sha,pr_url,result_summary,created_at,updated_at,completed_at,is_fixture,approval_state,batch_id,merged_into",
+          "id,session_id,title,status,priority,risk_level,source_type,blocker,branch_name,commit_sha,pr_url,result_summary,created_at,updated_at,completed_at,is_fixture,approval_state,batch_id,merged_into,metadata",
         )
         .eq("user_id", userId)
         .order("updated_at", { ascending: false })
@@ -165,6 +165,29 @@ export async function getJarvisStatus(db: any, userId: string) {
     open_tasks: openTasks.slice(0, 15),
     recently_completed: production.filter((t: any) => t.status === "completed").slice(0, 6),
     blocked: production.filter((t: any) => t.status === "blocked").slice(0, 6),
+    // Candidates JARVIS built: what is waiting on Adam, what is mid-release, what just shipped.
+    release_queue: production
+      .filter(
+        (t: any) =>
+          (t.pr_url && t.metadata?.release_approval !== undefined) ||
+          (t.pr_url && t.status === "ready_for_release") ||
+          t.metadata?.release,
+      )
+      .slice(0, 8)
+      .map((t: any) => ({
+        task_id: t.id,
+        title: t.title,
+        pr_url: t.pr_url,
+        pr: Number(/\/pull\/(\d+)/.exec(String(t.pr_url ?? ""))?.[1] ?? 0) || null,
+        state:
+          t.metadata?.release?.state ??
+          (t.status === "ready_for_release" ? "awaiting_approval" : t.status),
+        mode: t.metadata?.release?.mode ?? null,
+        decision: t.metadata?.release?.decision ?? null,
+        note: t.metadata?.release?.note ?? null,
+        approval_valid:
+          Boolean(t.metadata?.release_approval) && !t.metadata?.release?.approval_invalid,
+      })),
     proposed_tasks: proposed.slice(0, 50),
     proposed_count: proposed.length,
     // Historical validation evidence: kept visible, never counted as capacity.

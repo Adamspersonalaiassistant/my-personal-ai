@@ -13,6 +13,7 @@ import { assertSafeContent, assertSafeRepoPath, assessPaidCreditRequest } from "
 import type { Annotation, GithubOps } from "./github-ops.ts";
 import type { EditPlan, PlannedEdit, Planner } from "./llm.ts";
 import { buildOpportunities, type RadarInputs } from "./radar.ts";
+import { ReleaseOperator, type Publisher, type ReleaseStore } from "./release.ts";
 
 export const RUNNABLE = [
   "queued",
@@ -96,7 +97,7 @@ export type SessionRow = {
   metadata: Record<string, any>;
 };
 
-export interface Store {
+export interface Store extends ReleaseStore {
   ownerId(): Promise<string>;
   claim(workerId: string, limit: number): Promise<TaskRow[]>;
   /** Fenced write: only succeeds while `leaseToken` still owns the task. */
@@ -154,6 +155,12 @@ export type EngineDeps = {
   now?: () => Date;
   budgetMs?: number;
   forceRadar?: boolean;
+  /** The gated release operator (see release.ts). Omitted = no releases this tick. */
+  releases?: {
+    servedCommit: () => Promise<string | null>;
+    publisher: Publisher | null;
+    enabled?: boolean;
+  };
 };
 
 type StepResult = {
@@ -299,6 +306,7 @@ export class Engine {
     completed: 0,
     errors: 0,
     radar: null as null | Record<string, unknown>,
+    release: null as null | Record<string, unknown>,
     finalized: [] as string[],
     lease_lost: 0,
   };
@@ -328,6 +336,20 @@ export class Engine {
       if (!claimed.length) break;
       this.report.claimed += claimed.length;
       await Promise.all(claimed.map((task) => this.runTask(task)));
+    }
+    if (this.d.github && this.d.releases && this.timeLeft() > 10_000) {
+      try {
+        this.report.release = await new ReleaseOperator({
+          store: this.d.store,
+          github: this.d.github,
+          servedCommit: this.d.releases.servedCommit,
+          publisher: this.d.releases.publisher,
+          now: this.now,
+          enabled: this.d.releases.enabled !== false,
+        }).run(owner);
+      } catch (error: any) {
+        this.report.release = { error: String(error?.message ?? error).slice(0, 300) };
+      }
     }
     await this.finalizeSessions(owner);
     return this.report;

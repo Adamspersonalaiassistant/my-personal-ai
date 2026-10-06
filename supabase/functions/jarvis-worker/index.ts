@@ -4,6 +4,10 @@ import { Engine } from "./engine.ts";
 import { GithubOps } from "./github-ops.ts";
 import { OpenAiPlanner } from "./llm.ts";
 import { SupabaseStore } from "./store-supabase.ts";
+import { lovablePublisher, servedCommitFrom } from "./release.ts";
+
+const PUBLISHED_URL = "https://emery-personal-ai.lovable.app";
+const LOVABLE_PROJECT_ID = "9d966392-55bb-436a-bf8b-bf2dee556f11";
 
 // JARVIS background engineering worker. Invoked by ONE cron job
 // (jarvis-worker-tick → jarvis_kick_worker) or an explicit kick. Authenticated
@@ -53,6 +57,17 @@ Deno.serve(async (request) => {
     workerId: `edge-${crypto.randomUUID().slice(0, 8)}`,
     budgetMs: 110_000,
     forceRadar: String(body?.source ?? "").startsWith("radar"),
+    releases: {
+      servedCommit: () => servedCommitFrom(PUBLISHED_URL, fetch),
+      // Lovable's publish API needs a Business plan key; without it JARVIS asks Adam to tap Publish.
+      publisher: lovablePublisher(
+        Deno.env.get("JARVIS_LOVABLE_API_KEY") || null,
+        LOVABLE_PROJECT_ID,
+        fetch,
+      ),
+      // Kill switch: set JARVIS_RELEASE_OPERATOR=off in Edge Function secrets to stop all releases.
+      enabled: Deno.env.get("JARVIS_RELEASE_OPERATOR") !== "off",
+    },
   });
 
   const work = engine.tick().then(

@@ -8,6 +8,7 @@
 // 4. Record a jarvis_tool runtime event as the execution receipt.
 // Credentials stay in process.env and are never placed in results.
 
+import { EMERY_PUBLISHED_URL } from "./build-info.ts";
 import { runCanonicalEmeryEvaluations } from "../emery/evaluation-runner.ts";
 import { describeCapability, searchCapabilities } from "./capability-catalog.ts";
 import { createEdgeGithubFetcher, edgeGithubStatus } from "./edge-transport.ts";
@@ -303,6 +304,8 @@ async function run(name: string, args: Record<string, any>, ctx: GatewayContext)
       return approveTasks(ctx, args);
     case "jarvis.supersede_batch":
       return supersedeBatch(ctx, args);
+    case "jarvis.approve_release":
+      return approveRelease(ctx, args);
     case "jarvis.update_task":
       return updateTask(ctx, args);
     case "jarvis.record_knowledge":
@@ -718,6 +721,92 @@ async function approveTasks(ctx: GatewayContext, args: Record<string, any>) {
     note: targets.length
       ? `${targets.length} task(s) approved. The worker accepts them into today's production intake (${state.DAILY_TASK_CAPACITY}/day) as capacity allows.`
       : "No matching proposed tasks.",
+  };
+}
+
+const RELEASE_APPROVAL_TTL_MS = 60 * 60_000;
+
+/**
+ * Adam approved a release. Bind the approval to ONE candidate: its PR number,
+ * exact head sha (which must still be the commit JARVIS tested), the task and the
+ * production commit right now. The worker's release operator performs the release
+ * and rechecks every one of these; if the PR moves, the approval is void.
+ */
+async function approveRelease(ctx: GatewayContext, args: Record<string, any>) {
+  if (!ctx.approvals.releaseApproved)
+    throw new PolicyError(
+      "Adam has not approved a release in this message. Ask: 'Ready for release. Approve it?' and wait for his reply.",
+    );
+  const { data, error } = await ctx.db
+    .from("jarvis_engineering_tasks")
+    .select("id,title,status,pr_url,commit_sha,is_fixture,metadata")
+    .eq("user_id", ctx.userId)
+    .eq("status", "ready_for_release")
+    .eq("is_fixture", false);
+  if (error) throw new Error(error.message);
+  const prOf = (url: unknown) => Number(/\/pull\/(\d+)/.exec(String(url ?? ""))?.[1] ?? 0);
+  const wanted = Number(args["pr_number"] ?? ctx.approvals.releasePr ?? 0) || null;
+  const pending = ((data ?? []) as any[]).filter(
+    (t) =>
+      prOf(t.pr_url) &&
+      ![
+        "merged",
+        "awaiting_deploy",
+        "awaiting_publish",
+        "publishing",
+        "verified",
+        "stable",
+        "released_no_deploy",
+      ].includes(String(t.metadata?.release?.state ?? "")),
+  );
+  const matches = wanted ? pending.filter((t) => prOf(t.pr_url) === wanted) : pending;
+  if (matches.length === 0)
+    throw new PolicyError(
+      wanted
+        ? `PR #${wanted} is not a ready candidate.`
+        : "There is no candidate waiting for release.",
+    );
+  if (matches.length > 1)
+    throw new PolicyError(
+      `Several candidates are ready (${matches.map((t) => `#${prOf(t.pr_url)} ${t.title}`).join("; ")}). Ask Adam which PR number to approve.`,
+    );
+  const task = matches[0]!;
+  const pr = await createGithubClient(ctx).getPr(prOf(task.pr_url));
+  if (pr.state !== "open" || pr.merged) throw new PolicyError(`PR #${pr.number} is not open.`);
+  if (!pr.headRef.startsWith("jarvis/") || pr.baseRef !== "main")
+    throw new PolicyError("Only jarvis/* candidates targeting main can be released.");
+  if (pr.headSha !== task.commit_sha)
+    throw new PolicyError(
+      `PR #${pr.number} changed since JARVIS tested it (head ${pr.headSha.slice(0, 7)} vs tested ${String(task.commit_sha).slice(0, 7)}). It needs a fresh test run before approval.`,
+    );
+  const served = await state.observeServedBuild(EMERY_PUBLISHED_URL, ctx.fetcher ?? fetch);
+  if (!served.commit)
+    throw new PolicyError(
+      "Production did not report its commit, so a release cannot be bound to it.",
+    );
+  const now = Date.now();
+  const approval = {
+    pr: pr.number,
+    head_sha: pr.headSha,
+    task_id: task.id,
+    production_base: served.commit,
+    approved_at: new Date(now).toISOString(),
+    expires_at: new Date(now + RELEASE_APPROVAL_TTL_MS).toISOString(),
+    source_ref: ctx.sourceRef ?? null,
+  };
+  const { data: ok, error: rpcError } = await ctx.db.rpc("jarvis_set_release_approval", {
+    p_task: task.id,
+    p_approval: approval,
+  });
+  if (rpcError) throw new Error(rpcError.message);
+  if (ok !== true) throw new PolicyError("The candidate is no longer ready for release.");
+  return {
+    approved: true,
+    pr: pr.number,
+    head: pr.headSha.slice(0, 7),
+    production: served.commit.slice(0, 7),
+    expires_at: approval.expires_at,
+    note: "Approval recorded for this exact commit. The release operator (runs every 2 minutes) re-checks CI, the release gate and that nothing changed, then merges, deploys and verifies production, and sends one notification. If the PR changes, I will ask you again.",
   };
 }
 

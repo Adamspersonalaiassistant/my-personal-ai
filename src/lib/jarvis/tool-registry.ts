@@ -519,6 +519,18 @@ export const JARVIS_TOOLS: JarvisToolDefinition[] = [
     },
   }),
   tool({
+    name: "jarvis.approve_release",
+    family: "jarvis",
+    risk: "REVERSIBLE_WRITE",
+    description:
+      "Record Adam's approval to release ONE ready candidate (only when his own message says 'Approve it' / 'Approve PR N' / 'Ship that'). The approval is bound to that PR's exact head commit and the current production commit and expires in an hour or if the PR changes. This does NOT merge: the release operator in the durable worker re-checks CI, the release gate and the pinned commit, merges, deploys and verifies. Never merge by any other means.",
+    keywords: ["approve", "release", "ship", "merge", "publish", "candidate", "pr"],
+    parameters: {
+      type: "object",
+      properties: { pr_number: num("PR number; omit when exactly one candidate is ready") },
+    },
+  }),
+  tool({
     name: "jarvis.supersede_batch",
     family: "jarvis",
     risk: "REVERSIBLE_WRITE",
