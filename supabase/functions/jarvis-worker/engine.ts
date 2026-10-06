@@ -517,7 +517,8 @@ export class Engine {
     const others = (await this.d.store.tasks({ userId: task.user_id, sinceIso: since })).filter(
       (o) =>
         o.id !== task.id &&
-        o.status !== "cancelled" &&
+        // A failed or cancelled task cannot absorb new work: a re-run must execute.
+        !["cancelled", "failed"].includes(o.status) &&
         !o.merged_into &&
         o.created_at <= task.created_at,
     );

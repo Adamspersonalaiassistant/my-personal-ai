@@ -849,6 +849,33 @@ await check(
   },
 );
 
+await check("a re-run of a failed task executes instead of merging into the failure", async () => {
+  const store = new MemoryStore();
+  const failed = store.addTask({
+    title: "Run 2 fixture A2: controlled source change",
+    status: "failed",
+    task_spec: { kind: "diagnostic" },
+  });
+  const rerun = store.addTask({
+    title: "Run 2 fixture B2: controlled source change",
+    task_spec: { kind: "diagnostic" },
+  });
+  const twin = store.addTask({
+    title: "Run 2 fixture B2: controlled source change",
+    task_spec: { kind: "diagnostic" },
+  });
+  await drive(store, null, new FakePlanner(), 3);
+  const row = (id) => store.taskRows.find((r) => r.id === id);
+  assert.equal(row(rerun.id).merged_into, null);
+  assert.equal(row(rerun.id).status, "completed");
+  assert.equal(
+    row(twin.id).merged_into,
+    rerun.id,
+    "a genuine duplicate of the open re-run still merges",
+  );
+  assert.equal(row(failed.id).status, "failed");
+});
+
 await check("dependency on a failed task blocks the dependent instead of running it", async () => {
   const store = new MemoryStore();
   const a = store.addTask({
