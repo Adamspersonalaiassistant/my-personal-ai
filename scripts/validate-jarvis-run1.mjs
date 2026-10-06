@@ -994,4 +994,26 @@ await check(
   },
 );
 
+const { jarvisVoiceProfile, jarvisRealtimeInstructions, DEFAULT_JARVIS_VOICE } =
+  await import("../src/lib/jarvis/voice.ts");
+
+await check(
+  "Run 2 voice: JARVIS has its own persistent voice, never Emery's, and routes speech into the shared JARVIS thread",
+  () => {
+    assert.equal(jarvisVoiceProfile(null, "shimmer").voice, DEFAULT_JARVIS_VOICE.voice);
+    assert.notEqual(jarvisVoiceProfile(null, "shimmer").voice, "shimmer");
+    // Even if Emery's voice later becomes JARVIS's default, they stay distinct.
+    assert.notEqual(jarvisVoiceProfile(null, "cedar").voice, "cedar");
+    const stored = jarvisVoiceProfile({ voice_profile: { voice: "ash", speed: 1.05 } }, "shimmer");
+    assert.equal(stored.voice, "ash");
+    assert.equal(stored.speed, 1.05);
+    assert.equal(jarvisVoiceProfile({ voice_profile: { voice: "bogus", speed: 9 } }).speed, 1);
+    const text = jarvisRealtimeInstructions(DEFAULT_JARVIS_VOICE, "STATE");
+    assert.match(text, /British-English/);
+    assert.match(text, /never imitate any actor/i);
+    assert.match(text, /jarvis_turn/);
+    assert.match(text, /You are NOT Emery/);
+  },
+);
+
 console.log(`JARVIS Run 1 end-to-end harness: complete (${passed} checks).`);
