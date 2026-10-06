@@ -1180,6 +1180,7 @@ function memoryDb(seed = {}) {
       const builder = {
         select: () => builder,
         eq: (k, v) => (filters.push((r) => get(r, k) === v), builder),
+        is: (k, v) => (filters.push((r) => (get(r, k) ?? null) === v), builder),
         in: (k, v) => (filters.push((r) => v.includes(get(r, k))), builder),
         gte: () => builder,
         or: () => builder,
@@ -1228,6 +1229,10 @@ function memoryDb(seed = {}) {
         return { data: matching()[0] ?? null, error: null };
       }
       function many() {
+        if (mode === "update") {
+          for (const r of matching()) Object.assign(r, payload);
+          return { data: null, error: null };
+        }
         if (mode !== "select") return { data: null, error: null };
         const rows = matching();
         if (desc) rows.reverse();
@@ -1463,6 +1468,367 @@ await check(
       "t-half-0001",
     );
     assert.ok(half.user && !half.agent);
+  },
+);
+
+// ------------------------------------------------------------------------
+// Production capacity accounting + task approval semantics.
+// ------------------------------------------------------------------------
+
+const state = await import("../src/lib/jarvis/state.ts");
+const { assessTaskApproval, assessBatchReplacement } = await import("../src/lib/jarvis/policy.ts");
+const { countsTowardCapacity, easternDate: easternToday } =
+  await import("../src/lib/jarvis/state.ts");
+
+const NOW = new Date().toISOString();
+const TODAY = easternToday();
+const YESTERDAY = easternToday(new Date(Date.now() - 36 * 3600_000));
+const session = (id, date) => ({
+  id,
+  user_id: "u1",
+  session_date: date,
+  status: "completed",
+  intake_limit: 50,
+  accepted_count: 0,
+  updated_at: NOW,
+  created_at: NOW,
+});
+const trow = (n, over = {}) => ({
+  id: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
+  user_id: "u1",
+  title: `Task ${n} ${over.tag ?? ""}`,
+  status: "queued",
+  priority: 3,
+  session_id: null,
+  is_fixture: false,
+  approval_state: "approved",
+  batch_id: null,
+  merged_into: null,
+  attempt_count: 0,
+  lease_token: null,
+  metadata: {},
+  created_at: NOW,
+  updated_at: NOW,
+  ...over,
+});
+const gwCtx = (db, approvals = {}) => ({
+  db,
+  userId: "u1",
+  agentId: "a1",
+  approvals: { paidCreditApproved: false, highRiskApproved: false, ...approvals },
+  openAiKey: null,
+  researchModel: "m",
+});
+const statusOf = (db) => state.getJarvisStatus(db, "u1");
+
+await check(
+  "capacity: a 50-task load-test fixture batch reads 0/50 and stays visible as historical validation evidence",
+  async () => {
+    const fixtures = Array.from({ length: 50 }, (_, i) =>
+      trow(i + 1, {
+        session_id: "s-fix",
+        is_fixture: true,
+        status: "completed",
+        completed_at: NOW,
+      }),
+    );
+    const db = memoryDb({
+      jarvis_engineering_sessions: [{ ...session("s-fix", TODAY), accepted_count: 50 }],
+      jarvis_engineering_tasks: fixtures,
+    });
+    const s = await statusOf(db);
+    assert.equal(s.accepted_today, 0, "fixtures never consume production capacity");
+    assert.equal(s.capacity, 50);
+    assert.equal(s.validation_fixtures.total, 50);
+    assert.equal(s.validation_fixtures.accepted_today, 50);
+    assert.equal(s.validation_fixtures.counts_toward_capacity, false);
+    assert.equal(s.recently_completed.length, 0, "fixture completions are not production work");
+    assert.equal(s.ready_for_more_tasks.ready, true);
+    assert.match(s.ready_for_more_tasks.note, /0 of 50 production tasks accepted today/);
+    assert.doesNotMatch(s.ready_for_more_tasks.note, /intake is full/);
+    assert.equal(db.tables.jarvis_engineering_tasks.length, 50, "history preserved");
+  },
+);
+
+await check(
+  "capacity: proposed tasks = 0/50; approved + accepted = counted; cancelled, superseded, deferred, merged and unaccepted are not",
+  async () => {
+    const proposed = Array.from({ length: 20 }, (_, i) =>
+      trow(i + 1, { approval_state: "proposed", batch_id: "b-prop" }),
+    );
+    const sessions = [session("s1", TODAY)];
+    let db = memoryDb({
+      jarvis_engineering_sessions: sessions,
+      jarvis_engineering_tasks: proposed,
+    });
+    let s = await statusOf(db);
+    assert.equal(s.accepted_today, 0, "20 proposed = 0/50");
+    assert.equal(s.proposed_count, 20);
+    assert.match(s.ready_for_more_tasks.note, /0 of 50 production tasks accepted today/);
+    assert.match(s.ready_for_more_tasks.note, /20 proposed task\(s\) ready for your approval/);
+    assert.equal(s.status_counts.queued, 0, "proposals are not the production queue");
+
+    // Adam approves; the worker accepts them.
+    const accepted = proposed.map((t) => ({ ...t, approval_state: "approved", session_id: "s1" }));
+    db = memoryDb({ jarvis_engineering_sessions: sessions, jarvis_engineering_tasks: accepted });
+    s = await statusOf(db);
+    assert.equal(s.accepted_today, 20, "approved = 20/50");
+    assert.match(s.ready_for_more_tasks.note, /20 of 50 production tasks accepted today/);
+
+    // 5 cancelled → no longer counted (documented policy). Plus the other non-counting kinds.
+    const mixed = accepted.map((t, i) =>
+      i < 5
+        ? { ...t, status: "cancelled" }
+        : i === 5
+          ? { ...t, approval_state: "superseded", status: "cancelled" }
+          : i === 6
+            ? { ...t, status: "deferred" }
+            : i === 7
+              ? { ...t, merged_into: accepted[8].id }
+              : i === 8
+                ? { ...t, session_id: null }
+                : t,
+    );
+    db = memoryDb({ jarvis_engineering_sessions: sessions, jarvis_engineering_tasks: mixed });
+    s = await statusOf(db);
+    assert.equal(s.accepted_today, 11);
+    assert.equal(mixed.filter(countsTowardCapacity).length, 11);
+  },
+);
+
+await check(
+  "capacity: a genuinely full real day still reports full; midnight Eastern rollover starts at 0/50 with history intact",
+  async () => {
+    const full = Array.from({ length: 50 }, (_, i) =>
+      trow(i + 1, { session_id: "s-today", status: "completed" }),
+    );
+    let s = await statusOf(
+      memoryDb({
+        jarvis_engineering_sessions: [session("s-today", TODAY)],
+        jarvis_engineering_tasks: full,
+      }),
+    );
+    assert.equal(s.accepted_today, 50);
+    assert.match(s.ready_for_more_tasks.note, /intake is full/);
+    // The same tasks belong to yesterday's session: today starts empty.
+    const db = memoryDb({
+      jarvis_engineering_sessions: [session("s-yday", YESTERDAY)],
+      jarvis_engineering_tasks: full.map((t) => ({ ...t, session_id: "s-yday" })),
+    });
+    s = await statusOf(db);
+    assert.equal(s.accepted_today, 0);
+    assert.equal(s.ready_for_more_tasks.ready, true);
+    assert.equal(db.tables.jarvis_engineering_tasks.length, 50, "history preserved");
+  },
+);
+
+await check("approval semantics: ideas propose, explicit execute/approve schedules", () => {
+  for (const proposeOnly of [
+    "What should the first 20 improvements be?",
+    "Give me 20 ideas for Emery",
+    "I have a prompt for you instead of the 50 task plan",
+    "Don't execute these yet",
+    "Do not run them until I approve",
+  ])
+    assert.equal(assessTaskApproval(proposeOnly).approved, false, proposeOnly);
+  for (const approve of [
+    "I approve those 20. Execute them.",
+    "Execute these 20 tasks",
+    "Schedule these",
+    "Proceed with this batch",
+    "Go ahead",
+  ])
+    assert.equal(assessTaskApproval(approve).approved, true, approve);
+  assert.equal(
+    assessBatchReplacement("I have a prompt for you instead of the 50 task plan").replace,
+    true,
+  );
+  assert.equal(assessBatchReplacement("What should the first 20 improvements be?").replace, false);
+});
+
+await check(
+  "approval: JARVIS-created tasks are PROPOSED (0/50) until Adam approves; approve_tasks needs his explicit approval",
+  async () => {
+    const db = memoryDb({
+      jarvis_engineering_sessions: [session("s1", TODAY)],
+      jarvis_engineering_tasks: [],
+    });
+    const tasks = Array.from({ length: 20 }, (_, i) => ({
+      title: `Improve Emery area ${i + 1}`,
+      objective: "Diagnose and report",
+      kind: "diagnostic",
+      checks: [{ type: "db_count", table: "emery_runtime_events", days: 7 }],
+    }));
+    const made = await executeJarvisTool("jarvis.create_tasks", { tasks }, gwCtx(db));
+    assert.equal(made.ok, true);
+    assert.equal(made.result.created, 20);
+    assert.equal(made.result.approval_state, "proposed");
+    assert.ok(db.tables.jarvis_engineering_tasks.every((t) => t.approval_state === "proposed"));
+    assert.ok(db.tables.jarvis_engineering_tasks.every((t) => t.batch_id === made.result.batch_id));
+    let s = await statusOf(db);
+    assert.equal(s.accepted_today, 0);
+    assert.equal(s.proposed_count, 20);
+
+    const refused = await executeJarvisTool(
+      "jarvis.approve_tasks",
+      { batch_id: made.result.batch_id },
+      gwCtx(db),
+    );
+    assert.equal(refused.ok, false, "the model cannot approve on its own");
+    assert.ok(db.tables.jarvis_engineering_tasks.every((t) => t.approval_state === "proposed"));
+
+    const approved = await executeJarvisTool(
+      "jarvis.approve_tasks",
+      { batch_id: made.result.batch_id },
+      gwCtx(db, { tasksApproved: true }),
+    );
+    assert.equal(approved.ok, true);
+    assert.equal(approved.result.approved, 20);
+    assert.ok(db.tables.jarvis_engineering_tasks.every((t) => t.approval_state === "approved"));
+    s = await statusOf(db);
+    assert.equal(s.proposed_count, 0);
+    assert.equal(s.accepted_today, 0, "approved but not yet accepted by the worker");
+
+    // "Execute these" in the same message creates approved tasks directly.
+    const direct = await executeJarvisTool(
+      "jarvis.create_tasks",
+      {
+        tasks: [
+          {
+            title: "Direct approved task",
+            kind: "diagnostic",
+            checks: [{ type: "db_count", table: "emery_runtime_events", days: 7 }],
+          },
+        ],
+      },
+      gwCtx(db, { tasksApproved: true }),
+    );
+    assert.equal(direct.result.approval_state, "approved");
+  },
+);
+
+await check(
+  "batch replacement: a proposed 50-task plan is superseded before approval, the new batch is the only active one, 0/50 throughout",
+  async () => {
+    const old = Array.from({ length: 50 }, (_, i) =>
+      trow(i + 1, { approval_state: "proposed", batch_id: "11111111-1111-4111-8111-111111111111" }),
+    );
+    const db = memoryDb({
+      jarvis_engineering_sessions: [session("s1", TODAY)],
+      jarvis_engineering_tasks: old,
+    });
+    assert.equal((await statusOf(db)).accepted_today, 0);
+    const noIntent = await executeJarvisTool("jarvis.supersede_batch", {}, gwCtx(db));
+    assert.equal(noIntent.ok, false, "never supersede without Adam saying so");
+    const replaced = await executeJarvisTool(
+      "jarvis.supersede_batch",
+      {},
+      gwCtx(db, { batchReplacement: true }),
+    );
+    assert.equal(replaced.ok, true);
+    assert.equal(replaced.result.superseded, 50);
+    assert.deepEqual(replaced.result.needs_decision, []);
+    assert.ok(
+      db.tables.jarvis_engineering_tasks.every(
+        (t) => t.status === "cancelled" && t.approval_state === "superseded",
+      ),
+      "old batch superseded, audit rows kept",
+    );
+    const next = await executeJarvisTool(
+      "jarvis.create_tasks",
+      {
+        tasks: [
+          {
+            title: "Brand new prompt task",
+            kind: "diagnostic",
+            checks: [{ type: "db_count", table: "emery_runtime_events", days: 7 }],
+          },
+        ],
+      },
+      gwCtx(db),
+    );
+    const s = await statusOf(db);
+    assert.equal(s.proposed_count, 1, "only the new batch is active");
+    assert.equal(s.accepted_today, 0, "replacement needs no capacity slots");
+    assert.equal(db.tables.jarvis_engineering_tasks.length, 51, "history preserved");
+    assert.ok(next.result.batch_id);
+  },
+);
+
+await check(
+  "batch replacement: an approved-but-unstarted batch is superseded safely; work in progress is never cancelled silently; no duplicate execution",
+  async () => {
+    const BATCH = "22222222-2222-4222-8222-222222222222";
+    const rows = [
+      trow(1, { approval_state: "approved", batch_id: BATCH }),
+      trow(2, {
+        approval_state: "approved",
+        batch_id: BATCH,
+        session_id: "s1",
+        status: "validating",
+        attempt_count: 1,
+      }),
+      trow(3, {
+        approval_state: "approved",
+        batch_id: BATCH,
+        session_id: "s1",
+        status: "building",
+        branch_name: "jarvis/x",
+        lease_token: "lease",
+        attempt_count: 2,
+      }),
+    ];
+    const db = memoryDb({
+      jarvis_engineering_sessions: [session("s1", TODAY)],
+      jarvis_engineering_tasks: rows,
+    });
+    const before = await statusOf(db);
+    assert.equal(before.accepted_today, 2);
+    const result = await executeJarvisTool(
+      "jarvis.supersede_batch",
+      { batch_id: BATCH },
+      gwCtx(db, { batchReplacement: true }),
+    );
+    assert.equal(result.result.superseded, 2);
+    assert.equal(result.result.needs_decision.length, 1);
+    assert.equal(result.result.needs_decision[0].status, "building");
+    const byId = Object.fromEntries(db.tables.jarvis_engineering_tasks.map((t) => [t.id, t]));
+    assert.equal(byId[rows[0].id].status, "cancelled");
+    assert.equal(byId[rows[1].id].approval_state, "superseded");
+    assert.equal(
+      byId[rows[2].id].status,
+      "building",
+      "in-progress work is left for Adam to decide",
+    );
+    const after = await statusOf(db);
+    assert.equal(
+      after.accepted_today,
+      1,
+      "superseded tasks stop counting; the running one still counts",
+    );
+  },
+);
+
+await check(
+  "worker safety: the claim function and accept function only handle approved, class-separated tasks",
+  async () => {
+    const { readFileSync } = await import("node:fs");
+    const sql = readFileSync(
+      new URL(
+        "../supabase/migrations/20261006190000_jarvis_production_capacity_accounting.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    assert.match(sql, /t\.approval_state = 'approved'/, "claim excludes proposed/superseded");
+    assert.match(
+      sql,
+      /t\.is_fixture = v_fixture/,
+      "fixtures and production are counted separately",
+    );
+    assert.match(sql, /status not in \('cancelled','deferred'\)/);
+    assert.match(sql, /merged_into is null/);
+    assert.doesNotMatch(sql, /drop table|delete from|truncate/i, "no history is deleted");
   },
 );
 

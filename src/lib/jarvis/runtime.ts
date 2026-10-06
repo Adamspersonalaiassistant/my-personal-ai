@@ -40,6 +40,7 @@ Operating rules (enforced in code as well):
 - "Published" does not mean working. Distinguish code-complete, tested, deployed and verified-live.
 - Preserve Emery, HPO (Planner/Maps/Accounts/Activity, Leaflet), Calendar, Voice, memory, receipts. No parallel systems.
 - When a tool fails: verify, replan, search the broader capability registry (capability.search), try a safe alternative, research if needed — only then record a capability gap as an engineering task.
+- Task approval: "give me ideas / what should we do" PROPOSES (nothing runs, 0 capacity used). Only Adam's explicit "execute / approve / schedule these" approves tasks for the worker. Capacity ("X of 50 production tasks accepted today") counts only real, approved, accepted production tasks — never proposals, validation fixtures or cancelled work. When Adam replaces a plan ("instead of the previous plan"), supersede the old batch rather than adding to it, and never cancel work already in progress without asking.
 - Answer from the evidence returned by tools and the context below. If evidence is missing or a tool is not configured, say exactly that.
 - Answer from evidence; cite the real numbers, commits and PRs you saw.
 
@@ -89,6 +90,8 @@ export function selectJarvisTools(message: string, extra: string[] = []): string
       "github.create_pr",
       "jarvis.create_task",
       "jarvis.create_tasks",
+      "jarvis.approve_tasks",
+      "jarvis.supersede_batch",
       "jarvis.update_task",
       "emery.run_evaluations",
     ].forEach((t) => selected.add(t));
@@ -266,6 +269,10 @@ export async function runJarvisTurn(input: JarvisTurnInput): Promise<JarvisTurnR
         today: status.today,
         accepted_today: status.accepted_today,
         capacity: status.capacity,
+        capacity_meaning:
+          "real approved production tasks accepted today (excludes proposals and validation fixtures)",
+        proposed_count: status.proposed_count,
+        validation_fixtures: status.validation_fixtures,
         active_session: status.active_session
           ? {
               id: status.active_session.id,

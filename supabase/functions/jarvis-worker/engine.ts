@@ -76,9 +76,14 @@ export type TaskRow = {
   lease_token: string | null;
   next_attempt_at: string;
   is_fixture: boolean;
+  /** proposed | approved | superseded. Only approved tasks are ever claimed or counted. */
+  approval_state?: string;
   created_at: string;
   completed_at: string | null;
 };
+
+/** Read-only radar diagnostics at or above this confidence may run without Adam approving them first. */
+export const RADAR_AUTO_CONFIDENCE = 0.8;
 
 export type SessionRow = {
   id: string;
@@ -158,6 +163,17 @@ type StepResult = {
   wait?: number;
   note: string;
 };
+
+/** Mirrors src/lib/jarvis/state.ts countsTowardCapacity (and the jarvis_accept_task SQL). */
+export function countsTowardCapacity(t: TaskRow) {
+  return Boolean(
+    t.session_id &&
+    !t.is_fixture &&
+    (t.approval_state ?? "approved") === "approved" &&
+    !["cancelled", "deferred"].includes(t.status) &&
+    !t.merged_into,
+  );
+}
 
 export function easternDate(d: Date) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -1059,7 +1075,18 @@ export class Engine {
           },
         },
         is_fixture: opp.fixture,
-      });
+        // Radar discoveries are PROPOSALS unless they are fixtures (validation) or
+        // high-confidence read-only diagnostics that safe-autonomy policy already
+        // allows to run. Low-confidence findings never consume production slots.
+        approval_state:
+          opp.fixture || (opp.kind !== "code_change" && opp.confidence >= RADAR_AUTO_CONFIDENCE)
+            ? "approved"
+            : "proposed",
+        approved_at:
+          opp.fixture || (opp.kind !== "code_change" && opp.confidence >= RADAR_AUTO_CONFIDENCE)
+            ? this.now().toISOString()
+            : null,
+      } as Partial<TaskRow>);
       if ("id" in inserted) created.push(inserted.id);
       else skipped.push(opp.dedupe_key);
     }
@@ -1100,6 +1127,7 @@ export class Engine {
       ).length;
       const metrics = {
         accepted: tasks.length,
+        fixture_tasks: tasks.filter((t) => t.is_fixture).length,
         completed,
         ready_for_release: ready,
         blocked,
@@ -1133,7 +1161,8 @@ export class Engine {
         session.id,
         {
           status: blocked || failed ? "completed_with_blockers" : "completed",
-          accepted_count: tasks.length,
+          // Production intake only: validation fixtures are evidence, not capacity.
+          accepted_count: tasks.filter(countsTowardCapacity).length,
           completed_count: completed,
           ready_for_release_count: ready,
           blocked_count: blocked,

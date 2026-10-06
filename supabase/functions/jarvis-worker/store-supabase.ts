@@ -9,7 +9,7 @@ import type { SessionRow, Store, TaskRow } from "./engine.ts";
 type Db = any;
 
 const TASK_COLUMNS =
-  "id,user_id,session_id,source_type,source_ref,title,objective,why_it_matters,priority,risk_level,status,branch_name,commit_sha,pr_url,test_results,result_summary,blocker,attempt_count,task_spec,stage_state,metadata,dedupe_key,depends_on,merged_into,lease_token,next_attempt_at,is_fixture,created_at,completed_at";
+  "id,user_id,session_id,source_type,source_ref,title,objective,why_it_matters,priority,risk_level,status,branch_name,commit_sha,pr_url,test_results,result_summary,blocker,attempt_count,task_spec,stage_state,metadata,dedupe_key,depends_on,merged_into,lease_token,next_attempt_at,is_fixture,approval_state,created_at,completed_at";
 
 function must(result: { data: any; error: any }, what: string): any {
   if (result.error) throw new Error(`${what}: ${result.error.message ?? result.error}`);
@@ -152,10 +152,15 @@ export class SupabaseStore implements Store {
     );
     const ids = (sessions ?? []).map((s: any) => s.id);
     if (!ids.length) return 0;
+    // Real production intake only: fixtures, unapproved, cancelled/deferred and merged rows never count.
     const result = await this.db
       .from("jarvis_engineering_tasks")
       .select("id", { count: "exact", head: true })
-      .in("session_id", ids);
+      .in("session_id", ids)
+      .eq("is_fixture", false)
+      .eq("approval_state", "approved")
+      .not("status", "in", "(cancelled,deferred)")
+      .is("merged_into", null);
     if (result.error) throw new Error(`accepted count: ${result.error.message}`);
     return result.count ?? 0;
   }
