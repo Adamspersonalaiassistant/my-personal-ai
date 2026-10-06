@@ -9,7 +9,17 @@ import {
   loadJarvisMessages,
 } from "@/lib/jarvis/room";
 import { currentBearerToken } from "@/lib/jarvis/request-auth";
-import { jarvisRealtimeInstructions, jarvisVoiceProfile } from "@/lib/jarvis/voice";
+import {
+  DEFAULT_JARVIS_VOICE,
+  isJarvisVoiceId,
+  JARVIS_TEST_PHRASES,
+  JARVIS_VOICE_CANDIDATES,
+  JARVIS_VOICE_VERSION,
+  jarvisPreviewInstructions,
+  jarvisRealtimeInstructions,
+  jarvisVoiceProfile,
+  type JarvisVoiceId,
+} from "@/lib/jarvis/voice";
 import * as jarvisState from "@/lib/jarvis/state";
 import { MODEL_POLICY } from "@/lib/model-policy";
 
@@ -132,7 +142,7 @@ export const createJarvisRealtimeSecret = createServerFn({ method: "POST" })
               type: "function",
               name: "jarvis_turn",
               description:
-                "Send Adam's engineering request to JARVIS's canonical runtime (same thread, knowledge, tools, task state and release self-awareness as typed JARVIS). Returns JARVIS's evidence-based answer to speak.",
+                "Send Adam's request to JARVIS's canonical runtime (same thread, knowledge, tools, task state and release self-awareness as typed JARVIS). Returns JARVIS's full written answer; speak a concise version of it.",
               parameters: {
                 type: "object",
                 additionalProperties: false,
@@ -155,17 +165,120 @@ export const createJarvisRealtimeSecret = createServerFn({ method: "POST" })
     const payload = (await response.json()) as { value?: string; expires_at?: number };
     if (!payload.value)
       return { error: "The voice service returned an invalid session token." } as const;
-    // Persist the voice identity on the JARVIS agent the first time (idempotent).
-    if (!agent.metadata?.voice_profile) {
-      await db
-        .from("agents")
-        .update({ metadata: { ...(agent.metadata ?? {}), voice_profile: profile } })
-        .eq("id", agent.id)
-        .eq("user_id", context.userId);
-    }
+    // Evidence of the configuration actually used. The delivery spec lives in
+    // code; only Adam's explicit audition choice is stored as voice_profile.
+    await db
+      .from("agents")
+      .update({
+        metadata: {
+          ...(agent.metadata ?? {}),
+          voice_last_session: {
+            at: new Date().toISOString(),
+            voice: profile.voice,
+            speed: profile.speed,
+            version: profile.version,
+            selected_by: profile.selected_by,
+          },
+        },
+      })
+      .eq("id", agent.id)
+      .eq("user_id", context.userId);
     return {
       clientSecret: payload.value,
       model: MODEL_POLICY.realtime,
       voice: profile.voice,
     } as const;
+  });
+
+/** Current JARVIS voice and the audition candidates (no provider call). */
+export const getJarvisVoiceSettings = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const db = context.supabase as any;
+    const agent = await ensureJarvisAgent(db, context.userId);
+    const { data: emeryVoice } = await db
+      .from("voice_profiles")
+      .select("base_voice_id")
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    const profile = jarvisVoiceProfile(agent.metadata, emeryVoice?.base_voice_id ?? null);
+    return {
+      voice: profile.voice,
+      selectedBy: profile.selected_by,
+      version: profile.version,
+      candidates: JARVIS_VOICE_CANDIDATES.filter((c) => c.id !== emeryVoice?.base_voice_id).map(
+        (c) => ({ ...c }),
+      ),
+      phrases: [...JARVIS_TEST_PHRASES],
+    };
+  });
+
+/**
+ * Audition one JARVIS candidate voice speaking one fixed test phrase, using the
+ * same delivery instructions as the live session. Text-to-speech preview of the
+ * same built-in voice — close to, but not identical with, Realtime output.
+ */
+export const previewJarvisVoice = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { voice: string; phrase: number }) => {
+    if (!isJarvisVoiceId(input?.voice)) throw new Error("Unknown JARVIS voice candidate.");
+    const phrase = Number(input?.phrase);
+    if (!Number.isInteger(phrase) || phrase < 0 || phrase >= JARVIS_TEST_PHRASES.length)
+      throw new Error("Unknown test phrase.");
+    return { voice: input.voice as JarvisVoiceId, phrase };
+  })
+  .handler(async ({ data }) => {
+    const apiKey = process.env["OPENAI_API_KEY"];
+    if (!apiKey) return { error: "The voice service isn't configured." } as const;
+    const response = await fetch("https://api.openai.com/v1/audio/speech", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: MODEL_POLICY.tts,
+        voice: data.voice,
+        input: JARVIS_TEST_PHRASES[data.phrase],
+        instructions: jarvisPreviewInstructions(),
+        response_format: "mp3",
+        speed: DEFAULT_JARVIS_VOICE.speed,
+      }),
+    });
+    if (!response.ok) {
+      console.error("JARVIS voice preview failed", response.status);
+      return { error: "That preview couldn't be generated. Try again." } as const;
+    }
+    const bytes = Buffer.from(await response.arrayBuffer());
+    return { audio: `data:audio/mpeg;base64,${bytes.toString("base64")}` } as const;
+  });
+
+/** Adam's explicit choice of JARVIS voice. Never touches Emery's voice profile. */
+export const selectJarvisVoice = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { voice: string }) => {
+    if (!isJarvisVoiceId(input?.voice)) throw new Error("Unknown JARVIS voice candidate.");
+    return { voice: input.voice as JarvisVoiceId };
+  })
+  .handler(async ({ data, context }) => {
+    const db = context.supabase as any;
+    const agent = await ensureJarvisAgent(db, context.userId);
+    const { data: emeryVoice } = await db
+      .from("voice_profiles")
+      .select("base_voice_id")
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    if (emeryVoice?.base_voice_id === data.voice)
+      return { error: "That is Emery's voice. JARVIS keeps a separate identity." } as const;
+    const voiceProfile = {
+      voice: data.voice,
+      speed: DEFAULT_JARVIS_VOICE.speed,
+      version: JARVIS_VOICE_VERSION,
+      selected_by: "adam",
+      selected_at: new Date().toISOString(),
+    };
+    const { error } = await db
+      .from("agents")
+      .update({ metadata: { ...(agent.metadata ?? {}), voice_profile: voiceProfile } })
+      .eq("id", agent.id)
+      .eq("user_id", context.userId);
+    if (error) return { error: "Couldn't save the JARVIS voice." } as const;
+    return { voice: data.voice } as const;
   });

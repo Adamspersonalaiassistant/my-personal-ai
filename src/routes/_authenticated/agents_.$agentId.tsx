@@ -12,6 +12,7 @@ import {
   Users,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { AssistantText } from "@/components/AssistantText";
 import { JarvisRoom } from "@/components/JarvisRoom";
 import { getAgentThread, sendAgentMessage } from "@/lib/agent.functions";
 
@@ -341,7 +342,7 @@ function GroupMessage({ message, agentName }: { message: Message; agentName: str
           {time ? <span className="text-[9px] text-muted-foreground/55">{time}</span> : null}
         </div>
         <div
-          className={`whitespace-pre-wrap rounded-[1.45rem] px-4 py-3 text-[15px] leading-6 ${
+          className={`rounded-[1.45rem] px-4 py-3 text-[15px] leading-6 ${
             isUser
               ? "rounded-br-[0.45rem] bg-[linear-gradient(145deg,oklch(0.79_0.17_155),oklch(0.64_0.15_158))] text-primary-foreground shadow-[0_10px_30px_oklch(0.3_0.09_158/0.12)]"
               : isEmery
@@ -349,7 +350,11 @@ function GroupMessage({ message, agentName }: { message: Message; agentName: str
                 : "rounded-tl-[0.45rem] border border-border/50 bg-card/42 text-foreground"
           }`}
         >
-          {message.content}
+          {isUser ? (
+            <span className="whitespace-pre-wrap">{message.content}</span>
+          ) : (
+            <AssistantText text={message.content} />
+          )}
         </div>
       </div>
     </div>

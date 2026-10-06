@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { AssistantText } from "@/components/AssistantText";
 import { EmeryVoiceControl } from "@/components/EmeryVoiceControl";
 import { OperatingContextCard } from "@/components/OperatingContextCard";
 import { EmeryPresence } from "@/components/emery-visual/EmeryPresence";
@@ -80,14 +81,6 @@ const MAX_FILES = 5;
 const CHAT_PAGE_SIZE = 80;
 const BOTTOM_THRESHOLD = 140;
 const PREFILL_KEY = "emery:prefill";
-
-function cleanAssistantText(text: string) {
-  return text
-    .replace(/\*\*/g, "")
-    .replace(/__/g, "")
-    .replace(/^#{1,6}\s+/gm, "")
-    .replace(/`([^`]+)`/g, "$1");
-}
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -631,8 +624,8 @@ function Conversation() {
                               className="emery-blue-brain size-8 object-cover"
                             />
                           </div>
-                          <div className="emery-assistant-message min-w-0 max-w-[calc(100%-2.625rem)] whitespace-pre-wrap break-words rounded-md border border-live/10 px-3 py-2.5 text-[15px] leading-7 text-foreground/95 sm:max-w-[88%]">
-                            {cleanAssistantText(message.text)}
+                          <div className="emery-assistant-message min-w-0 max-w-[calc(100%-2.625rem)] break-words rounded-md border border-live/10 px-3 py-2.5 text-[15px] leading-7 text-foreground/95 sm:max-w-[88%]">
+                            <AssistantText text={message.text} />
                           </div>
                         </div>
                       ),

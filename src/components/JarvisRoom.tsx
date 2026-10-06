@@ -15,6 +15,8 @@ import {
   XCircle,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { AssistantText } from "@/components/AssistantText";
+import { JarvisVoiceAudition } from "@/components/JarvisVoiceAudition";
 import { JarvisVoiceControl } from "@/components/JarvisVoiceControl";
 import { getJarvisRoom, getJarvisStatusPanel, sendJarvisMessage } from "@/lib/jarvis.functions";
 
@@ -266,6 +268,7 @@ export function JarvisRoom() {
                     )}
                 />
               ) : null}
+              <JarvisVoiceAudition />
               {approvals.length ? (
                 <PanelList
                   title="Approval required"
@@ -422,13 +425,17 @@ function RoomBubble({ message }: { message: RoomMessage }) {
           {time ? <span className="text-[9px] text-muted-foreground/55">{time}</span> : null}
         </div>
         <div
-          className={`whitespace-pre-wrap rounded-[1.45rem] px-4 py-3 text-[15px] leading-6 ${
+          className={`rounded-[1.45rem] px-4 py-3 text-[15px] leading-6 ${
             isUser
               ? "rounded-br-[0.45rem] bg-primary text-primary-foreground"
               : `rounded-tl-[0.45rem] border bg-card/42 text-foreground ${message.metadata?.recoverable_error ? "border-destructive/30" : message.metadata?.approval_required ? "border-amber-400/30" : "border-border/50"}`
           }`}
         >
-          {message.content}
+          {isUser ? (
+            <span className="whitespace-pre-wrap">{message.content}</span>
+          ) : (
+            <AssistantText text={message.content} />
+          )}
         </div>
         {!isUser && trace.length ? (
           <div className="mt-1.5 px-1">
