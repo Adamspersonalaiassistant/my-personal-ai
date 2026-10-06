@@ -2,6 +2,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { ASSISTANT_IDENTITY } from "@/lib/assistant-identity";
+import { EMERY_TYPED_FORMAT_POLICY } from "@/lib/response-format-policy";
 import { persistDurableMemoryFromMessage } from "@/lib/chat.functions";
 import { loadHpoAgentContext } from "@/lib/hpo-agent-context";
 import { inferEmeryDomain, domainPrompt, domainMetadata } from "@/lib/emery-domain";
@@ -1758,7 +1759,9 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
               STABLE_RUNTIME_POLICY +
               "\n\nEXECUTION CAPABILITY REGISTRY:\n" +
               executionCapabilityPrompt() +
-              "\n\nCAPABILITY RULE: If Adam asks you to execute something outside the registry's executable actions, say what is not connected instead of implying you performed it. If a recent execution receipt says failed or needs_clarification, do not describe that action as completed.",
+              "\n\nCAPABILITY RULE: If Adam asks you to execute something outside the registry's executable actions, say what is not connected instead of implying you performed it. If a recent execution receipt says failed or needs_clarification, do not describe that action as completed." +
+              // Written replies only: spoken turns keep the Voice contract untouched.
+              (data.source.inputMode === "voice" ? "" : "\n\n" + EMERY_TYPED_FORMAT_POLICY),
           },
           {
             role: "system",
