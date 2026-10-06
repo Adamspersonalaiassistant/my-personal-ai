@@ -29,8 +29,12 @@ export function jarvisVoiceProfile(
   agentMetadata: unknown,
   emeryVoiceId?: string | null,
 ): JarvisVoiceProfile {
-  const stored = (agentMetadata as any)?.voice_profile ?? {};
-  let voice = ALLOWED_VOICES.has(stored.voice) ? stored.voice : DEFAULT_JARVIS_VOICE.voice;
+  type Stored = { voice?: unknown; speed?: unknown; delivery?: unknown; version?: unknown };
+  const stored: Stored = (agentMetadata as { voice_profile?: Stored } | null)?.voice_profile ?? {};
+  let voice: JarvisVoiceProfile["voice"] =
+    typeof stored.voice === "string" && ALLOWED_VOICES.has(stored.voice)
+      ? (stored.voice as JarvisVoiceProfile["voice"])
+      : DEFAULT_JARVIS_VOICE.voice;
   // Keep JARVIS audibly distinct from Emery even if her voice changes later.
   if (emeryVoiceId && voice === emeryVoiceId) voice = voice === "cedar" ? "ash" : "cedar";
   const speed = Number(stored.speed);
