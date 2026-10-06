@@ -1957,6 +1957,17 @@ await check(
       selfEvents: [ev("policy"), ev("policy"), ev("not_configured")],
     });
     assert.equal(refusals.length, 0);
+    const noise = radar.buildOpportunities({
+      events: [],
+      receipts: [],
+      backlog: [],
+      evaluations: [],
+      selfEvents: [1, 2, 3].map(() => ({
+        ...ev("failed"),
+        metadata: { kind: "failed", error: "x", fixture: true },
+      })),
+    });
+    assert.equal(noise.length, 0, "errors from validation fixtures are not self-weaknesses");
   },
 );
 
