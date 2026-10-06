@@ -30,3 +30,15 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment files
+# `.env` is Lovable-managed and holds ONLY public, publishable Supabase client
+# config (URL, project id, publishable key). It stays tracked so Lovable builds
+# keep working. Never add server secrets to it — server secrets belong in the
+# Lovable/Supabase secret store. Every other .env variant is ignored.
+.env.*
+!.env.example
+.env.local
+.env.*.local
+*.pem
+*.key

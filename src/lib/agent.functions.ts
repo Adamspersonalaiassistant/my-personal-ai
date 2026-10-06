@@ -4,6 +4,8 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { ASSISTANT_IDENTITY } from "@/lib/assistant-identity";
 import { scopeAgentContext, selectHpoDelegates, shouldResearchWithWeb } from "@/lib/agent-policy";
 import { loadHpoAgentContext } from "@/lib/hpo-agent-context";
+import { handleJarvisTurn, isJarvisAgent } from "@/lib/jarvis/room";
+import { currentBearerToken } from "@/lib/jarvis/request-auth";
 
 type AgentRow = {
   id: string;
@@ -742,6 +744,28 @@ export const sendAgentMessage = createServerFn({ method: "POST" })
     if (error || !rawAgent) return { error: "That agent isn't available." } as const;
     const agent = rawAgent as AgentRow;
     if (agent.is_internal) return { error: "HPO subagents report through HPO Agent." } as const;
+    // The JARVIS room is Adam ↔ JARVIS only: no Emery commander reply.
+    if (isJarvisAgent(agent)) {
+      const turn = await handleJarvisTurn(
+        db,
+        context.userId,
+        agent,
+        data.message,
+        await currentBearerToken(),
+      );
+      if (turn.error)
+        return {
+          error: turn.error,
+          userMessage: turn.userMessage,
+          agentMessage: turn.agentMessage,
+          emeryMessage: null,
+        } as const;
+      return {
+        userMessage: turn.userMessage,
+        agentMessage: turn.agentMessage,
+        emeryMessage: null,
+      } as const;
+    }
 
     const thread = await getOrCreateThread(db, context.userId, agent);
     const userRow = await saveAgentMessage(

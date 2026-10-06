@@ -28,6 +28,9 @@ import { prepareEmeryRequestRouting } from "@/lib/emery/request-routing";
 import { emptyActionContext } from "@/lib/emery/context-load-policy";
 import { buildChatSmartMemoryContext } from "@/lib/emery/chat-smart-memory";
 import { recordTurnEvaluation } from "@/lib/emery/turn-evaluation";
+import { buildEmerySelfAwarenessBlock, isJarvisSelfAwarenessQuestion } from "@/lib/jarvis/runtime";
+import { currentBearerToken } from "@/lib/jarvis/request-auth";
+import { ingestKnowledgeFromMessage } from "@/lib/jarvis/tool-gateway";
 
 const STABLE_RUNTIME_POLICY = `EXECUTION POLICY:
 - There is one Emery across chat, capture, Shortcut, Voice, Calendar, HPO, memory, and future integrations.
@@ -1714,6 +1717,29 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
           : null,
       } as const;
     }
+    // Self-awareness: version/upgrade questions read the release ledger and live
+    // deployment state instead of relying on prompt claims. Normal turns skip this.
+    const selfAwarenessBlock = isJarvisSelfAwarenessQuestion(data.message)
+      ? await buildEmerySelfAwarenessBlock({
+          db,
+          userId,
+          agentId: null,
+          approvals: { paidCreditApproved: false, highRiskApproved: false },
+          openAiKey: null,
+          researchModel: MODEL_POLICY.primary,
+          sourceRef: userMessage.id,
+          authToken: await currentBearerToken(),
+        }).catch((error: any) => {
+          console.error("Emery self-awareness read failed", error);
+          return "EMERY SELF-AWARENESS: release/deployment state could not be read this turn. Say so plainly; do not guess a version or invent upgrades.";
+        })
+      : "";
+    // Engineering preferences/decisions Adam states to Emery become JARVIS knowledge.
+    if (!data.source.hpoEphemeral)
+      await ingestKnowledgeFromMessage({ db, userId, sourceRef: userMessage.id }, data.message, {
+        sourceType: "emery_conversation",
+        requireEngineeringSubject: true,
+      }).catch(() => null);
     const resp = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -1766,6 +1792,7 @@ export const sendEmeryMessage = createServerFn({ method: "POST" })
                 },
               ]
             : []),
+          ...(selfAwarenessBlock ? [{ role: "system", content: selfAwarenessBlock }] : []),
           ...(hpoBlock
             ? [
                 {

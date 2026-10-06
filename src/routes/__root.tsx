@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import blueThemeCss from "../blue-theme.css?url";
 import { EmeryDeviceContinuityBootstrap } from "../components/EmeryDeviceContinuityBootstrap";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { EMERY_BUILD } from "../lib/jarvis/build-info";
 
 function NotFoundComponent() {
   return (
@@ -85,6 +86,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "robots", content: "noindex, nofollow" },
       { name: "theme-color", content: "#071a3d" },
       { name: "emery-build", content: "2026-09-30-hpo-map-routeonly-v4" },
+      { name: "emery-commit", content: EMERY_BUILD.commit ?? "unknown" },
       { name: "mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
