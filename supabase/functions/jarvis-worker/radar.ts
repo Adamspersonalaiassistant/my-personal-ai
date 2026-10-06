@@ -298,6 +298,9 @@ export function buildOpportunities(
     if (event.status !== "error") continue;
     const meta = event.metadata && typeof event.metadata === "object" ? event.metadata : {};
     if (["policy", "not_configured"].includes(str(meta.kind))) continue;
+    // Errors from validation fixtures are intentional; only an explicit self_probe
+    // (a controlled self-improvement test) is treated as fixture evidence.
+    if (meta.fixture === true && meta.self_probe !== true) continue;
     const isTool = event.event_type === "jarvis_tool";
     const subject = isTool
       ? `jarvis_tool:${str(event.action)}`
@@ -314,7 +317,7 @@ export function buildOpportunities(
         action: event.action,
         observed: str(meta.error).slice(0, 300) || null,
       },
-      { fixture: meta.fixture === true, capability: isTool ? "tool" : "worker" },
+      { fixture: meta.self_probe === true, capability: isTool ? "tool" : "worker" },
     );
   }
 

@@ -1266,7 +1266,7 @@ await check(
       event_type: "jarvis_tool",
       status: "error",
       action: "jarvis.search_knowledge",
-      metadata: { kind, error: "limit must be a positive number", fixture: true },
+      metadata: { kind, error: "limit must be a positive number", fixture: true, self_probe: true },
       created_at: new Date(clock - i * 1000).toISOString(),
     });
     // Expected refusals are never treated as weaknesses.
