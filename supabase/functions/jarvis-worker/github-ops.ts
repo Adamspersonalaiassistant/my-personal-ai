@@ -5,7 +5,13 @@
 // Pure module (no Deno APIs) — unit-tested in Node with a fake transport.
 
 import { assertCandidateBranch, assertSafeContent, assertSafeRepoPath } from "./guards.ts";
-import { handleGithubProxy, JARVIS_REPO, type ProxyDeps } from "./proxy.ts";
+import {
+  handleGithubProxy,
+  JARVIS_REPO,
+  READY_FOR_REVIEW_MUTATION,
+  type ProxyDeps,
+} from "./proxy.ts";
+import type { PrFile } from "./release-gate.ts";
 
 const R = `/repos/${JARVIS_REPO}`;
 
@@ -39,12 +45,41 @@ export class GithubOps {
     this.checkName = checkName;
   }
 
-  private async call(method: string, path: string, body?: unknown, accept?: "raw" | "json") {
+  private async call(
+    method: string,
+    path: string,
+    body?: unknown,
+    accept?: "raw" | "json",
+    releaseAuth?: ProxyDeps["releaseAuth"],
+  ) {
     const out = await handleGithubProxy(
       { method, path, body, ...(accept ? { accept } : {}) },
-      this.deps,
+      releaseAuth ? { ...this.deps, releaseAuth } : this.deps,
     );
     return out;
+  }
+
+  /** JSON call through the gateway; releaseAuth only ever comes from ReleaseGithub. */
+  async rawJson(
+    method: string,
+    path: string,
+    body?: unknown,
+    releaseAuth?: ProxyDeps["releaseAuth"],
+  ) {
+    const out = await this.call(method, path, body, undefined, releaseAuth);
+    if (out.status >= 400) {
+      let message = out.body;
+      try {
+        message = JSON.parse(out.body)?.message ?? out.body;
+      } catch {
+        /* keep */
+      }
+      throw new GithubOpError(
+        `${method} ${path.replace(R, "")} → ${out.status}: ${String(message).slice(0, 200)}`,
+        out.status,
+      );
+    }
+    return out.body ? JSON.parse(out.body) : null;
   }
 
   private async json(method: string, path: string, body?: unknown) {
@@ -75,9 +110,16 @@ export class GithubOps {
     return JSON.parse(out.body)?.object?.sha ?? null;
   }
 
-  async commit(sha: string): Promise<{ sha: string; tree: string; message: string }> {
+  async commit(
+    sha: string,
+  ): Promise<{ sha: string; tree: string; message: string; parents: string[] }> {
     const data = await this.json("GET", `${R}/git/commits/${sha}`);
-    return { sha: data.sha, tree: data.tree?.sha, message: String(data.message ?? "") };
+    return {
+      sha: data.sha,
+      tree: data.tree?.sha,
+      message: String(data.message ?? ""),
+      parents: ((data.parents ?? []) as any[]).map((p) => String(p?.sha ?? p)),
+    };
   }
 
   /** Idempotent: an existing branch is reused. */
@@ -129,19 +171,26 @@ export class GithubOps {
    */
   async commitFiles(
     branch: string,
-    files: Array<{ path: string; content: string }>,
+    files: Array<{ path: string; content: string | null }>,
     message: string,
     marker: string,
   ) {
     assertCandidateBranch(branch);
-    for (const file of files) assertSafeContent(assertSafeRepoPath(file.path), file.content);
+    for (const file of files)
+      if (file.content !== null) assertSafeContent(assertSafeRepoPath(file.path), file.content);
+      else assertSafeRepoPath(file.path);
     const head = await this.branchHead(branch);
     if (!head) throw new GithubOpError(`branch ${branch} does not exist`, 404);
     const parent = await this.commit(head);
     if (parent.message.includes(marker)) return { sha: head, reused: true };
     const tree = await this.json("POST", `${R}/git/trees`, {
       base_tree: parent.tree,
-      tree: files.map((f) => ({ path: f.path, mode: "100644", type: "blob", content: f.content })),
+      // content null deletes the file (used only by rollback candidates).
+      tree: files.map((f) =>
+        f.content === null
+          ? { path: f.path, mode: "100644", type: "blob", sha: null }
+          : { path: f.path, mode: "100644", type: "blob", content: f.content },
+      ),
     });
     const commit = await this.json("POST", `${R}/git/commits`, {
       message: `${message}\n\n${marker}`,
@@ -253,10 +302,106 @@ export class GithubOps {
       head: branch,
       base: "main",
       title: title.slice(0, 240),
-      body: `${body.slice(0, 60000)}\n\n---\n_Candidate prepared autonomously by JARVIS Engineer. Not merged — release requires Adam's review._`,
-      draft: true,
+      body: `${body.slice(0, 60000)}\n\n---\n_Candidate prepared autonomously by JARVIS Engineer. Released only through JARVIS's gated release operator (auto for low-risk changes, otherwise after Adam's approval of this exact head)._`,
+      draft: false,
     });
     return { number: Number(pr.number), url: String(pr.html_url), created: true };
+  }
+}
+
+export type PullRequest = {
+  number: number;
+  nodeId: string;
+  state: string;
+  merged: boolean;
+  mergeCommitSha: string | null;
+  draft: boolean;
+  headRef: string;
+  headSha: string;
+  baseRef: string;
+  baseSha: string;
+  url: string;
+};
+
+export class ReleaseGithub {
+  constructor(private readonly ops: GithubOps) {}
+
+  async pr(number: number): Promise<PullRequest> {
+    const d = await this.ops.rawJson("GET", `${R}/pulls/${Number(number)}`);
+    return {
+      number: Number(d.number),
+      nodeId: String(d.node_id ?? ""),
+      state: String(d.state),
+      merged: Boolean(d.merged),
+      mergeCommitSha: d.merge_commit_sha ?? null,
+      draft: Boolean(d.draft),
+      headRef: String(d.head?.ref ?? ""),
+      headSha: String(d.head?.sha ?? ""),
+      baseRef: String(d.base?.ref ?? ""),
+      baseSha: String(d.base?.sha ?? ""),
+      url: String(d.html_url ?? ""),
+    };
+  }
+
+  async files(number: number): Promise<PrFile[]> {
+    const d = await this.ops.rawJson("GET", `${R}/pulls/${Number(number)}/files?per_page=100`);
+    return ((d ?? []) as any[]).map((f) => ({
+      filename: String(f.filename),
+      status: String(f.status),
+      additions: Number(f.additions ?? 0),
+      deletions: Number(f.deletions ?? 0),
+      patch: typeof f.patch === "string" ? f.patch : null,
+    }));
+  }
+
+  /** How many main commits the candidate is missing (0 = up to date). */
+  async behindMain(headSha: string): Promise<number> {
+    const d = await this.ops.rawJson("GET", `${R}/compare/main...${headSha}`);
+    return Number(d?.behind_by ?? 0);
+  }
+
+  async updateBranch(number: number, expectedHeadSha: string) {
+    await this.ops.rawJson("PUT", `${R}/pulls/${Number(number)}/update-branch`, {
+      expected_head_sha: expectedHeadSha,
+    });
+  }
+
+  async markReady(pr: PullRequest) {
+    await this.ops.rawJson(
+      "POST",
+      "/graphql",
+      { query: READY_FOR_REVIEW_MUTATION, variables: { id: pr.nodeId } },
+      { pr: pr.number, sha: pr.headSha, nodeId: pr.nodeId },
+    );
+  }
+
+  /** The one merge path: pinned head sha, merge commit, one-shot release authorization. */
+  async merge(pr: PullRequest, title: string) {
+    const d = await this.ops.rawJson(
+      "PUT",
+      `${R}/pulls/${pr.number}/merge`,
+      { sha: pr.headSha, merge_method: "merge", commit_title: title.slice(0, 200) },
+      { pr: pr.number, sha: pr.headSha },
+    );
+    return { merged: Boolean(d?.merged), sha: String(d?.sha ?? "") };
+  }
+
+  /** Latest GitHub Actions run of a workflow file for a commit. */
+  async workflowRun(headSha: string, workflowFile: string) {
+    const d = await this.ops.rawJson(
+      "GET",
+      `${R}/actions/runs?head_sha=${encodeURIComponent(headSha)}&per_page=20`,
+    );
+    const run = ((d?.workflow_runs ?? []) as any[]).find((r) =>
+      String(r.path ?? "").endsWith(workflowFile),
+    );
+    return run
+      ? {
+          status: String(run.status),
+          conclusion: run.conclusion ? String(run.conclusion) : null,
+          url: String(run.html_url ?? ""),
+        }
+      : null;
   }
 }
 

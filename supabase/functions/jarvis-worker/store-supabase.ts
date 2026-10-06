@@ -5,6 +5,7 @@
 
 import type { RadarInputs } from "./radar.ts";
 import type { SessionRow, Store, TaskRow } from "./engine.ts";
+import type { ReleaseRecord, ReleaseState } from "./release.ts";
 
 type Db = any;
 
@@ -292,5 +293,90 @@ export class SupabaseStore implements Store {
     const result = await this.db.from("emery_releases").insert(row);
     if (result.error && result.error.code !== "23505")
       throw new Error(`candidate insert: ${result.error.message}`);
+  }
+
+  // ------------------------------------------------------------- releases
+
+  async releaseCandidates(userId: string) {
+    return must(
+      await this.db
+        .from("jarvis_engineering_tasks")
+        .select(TASK_COLUMNS)
+        .eq("user_id", userId)
+        .eq("status", "ready_for_release")
+        .eq("is_fixture", false)
+        .eq("approval_state", "approved")
+        .not("pr_url", "is", null)
+        .order("completed_at", { ascending: true })
+        .limit(20),
+      "release candidates",
+    ) as TaskRow[];
+  }
+
+  async casRelease(
+    task: TaskRow,
+    from: ReleaseState | null,
+    release: ReleaseRecord,
+    extra: Partial<TaskRow> = {},
+  ) {
+    const ok = must(
+      await this.db.rpc("jarvis_cas_release", {
+        p_task: task.id,
+        p_from: from,
+        p_release: release,
+        p_patch: extra,
+      }),
+      "release transition",
+    );
+    return ok === true;
+  }
+
+  async autoReleasesSince(userId: string, sinceIso: string) {
+    const result = await this.db
+      .from("jarvis_engineering_tasks")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("metadata->release->>mode", "auto_low_risk")
+      .gte("metadata->release->>merged_at", sinceIso);
+    if (result.error) throw new Error(`auto releases: ${result.error.message}`);
+    return result.count ?? 0;
+  }
+
+  async recordRelease(row: Record<string, unknown>) {
+    const result = await this.db.from("emery_releases").insert(row).select("id").single();
+    if (result.error) throw new Error(`release ledger: ${result.error.message}`);
+    return (result.data?.id as string) ?? null;
+  }
+
+  async notify(
+    userId: string,
+    note: { title: string; body: string; ref: string; metadata?: Record<string, unknown> },
+  ) {
+    const result = await this.db.from("app_notifications").insert({
+      user_id: userId,
+      title: note.title.slice(0, 120),
+      body: note.body.slice(0, 600),
+      scheduled_for: new Date().toISOString(),
+      status: "pending",
+      source_type: "jarvis_release",
+      source_ref: note.ref,
+      metadata: note.metadata ?? {},
+    });
+    // One notification per release outcome: a duplicate source_ref is expected and ignored.
+    if (result.error && result.error.code !== "23505")
+      throw new Error(`release notification: ${result.error.message}`);
+  }
+
+  async runtimeErrors(userId: string, fromIso: string, toIso: string) {
+    const result = await this.db
+      .from("emery_runtime_events")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("status", "error")
+      .not("event_type", "in", "(jarvis_tool,jarvis_worker,jarvis_radar)")
+      .gte("created_at", fromIso)
+      .lte("created_at", toIso);
+    if (result.error) throw new Error(`runtime errors: ${result.error.message}`);
+    return result.count ?? 0;
   }
 }

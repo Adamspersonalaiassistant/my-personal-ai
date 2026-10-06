@@ -3,11 +3,15 @@
 // mergeable at all. Pure and dependency-free so it is unit-tested in Node and
 // enforced in the worker at the one place a merge can happen.
 //
-// Adam's policy (2026-10-06): JARVIS auto-releases low-risk, test-covered,
-// non-protected changes and reports afterwards; everything else waits for his
-// explicit "Approve it". JARVIS never auto-merges changes to his own safety
-// code, the release gate, the GitHub gateway, authentication, secrets, CI,
-// migrations, database functions, HPO workflows or the UI shell.
+// Adam's policy (2026-10-06), four tiers:
+//   AUTO        docs, validation scripts, honest "not connected" capability notes
+//               within size limits: released without a fresh approval.
+//   NEEDS ADAM  normal Emery/JARVIS source, UI, HPO, edge functions, config:
+//               merged only after Adam's approval bound to the exact head sha.
+//   MANUAL ONLY JARVIS's own release guardrails (gate, operator, gateway, guards,
+//               policy), CI workflows and database migrations: JARVIS never
+//               merges these, even with approval; a person merges them.
+//   NEVER       secrets, keys and environment/credential files.
 
 export type PrFile = {
   filename: string;
@@ -30,32 +34,56 @@ const AUTO_ALLOWED: RegExp[] = [
   /^src\/lib\/execution-capabilities\.ts$/,
 ];
 
-/** Never auto-releasable (and, for the first group, never mergeable even with approval). */
+/** Never mergeable by anyone through JARVIS. */
 const NEVER_MERGEABLE: Array<{ pattern: RegExp; reason: string }> = [
-  { pattern: /^\.github\//, reason: "CI/workflow files" },
   { pattern: /(^|\/)\.env/, reason: "environment files" },
   { pattern: /\.(pem|key|p12|pfx)$/i, reason: "key material" },
   { pattern: /(^|\/)(secrets?|credentials?)[\w.-]*$/i, reason: "credential files" },
 ];
 
-const NEEDS_ADAM: Array<{ pattern: RegExp; reason: string }> = [
-  { pattern: /^supabase\/migrations\//, reason: "database migration" },
-  { pattern: /^supabase\/functions\//, reason: "edge function (deployed separately)" },
-  { pattern: /^src\/integrations\//, reason: "generated auth/database integration" },
-  { pattern: /^src\/lib\/(hpo-|hpo\/)|^src\/components\/Hpo|^src\/routes\/.*hpo/i, reason: "protected HPO workflow" },
+/** JARVIS may not merge these even with approval: a person reviews and merges them. */
+const MANUAL_ONLY: Array<{ pattern: RegExp; reason: string }> = [
+  { pattern: /^\.github\//, reason: "CI/deploy workflows" },
+  {
+    pattern: /^supabase\/migrations\//,
+    reason: "database migrations (must be applied by a person)",
+  },
   {
     pattern:
-      /^src\/lib\/jarvis\/(policy|guards|github|request-auth|release-gate|tool-gateway|runtime|room)\.ts$/,
-    reason: "JARVIS safety/policy/release code (JARVIS never auto-releases changes to his own guardrails)",
+      /^supabase\/functions\/(jarvis-worker|jarvis-github)\/(release-gate|release|proxy|guards)\.ts$/,
+    reason: "JARVIS release guardrails and GitHub gateway",
   },
-  { pattern: /auth|security|rls|secret|credential|cron-auth/i, reason: "auth/security-sensitive path" },
-  { pattern: /^(package(-lock)?\.json|bun\.lockb?|pnpm-lock\.yaml|vite\.config\.\w+|wrangler\.\w+|tsconfig.*\.json)$/, reason: "build/dependency configuration" },
+  {
+    pattern: /^src\/lib\/jarvis\/(policy|guards|github|request-auth)\.ts$/,
+    reason: "JARVIS safety policy",
+  },
+  { pattern: /^supabase\/config\.toml$/, reason: "function auth configuration" },
+];
+
+/** Mergeable after Adam's sha-bound approval, never automatically. */
+const NEEDS_ADAM: Array<{ pattern: RegExp; reason: string }> = [
+  { pattern: /^supabase\/functions\//, reason: "edge function (auto-deployed after merge)" },
+  { pattern: /^src\/integrations\//, reason: "generated auth/database integration" },
+  {
+    pattern: /^src\/lib\/(hpo-|hpo\/)|^src\/components\/Hpo|^src\/routes\/.*hpo/i,
+    reason: "protected HPO workflow",
+  },
+  { pattern: /^src\/lib\/jarvis\//, reason: "JARVIS runtime code" },
+  { pattern: /auth|security|rls|cron-auth/i, reason: "auth/security-sensitive path" },
+  {
+    pattern:
+      /^(package(-lock)?\.json|bun\.lockb?|pnpm-lock\.yaml|vite\.config\.\w+|wrangler\.\w+|tsconfig.*\.json)$/,
+    reason: "build/dependency configuration",
+  },
   { pattern: /^src\/(routes|components)\//, reason: "user interface" },
+  { pattern: /^src\//, reason: "Emery runtime behaviour" },
 ];
 
 export type ReleaseDecision = {
-  /** May be merged at all (given Adam's approval or the auto policy). */
+  /** JARVIS may merge it at all (given Adam's approval or the auto policy). */
   mergeable: boolean;
+  /** A person must merge it outside JARVIS (guardrails, workflows, migrations). */
+  manualOnly: boolean;
   /** May be merged without a fresh human approval. */
   auto: boolean;
   reasons: string[];
@@ -77,9 +105,18 @@ function capabilityPatchIsHonest(file: PrFile) {
 export function evaluateReleaseGate(files: PrFile[]): ReleaseDecision {
   const reasons: string[] = [];
   let mergeable = true;
+  let manualOnly = false;
   let auto = true;
   const changedLines = files.reduce((n, f) => n + (f.additions ?? 0) + (f.deletions ?? 0), 0);
-  if (!files.length) return { mergeable: false, auto: false, reasons: ["No changed files."], changedLines: 0, files: 0 };
+  if (!files.length)
+    return {
+      mergeable: false,
+      manualOnly: false,
+      auto: false,
+      reasons: ["No changed files."],
+      changedLines: 0,
+      files: 0,
+    };
 
   for (const file of files) {
     const name = file.filename;
@@ -90,42 +127,71 @@ export function evaluateReleaseGate(files: PrFile[]): ReleaseDecision {
       reasons.push(`${name}: ${never.reason} can never be merged by JARVIS.`);
       continue;
     }
+    const manual = MANUAL_ONLY.find((e) => e.pattern.test(name));
+    if (manual) {
+      mergeable = false;
+      manualOnly = true;
+      auto = false;
+      reasons.push(`${name}: ${manual.reason} — a person merges this, never JARVIS.`);
+      continue;
+    }
+    if (AUTO_ALLOWED.some((p) => p.test(name))) {
+      if (file.status === "removed" || file.status === "renamed") {
+        auto = false;
+        reasons.push(`${name}: deletions and renames need Adam.`);
+      } else if (
+        /^src\/lib\/execution-capabilities\.ts$/.test(name) &&
+        !capabilityPatchIsHonest(file)
+      ) {
+        auto = false;
+        reasons.push(
+          `${name}: may only add 'not connected' entries automatically; claiming a new executable capability needs Adam.`,
+        );
+      }
+      continue;
+    }
     const needs = NEEDS_ADAM.find((e) => e.pattern.test(name));
-    if (needs) {
-      auto = false;
-      reasons.push(`${name}: ${needs.reason}.`);
-      continue;
-    }
-    if (!AUTO_ALLOWED.some((p) => p.test(name))) {
-      auto = false;
-      reasons.push(`${name}: outside the low-risk auto-release scope.`);
-      continue;
-    }
-    if (file.status === "removed" || file.status === "renamed") {
-      auto = false;
-      reasons.push(`${name}: deletions and renames need Adam.`);
-      continue;
-    }
-    if (/^src\/lib\/execution-capabilities\.ts$/.test(name) && !capabilityPatchIsHonest(file)) {
-      auto = false;
-      reasons.push(`${name}: may only add 'not connected' entries; it must never claim a new executable capability.`);
-    }
+    auto = false;
+    reasons.push(
+      needs ? `${name}: ${needs.reason}.` : `${name}: outside the low-risk auto-release scope.`,
+    );
   }
   if (files.length > AUTO_RELEASE_LIMITS.maxFiles) {
     auto = false;
-    reasons.push(`${files.length} files exceeds the auto-release limit (${AUTO_RELEASE_LIMITS.maxFiles}).`);
+    reasons.push(
+      `${files.length} files exceeds the auto-release limit (${AUTO_RELEASE_LIMITS.maxFiles}).`,
+    );
   }
   if (changedLines > AUTO_RELEASE_LIMITS.maxChangedLines) {
     auto = false;
-    reasons.push(`${changedLines} changed lines exceeds the auto-release limit (${AUTO_RELEASE_LIMITS.maxChangedLines}).`);
+    reasons.push(
+      `${changedLines} changed lines exceeds the auto-release limit (${AUTO_RELEASE_LIMITS.maxChangedLines}).`,
+    );
   }
   if (!mergeable) auto = false;
-  return { mergeable, auto, reasons, changedLines, files: files.length };
+  return { mergeable, manualOnly, auto, reasons, changedLines, files: files.length };
 }
 
 /** One-line, plain-language explanation of a decision (for the status panel and notifications). */
 export function describeDecision(decision: ReleaseDecision) {
-  if (decision.auto) return "Low-risk: documentation/test/capability-note change, within size limits.";
+  if (decision.auto)
+    return "Low risk: documentation, validation or capability-note change within size limits.";
+  if (decision.manualOnly)
+    return `Manual release only: ${decision.reasons[0] ?? "guardrail change"}`;
   if (!decision.mergeable) return `Blocked: ${decision.reasons[0] ?? "protected content"}`;
   return `Needs your approval: ${decision.reasons.slice(0, 2).join(" ")}`.slice(0, 300);
+}
+
+/** What a merged change needs before it is live. */
+export function deploymentNeeds(files: PrFile[]) {
+  const functions = [
+    ...new Set(
+      files
+        .map((f) => /^supabase\/functions\/([\w-]+)\//.exec(f.filename)?.[1])
+        .filter((x): x is string => Boolean(x)),
+    ),
+  ];
+  // Anything Lovable builds (outside docs/, scripts/, supabase/, .github/) needs a frontend publish.
+  const frontend = files.some((f) => !/^(docs|scripts|supabase|\.github)\//.test(f.filename));
+  return { functions, frontend };
 }

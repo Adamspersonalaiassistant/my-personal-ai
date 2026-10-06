@@ -34,7 +34,19 @@ export type ProxyResult = { status: number; body: string; refused?: string };
 export type ProxyDeps = {
   token: string | null;
   fetcher: typeof fetch;
+  /**
+   * One-shot release authorization for ONE pull request at ONE pinned head sha.
+   * Only the worker's release operator sets this, and only after the release
+   * gate plus CI (and, when required, Adam's sha-bound approval) cleared that
+   * exact PR. The interactive jarvis-github gateway never sets it, so the model
+   * can never merge through it.
+   */
+  releaseAuth?: { pr: number; sha: string; nodeId?: string } | null;
 };
+
+/** The only GraphQL operation the gateway allows: mark the authorized PR ready for review. */
+export const READY_FOR_REVIEW_MUTATION =
+  "mutation($id: ID!) { markPullRequestReadyForReview(input: { pullRequestId: $id }) { pullRequest { isDraft } } }";
 
 class Refusal extends Error {}
 
@@ -67,6 +79,8 @@ const READ_PATTERNS: RegExp[] = [
   /^\/git\/trees\/[^/?]+(\?.*)?$/,
   /^\/pulls(\?.*)?$/,
   /^\/pulls\/\d+$/,
+  /^\/pulls\/\d+\/files(\?.*)?$/,
+  /^\/actions\/runs(\?.*)?$/,
   /^\/license$/,
   /^\/branches\/[^/?]+$/,
   /^\/check-runs\/\d+\/annotations(\?.*)?$/,
@@ -106,6 +120,7 @@ function checkTreeBody(body: Record<string, any>) {
 async function checkWrite(req: ProxyRequest, deps: ProxyDeps) {
   const method = req.method;
   const path = req.path;
+  if (method === "POST" && path === "/graphql") return checkGraphql(asObject(req.body), deps);
   if (!path.startsWith(REPO_PREFIX)) refuse("Only the Emery repository can be written.");
   const rest = path.slice(REPO_PREFIX.length);
   const body = asObject(req.body);
@@ -146,9 +161,67 @@ async function checkWrite(req: ProxyRequest, deps: ProxyDeps) {
     assertCandidateBranch(String(asObject(asObject(await pr.json())["head"])["ref"] ?? ""));
     return;
   }
+  if (method === "PUT" && /^\/pulls\/\d+\/update-branch$/.test(rest)) {
+    // Bring a jarvis/* candidate up to date with main (a write to the candidate branch only).
+    for (const key of Object.keys(body))
+      if (key !== "expected_head_sha") refuse("Only expected_head_sha may be sent.");
+    if (typeof body["expected_head_sha"] !== "string") refuse("expected_head_sha is required.");
+    const pr = asObject(
+      await (
+        await deps.fetcher(`${API}${path.replace(/\/update-branch$/, "")}`, {
+          headers: authHeaders(deps.token),
+        })
+      ).json(),
+    );
+    assertCandidateBranch(String(asObject(pr["head"])["ref"] ?? ""));
+    return;
+  }
+  const mergeMatch = /^\/pulls\/(\d+)\/merge$/.exec(rest);
+  if (method === "PUT" && mergeMatch) {
+    const auth = deps.releaseAuth;
+    if (!auth || auth.pr !== Number(mergeMatch[1]))
+      refuse("Merging is only possible through the worker's gated release operator.");
+    if (body["sha"] !== auth.sha || body["merge_method"] !== "merge")
+      refuse("A release merge must pin the authorized head sha and use a merge commit.");
+    for (const key of Object.keys(body))
+      if (!["sha", "merge_method", "commit_title", "commit_message"].includes(key))
+        refuse("Unexpected merge parameter.");
+    await assertReleasablePr(auth, deps);
+    return;
+  }
   refuse(
     `${method} ${rest} is not an allowed write (merge, delete, workflow and protected-ref operations are refused).`,
   );
+}
+
+/** Re-verified at the chokepoint for every release write: open, jarvis/* head at the pinned sha, base main. */
+async function assertReleasablePr(
+  auth: { pr: number; sha: string; nodeId?: string },
+  deps: ProxyDeps,
+) {
+  const res = await deps.fetcher(`${API}${REPO_PREFIX}/pulls/${auth.pr}`, {
+    headers: authHeaders(deps.token),
+  });
+  if (!res.ok) refuse("Pull request could not be inspected.");
+  const pr = asObject(await res.json());
+  const head = asObject(pr["head"]);
+  assertCandidateBranch(String(head["ref"] ?? ""));
+  if (pr["state"] !== "open") refuse("Only an open pull request can be released.");
+  if (head["sha"] !== auth.sha) refuse("The pull request head moved after authorization.");
+  if (asObject(pr["base"])["ref"] !== "main") refuse("Release merges must target main.");
+  return pr;
+}
+
+async function checkGraphql(body: Record<string, any>, deps: ProxyDeps) {
+  const auth = deps.releaseAuth;
+  if (!auth?.nodeId) refuse("GraphQL is only available to the release operator.");
+  if (body["query"] !== READY_FOR_REVIEW_MUTATION)
+    refuse("Only the ready-for-review mutation is allowed.");
+  const variables = asObject(body["variables"]);
+  if (Object.keys(variables).join() !== "id" || variables["id"] !== auth.nodeId)
+    refuse("The mutation must target the authorized pull request.");
+  const pr = await assertReleasablePr(auth, deps);
+  if (pr["node_id"] !== auth.nodeId) refuse("Pull request identity mismatch.");
 }
 
 function authHeaders(token: string | null, accept = "application/vnd.github+json") {
@@ -165,7 +238,7 @@ export async function handleGithubProxy(req: ProxyRequest, deps: ProxyDeps): Pro
   const method = String(req.method ?? "").toUpperCase();
   const path = String(req.path ?? "");
   try {
-    if (!["GET", "POST", "PATCH"].includes(method)) refuse(`${method} is not allowed.`);
+    if (!["GET", "POST", "PATCH", "PUT"].includes(method)) refuse(`${method} is not allowed.`);
     if (
       !path.startsWith("/") ||
       path.includes("..") ||
