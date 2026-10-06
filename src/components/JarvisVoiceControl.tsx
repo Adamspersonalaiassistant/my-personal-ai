@@ -2,7 +2,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Loader2, Mic, MicOff } from "lucide-react";
-import { createJarvisRealtimeSecret, sendJarvisMessage } from "@/lib/jarvis.functions";
+import {
+  createJarvisRealtimeSecret,
+  getJarvisRoom,
+  sendJarvisMessage,
+} from "@/lib/jarvis.functions";
+import {
+  newTurnId,
+  runJarvisTurn,
+  type TurnMessage,
+  type TurnSendResult,
+} from "@/lib/jarvis/turn-reconcile";
 import { toSpeakable } from "@/lib/assistant-format";
 import { claimExclusiveEmeryVoice, releaseExclusiveEmeryVoice } from "@/lib/voice-session-guard";
 
@@ -21,6 +31,7 @@ type TurnResult = Awaited<ReturnType<typeof sendJarvisMessage>>;
 export function JarvisVoiceControl({ onTurn }: { onTurn: (result: TurnResult) => void }) {
   const mintSecret = useServerFn(createJarvisRealtimeSecret);
   const sendTurn = useServerFn(sendJarvisMessage);
+  const loadRoom = useServerFn(getJarvisRoom);
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
   const peerRef = useRef<RTCPeerConnection | null>(null);
@@ -63,13 +74,29 @@ export function JarvisVoiceControl({ onTurn }: { onTurn: (result: TurnResult) =>
       setStatus("thinking");
       let output = "JARVIS could not complete that turn.";
       try {
-        const result = await sendTurn({
-          data: { message: request || "(inaudible request)", channel: "voice" },
+        // One turn id per spoken request: a lost response is reconciled against
+        // the thread, and a retry never creates a second turn.
+        const turnId = newTurnId();
+        const message = request || "(inaudible request)";
+        const outcome = await runJarvisTurn({
+          turnId,
+          send: () =>
+            sendTurn({
+              data: { message, channel: "voice", turnId },
+            }) as unknown as Promise<TurnSendResult>,
+          loadMessages: async () => (await loadRoom()).messages as unknown as TurnMessage[],
+          wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
         });
-        onTurn(result);
-        // The full written answer stays in the shared thread; Voice gets it
-        // without markdown symbols so nothing like "hash hash" is ever spoken.
-        output = toSpeakable(result.agentMessage?.content ?? result.error ?? output) || output;
+        if (outcome.kind === "completed") {
+          const result = outcome.result;
+          onTurn(result as unknown as TurnResult);
+          // The full written answer stays in the shared thread; Voice gets it
+          // without markdown symbols so nothing like "hash hash" is ever spoken.
+          output = toSpeakable(result.agentMessage?.content ?? result.error ?? output) || output;
+        } else if (outcome.kind === "unconfirmed") {
+          output =
+            "I couldn't confirm that turn finished yet. It's saved once, so please check the thread before asking again.";
+        }
       } catch (caught) {
         console.error(caught);
       }
@@ -85,7 +112,7 @@ export function JarvisVoiceControl({ onTurn }: { onTurn: (result: TurnResult) =>
       }
       setStatus("listening");
     },
-    [onTurn, sendTurn],
+    [loadRoom, onTurn, sendTurn],
   );
 
   const start = useCallback(async () => {

@@ -9,6 +9,7 @@ import {
   loadJarvisMessages,
 } from "@/lib/jarvis/room";
 import { currentBearerToken } from "@/lib/jarvis/request-auth";
+import { TURN_ID_PATTERN } from "@/lib/jarvis/turn-reconcile";
 import {
   DEFAULT_JARVIS_VOICE,
   isJarvisVoiceId,
@@ -54,13 +55,16 @@ export const getJarvisStatusPanel = createServerFn({ method: "GET" })
 
 export const sendJarvisMessage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { message: string; channel?: "typed" | "voice" }) => {
+  .inputValidator((input: { message: string; channel?: "typed" | "voice"; turnId?: string }) => {
     const message = String(input?.message ?? "").trim();
     if (!message) throw new Error("Message is required");
     if (message.length > 8000) throw new Error("Message is too long");
+    const turnId = input?.turnId == null ? null : String(input.turnId);
+    if (turnId !== null && !TURN_ID_PATTERN.test(turnId)) throw new Error("Invalid turn id");
     return {
       message,
       channel: input?.channel === "voice" ? ("voice" as const) : ("typed" as const),
+      turnId,
     };
   })
   .handler(async ({ data, context }) => {
@@ -73,6 +77,7 @@ export const sendJarvisMessage = createServerFn({ method: "POST" })
       data.message,
       await currentBearerToken(),
       data.channel,
+      data.turnId,
     );
   });
 
