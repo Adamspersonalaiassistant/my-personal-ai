@@ -44,10 +44,21 @@ function InlineParts({ parts }: { parts: Inline[] }) {
 
 export function AssistantText({ text, className = "" }: { text: string; className?: string }) {
   const blocks = useMemo(() => parseAssistantText(text), [text]);
+  // Bullets that follow a numbered section belong to it and align with its text.
+  let underNumbered = false;
   return (
     <div className={`min-w-0 space-y-1.5 break-words ${className}`}>
       {blocks.map((block, index) => {
         const spaced = index > 0 ? "pt-1.5" : "";
+        if (block.type === "numbered") underNumbered = true;
+        else if (block.type !== "bullet") underNumbered = false;
+        const bulletIndent = underNumbered
+          ? block.type === "bullet" && block.depth
+            ? "pl-12"
+            : "pl-7"
+          : block.type === "bullet" && block.depth
+            ? "pl-6"
+            : "pl-1";
         switch (block.type) {
           case "title":
             return (
@@ -71,7 +82,7 @@ export function AssistantText({ text, className = "" }: { text: string; classNam
             );
           case "bullet":
             return (
-              <div key={index} className={`flex gap-2 ${block.depth ? "pl-9" : "pl-3"}`}>
+              <div key={index} className={`flex gap-2 ${bulletIndent}`}>
                 <span
                   aria-hidden
                   className="mt-[0.7em] size-1.5 shrink-0 rounded-full bg-muted-foreground/60"
