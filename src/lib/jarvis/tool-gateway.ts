@@ -286,7 +286,7 @@ async function run(name: string, args: Record<string, any>, ctx: GatewayContext)
       const loaded = await state.loadKnowledge(db, userId);
       const items = Array.isArray(loaded) ? loaded : [];
       const limit = Math.max(0, Math.min(num(args["limit"]) ?? 8, 15));
-      let ranked;
+      let ranked: ReturnType<typeof rankKnowledge>;
       try {
         ranked = rankKnowledge(items, String(args["query"] ?? ""), limit);
       } catch {
