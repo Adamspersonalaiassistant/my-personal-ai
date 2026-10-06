@@ -1,7 +1,10 @@
 // Focused candidate verification for JARVIS branches (run in GitHub Actions).
-// Emits GitHub annotations so the JARVIS worker can read failures through the
-// Checks API and perform bounded repair. Exit code 1 = candidate not verified.
+// Emits GitHub annotations (Checks API) and, when JARVIS_REPORT is set, writes a
+// JSON report that a separate, code-free workflow job publishes as commit
+// statuses. The worker reads either source to drive bounded repair.
+// Exit code 1 = candidate not verified.
 import { spawnSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
 
 const STEPS = [
   { name: "typecheck", cmd: "npx", args: ["tsc", "--noEmit", "-p", "."] },
@@ -14,12 +17,14 @@ const STEPS = [
 const escape = (text) => String(text).replace(/%/g, "%25").replace(/\r/g, "").replace(/\n/g, "%0A");
 let failed = 0;
 let annotations = 0;
+const report = { passed: false, steps: [], failures: [] };
 
 for (const step of STEPS) {
   const started = Date.now();
   const run = spawnSync(step.cmd, step.args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
   const output = `${run.stdout ?? ""}\n${run.stderr ?? ""}`;
   const seconds = ((Date.now() - started) / 1000).toFixed(1);
+  report.steps.push({ name: step.name, ok: run.status === 0, seconds: Number(seconds) });
   if (run.status === 0) {
     console.log(`PASS ${step.name} (${seconds}s)`);
     continue;
@@ -31,14 +36,30 @@ for (const step of STEPS) {
     for (const match of output.matchAll(/^(.+?)\((\d+),(\d+)\): error (TS\d+): (.+)$/gm)) {
       if (annotations >= 40) break;
       annotations += 1;
+      report.failures.push({
+        path: match[1],
+        line: Number(match[2]),
+        title: match[4],
+        message: match[5].slice(0, 400),
+      });
       console.log(
         `::error file=${match[1]},line=${match[2]},col=${match[3]},title=${match[4]}::${escape(match[5])}`,
       );
     }
   }
   const tail = output.trim().split("\n").filter(Boolean).slice(-15).join("\n");
+  if (step.name !== "typecheck" || !report.failures.length)
+    report.failures.push({
+      path: "",
+      line: null,
+      title: `${step.name} failed`,
+      message: tail.slice(-400),
+    });
   console.log(`::error title=jarvis-candidate ${step.name} failed::${escape(tail.slice(-1800))}`);
 }
+
+report.passed = failed === 0;
+if (process.env.JARVIS_REPORT) writeFileSync(process.env.JARVIS_REPORT, JSON.stringify(report));
 
 if (failed) {
   console.log(`JARVIS candidate check: ${failed} step(s) failed.`);

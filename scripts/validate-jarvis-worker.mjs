@@ -325,6 +325,31 @@ class FakeGithub {
         tree: Object.keys(files ?? {}).map((path) => ({ path, type: "blob", size: 10 })),
       });
     }
+    if (method === "GET" && this.checksForbidden && /^\/commits\/\w+\/check-runs$/.test(p))
+      return json({ message: "Resource not accessible by personal access token" }, 403);
+    if (method === "GET" && (m = p.match(/^\/commits\/(\w+)\/status$/))) {
+      // Commit statuses published by the workflow's code-free report job.
+      const sha = m[1];
+      if (!this.ciPendingOnce.has(sha)) {
+        this.ciPendingOnce.add(sha);
+        return json({ state: "pending", statuses: [] });
+      }
+      const broken = Object.entries(this.filesAt(sha) ?? {}).filter(([, c]) =>
+        String(c).includes("BROKEN_TYPE_ERROR"),
+      );
+      const statuses = broken.map(([path], i) => ({
+        context: `jarvis-candidate/e${i + 1}`,
+        state: "failure",
+        description: `${path}:1 TS2322: Type 'string' is not assignable to type 'number'.`,
+      }));
+      statuses.push({
+        context: "jarvis-candidate",
+        state: broken.length ? "failure" : "success",
+        description: broken.length ? "Failed: typecheck" : "All candidate checks passed",
+        target_url: `https://ci/${sha}`,
+      });
+      return json({ state: broken.length ? "failure" : "success", statuses });
+    }
     if (method === "GET" && (m = p.match(/^\/commits\/(\w+)\/check-runs$/))) {
       const sha = m[1];
       if (!this.ciPendingOnce.has(sha)) {
@@ -588,6 +613,46 @@ await check(
         .filesAt(row.branch_name)
         ["src/lib/jarvis/fixtures/repair-fixture.ts"].includes("BROKEN_TYPE_ERROR"),
     );
+  },
+);
+
+await check(
+  "CI fallback: token without Checks: read → commit statuses drive failure detection and repair",
+  async () => {
+    const store = new MemoryStore();
+    const gh = new FakeGithub();
+    gh.checksForbidden = true;
+    const planner = new FakePlanner();
+    const t = store.addTask({
+      title: "Repair via statuses",
+      task_spec: {
+        kind: "code_change",
+        objective: "Add a typed fixture constant",
+        edits: [
+          {
+            path: "src/lib/jarvis/fixtures/controlled.ts",
+            find: "CONTROLLED_VALUE = 1",
+            replace: "CONTROLLED_VALUE = 4",
+          },
+        ],
+        inject_failure: {
+          path: "src/lib/jarvis/fixtures/repair-fixture.ts",
+          content: 'const value: number = "BROKEN_TYPE_ERROR";\nexport { value };\n',
+        },
+        max_repairs: 2,
+      },
+    });
+    await drive(store, gh, planner, 7);
+    const row = store.taskRows.find((r) => r.id === t.id);
+    assert.equal(row.status, "ready_for_release", JSON.stringify(row.stage_state.log, null, 1));
+    assert.equal(row.stage_state.repairs, 1);
+    const repair = planner.calls.find((c) => c.kind === "repair");
+    assert.ok(repair && repair.failures > 0, "repair received status-derived failures");
+    assert.deepEqual(
+      row.test_results.ci.map((c) => c.state),
+      ["failure", "success"],
+    );
+    assert.ok(gh.calls.some((c) => c.path.endsWith("/status")));
   },
 );
 

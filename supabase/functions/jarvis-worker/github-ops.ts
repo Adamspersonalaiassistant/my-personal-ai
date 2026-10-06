@@ -22,6 +22,9 @@ export type CiState = {
   checkRunId: number | null;
   url: string | null;
   conclusion: string | null;
+  /** Failures carried by commit statuses (used when the Checks API is not readable). */
+  failures?: Annotation[];
+  source?: "checks" | "statuses";
 };
 
 export type Annotation = { path: string; line: number | null; title: string; message: string };
@@ -29,6 +32,7 @@ export type Annotation = { path: string; line: number | null; title: string; mes
 export class GithubOps {
   private readonly deps: ProxyDeps;
   readonly checkName: string;
+  private checksReadable = true;
 
   constructor(deps: ProxyDeps, checkName = "jarvis-candidate") {
     this.deps = deps;
@@ -148,18 +152,75 @@ export class GithubOps {
     return { sha: String(commit.sha), reused: false };
   }
 
+  /**
+   * CI result for a candidate commit. Prefers the Checks API; if the runtime
+   * token cannot read checks (403), falls back to the commit statuses that the
+   * workflow's code-free `report` job publishes.
+   */
   async ci(sha: string): Promise<CiState> {
+    if (this.checksReadable) {
+      try {
+        return await this.ciFromChecks(sha);
+      } catch (error) {
+        if (!(error instanceof GithubOpError) || error.status !== 403) throw error;
+        this.checksReadable = false;
+      }
+    }
+    return this.ciFromStatuses(sha);
+  }
+
+  private async ciFromChecks(sha: string): Promise<CiState> {
     const data = await this.json("GET", `${R}/commits/${sha}/check-runs?per_page=50`);
     const run = ((data?.check_runs ?? []) as any[]).find((r) => r.name === this.checkName);
-    if (!run) return { state: "missing", checkRunId: null, url: null, conclusion: null };
+    if (!run)
+      return { state: "missing", checkRunId: null, url: null, conclusion: null, source: "checks" };
     if (run.status !== "completed")
-      return { state: "pending", checkRunId: run.id, url: run.html_url, conclusion: null };
+      return {
+        state: "pending",
+        checkRunId: run.id,
+        url: run.html_url,
+        conclusion: null,
+        source: "checks",
+      };
     const ok = ["success", "neutral", "skipped"].includes(run.conclusion);
     return {
       state: ok ? "success" : "failure",
       checkRunId: run.id,
       url: run.html_url,
       conclusion: run.conclusion,
+      source: "checks",
+    };
+  }
+
+  private async ciFromStatuses(sha: string): Promise<CiState> {
+    const data = await this.json("GET", `${R}/commits/${sha}/status`);
+    const statuses = (data?.statuses ?? []) as any[];
+    const overall = statuses.find((s) => s.context === this.checkName);
+    const base = { checkRunId: null, source: "statuses" as const };
+    if (!overall) return { ...base, state: "missing", url: null, conclusion: null };
+    if (overall.state === "pending")
+      return { ...base, state: "pending", url: overall.target_url ?? null, conclusion: null };
+    if (overall.state === "success")
+      return { ...base, state: "success", url: overall.target_url ?? null, conclusion: "success" };
+    const failures = statuses
+      .filter((s) => String(s.context).startsWith(`${this.checkName}/e`))
+      .sort((a, b) => String(a.context).localeCompare(String(b.context)))
+      .map((s) => parseStatusFailure(String(s.description ?? "")));
+    return {
+      ...base,
+      state: "failure",
+      url: overall.target_url ?? null,
+      conclusion: overall.state,
+      failures: failures.length
+        ? failures
+        : [
+            {
+              path: "",
+              line: null,
+              title: "jarvis-candidate",
+              message: String(overall.description ?? ""),
+            },
+          ],
     };
   }
 
@@ -197,4 +258,23 @@ export class GithubOps {
     });
     return { number: Number(pr.number), url: String(pr.html_url), created: true };
   }
+}
+
+/** "src/x.ts:12 TS2322: message" → annotation; anything else keeps the text as the message. */
+export function parseStatusFailure(description: string): Annotation {
+  const match = /^(\S+?):(\d*) ([^:]*): ?(.*)$/.exec(description);
+  if (match && match[1].includes("/"))
+    return {
+      path: match[1],
+      line: match[2] ? Number(match[2]) : null,
+      title: match[3],
+      message: match[4],
+    };
+  const plain = /^([^:]*): ?(.*)$/.exec(description);
+  return {
+    path: "",
+    line: null,
+    title: plain?.[1] ?? "",
+    message: plain?.[2] ?? description,
+  };
 }

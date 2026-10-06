@@ -864,7 +864,8 @@ export class Engine {
       { sha, state: ci.state, url: ci.url, at: this.now().toISOString() },
     ];
     if (ci.state === "failure") {
-      const failures: Annotation[] = ci.checkRunId ? await gh.annotations(ci.checkRunId) : [];
+      const failures: Annotation[] =
+        ci.failures ?? (ci.checkRunId ? await gh.annotations(ci.checkRunId) : []);
       const repairs = Number(task.stage_state?.repairs ?? 0);
       const maxRepairs = Math.min(Number(task.task_spec?.max_repairs ?? 2), 3);
       if (repairs >= maxRepairs)
