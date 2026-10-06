@@ -520,7 +520,8 @@ export class Engine {
         // A failed or cancelled task cannot absorb new work: a re-run must execute.
         !["cancelled", "failed"].includes(o.status) &&
         !o.merged_into &&
-        o.created_at <= task.created_at,
+        // Strict order (id breaks timestamp ties) so two duplicates never merge into each other.
+        (o.created_at < task.created_at || (o.created_at === task.created_at && o.id < task.id)),
     );
     const norm = normalizeTitle(task.title);
     const dup = others.find(

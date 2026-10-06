@@ -849,6 +849,26 @@ await check(
   },
 );
 
+await check(
+  "duplicates with identical timestamps merge one way only (parallel validation)",
+  async () => {
+    const store = new MemoryStore();
+    const a = store.addTask({ title: "Same batch task", task_spec: { kind: "diagnostic" } });
+    const b = store.addTask({ title: "Same batch task", task_spec: { kind: "diagnostic" } });
+    b.created_at = a.created_at; // one multi-row insert
+    await Promise.all([
+      makeEngine(store, null, null, { workerId: "p1" }).tick(),
+      makeEngine(store, null, null, { workerId: "p2" }).tick(),
+    ]);
+    advance(61_000);
+    await drive(store, null, null, 2);
+    const rows = [a, b].map((t) => store.taskRows.find((r) => r.id === t.id));
+    const merged = rows.filter((r) => r.merged_into);
+    assert.equal(merged.length, 1, JSON.stringify(rows.map((r) => [r.status, r.merged_into])));
+    assert.equal(rows.filter((r) => r.status === "completed").length, 1);
+  },
+);
+
 await check("a re-run of a failed task executes instead of merging into the failure", async () => {
   const store = new MemoryStore();
   const failed = store.addTask({
