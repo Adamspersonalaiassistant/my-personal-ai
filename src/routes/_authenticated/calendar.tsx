@@ -202,7 +202,7 @@ function CalendarPage() {
   const [priority, setPriority] = useState(3);
   const [projectId, setProjectId] = useState("");
   const [participants, setParticipants] = useState("");
-  const [eventType, setEventType] = useState<"event" | "meeting" | "appointment" | "lunch">(
+  const [eventType, setEventType] = useState<"event" | "meeting" | "appointment" | "lunch" | "dinner">(
     "event",
   );
 
@@ -1018,7 +1018,7 @@ function CalendarPage() {
                       value={eventType}
                       onChange={(event) =>
                         setEventType(
-                          event.target.value as "event" | "meeting" | "appointment" | "lunch",
+                          event.target.value as "event" | "meeting" | "appointment" | "lunch" | "dinner",
                         )
                       }
                       className="min-h-11 w-full rounded-xl border border-border/55 bg-card/45 px-3 text-[14px] outline-none"
@@ -1027,6 +1027,7 @@ function CalendarPage() {
                       <option value="meeting">Meeting</option>
                       <option value="appointment">Appointment</option>
                       <option value="lunch">Lunch</option>
+                      <option value="dinner">Dinner</option>
                     </select>
                     <input
                       value={participants}
