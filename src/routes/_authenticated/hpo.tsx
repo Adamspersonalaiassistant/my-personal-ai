@@ -312,6 +312,7 @@ function HpoWorkspace() {
                 onOpenAccount={setSelected}
                 onAskEmery={(prompt, title) => openHpoEmery(prompt, title)}
                 onMore={() => void loadMore()}
+                onSaved={() => { setRevision((current) => current + 1); void refresh(); }}
                 loading={moreLoading}
               />
             ) : null}
