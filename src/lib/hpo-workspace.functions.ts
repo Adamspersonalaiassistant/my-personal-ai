@@ -48,10 +48,10 @@ export const getHpoWorkspace = createServerFn({ method: "GET" })
         .from("meetings")
         .select("id,title,meeting_at,end_at,participants,metadata")
         .eq("user_id", context.userId)
-        .gte("meeting_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+        .gte("meeting_at", new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString())
         .lte("meeting_at", new Date(Date.now() + 120 * 24 * 60 * 60 * 1000).toISOString())
         .order("meeting_at")
-        .limit(120),
+        .limit(300),
       db
         .from("hpo_interactions")
         .select("account_id,occurred_at")
@@ -102,7 +102,10 @@ export const getHpoWorkspace = createServerFn({ method: "GET" })
             meta["hpo"] === true ||
             typeof meta["hpo_account_id"] === "string" ||
             typeof meta["account_id"] === "string" ||
-            typeof meta["hpo_activity_type"] === "string")
+            typeof meta["hpo_activity_type"] === "string" ||
+            ["lunch", "dinner"].includes(String(meta["event_type"] || "").toLowerCase()) ||
+            (String(meta["event_type"] || "").toLowerCase() === "event" &&
+              /\\b(attorney|law firm|esq\\.?|mri|medical|physician|doctor|clinic|orthop|networking|grand opening|5k|race booth|hudson pro)\\b/i.test(String(row.title || ""))))
         );
       }),
       accountLimitReached: (accounts.data?.length ?? 0) === 1000,
