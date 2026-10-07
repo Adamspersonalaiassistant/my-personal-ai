@@ -306,7 +306,14 @@ Resolve relative dates from CURRENT LOCAL TIME. Do not invent a follow-up date o
     if (exact.error) throw exact.error;
     meeting = exact.data ?? null;
   }
-  const account = accounts.find((row: any) => row.id === parsed.target_account_id) ?? null;
+  let account = accounts.find((row: any) => row.id === parsed.target_account_id) ?? null;
+  if (!account && typeof parsed.target_account_id === "string") {
+    const exactAccount = await db.from("hpo_accounts")
+      .select("id,name,account_type,specialty,city,status")
+      .eq("id", parsed.target_account_id).eq("user_id", userId).maybeSingle();
+    if (exactAccount.error) throw exactAccount.error;
+    account = exactAccount.data ?? null;
+  }
 
   if (action === "schedule_activity") {
     if (!meeting) return clarify("What date and time should I put this HPO activity on your calendar?");
@@ -424,10 +431,17 @@ Resolve relative dates from CURRENT LOCAL TIME. Do not invent a follow-up date o
       : typeof meetingMeta["account_id"] === "string"
         ? String(meetingMeta["account_id"])
         : null;
-  const resolvedAccount =
+  let resolvedAccount =
     account ?? accounts.find((row: any) => row.id === meetingAccountId) ?? null;
-  if (activityType === "office_visit" && !resolvedAccount && !meeting) {
-    return clarify("Which office should I attach that office visit to?");
+  if (!resolvedAccount && meetingAccountId) {
+    const exactAccount = await db.from("hpo_accounts")
+      .select("id,name,account_type,specialty,city,status")
+      .eq("id", meetingAccountId).eq("user_id", userId).maybeSingle();
+    if (exactAccount.error) throw exactAccount.error;
+    resolvedAccount = exactAccount.data ?? null;
+  }
+  if (activityType === "office_visit" && !resolvedAccount) {
+    return clarify("Which HPO office should I attach this office visit to?");
   }
   const occurredAt = isoOrNull(parsed.occurred_at) ?? meeting?.meeting_at ?? new Date().toISOString();
   const activityTitle = String(
