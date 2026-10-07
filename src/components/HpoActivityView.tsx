@@ -81,9 +81,9 @@ const meetingType = (row: Meeting): ActivityType | null => {
   const hpoContext = meta["hpo"] === true || meta["domain"] === "hpo" ||
     typeof meta["hpo_account_id"] === "string" ||
     typeof meta["account_id"] === "string" ||
-    /\\b(orthop[a-z]*|hudson pro|attorney|law firm|esq\\.?|doctor|physician|clinic|grand opening|mri|medical|5k|booth|networking)\\b/i.test(row.title || "");
+    /\b(orthop[a-z]*|hudson pro|attorney|law firm|esq\.?|doctor|physician|clinic|grand opening|mri|medical|5k|booth|networking)\b/i.test(row.title || "");
   if (!hpoContext) return null;
-  if (base === "event" || /\\b(event|conference|networking|opening|5k|booth|oktoberfest)\\b/i.test(row.title || "")) return "event";
+  if (base === "event" || /\b(event|conference|networking|opening|5k|booth|oktoberfest)\b/i.test(row.title || "")) return "event";
   return null;
 };
 const dateTime = (value: string) =>
