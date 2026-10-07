@@ -103,8 +103,7 @@ export const getHpoWorkspace = createServerFn({ method: "GET" })
             typeof meta["hpo_account_id"] === "string" ||
             typeof meta["account_id"] === "string" ||
             typeof meta["hpo_activity_type"] === "string" ||
-            ["lunch", "dinner"].includes(String(meta["event_type"] || "").toLowerCase()) ||
-            (String(meta["event_type"] || "").toLowerCase() === "event" &&
+            (["lunch", "dinner", "event"].includes(String(meta["event_type"] || "").toLowerCase()) &&
               /\b(attorney|law firm|esq\.?|mri|medical|physician|doctor|clinic|orthop|networking|grand opening|5k|race booth|hudson pro)\b/i.test(String(row.title || ""))))
         );
       }),
