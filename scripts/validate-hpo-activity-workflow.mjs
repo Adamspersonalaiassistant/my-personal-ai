@@ -17,10 +17,15 @@ expect(
   "HPO workspace does not load structured activity fields",
 );
 expect(
-  view.includes("Office visits") &&
-    view.includes("Lunches") &&
-    view.includes("Dinners") &&
-    view.includes("Events"),
-  "Activity dropdown is incomplete",
+  view.includes('role="tablist"') && view.includes('role="tab"') &&
+    view.includes("Office Visits") && view.includes("Lunches") &&
+    view.includes("Dinners") && view.includes("Events"),
+  "Activity must have exactly the four primary HPO activity tabs",
 );
+expect(view.includes("Review and log") && view.includes("noteInteractionId"), "Planner notes are not reviewable from Activity");
+expect(view.includes("Log recap to HPO account") && view.includes("saveHpoActivityLog"), "Calendar recaps are not persisted in HPO CRM");
+const actions = read("src/lib/hpo-activity-actions.functions.ts");
+expect(actions.includes("eq(\"meeting_id\"") && actions.includes("hpo_recap_status"), "Calendar events must be deduplicated and marked recapped");
+const calendar = read("src/routes/_authenticated/calendar.tsx");
+expect(calendar.includes('<option value="dinner">Dinner</option>'), "Dinner must be creatable from Calendar");
 console.log("HPO Activity workflow validation passed");
