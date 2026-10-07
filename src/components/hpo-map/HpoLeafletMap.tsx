@@ -25,11 +25,12 @@ const TERMINAL = new Set([
   "bad_address",
 ]);
 type Filter = "all" | "account" | "prospect";
-type PinCategory = "attorney" | "doctor" | "chiro" | "chiro_pt" | "other";
+type PinCategory = "attorney" | "doctor" | "urgent_care" | "chiro" | "chiro_pt" | "other";
 
 const PIN_CATEGORIES: Record<PinCategory, { label: string; color: string }> = {
   attorney: { label: "Attorney", color: "#8b5cf6" },
   doctor: { label: "Doctor", color: "#1769e8" },
+  urgent_care: { label: "Urgent Care", color: "#ef4444" },
   chiro: { label: "Chiro", color: "#10b981" },
   chiro_pt: { label: "Chiro/PT", color: "#f59e0b" },
   other: { label: "Other", color: "#64748b" },
@@ -37,6 +38,7 @@ const PIN_CATEGORIES: Record<PinCategory, { label: string; color: string }> = {
 
 const PIN_CATEGORY_ORDER: PinCategory[] = [
   "doctor",
+  "urgent_care",
   "chiro",
   "chiro_pt",
   "attorney",
@@ -56,6 +58,8 @@ function officePinCategory(office: HpoMapOffice): PinCategory {
 
   if (/\b(attorney|law firm|law office|legal)\b/.test(source))
     return "attorney";
+  if (/\b(urgent care|walk-in clinic|walk in clinic)\b/.test(source))
+    return "urgent_care";
 
   const isChiro = /\b(chiro|chiropractor|chiropractic)\b/.test(source);
   const isPt = /\b(pt|physical therapy|physical therapist)\b/.test(source);
@@ -627,6 +631,7 @@ export function HpoLeafletMap({
     const counts: Record<PinCategory, number> = {
       attorney: 0,
       doctor: 0,
+      urgent_care: 0,
       chiro: 0,
       chiro_pt: 0,
       other: 0,
