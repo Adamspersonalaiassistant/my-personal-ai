@@ -261,7 +261,7 @@ export const createLinkedMeeting = createServerFn({ method: "POST" })
       endAt?: string | null;
       participants?: string[];
       projectId?: string | null;
-      eventType?: "event" | "meeting" | "appointment" | "lunch";
+      eventType?: "event" | "meeting" | "appointment" | "lunch" | "dinner";
     }) => {
       const title = String(input?.title ?? "").trim();
       if (!title) throw new Error("Meeting title is required");
@@ -278,7 +278,7 @@ export const createLinkedMeeting = createServerFn({ method: "POST" })
         meetingAt: input.meetingAt,
         endAt: endAt || new Date(Date.parse(input.meetingAt) + 60 * 60 * 1000).toISOString(),
         projectId: input?.projectId ? String(input.projectId) : null,
-        eventType: ["event", "meeting", "appointment", "lunch"].includes(String(input?.eventType))
+        eventType: ["event", "meeting", "appointment", "lunch", "dinner"].includes(String(input?.eventType))
           ? String(input.eventType)
           : "event",
         participants: Array.isArray(input?.participants)
