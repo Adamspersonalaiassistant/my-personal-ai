@@ -44,12 +44,12 @@ export const saveHpoActivityLog = createServerFn({ method: "POST" })
       if (!found.data) throw new Error("Calendar event not found.");
       meeting = found.data;
       const meta = record(meeting.metadata);
-      accountId ||= typeof meta.hpo_account_id === "string" ? meta.hpo_account_id
-        : typeof meta.account_id === "string" ? meta.account_id : null;
+      accountId ||= typeof meta['hpo_account_id'] === "string" ? meta['hpo_account_id']
+        : typeof meta['account_id'] === "string" ? meta['account_id'] : null;
       const existing = await db.from("hpo_interactions").select("id")
         .eq("user_id", userId).eq("meeting_id", meeting.id).limit(1);
       if (existing.error) throw existing.error;
-      if (existing.data?.length) return { ok: true, alreadyLogged: true, interactionId: existing.data[0].id };
+      if (existing.data?.length) return { ok: true, alreadyLogged: true, interactionId: existing.data[0]!.id };
     } else if (data.noteInteractionId) {
       const found = await db.from("hpo_interactions")
         .select("id,account_id,source_type,interaction_type,activity_type,occurred_at,metadata")
@@ -57,7 +57,7 @@ export const saveHpoActivityLog = createServerFn({ method: "POST" })
       if (found.error) throw found.error;
       if (!found.data || found.data.source_type !== "route" || found.data.interaction_type !== "note")
         throw new Error("Planner field note was not found or has already been classified.");
-      if (!record(found.data.metadata).field_note)
+      if (!record(found.data.metadata)['field_note'])
         throw new Error("Only saved Planner field notes can be classified here.");
       if (found.data.activity_type)
         return { ok: true, alreadyLogged: true, interactionId: found.data.id };
@@ -111,10 +111,10 @@ export const saveHpoActivityLog = createServerFn({ method: "POST" })
     if (account) {
       const lastTouch = account.last_touch_at && Date.parse(account.last_touch_at) > Date.parse(timestamp)
         ? account.last_touch_at : timestamp;
-      const patch: Record<string, unknown> = {
+      const patch = {
         last_touch_at: lastTouch, updated_at: new Date().toISOString(),
+        ...(data.nextAction ? { next_action: data.nextAction } : {}),
       };
-      if (data.nextAction) patch.next_action = data.nextAction;
       const updated = await db.from("hpo_accounts").update(patch)
         .eq("id", account.id).eq("user_id", userId);
       if (updated.error) throw updated.error;
