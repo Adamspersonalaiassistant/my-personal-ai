@@ -75,14 +75,13 @@ const meetingType = (row: Meeting): ActivityType | null => {
   if (explicit === "visit" || explicit === "office_visit") return "office_visit";
   if (explicit === "lunch" || explicit === "dinner" || explicit === "event") return explicit;
   const base = String(meta["event_type"] || "").toLowerCase();
-  // Calendar lunches/dinners are candidate relationship activities; exclude
-  // other personal calendar items unless there is clear HPO context.
-  if (base === "lunch" || base === "dinner") return base;
+  // Keep personal meals outside the HPO CRM unless explicitly linked.
   const hpoContext = meta["hpo"] === true || meta["domain"] === "hpo" ||
     typeof meta["hpo_account_id"] === "string" ||
     typeof meta["account_id"] === "string" ||
     /\b(orthop[a-z]*|hudson pro|attorney|law firm|esq\.?|doctor|physician|clinic|grand opening|mri|medical|5k|booth|networking)\b/i.test(row.title || "");
   if (!hpoContext) return null;
+  if (base === "lunch" || base === "dinner") return base;
   if (base === "event" || /\b(event|conference|networking|opening|5k|booth|oktoberfest)\b/i.test(row.title || "")) return "event";
   return null;
 };
