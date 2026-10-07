@@ -13,6 +13,7 @@ type Interaction = {
   id: string;
   account_id: string | null;
   interaction_type: string;
+  source_type?: string | null;
   activity_type?: string | null;
   activity_title?: string | null;
   meeting_id?: string | null;
