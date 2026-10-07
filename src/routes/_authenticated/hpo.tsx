@@ -229,7 +229,7 @@ function HpoWorkspace() {
                 </Button>
               </div>
             )}
-            {view === "planner" ? (
+            {view === "activity" ? (
               <HpoFollowupsCard
                 refreshKey={revision}
                 onOpenAccount={(id) => {
