@@ -39,6 +39,8 @@ jobs:
         run: npm run build
       - name: TypeScript
         run: npx tsc --noEmit
+      - name: HPO Activity workflow checks
+        run: npm run validate:hpo-activity
       - name: Emery improvement regression checks
         run: node scripts/validate-emery-improvement.mjs
       - name: Emery Voice activation regression checks
