@@ -66,6 +66,30 @@ export const saveHpoActivityLog = createServerFn({ method: "POST" })
         throw new Error("A Planner note must stay attached to its original account.");
       accountId = note.account_id;
     }
+    // A confirmed Planner note may be the same business meal/event already on Calendar.
+    // Link it only when one exact account/date/type match exists.
+    if (note && accountId && data.activityType !== "office_visit") {
+      const noteTime = Date.parse(note.occurred_at);
+      const possible = await db.from("meetings")
+        .select("id,title,meeting_at,metadata")
+        .eq("user_id", userId)
+        .gte("meeting_at", new Date(noteTime - 12*60*60*1000).toISOString())
+        .lte("meeting_at", new Date(noteTime + 12*60*60*1000).toISOString());
+      if (possible.error) throw possible.error;
+      const matches = (possible.data ?? []).filter((row) => {
+        const meta = record(row.metadata);
+        const linkedId = meta['hpo_account_id'] || meta['account_id'];
+        const linkedType = meta['hpo_activity_type'] || meta['event_type'];
+        return linkedId === accountId && linkedType === data.activityType;
+      });
+      if (matches.length === 1) {
+        const candidate = matches[0]!;
+        const existing = await db.from("hpo_interactions").select("id")
+          .eq("user_id", userId).eq("meeting_id", candidate.id).limit(1);
+        if (existing.error) throw existing.error;
+        if (!existing.data?.length) meeting = candidate;
+      }
+    }
     let account: any = null;
     if (accountId) {
       const found = await db.from("hpo_accounts")
@@ -93,7 +117,11 @@ export const saveHpoActivityLog = createServerFn({ method: "POST" })
     let interactionId: string;
     if (note) {
       const updated = await db.from("hpo_interactions")
-        .update({ ...values, metadata: { ...record(note.metadata), activity_confirmed_by_user: true } })
+        .update({
+          ...values,
+          ...(meeting ? { meeting_id: meeting.id } : {}),
+          metadata: { ...record(note.metadata), activity_confirmed_by_user: true },
+        })
         .eq("id", note.id).eq("user_id", userId).is("activity_type", null).select("id").single();
       if (updated.error) throw updated.error;
       interactionId = updated.data.id;
