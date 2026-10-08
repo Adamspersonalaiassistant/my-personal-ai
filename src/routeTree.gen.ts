@@ -18,6 +18,7 @@ import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/c
 import { Route as AuthenticatedConversationRouteImport } from './routes/_authenticated/conversation'
 import { Route as AuthenticatedHpoRouteImport } from './routes/_authenticated/hpo'
 import { Route as AuthenticatedIphoneRouteImport } from './routes/_authenticated/iphone'
+import { Route as AuthenticatedJarvisRouteImport } from './routes/_authenticated/jarvis'
 import { Route as AuthenticatedMeetingsRouteImport } from './routes/_authenticated/meetings'
 import { Route as AuthenticatedMemoriesRouteImport } from './routes/_authenticated/memories'
 import { Route as AuthenticatedPersonalRouteImport } from './routes/_authenticated/personal'
@@ -71,6 +72,11 @@ const AuthenticatedIphoneRoute = AuthenticatedIphoneRouteImport.update({
   path: '/iphone',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedJarvisRoute = AuthenticatedJarvisRouteImport.update({
+  id: '/jarvis',
+  path: '/jarvis',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedMeetingsRoute = AuthenticatedMeetingsRouteImport.update({
   id: '/meetings',
   path: '/meetings',
@@ -117,6 +123,7 @@ export interface FileRoutesByFullPath {
   '/conversation': typeof AuthenticatedConversationRoute
   '/hpo': typeof AuthenticatedHpoRoute
   '/iphone': typeof AuthenticatedIphoneRoute
+  '/jarvis': typeof AuthenticatedJarvisRoute
   '/meetings': typeof AuthenticatedMeetingsRoute
   '/memories': typeof AuthenticatedMemoriesRoute
   '/personal': typeof AuthenticatedPersonalRoute
@@ -134,6 +141,7 @@ export interface FileRoutesByTo {
   '/conversation': typeof AuthenticatedConversationRoute
   '/hpo': typeof AuthenticatedHpoRoute
   '/iphone': typeof AuthenticatedIphoneRoute
+  '/jarvis': typeof AuthenticatedJarvisRoute
   '/meetings': typeof AuthenticatedMeetingsRoute
   '/memories': typeof AuthenticatedMemoriesRoute
   '/personal': typeof AuthenticatedPersonalRoute
@@ -153,6 +161,7 @@ export interface FileRoutesById {
   '/_authenticated/conversation': typeof AuthenticatedConversationRoute
   '/_authenticated/hpo': typeof AuthenticatedHpoRoute
   '/_authenticated/iphone': typeof AuthenticatedIphoneRoute
+  '/_authenticated/jarvis': typeof AuthenticatedJarvisRoute
   '/_authenticated/meetings': typeof AuthenticatedMeetingsRoute
   '/_authenticated/memories': typeof AuthenticatedMemoriesRoute
   '/_authenticated/personal': typeof AuthenticatedPersonalRoute
@@ -172,6 +181,7 @@ export interface FileRouteTypes {
     | '/conversation'
     | '/hpo'
     | '/iphone'
+    | '/jarvis'
     | '/meetings'
     | '/memories'
     | '/personal'
@@ -189,6 +199,7 @@ export interface FileRouteTypes {
     | '/conversation'
     | '/hpo'
     | '/iphone'
+    | '/jarvis'
     | '/meetings'
     | '/memories'
     | '/personal'
@@ -207,6 +218,7 @@ export interface FileRouteTypes {
     | '/_authenticated/conversation'
     | '/_authenticated/hpo'
     | '/_authenticated/iphone'
+    | '/_authenticated/jarvis'
     | '/_authenticated/meetings'
     | '/_authenticated/memories'
     | '/_authenticated/personal'
@@ -286,6 +298,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedIphoneRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/jarvis': {
+      id: '/_authenticated/jarvis'
+      path: '/jarvis'
+      fullPath: '/jarvis'
+      preLoaderRoute: typeof AuthenticatedJarvisRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/meetings': {
       id: '/_authenticated/meetings'
       path: '/meetings'
@@ -346,6 +365,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedConversationRoute: typeof AuthenticatedConversationRoute
   AuthenticatedHpoRoute: typeof AuthenticatedHpoRoute
   AuthenticatedIphoneRoute: typeof AuthenticatedIphoneRoute
+  AuthenticatedJarvisRoute: typeof AuthenticatedJarvisRoute
   AuthenticatedMeetingsRoute: typeof AuthenticatedMeetingsRoute
   AuthenticatedMemoriesRoute: typeof AuthenticatedMemoriesRoute
   AuthenticatedPersonalRoute: typeof AuthenticatedPersonalRoute
@@ -363,6 +383,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedConversationRoute: AuthenticatedConversationRoute,
   AuthenticatedHpoRoute: AuthenticatedHpoRoute,
   AuthenticatedIphoneRoute: AuthenticatedIphoneRoute,
+  AuthenticatedJarvisRoute: AuthenticatedJarvisRoute,
   AuthenticatedMeetingsRoute: AuthenticatedMeetingsRoute,
   AuthenticatedMemoriesRoute: AuthenticatedMemoriesRoute,
   AuthenticatedPersonalRoute: AuthenticatedPersonalRoute,
