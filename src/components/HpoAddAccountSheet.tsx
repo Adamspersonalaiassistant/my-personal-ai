@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { CheckCircle2, ChevronDown, MessageCircle, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { CheckCircle2, MessageCircle, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   emeryDraftHpoAccount, saveHpoAccountWithContacts,
@@ -100,7 +100,7 @@ export function HpoAddAccountSheet({
     }
   }
 
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (working || filling || saving) return;
     setError(""); setDuplicateId(null); setSaving(true);
@@ -174,8 +174,12 @@ export function HpoAddAccountSheet({
               </label>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <label className="block text-xs font-medium">Account type
-                  <select value={TYPE_OPTIONS.includes(account.accountType) ? account.accountType : "Other"}
+                  <select value={account.accountType}
                     onChange={(e) => updateAccount("accountType",e.target.value)} className={inputClass}>
+                    <option value="">Choose account type</option>
+                    {account.accountType && !TYPE_OPTIONS.includes(account.accountType) && (
+                      <option value={account.accountType}>{account.accountType}</option>
+                    )}
                     {TYPE_OPTIONS.map((type) => <option key={type} value={type}>{type}</option>)}
                   </select>
                 </label>
