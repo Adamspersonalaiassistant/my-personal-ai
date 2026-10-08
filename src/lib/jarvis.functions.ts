@@ -53,6 +53,37 @@ export const getJarvisStatusPanel = createServerFn({ method: "GET" })
     jarvisStatusPanel(context.supabase as any, context.userId, await currentBearerToken()),
   );
 
+/**
+ * Owner-authenticated, PHI-minimized diagnostics for the Settings control center.
+ * Reuses canonical telemetry and execution receipts; no new database model.
+ * Never return free-text event metadata, patient identifiers, or secrets to the dashboard.
+ */
+export const getJarvisControlCenterIssues = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const db = context.supabase as any;
+    const [telemetry, receipts] = await Promise.all([
+      jarvisState.runtimeTelemetry(db, context.userId, 7),
+      jarvisState.executionReceipts(db, context.userId, 7),
+    ]);
+    return {
+      period_days: 7,
+      observed_events: telemetry.total_events,
+      recent_problems: telemetry.recent_problems.slice(0, 12).map((problem) => ({
+        at: problem.at,
+        domain: problem.domain ?? null,
+        event_type: problem.event_type,
+        action: problem.action,
+        status: problem.status,
+      })),
+      failed_executions: receipts.by_status["failed"] ?? 0,
+      unresolved_executions: receipts.by_status["needs_clarification"] ?? 0,
+      // The telemetry reader is bounded to its most recent records; these
+      // counts are observations, not an exhaustive incident inventory.
+      observed_problem_count: telemetry.recent_problems.length,
+    };
+  });
+
 export const sendJarvisMessage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { message: string; channel?: "typed" | "voice"; turnId?: string }) => {
