@@ -16,7 +16,7 @@ import {
 import { toSpeakable } from "@/lib/assistant-format";
 import { claimExclusiveEmeryVoice, releaseExclusiveEmeryVoice } from "@/lib/voice-session-guard";
 
-type Status = "idle" | "connecting" | "listening" | "thinking" | "error";
+type Status = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "error";
 
 type TurnResult = Awaited<ReturnType<typeof sendJarvisMessage>>;
 
@@ -28,7 +28,13 @@ type TurnResult = Awaited<ReturnType<typeof sendJarvisMessage>>;
  * Uses the shared exclusive-voice guard so Emery and JARVIS never talk over
  * each other.
  */
-export function JarvisVoiceControl({ onTurn }: { onTurn: (result: TurnResult) => void }) {
+export function JarvisVoiceControl({
+  onTurn,
+  variant = "compact",
+}: {
+  onTurn: (result: TurnResult) => void;
+  variant?: "compact" | "core";
+}) {
   const mintSecret = useServerFn(createJarvisRealtimeSecret);
   const sendTurn = useServerFn(sendJarvisMessage);
   const loadRoom = useServerFn(getJarvisRoom);
@@ -160,7 +166,9 @@ export function JarvisVoiceControl({ onTurn }: { onTurn: (result: TurnResult) =>
       channel.onmessage = (message) => {
         try {
           const event = JSON.parse(message.data);
-          if (event.type === "response.function_call_arguments.done") void handleToolCall(event);
+          if (event.type === "output_audio_buffer.started") setStatus("speaking");
+          else if (event.type === "output_audio_buffer.stopped") setStatus("listening");
+          else if (event.type === "response.function_call_arguments.done") void handleToolCall(event);
           else if (
             event.type === "response.output_item.done" &&
             event.item?.type === "function_call"
@@ -198,7 +206,45 @@ export function JarvisVoiceControl({ onTurn }: { onTurn: (result: TurnResult) =>
     }
   }, [handleToolCall, mintSecret, stop]);
 
-  const active = status === "listening" || status === "thinking" || status === "connecting";
+  const active = status === "listening" || status === "thinking" || status === "connecting" || status === "speaking";
+  if (variant === "core") {
+    const label = status === "idle" ? "Tap the Core to talk with JARVIS" :
+      status === "connecting" ? "Connecting securely…" :
+      status === "thinking" ? "JARVIS is working…" :
+      status === "speaking" ? "JARVIS is speaking…" :
+      status === "listening" ? "Listening…" : "Voice connection unavailable";
+    return (
+      <div className="flex flex-col items-center gap-3">
+        <button
+          type="button"
+          onClick={() => (active ? stop() : void start())}
+          aria-label={active ? "End JARVIS voice session" : "Start JARVIS voice conversation"}
+          aria-pressed={active}
+          className="group relative flex size-40 shrink-0 items-center justify-center rounded-full outline-none ring-offset-4 ring-offset-background transition-transform duration-300 hover:scale-[1.035] focus-visible:ring-2 focus-visible:ring-cyan-300 active:scale-[0.98] sm:size-48"
+        >
+          <span aria-hidden="true" className={`absolute inset-1 rounded-full border border-cyan-400/40 bg-[radial-gradient(circle_at_50%_42%,rgba(9,105,170,0.40),rgba(3,13,34,0.9)_65%)] shadow-[0_0_56px_rgba(0,153,255,0.18)] ${active ? "motion-safe:animate-pulse" : ""}`} />
+          <span aria-hidden="true" className={`absolute inset-4 rounded-full border-2 border-dashed border-cyan-300/50 ${active ? "motion-safe:animate-[spin_20s_linear_infinite]" : ""}`} />
+          <span aria-hidden="true" className={`absolute inset-8 rounded-full border border-blue-400/70 ${active ? "motion-safe:animate-[spin_12s_linear_infinite_reverse]" : ""}`} />
+          <span className="relative z-10 flex size-20 items-center justify-center rounded-full border border-cyan-300/40 bg-slate-950/80 text-cyan-100 shadow-[0_0_32px_rgba(65,193,255,0.2)]">
+            {status === "connecting" || status === "thinking" ? (
+              <Loader2 className="size-8 motion-safe:animate-spin" />
+            ) : active ? (
+              <MicOff className="size-8" />
+            ) : (
+              <Mic className="size-8" />
+            )}
+          </span>
+        </button>
+        <p className="text-center text-xs font-medium tracking-wide text-cyan-100/85" aria-live="polite">
+          {label}
+        </p>
+        {error ? <p className="max-w-xs text-center text-xs text-destructive" role="alert">{error}</p> : null}
+        <p className="text-center text-[11px] text-muted-foreground">
+          {active ? "Tap to end the session" : "Microphone starts only when you tap"}
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="flex items-center gap-2">
       <button
