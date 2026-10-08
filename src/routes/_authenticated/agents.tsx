@@ -58,7 +58,6 @@ function Agents() {
   const [description, setDescription] = useState("");
   const [persona, setPersona] = useState("");
 
-  const jarvis = agents.find((agent) => agent.slug === "jarvis-engineer") ?? null;
   const specialists = agents.filter((agent) => agent.slug !== "jarvis-engineer");
 
   async function refresh() {
@@ -124,32 +123,6 @@ function Agents() {
             <Plus className="size-4" /> Add
           </button>
         </div>
-
-        {jarvis ? (
-          <button
-            type="button"
-            onClick={() => navigate({ to: "/agents/$agentId", params: { agentId: jarvis.id } })}
-            className="emery-press group mb-3 flex w-full items-center gap-3 rounded-2xl border border-primary/25 bg-primary/[0.05] px-3.5 py-3.5 text-left hover:bg-primary/[0.08]"
-            aria-label="Open JARVIS Engineer"
-          >
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/[0.1] text-primary">
-              <Cpu className="size-5" strokeWidth={1.8} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <p className="text-[15px] font-semibold">JARVIS Engineer</p>
-                <span className="rounded-md bg-primary/[0.12] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-primary">
-                  Pinned
-                </span>
-              </div>
-              <p className="mt-0.5 line-clamp-2 text-xs leading-5 text-muted-foreground">
-                Your engineer behind Emery. Talks with you directly about building, fixing and
-                releasing Emery.
-              </p>
-            </div>
-            <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-          </button>
-        ) : null}
 
         <section className="mb-4 flex items-center gap-3 rounded-xl border border-border/35 bg-card/24 px-3.5 py-3">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/[0.065] text-primary">
