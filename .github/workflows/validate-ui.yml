@@ -39,6 +39,8 @@ jobs:
         run: npm run build
       - name: TypeScript
         run: npx tsc --noEmit
+      - name: HPO Account entry and relationship synchronization
+        run: node scripts/validate-hpo-account-entry.mjs
       - name: HPO Activity workflow checks
         run: npm run validate:hpo-activity
       - name: Emery improvement regression checks
