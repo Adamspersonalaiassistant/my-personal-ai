@@ -261,6 +261,7 @@ export const createLinkedMeeting = createServerFn({ method: "POST" })
       endAt?: string | null;
       participants?: string[];
       projectId?: string | null;
+      hpoAccountId?: string | null;
       eventType?: "event" | "meeting" | "appointment" | "lunch" | "dinner";
     }) => {
       const title = String(input?.title ?? "").trim();
@@ -278,6 +279,7 @@ export const createLinkedMeeting = createServerFn({ method: "POST" })
         meetingAt: input.meetingAt,
         endAt: endAt || new Date(Date.parse(input.meetingAt) + 60 * 60 * 1000).toISOString(),
         projectId: input?.projectId ? String(input.projectId) : null,
+        hpoAccountId: input?.hpoAccountId ? String(input.hpoAccountId) : null,
         eventType: ["event", "meeting", "appointment", "lunch", "dinner"].includes(String(input?.eventType))
           ? String(input.eventType)
           : "event",
@@ -294,9 +296,30 @@ export const createLinkedMeeting = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const db = context.supabase as any;
     await verifyProject(db, context.userId, data.projectId);
-    const metadata = data.projectId
-      ? { project_id: data.projectId, source_type: "manual", event_type: data.eventType }
-      : { source_type: "manual", event_type: data.eventType };
+    if (data.hpoAccountId) {
+      const linked = await db.from("hpo_accounts").select("id")
+        .eq("id", data.hpoAccountId).eq("user_id", context.userId)
+        .eq("status", "active").maybeSingle();
+      if (linked.error) throw linked.error;
+      if (!linked.data) throw new Error("Selected HPO account no longer exists.");
+    }
+    const hpoType = ["lunch", "dinner", "event"].includes(data.eventType)
+      ? data.eventType : null;
+    const metadata = {
+      source_type: "manual",
+      event_type: data.eventType,
+      ...(data.projectId ? { project_id: data.projectId } : {}),
+      ...(data.hpoAccountId ? {
+        domain: "hpo",
+        hpo: true,
+        hpo_account_id: data.hpoAccountId,
+        ...(hpoType ? {
+          hpo_activity_type: hpoType,
+          hpo_recap_required: true,
+          hpo_recap_status: "pending",
+        } : {}),
+      } : {}),
+    };
     const { data: meeting, error } = await db
       .from("meetings")
       .insert({
