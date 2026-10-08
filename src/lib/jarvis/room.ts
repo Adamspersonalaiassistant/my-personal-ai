@@ -340,7 +340,7 @@ export async function jarvisStatusPanel(db: any, userId: string, authToken: stri
       .catch((error) => ({ error: String(error?.message ?? error) })),
     state.releaseLedger(db, userId, 4),
   ]);
-  const reconciliation = (deployment as any).reconciliation ?? null;
+  const reconciliation = "reconciliation" in deployment ? deployment.reconciliation : null;
   return {
     production: reconciliation
       ? {
@@ -349,14 +349,14 @@ export async function jarvisStatusPanel(db: any, userId: string, authToken: stri
           github_main: reconciliation.github_main,
           in_sync: reconciliation.in_sync,
           discrepancies: reconciliation.discrepancies,
-          served_build_id: (deployment as any).served?.build_id ?? null,
+          served_build_id: "served" in deployment ? deployment.served.build_id : null,
         }
       : {
           commit: null,
           source: "unknown",
           github_main: null,
           in_sync: null,
-          discrepancies: [(deployment as any).error ?? "Deployment state unavailable"],
+          discrepancies: ["error" in deployment ? deployment.error : "Deployment state unavailable"],
           served_build_id: null,
         },
     status,

@@ -373,6 +373,20 @@ await check(
     });
     assert.equal(synced.in_sync, true);
     assert.equal(synced.discrepancies.length, 0);
+    const ledgerOnly = reconcileDeployment({
+      servedCommit: null,
+      runningCommit: null,
+      githubMain: release.production_commit_sha,
+      latestRelease: release,
+    });
+    assert.equal(ledgerOnly.in_sync, null, "Ledger agreement cannot verify the live bundle");
+    const unverifiedRelease = reconcileDeployment({
+      servedCommit: release.production_commit_sha,
+      runningCommit: null,
+      githubMain: release.production_commit_sha,
+      latestRelease: { ...release, deployment_verified: false },
+    });
+    assert.equal(unverifiedRelease.in_sync, false, "An unverified release cannot report in sync");
     const drift = reconcileDeployment({
       servedCommit: null,
       runningCommit: null,

@@ -130,7 +130,7 @@ assert.equal(
     address: "1 St",
     owner_name: "Bilal",
   }),
-  false,
+  true,
 );
 assert.equal(
   pure.eligiblePlannerAccount({
@@ -138,12 +138,14 @@ assert.equal(
     address: "1 St",
     tags: ["exclude_from_adam_route"],
   }),
-  false,
+  true,
 );
 assert.equal(
   pure.eligiblePlannerProspect({ address: "1 St", fit_status: "closed" }),
   false,
 );
+assert.equal(pure.eligiblePlannerAccount({ status: "inactive", address: "1 St" }), false);
+assert.equal(pure.eligiblePlannerAccount({ status: "active", address: "  " }), false);
 assert.match(pure.plannerGamePlan({}).priorNote, /No prior note/);
 assert.doesNotMatch(pure.plannerGamePlan({}).approach, /Jenni|Amanda/);
 assert.throws(() => pure.validatePlannerStartingPoint(null), /starting/);
@@ -290,6 +292,9 @@ const sessions = {
   },
 };
 stubs.set("@tanstack/react-start", { useServerFn: (fn) => fn });
+// UI checks must not import live server auth or perform field mutations.
+stubs.set("@/lib/hpo-route.functions", { addHpoRouteStopNote: async () => {}, optimizeHpoRoute: async () => {} });
+stubs.set("@/lib/hpo-field.functions", { removeHpoRouteStop: async () => {}, reoptimizeHpoRouteRemaining: async () => {} });
 stubs.set("@/lib/hpo-route-session.functions", sessions);
 stubs.set("@/lib/hpo-weekly-planner.functions", {
   getHpoWeeklyPlanner: async () => ({
@@ -631,7 +636,7 @@ await optimizeTest(dbFor());
 assert.deepEqual(applied[0].p_stop_ids, ["s1", "s0"]);
 assert.equal(
   applied[0].p_patch.metadata.optimization_engine,
-  "open_road_matrix",
+  "open_road_matrix_exact_v2",
 );
 assert.deepEqual(
   applied[0].p_patch.metadata.route_geometry[0],
@@ -764,6 +769,7 @@ const serverDB = {
   from(table) {
     assert(table in records, `Unexpected table: ${table}`);
     let conditions = [];
+    let nonNull = [];
     let included = null;
     let range = null;
     let limit = null;
@@ -773,6 +779,12 @@ const serverDB = {
       },
       eq(field, value) {
         conditions.push([field, value]);
+        return this;
+      },
+      not(field, operator, value) {
+        assert.equal(operator, "is");
+        assert.equal(value, null);
+        nonNull.push(field);
         return this;
       },
       in(field, values) {
@@ -794,6 +806,7 @@ const serverDB = {
         let data = records[table].filter((r) =>
           conditions.every(([f, v]) => r[f] === v),
         );
+        data = data.filter((r) => nonNull.every((field) => r[field] != null));
         if (included)
           data = data.filter((r) => included[1].includes(r[included[0]]));
         if (range) data = data.slice(range[0], range[1] + 1);
@@ -813,7 +826,8 @@ const serverContext = { supabase: serverDB, userId: "test-user" };
 const pool = await actualSessions.getHpoPlannerOffices({
   context: serverContext,
 });
-assert.equal(pool.allCandidates.length, 4);
+assert.equal(pool.allCandidates.length, 5);
+assert(pool.allCandidates.some((office) => office.accountId === "excluded"), "Legacy tags must not silently hide active CRM accounts");
 assert.equal(pool.candidates.length, 0);
 const selected = [{ accountId: ids[0], visitType: "lunch" }];
 const plans = await actualSessions.prepareHpoPlannerGamePlan({
@@ -832,7 +846,7 @@ await assert.rejects(
       },
       context: serverContext,
     }),
-  /unavailable or excluded/,
+  /selected office could not be loaded from its saved record/,
 );
 const originalKey = process.env.OPENAI_API_KEY;
 process.env.OPENAI_API_KEY = "test-only-placeholder";

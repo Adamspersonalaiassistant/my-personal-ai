@@ -56,7 +56,8 @@ const prompt = deviceContinuityPrompt(metadata);
 assert(prompt.includes("presentation context only"));
 assert(prompt.includes("never create a separate Emery identity"));
 assert(prompt.includes("same server-side conversation"));
-assert(prompt.includes("canonical controllers"));
+assert(prompt.includes("controllers, execution receipts"));
+assert(ONE_EMERY_DEVICE_CONTRACT.includes("canonical controllers"));
 assert(ONE_EMERY_DEVICE_CONTRACT.includes("one assistant across iPhone PWA"));
 assert(ONE_EMERY_DEVICE_CONTRACT.includes("never forks memory"));
 
@@ -67,7 +68,8 @@ assert.equal(manifest.id, "/");
 assert.equal(manifest.display, "standalone");
 assert(!("orientation" in manifest), "Phase 8 must not lock the shared app to portrait-only");
 assert(Array.isArray(manifest.shortcuts) && manifest.shortcuts.length >= 4);
-assert(manifest.shortcuts.some((item) => item.url.startsWith("/chat")));
+assert(manifest.start_url.startsWith("/chat"));
+assert(manifest.shortcuts.some((item) => item.url.startsWith("/conversation")));
 assert(manifest.shortcuts.some((item) => item.url.startsWith("/hpo")));
 assert(manifest.shortcuts.some((item) => item.url.startsWith("/calendar")));
 assert(manifest.shortcuts.some((item) => item.url.startsWith("/capture")));
@@ -117,14 +119,16 @@ assert(!deviceHookSource.includes("deviceId"));
 assert(bootstrapSource.includes("useEmeryDeviceContinuity"));
 assert(rootSource.includes("EmeryDeviceContinuityBootstrap"));
 
-// Phone and desktop are two presentations of the same routes and same backend.
-assert(chatSource.includes("sendEmeryMessage"));
-assert(chatSource.includes("getMainConversationPage"));
+// Voice home and typed conversation remain two surfaces of the same assistant.
+const conversationSource = fs.readFileSync(new URL("../src/routes/_authenticated/conversation.tsx", import.meta.url), "utf8");
+assert(chatSource.includes("EmeryVoiceControl"));
+assert(conversationSource.includes("sendEmeryMessage"));
+assert(conversationSource.includes("getMainConversationPage"));
 assert(appShellSource.includes("md:hidden"));
 assert(appShellSource.includes("md:flex"));
 assert(appShellSource.includes('to="/chat"'));
-assert(appShellSource.includes('to="/hpo"'));
-assert(appShellSource.includes('to="/calendar"'));
+assert(appShellSource.includes('to: "/hpo"'));
+assert(appShellSource.includes('to: "/calendar"'));
 
 // Central Emery already guarantees one identity/conversation/action stack across entry points.
 assert(

@@ -45,17 +45,25 @@ export function JarvisVoiceControl({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const channelRef = useRef<RTCDataChannel | null>(null);
   const handledCalls = useRef(new Set<string>());
+  const sessionEpoch = useRef(0);
+  const onTurnRef = useRef(onTurn);
+  onTurnRef.current = onTurn;
 
   const stop = useCallback(() => {
-    channelRef.current?.close();
-    peerRef.current?.getSenders().forEach((sender) => sender.track?.stop());
-    peerRef.current?.close();
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    audioRef.current?.remove();
+    sessionEpoch.current += 1;
+    const channel = channelRef.current;
+    const peer = peerRef.current;
+    const stream = streamRef.current;
+    const audio = audioRef.current;
     channelRef.current = null;
     peerRef.current = null;
     streamRef.current = null;
     audioRef.current = null;
+    channel?.close();
+    peer?.getSenders().forEach((sender) => sender.track?.stop());
+    peer?.close();
+    stream?.getTracks().forEach((track) => track.stop());
+    audio?.remove();
     handledCalls.current.clear();
     releaseExclusiveEmeryVoice(stop);
     setStatus("idle");
@@ -68,6 +76,8 @@ export function JarvisVoiceControl({
       const callId = event.call_id ?? event.item?.call_id;
       const name = event.name ?? event.item?.name;
       if (!callId || name !== "jarvis_turn" || handledCalls.current.has(callId)) return;
+      const epoch = sessionEpoch.current;
+      const channel = channelRef.current;
       handledCalls.current.add(callId);
       let request = "";
       try {
@@ -95,7 +105,8 @@ export function JarvisVoiceControl({
         });
         if (outcome.kind === "completed") {
           const result = outcome.result;
-          onTurn(result as unknown as TurnResult);
+          if (epoch !== sessionEpoch.current) return;
+          onTurnRef.current(result as unknown as TurnResult);
           // The full written answer stays in the shared thread; Voice gets it
           // without markdown symbols so nothing like "hash hash" is ever spoken.
           output = toSpeakable(result.agentMessage?.content ?? result.error ?? output) || output;
@@ -106,7 +117,7 @@ export function JarvisVoiceControl({
       } catch (caught) {
         console.error(caught);
       }
-      const channel = channelRef.current;
+      if (epoch !== sessionEpoch.current) return;
       if (channel?.readyState === "open") {
         channel.send(
           JSON.stringify({
@@ -118,7 +129,7 @@ export function JarvisVoiceControl({
       }
       setStatus("listening");
     },
-    [loadRoom, onTurn, sendTurn],
+    [loadRoom, sendTurn],
   );
 
   const start = useCallback(async () => {
@@ -134,13 +145,19 @@ export function JarvisVoiceControl({
     }
     setStatus("connecting");
     claimExclusiveEmeryVoice(stop);
+    const epoch = ++sessionEpoch.current;
     try {
       const token = await mintSecret();
+      if (epoch !== sessionEpoch.current) return;
       if (!("clientSecret" in token) || !token.clientSecret)
         throw new Error("error" in token ? token.error : "Voice session unavailable.");
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
+      if (epoch !== sessionEpoch.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       streamRef.current = stream;
       const peer = new RTCPeerConnection();
       peerRef.current = peer;
@@ -158,12 +175,15 @@ export function JarvisVoiceControl({
         }
       };
       peer.onconnectionstatechange = () => {
-        if (["failed", "disconnected", "closed"].includes(peer.connectionState)) stop();
+        if (epoch === sessionEpoch.current && ["failed", "disconnected", "closed"].includes(peer.connectionState)) stop();
       };
       const channel = peer.createDataChannel("oai-events");
       channelRef.current = channel;
-      channel.onopen = () => setStatus("listening");
+      channel.onopen = () => {
+        if (epoch === sessionEpoch.current) setStatus("listening");
+      };
       channel.onmessage = (message) => {
+        if (epoch !== sessionEpoch.current) return;
         try {
           const event = JSON.parse(message.data);
           if (event.type === "output_audio_buffer.started") setStatus("speaking");
@@ -184,7 +204,9 @@ export function JarvisVoiceControl({
         }
       };
       const offer = await peer.createOffer();
+      if (epoch !== sessionEpoch.current) return;
       await peer.setLocalDescription(offer);
+      if (epoch !== sessionEpoch.current) return;
       const sdp = await fetch(
         `https://api.openai.com/v1/realtime/calls?model=${encodeURIComponent(token.model)}`,
         {
@@ -196,9 +218,13 @@ export function JarvisVoiceControl({
           },
         },
       );
+      if (epoch !== sessionEpoch.current) return;
       if (!sdp.ok) throw new Error("The secure realtime voice connection was rejected.");
-      await peer.setRemoteDescription({ type: "answer", sdp: await sdp.text() });
+      const answer = await sdp.text();
+      if (epoch !== sessionEpoch.current) return;
+      await peer.setRemoteDescription({ type: "answer", sdp: answer });
     } catch (caught) {
+      if (epoch !== sessionEpoch.current) return;
       console.error(caught);
       stop();
       setError(caught instanceof Error ? caught.message : "JARVIS Voice could not start.");

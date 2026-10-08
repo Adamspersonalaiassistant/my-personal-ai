@@ -574,13 +574,19 @@ export function reconcileDeployment(input: {
     running_server_commit: input.runningCommit,
     latest_release_commit: input.latestRelease?.production_commit_sha ?? null,
     latest_release_verified: Boolean(input.latestRelease?.deployment_verified),
-    in_sync: comparable
-      ? sameSha(productionCommit!, input.githubMain!) &&
-        Boolean(
-          input.latestRelease &&
-          sameSha(input.latestRelease.production_commit_sha, productionCommit!),
-        )
-      : null,
+    // Ledger disagreement proves drift, but agreement alone cannot verify
+    // the deployed bundle. Only observed production plus a verified matching
+    // release can produce a positive synchronization claim.
+    in_sync: !comparable
+      ? null
+      : !sameSha(productionCommit!, input.githubMain!)
+        ? false
+        : !input.servedCommit
+          ? null
+          : Boolean(
+              input.latestRelease?.deployment_verified &&
+              sameSha(input.latestRelease.production_commit_sha, productionCommit!),
+            ),
     discrepancies,
   };
 }

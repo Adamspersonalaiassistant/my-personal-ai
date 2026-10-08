@@ -39,6 +39,23 @@ jobs:
         run: npm run build
       - name: TypeScript
         run: npx tsc --noEmit
+      - name: JARVIS Control Center runtime contracts
+        run: node --experimental-strip-types scripts/validate-jarvis-control-center.mjs
+      - name: JARVIS identity and integration regression checks
+        run: npm run validate:jarvis
+      - name: JARVIS worker and release safeguards
+        run: npm run validate:jarvis-worker && npm run validate:jarvis-release
+      - name: Emery device continuity regression checks
+        run: node --experimental-strip-types scripts/validate-emery-device-continuity.mjs
+      - name: Focused JARVIS Control Center lint
+        run: >-
+          npx eslint --rule 'prettier/prettier: off'
+          src/routes/_authenticated/jarvis.tsx
+          src/components/JarvisRoom.tsx
+          src/components/JarvisVoiceControl.tsx
+          src/lib/jarvis.functions.ts
+          src/lib/jarvis/room.ts
+          src/lib/jarvis/state.ts
       - name: HPO Account entry and relationship synchronization
         run: node scripts/validate-hpo-account-entry.mjs
       - name: HPO Activity workflow checks
@@ -49,6 +66,10 @@ jobs:
         run: node scripts/validate-emery-voice.mjs
       - name: HPO Field OS regression checks
         run: npm run validate:hpo-field-os
+      - name: Install isolated Planner test dependency
+        run: npm install --no-save --package-lock=false --no-audit --no-fund jsdom@30.1.1
+      - name: HPO Planner UI, optimizer and server handler regression checks
+        run: node scripts/validate-hpo-planner-workflow.mjs
       - name: Phase 0 zero-credit certification
         run: npm run validate:phase0
       - name: Adam-specific behavior certification

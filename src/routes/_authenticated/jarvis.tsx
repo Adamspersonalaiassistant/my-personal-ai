@@ -60,12 +60,14 @@ function JarvisControlCenter() {
       setPanel(livePanel.value);
       setPanelError(null);
     } else {
+      setPanel(null);
       setPanelError("Production and engineering status could not be refreshed.");
     }
     if (liveIssues.status === "fulfilled") {
       setIssues(liveIssues.value);
       setIssuesError(null);
     } else {
+      setIssues(null);
       setIssuesError("Recent diagnostic events could not be refreshed.");
     }
     setRefreshing(false);
