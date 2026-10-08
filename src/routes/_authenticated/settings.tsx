@@ -6,6 +6,7 @@ import {
   Brain,
   CheckSquare,
   ChevronRight,
+  Cpu,
   Database,
   FileUp,
   Mic2,
@@ -130,6 +131,24 @@ function Settings() {
               <p className="mt-0.5 truncate text-xs text-muted-foreground">{user?.email}</p>
             </div>
           </div>
+        </SettingsGroup>
+
+        <SettingsGroup title="Engineering">
+          <Link
+            to="/jarvis"
+            className="emery-press flex min-h-[76px] items-center gap-3 px-3.5 py-3 hover:bg-primary/[0.05]"
+          >
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/[0.08] text-primary">
+              <Cpu className="size-5" strokeWidth={1.7} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">JARVIS · Engineering Control Center</p>
+              <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+                Production health, engineering work, improvement ideas, releases and live voice
+              </p>
+            </div>
+            <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+          </Link>
         </SettingsGroup>
 
         <SettingsGroup title="iPhone">

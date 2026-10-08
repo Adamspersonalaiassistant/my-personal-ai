@@ -54,7 +54,7 @@ const STATUS_ROWS: Array<{ key: string; label: string }> = [
   { key: "completed", label: "Completed" },
 ];
 
-export function JarvisRoom() {
+export function JarvisRoom({ onBack }: { onBack?: () => void } = {}) {
   const loadRoom = useServerFn(getJarvisRoom);
   const loadPanel = useServerFn(getJarvisStatusPanel);
   const send = useServerFn(sendJarvisMessage);
@@ -172,13 +172,24 @@ export function JarvisRoom() {
       <div className="flex h-full min-h-0 flex-col">
         <section className="shrink-0 border-b border-border/35 bg-background/62 px-3 py-2 backdrop-blur-2xl sm:px-5">
           <div className="mx-auto flex max-w-2xl items-center gap-3">
-            <Link
-              to="/agents"
-              aria-label="Back to agents"
-              className="emery-press emery-surface flex size-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground"
-            >
-              <ArrowLeft className="size-4" />
-            </Link>
+            {onBack ? (
+              <button
+                type="button"
+                onClick={onBack}
+                aria-label="Back to JARVIS control center"
+                className="emery-press emery-surface flex size-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground"
+              >
+                <ArrowLeft className="size-4" />
+              </button>
+            ) : (
+              <Link
+                to="/jarvis"
+                aria-label="Back to JARVIS control center"
+                className="emery-press emery-surface flex size-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground"
+              >
+                <ArrowLeft className="size-4" />
+              </Link>
+            )}
             <div className="emery-icon-well hidden size-10 shrink-0 items-center justify-center rounded-xl min-[390px]:flex">
               <Cpu className="size-[18px]" strokeWidth={1.8} />
             </div>
