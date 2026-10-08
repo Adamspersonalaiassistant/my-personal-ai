@@ -189,7 +189,7 @@ export function JarvisRoom({ onBack }: { onBack?: () => void } = {}) {
               >
                 <ArrowLeft className="size-4" />
               </Link>
-            )
+            )}
             <div className="emery-icon-well hidden size-10 shrink-0 items-center justify-center rounded-xl min-[390px]:flex">
               <Cpu className="size-[18px]" strokeWidth={1.8} />
             </div>
