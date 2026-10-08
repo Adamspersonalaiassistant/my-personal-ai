@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { setTaskCompleted } from "@/lib/emery.functions";
+import { listHpoCalendarAccounts } from "@/lib/hpo-account-create.functions";
 import {
   createLinkedMeeting,
   createLinkedTask,
@@ -162,6 +163,7 @@ function CalendarPage() {
   const loadTasks = useServerFn(listUnifiedTasks);
   const loadMeetings = useServerFn(listUnifiedMeetings);
   const loadProjects = useServerFn(listProjectOptions);
+  const loadHpoAccounts = useServerFn(listHpoCalendarAccounts);
   const addTask = useServerFn(createLinkedTask);
   const addMeeting = useServerFn(createLinkedMeeting);
   const toggleTask = useServerFn(setTaskCompleted);
@@ -176,6 +178,8 @@ function CalendarPage() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
+  const [hpoAccounts, setHpoAccounts] = useState<Array<{id:string;name:string;city:string|null}>>([]);
+  const [hpoAccountId, setHpoAccountId] = useState("");
   const [surface, setSurface] = useState<CalendarSurface>("calendar");
   const [view, setView] = useState<CalendarView>("day");
   const [selectedDate, setSelectedDate] = useState(() => dayStart(new Date()));
@@ -205,6 +209,11 @@ function CalendarPage() {
   const [eventType, setEventType] = useState<"event" | "meeting" | "appointment" | "lunch" | "dinner">(
     "event",
   );
+
+  useEffect(() => {
+    void loadHpoAccounts().then((result) => setHpoAccounts(result.accounts))
+      .catch(() => { /* Calendar still works when HPO accounts are temporarily unavailable. */ });
+  }, [loadHpoAccounts]);
 
   const gridRef = useRef<HTMLDivElement | null>(null);
   const addRequestIdRef = useRef<string | null>(null);
@@ -503,6 +512,7 @@ function CalendarPage() {
     setProjectId("");
     setParticipants("");
     setEventType("event");
+    setHpoAccountId("");
   }
 
   function openAddFor(date = selectedDate) {
@@ -522,6 +532,9 @@ function CalendarPage() {
     setDeadlineWhen("");
     setAddKind(surface === "tasks" ? "task" : addKind);
     addRequestIdRef.current = clientRequestId();
+    if (surface !== "tasks") {
+      void loadHpoAccounts().then((result) => setHpoAccounts(result.accounts)).catch(() => {});
+    }
     setShowAdd(true);
   }
 
@@ -571,6 +584,7 @@ function CalendarPage() {
               .map((value) => value.trim())
               .filter(Boolean),
             projectId: projectId || null,
+            hpoAccountId: hpoAccountId || null,
             eventType,
           },
         });
@@ -1029,6 +1043,24 @@ function CalendarPage() {
                       <option value="lunch">Lunch</option>
                       <option value="dinner">Dinner</option>
                     </select>
+                    <label className="block text-xs font-medium text-muted-foreground">
+                      Link HPO account (optional)
+                      <select
+                        value={hpoAccountId}
+                        onChange={(event) => setHpoAccountId(event.target.value)}
+                        className="mt-1.5 min-h-11 w-full rounded-xl border border-border/55 bg-card/45 px-3 text-[14px] outline-none"
+                      >
+                        <option value="">Personal / no HPO account</option>
+                        {hpoAccounts.map((office) => (
+                          <option key={office.id} value={office.id}>
+                            {office.name}{office.city ? ` · ${office.city}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="mt-1 block text-[11px]">
+                        Linked HPO lunches, dinners, and events appear in Activity for a recap.
+                      </span>
+                    </label>
                     <input
                       value={participants}
                       onChange={(event) => setParticipants(event.target.value)}
