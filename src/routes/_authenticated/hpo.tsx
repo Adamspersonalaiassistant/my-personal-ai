@@ -20,7 +20,8 @@ import { HpoFieldNav, type HpoFieldView } from "@/components/HpoFieldNav";
 import { HpoAccountFieldDetail } from "@/components/HpoAccountFieldDetail";
 import { HpoEmerySheet, openHpoEmery } from "@/components/HpoEmerySheet";
 import { HpoActivityView } from "@/components/HpoActivityView";
-import { createHpoAccount, logHpoInteraction } from "@/lib/hpo.functions";
+import { HpoAddAccountSheet } from "@/components/HpoAddAccountSheet";
+import { logHpoInteraction } from "@/lib/hpo.functions";
 import { getHpoWorkspace, setHpoFieldAccountFollowup } from "@/lib/hpo-workspace.functions";
 import {
   updateVerifiedHpoAccountFacts,
@@ -93,7 +94,6 @@ export const Route = createFileRoute("/_authenticated/hpo")({
 
 function HpoWorkspace() {
   const read = useServerFn(getHpoWorkspace);
-  const createAccount = useServerFn(createHpoAccount);
   const logTouch = useServerFn(logHpoInteraction);
   const setFollowup = useServerFn(setHpoFieldAccountFollowup);
   const requestedRouteId =
@@ -340,12 +340,21 @@ function HpoWorkspace() {
               />
             )}
             {sheet === "add" && (
-              <AccountSheet
+              <HpoAddAccountSheet
                 onClose={() => setSheet(null)}
-                onSave={async (values) => {
-                  await createAccount({ data: values });
+                onCreated={(id) => {
                   setSheet(null);
-                  await refresh();
+                  setView("accounts");
+                  setNoteSavedAccount(null);
+                  setSelected(id);
+                  void refresh();
+                }}
+                onExisting={(id) => {
+                  setSheet(null);
+                  setView("accounts");
+                  setNoteSavedAccount(null);
+                  setSelected(id);
+                  void refresh();
                 }}
               />
             )}
@@ -808,97 +817,6 @@ function Sheet({
         </div>
       </section>
     </div>
-  );
-}
-function AccountSheet({
-  onClose,
-  onSave,
-}: {
-  onClose: () => void;
-  onSave: (values: {
-    name: string;
-    accountType: string;
-    address: string;
-    city: string;
-    notes: string;
-  }) => Promise<void>;
-}) {
-  const [name, setName] = useState("");
-  const [accountType, setType] = useState("");
-  const [address, setAddress] = useState("");
-  const [city, setCity] = useState("");
-  const [notes, setNotes] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  return (
-    <Sheet title="Add account" onClose={onClose}>
-      <form
-        className="space-y-3"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          setSaving(true);
-          setError("");
-          try {
-            await onSave({ name, accountType, address, city, notes });
-          } catch (cause) {
-            setError(cause instanceof Error ? cause.message : "Could not save account.");
-          } finally {
-            setSaving(false);
-          }
-        }}
-      >
-        <label className="block text-xs text-muted-foreground">
-          Office name
-          <input
-            required
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className={`mt-1 ${field}`}
-          />
-        </label>
-        <label className="block text-xs text-muted-foreground">
-          Type
-          <input
-            value={accountType}
-            onChange={(e) => setType(e.target.value)}
-            placeholder="Attorney, provider…"
-            className={`mt-1 ${field}`}
-          />
-        </label>
-        <label className="block text-xs text-muted-foreground">
-          Address
-          <input
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            className={`mt-1 ${field}`}
-          />
-        </label>
-        <label className="block text-xs text-muted-foreground">
-          City
-          <input
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
-            className={`mt-1 ${field}`}
-          />
-        </label>
-        <label className="block text-xs text-muted-foreground">
-          Relationship notes
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            className={`mt-1 min-h-24 py-3 ${field}`}
-          />
-        </label>
-        {error && (
-          <p role="alert" className="text-xs text-destructive">
-            {error}
-          </p>
-        )}
-        <Button className="h-12 w-full" disabled={saving || !name.trim()}>
-          {saving ? "Saving…" : "Save account"}
-        </Button>
-      </form>
-    </Sheet>
   );
 }
 function TouchSheet({
