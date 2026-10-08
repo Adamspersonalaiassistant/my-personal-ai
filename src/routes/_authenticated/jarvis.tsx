@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowUpRight,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Cpu,
@@ -306,6 +307,31 @@ function JarvisControlCenter() {
           {status?.approvals_required?.length ? (
             <div className="rounded-xl border border-amber-400/25 bg-amber-400/[0.04] px-3.5 py-3 text-xs text-amber-100/90">
               {status.approvals_required.length} approval item(s) need review in the engineering conversation.
+            </div>
+          ) : null}
+        </section>
+
+        <section aria-label="Engineering connectivity" className="space-y-3">
+          <SectionHeading icon={ShieldCheck} title="Engineering connectivity" description="Configuration presence only; a configured key is not proof that a tool or deployment is healthy." />
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            {([
+              ["GitHub engineering", "JARVIS_GITHUB_TOKEN"],
+              ["OpenAI research", "OPENAI_API_KEY"],
+              ["Supabase management", "JARVIS_SUPABASE_ACCESS_TOKEN"],
+              ["Automated Lovable publish", "JARVIS_LOVABLE_API_KEY"],
+            ] as const).map(([label, key]) => (
+              <Metric key={key} label={label} value={panel ? (panel.configuration[key] ? "Configured" : "Not configured") : "Unknown"} />
+            ))}
+          </div>
+          {(panel?.latest_improvements ?? []).length > 0 ? (
+            <div className="rounded-xl border border-border/45 bg-card/25 p-3.5">
+              <p className="text-xs font-semibold">Recent engineering history</p>
+              {(panel?.latest_improvements ?? []).slice(0, 4).map((item, i) => (
+                <div key={i} className="mt-2 flex items-start gap-2 text-xs leading-5 text-muted-foreground">
+                  {item.verified === true ? <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-300" /> : <Activity className="mt-0.5 size-3.5 shrink-0" />}
+                  <span>{item.title} · {item.verified === true ? "verified live" : item.verified === false ? "not verified live" : "engineering record"}</span>
+                </div>
+              ))}
             </div>
           ) : null}
         </section>
