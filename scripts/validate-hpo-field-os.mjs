@@ -29,6 +29,9 @@ const fieldToday = read("src/components/HpoFieldToday.tsx");
 const fieldFns = read("src/lib/hpo-field.functions.ts");
 const offline = read("src/lib/hpo-field-offline.ts");
 const accountDetail = read("src/components/HpoAccountFieldDetail.tsx");
+const accountCreate = read("src/lib/hpo-account-create.functions.ts");
+const accountForm = read("src/components/HpoAddAccountSheet.tsx");
+const activityView = read("src/components/HpoActivityView.tsx");
 const fieldRead = read("src/lib/hpo-field-read-controller.ts");
 const voiceControl = read("src/components/EmeryVoiceControl.tsx");
 const routeCommands = read("src/lib/hpo-route-command-controller.ts");
@@ -73,7 +76,9 @@ check(
   "Leaflet preserves route geometry and stop markers",
   leaflet.includes("route_geometry_remaining") &&
     leaflet.includes("route_geometry") &&
-    leaflet.includes("L.circleMarker"),
+    leaflet.includes("L.polyline") &&
+    leaflet.includes("L.marker") &&
+    leaflet.includes("routeLayerRef"),
 );
 check(
   "Leaflet exposes current-location control and touch navigation",
@@ -107,14 +112,17 @@ check(
   "HPO has an embedded Emery action sheet using the canonical main conversation",
   hpoEmerySheet.includes("sendEmeryMessage") &&
     hpoEmerySheet.includes("EmeryVoiceControl") &&
-    hpoEmerySheet.includes("same HPO accounts, routes and activity"),
+    hpoEmerySheet.includes("HPO_EMERY_EVENT_NAME") &&
+    hpoRoute.includes("<HpoEmerySheet") &&
+    hpoEmerySheet.includes("selectedAccountId"),
 );
 check(
   "Map route and relationship actions open Emery inside the map experience",
   leaflet.includes("openHpoEmery") &&
     leaflet.includes("Help me with this HPO account/office") &&
-    leaflet.includes("Help me build today's HPO field route") &&
-    leaflet.includes("onToggleRouteStop(selectedOffice)"),
+    leaflet.includes("I want to build an HPO field route") &&
+    leaflet.includes("onToggleRouteStop(selectedOffice)") &&
+    leaflet.includes("onBuildRoute"),
 );
 check(
   "Completed historical routes never masquerade as today's active route",
@@ -125,7 +133,7 @@ check(
 );
 check(
   "Route creation defaults to today while returning execution to Planner",
-  planner.includes("useState(data.today)") &&
+  planner.includes("useState(initialRouteDate || data.today)") &&
     planner.includes("Optimize & Start Route") &&
     leaflet.includes('onNavigateHpo?.("planner")'),
 );
@@ -142,7 +150,8 @@ check(
     leaflet.includes('onNavigateHpo?.("planner")') &&
     !leaflet.includes('onNavigateHpo?.("today")') &&
     leaflet.includes("Fit offices") &&
-    leaflet.includes("Build today's route"),
+    leaflet.includes("Build Route") &&
+    leaflet.includes("onBuildRoute"),
 );
 check(
   "Today uses a RepMove-style Daily Route date strip and ordered route list",
@@ -227,7 +236,9 @@ check(
 );
 check(
   "HPO account and activity writes reuse existing records",
-  hpoRoute.includes("createHpoAccount") &&
+  hpoRoute.includes("<HpoAddAccountSheet") &&
+    accountForm.includes("saveHpoAccountWithContacts") &&
+    accountCreate.includes('db.rpc("hpo_create_account_with_contacts"') &&
     hpoRoute.includes("logHpoInteraction") &&
     hpoRoute.includes("setHpoFieldAccountFollowup") &&
     accountDetail.includes("updateHpoFieldAccount") &&
@@ -235,10 +246,12 @@ check(
 );
 check(
   "Activity exposes direct visit and touch capture with contact context",
-  hpoRoute.includes("Log Visit") &&
-    hpoRoute.includes("Log Touch") &&
-    hpoRoute.includes("Who did you speak with?") &&
-    hpoFns.includes("spoken_with"),
+  hpoRoute.includes("Who did you speak with?") &&
+    hpoRoute.includes("logTouch({ data: values })") &&
+    activityView.includes("Review and log") &&
+    activityView.includes("Log recap to HPO account") &&
+    activityView.includes("saveHpoActivityLog") &&
+    hpoRoute.includes("onLog={()"),
 );
 check(
   "HPO workspace reads and updates are authenticated owner-scoped",
@@ -361,7 +374,8 @@ check(
 check(
   "route builder runs as an over-map mobile sheet",
   planner.includes('role="dialog"') &&
-    planner.includes("Build HPO daily route") &&
+    planner.includes('aria-label="Build HPO route"') &&
+    planner.includes("initialRouteDate={initialRouteDate}") &&
     planner.includes("max-h-[90dvh]"),
 );
 check(
