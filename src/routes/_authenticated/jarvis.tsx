@@ -6,8 +6,6 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowUpRight,
-  BrainCircuit,
-  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Cpu,
@@ -17,7 +15,6 @@ import {
   MessageSquare,
   RefreshCw,
   ShieldCheck,
-  Sparkles,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { AssistantText } from "@/components/AssistantText";
