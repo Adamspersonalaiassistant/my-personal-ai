@@ -149,3 +149,18 @@ export const saveHpoAccountWithContacts = createServerFn({ method: "POST" })
       geocoded: Boolean(point && receipt.created),
     };
   });
+
+/** Lightweight canonical accounts list for calendar-to-CRM linking. */
+export const listHpoCalendarAccounts = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data, error } = await context.supabase
+      .from("hpo_accounts")
+      .select("id,name,city")
+      .eq("user_id", context.userId)
+      .eq("status", "active")
+      .order("name")
+      .limit(2000);
+    if (error) throw error;
+    return { accounts: data ?? [] };
+  });
