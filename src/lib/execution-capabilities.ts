@@ -73,6 +73,10 @@ export const EMERY_EXECUTION_CAPABILITIES = {
     canExecute: false,
     note: "Google Calendar is not connected.",
   },
+  apple_notes: {
+    canExecute: false,
+    note: "Apple Notes is not connected.",
+  },
 } as const;
 
 export function executionCapabilityPrompt() {
