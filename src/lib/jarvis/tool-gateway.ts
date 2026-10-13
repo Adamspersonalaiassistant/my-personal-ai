@@ -284,12 +284,10 @@ async function run(name: string, args: Record<string, any>, ctx: GatewayContext)
     case "jarvis.get_status":
       return state.getJarvisStatus(db, userId);
     case "jarvis.search_knowledge": {
+      const query = String(args["query"] ?? "").trim();
+      if (!query) return { matched: 0, total_items: 0, knowledge: [] };
       const items = await state.loadKnowledge(db, userId);
-      const ranked = rankKnowledge(
-        items,
-        String(args["query"] ?? ""),
-        Math.min(num(args["limit"]) ?? 8, 15),
-      );
+      const ranked = rankKnowledge(items, query, Math.min(num(args["limit"]) ?? 8, 15));
       return {
         matched: ranked.length,
         total_items: items.length,
